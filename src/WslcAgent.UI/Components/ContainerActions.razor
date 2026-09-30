@@ -102,15 +102,19 @@
     /// <summary>The shortcuts with nothing else: the dashboard's object of them, the row's own verbs being another.</summary>
     [Parameter] public bool ShortcutsAlone { get; set; }
 
+    /// <summary>The row stands for a run or a create under way: every verb shows, none can be pressed.</summary>
+    [Parameter] public bool Launching { get; set; }
+
     protected override string Key => Container.Id;
 
     /// <summary>
     /// Every verb stands greyed while one of them runs, and while the
     /// container is being recreated: for those
     /// seconds it may not exist, and a start pressed then would fail or cross
-    /// the recreate.
+    /// the recreate. And while the container is still being run or created:
+    /// its verbs stand where they will be, greyed until it exists.
     /// </summary>
-    private bool Locked => Busy || Container.IsRecreating;
+    private bool Locked => Busy || Container.IsRecreating || Launching;
 
     /// <summary>The launch form pre-filled from inspect; saving removes and recreates.</summary>
     private async Task EditAsync()

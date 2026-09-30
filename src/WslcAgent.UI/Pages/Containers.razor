@@ -115,13 +115,13 @@
                 <Actions>
                     <TemplateColumn T="ListRow<ContainerSummary>" Title="Actions" Sortable="false" Resizable="false" DragAndDropEnabled="false" StickyRight="true" HeaderClass="@GridColumn.Actions" CellClass="@GridColumn.Actions">
                         <CellTemplate>
-                            @if (LaunchOf(context.Item.Value) is { } launch)
+                            @if (LaunchOf(context.Item.Value) is { Phase: "error" } launch)
                             {
                                 @EditLaunchButton(launch)
                             }
                             else
                             {
-                                <ContainerActions Container="context.Item.Value" Changed="RefreshAsync" />
+                                <ContainerActions Container="context.Item.Value" Launching="@(LaunchOf(context.Item.Value) is not null)" Changed="RefreshAsync" />
                             }
                         </CellTemplate>
                     </TemplateColumn>
@@ -160,13 +160,13 @@
                             <ContainerCardBody Container="c" />
                         </ChildContent>
                         <Actions>
-                            @if (LaunchOf(c) is { } launch)
+                            @if (LaunchOf(c) is { Phase: "error" } launch)
                             {
                                 @EditLaunchButton(launch)
                             }
                             else
                             {
-                                <ContainerActions Container="c" Changed="RefreshAsync" Shortcuts="true" />
+                                <ContainerActions Container="c" Launching="@(LaunchOf(c) is not null)" Changed="RefreshAsync" Shortcuts="true" />
                             }
                         </Actions>
                     </EntityCard>
@@ -351,12 +351,7 @@
 
     /// <summary>A failed run keeps its settings on the agent: its row's one action opens them in the Run form, to fix and run again.</summary>
     private RenderFragment EditLaunchButton(ContainerLaunch launch) =>
-        @<text>
-            @if (launch.Phase == "error")
-            {
-                <MudIconButton Icon="@Icons.Material.Filled.EditNote" Size="Size.Small" title="Edit &amp; run again" OnClick="@(() => EditLaunchAsync(launch))" />
-            }
-        </text>;
+        @<MudIconButton Icon="@Icons.Material.Filled.EditNote" Size="Size.Small" title="Edit &amp; run again" OnClick="@(() => EditLaunchAsync(launch))" />;
 
     /// <summary>The Run form on what the failed run was started with; a run started from it replaces the failed row.</summary>
     private async Task EditLaunchAsync(ContainerLaunch launch)
