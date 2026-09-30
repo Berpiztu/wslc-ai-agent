@@ -4,6 +4,7 @@
 @inherits EntityActionsBase
 @using WslcAgent.UI.Components.Dialogs
 @using WslcAgent.UI.Components.Launch
+@inject NavigationManager Navigation
 
 @* A card leads with the verbs worth reaching without the menu — view and edit,
    view files, pull — and keeps the image's own (create, run, the menu, remove)
@@ -60,7 +61,10 @@
 
     private string Title(string title) => Pulling ? "Disabled while pulling" : title;
 
-    /// <summary>The same form the Containers page opens, the image already in it.</summary>
+    /// <summary>
+    /// The same form the Containers page opens, the image already in it. As in the
+    /// reference, the launch goes on in the Containers table, so that is where it leads.
+    /// </summary>
     private async Task LaunchAsync(LaunchMode mode)
     {
         var parameters = new DialogParameters<ContainerFormDialog>
@@ -70,7 +74,7 @@
         };
         if (await DialogFlow.ShowAsync<ContainerFormDialog>(Dialogs, mode == LaunchMode.Run ? "Run container" : "Create container", parameters, large: true))
         {
-            await Changed.InvokeAsync();
+            Navigation.NavigateTo("containers");
         }
     }
 

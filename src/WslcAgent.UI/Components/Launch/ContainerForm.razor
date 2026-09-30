@@ -13,7 +13,6 @@
    screen still shows it. *@
 @using System.Text.Json
 @using WslcAgent.ApiClient
-@implements IDisposable
 @inject WslcAgentApi Api
 @inject IDialogService Dialogs
 @inject ISnackbar Snackbar
@@ -182,34 +181,20 @@
                    title="Cancel the changes made in this form" Disabled="_busy" OnClick="CancelAsync" />
 </div>
 
-@* The veil while the agent works: what is being done, and for a run or a create the pull's
-   own progress. Nothing here is clickable; the rail's Close is the way out, and only for a
-   run or a create, which goes on in the Containers table. *@
+@* The veil while the agent works: what is being done. Nothing here is clickable. A run or
+   a create holds it only until the agent has taken the job: the form closes then, and the
+   Containers table follows the pull and the start. *@
 <MudOverlay Visible="_busy" Absolute="true" DarkBackground="true" AutoClose="false" LockScroll="false" ZIndex="10">
     <MudPaper Class="pa-4" Elevation="4">
         <MudStack AlignItems="AlignItems.Center" Spacing="2">
             <MudProgressCircular Color="Color.Info" Size="Size.Large" Indeterminate="true" />
             <MudText Typo="Typo.subtitle1" role="status">@_busyTitle</MudText>
-            @if (_busyStatus.Length > 0)
-            {
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">@_busyStatus</MudText>
-            }
-            @if (_busyPct is { } pct)
-            {
-                <MudProgressLinear Value="@Math.Max(pct, 2)" Color="Color.Info" Size="Size.Small" Class="wslc-busy-bar" />
-            }
-            @if (_following)
-            {
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">This window can be closed: it goes on in the Containers table.</MudText>
-            }
         </MudStack>
     </MudPaper>
 </MudOverlay>
 </div>
 
 @code {
-    private static readonly TimeSpan FollowEvery = TimeSpan.FromSeconds(1);
-    private readonly CancellationTokenSource _closing = new();
     private MudForm _form = default!;
     private string _fill = "";
     private string _fillStatus = "";
@@ -219,11 +204,6 @@
 
     private bool _busy;
     private string _busyTitle = "";
-    private string _busyStatus = "";
-    private int? _busyPct;
-
-    /// <summary>A run job under way: the veil follows it, and the window may be closed under it.</summary>
-    private bool _following;
 
     /// <summary>What the check or the failed launch said about one field: shown in that field instead of its example.</summary>
     private readonly Dictionary<string, string> _fields = new(StringComparer.Ordinal);
@@ -279,8 +259,6 @@
         }
     }
 
-    public void Dispose() => _closing.Cancel();
-
     /// <summary>True while the fields hold something other than what the form was opened with.</summary>
     private bool Changed => JsonSerializer.Serialize(Form.ToRequest(), ExportJson) != _openedJson;
 
@@ -289,11 +267,11 @@
     /// nothing changed, nothing to ask. The window's Close calls it, so no way out
     /// of the form drops what was typed in silence. While the agent is creating or
     /// recreating there is no leaving: closing would not stop it, only hide how it
-    /// ended. A run under way is the one exception: the table follows it.
+    /// ended. A run or a create closes the form itself once the agent has it.
     /// </summary>
     public async Task<bool> ConfirmLeaveAsync()
     {
-        if (_busy && !_following)
+        if (_busy)
         {
             Snackbar.Add($"{_busyTitle} Wait for it to finish.", Severity.Info);
             return false;
@@ -556,10 +534,18 @@
             : start ? $"Starting {Named}…" : $"Creating {Named}…");
         try
         {
-            var id = Mode == LaunchMode.Edit ? await RecreateAsync(request)
-                : await LaunchAndFollowAsync(request);
-            Snackbar.Add(Mode == LaunchMode.Edit ? $"Recreated {Named}" : start ? $"{Named} is running" : $"{Named} created, stopped", Severity.Success);
-            await OnDone.InvokeAsync(id);
+            if (Mode == LaunchMode.Edit)
+            {
+                var id = await RecreateAsync(request);
+                Snackbar.Add($"Recreated {Named}", Severity.Success);
+                await OnDone.InvokeAsync(id);
+            }
+            else
+            {
+                await Api.LaunchContainerAsync(request);
+                Snackbar.Add($"{(start ? "Run" : "Create")} started — watch the Containers table", Severity.Info);
+                await OnDone.InvokeAsync("");
+            }
         }
         catch (AgentApiException ex)
         {
@@ -568,10 +554,6 @@
         catch (HttpRequestException ex)
         {
             _general.Add((Severity.Error, ex.Message));
-        }
-        catch (OperationCanceledException)
-        {
-            // The window closed under a run: the table has it from here.
         }
         finally
         {
@@ -644,52 +626,6 @@
     private async Task<string> RecreateAsync(ContainerLaunchRequest request) =>
         Noted(await Api.RecreateContainerAsync(SourceId, request));
 
-    /// <summary>
-    /// Run and Create alike: the agent owns pull-then-run (or pull-then-create),
-    /// so the job outlives this window, which can be closed while the image
-    /// downloads; the veil follows the job every second (the pull's progress, then
-    /// the start or the creation) and the form closes only when the agent says the
-    /// container is there. A failed job comes back as a failed launch, its fields
-    /// included.
-    /// </summary>
-    private async Task<string> LaunchAndFollowAsync(ContainerLaunchRequest request)
-    {
-        var launch = await Api.LaunchContainerAsync(request);
-        _following = true;
-        using var timer = new PeriodicTimer(FollowEvery);
-        while (await timer.WaitForNextTickAsync(_closing.Token))
-        {
-            var job = (await Api.GetContainerLaunchesAsync(_closing.Token)).FirstOrDefault(l => l.Id == launch.Id);
-            if (job is null)
-            {
-                // Done and already forgotten by the agent: the list shows the container.
-                return "";
-            }
-
-            switch (job.Phase)
-            {
-                case "done":
-                    foreach (var note in job.Notes)
-                    {
-                        Snackbar.Add(note, Severity.Warning);
-                    }
-
-                    return job.ContainerId;
-                case "error":
-                    throw new AgentApiException(502, job.Error, job.FieldErrors);
-                case "cancelled":
-                    throw new AgentApiException(409, "The run was cancelled.");
-            }
-
-            _busyTitle = job.Phase == "pull" ? $"Pulling {job.Image}…" : $"{(request.Start ? "Starting" : "Creating")} {job.Name}…";
-            _busyStatus = job.Status;
-            _busyPct = job.Phase == "pull" ? job.Pct : null;
-            StateHasChanged();
-        }
-
-        return "";
-    }
-
     private string Noted(ContainerCreated created)
     {
         foreach (var note in created.Notes)
@@ -706,17 +642,12 @@
     {
         _busy = true;
         _busyTitle = title;
-        _busyStatus = "";
-        _busyPct = null;
         StateHasChanged();
     }
 
     private void Idle()
     {
         _busy = false;
-        _following = false;
-        _busyStatus = "";
-        _busyPct = null;
         StateHasChanged();
     }
 }
