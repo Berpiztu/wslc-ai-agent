@@ -134,6 +134,7 @@ What `ListGrid` fixes (never repeat these on a page):
 | Pinned columns | selection, dot, identity left (offsets 32px, 52px); actions right; they keep the row tone | CSS |
 | Rows | one line per cell, 3px vertical padding, 0.75rem text; header 0.72rem bold | CSS + theme |
 | Row identity | `ListRow<TItem>`, equal by the page's `KeyOf`: a poll updates cells in place instead of redrawing rows, so ticks and open menus survive it | `ListRow` + `ListPageBase.Rows` |
+| Row order | Not sorted by a column, a list follows the agent's own number for each row (`AgeOf`, the `uid` of its resource registry): given in the order things first appeared, kept through a recreate and on disk. A row keeps its place when it is started, edited or recreated, on every client and after a reload; something new comes last. A sort on a column is applied over it | `ListOrder` + `ListPageBase.AgeOf` |
 | A stopped WSLC session | the page goes dead with it: `PageShell RequiresSession="true"` says so above the screen and greys it out, pointer and keyboard alike (`inert` plus `.wslc-session-off`), in its content and in the title-bar and section-action slots the layout draws for it; it stops loading and polling and drops what it held. Starting the session wakes every screen at once, with no reload. System and Settings never carry the flag: Compact VHDX is what a stopped session is for | `SessionState` + `PageShell` + `MainLayout` + `ListPageBase` |
 | Header and pager tone | primary mixed 18% into the surface | CSS |
 

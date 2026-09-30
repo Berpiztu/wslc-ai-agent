@@ -111,5 +111,7 @@
     /// <summary>A network keeps its number in the agent's registry through a recreate, and its place with it.</summary>
     protected override string PlaceOf(NetworkSummary n) => n.Uid > 0 ? $"uid:{n.Uid}" : n.Name;
 
+    protected override int AgeOf(NetworkSummary n) => n.Uid;
+
     protected override string NameOf(NetworkSummary n) => n.Name;
 }
