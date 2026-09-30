@@ -142,25 +142,22 @@ Two ways in:
 >
 > The PowerShell download below avoids the browser's warning.
 
-**1. Download the agent's installer**, `wslc-ai-agent.msi`, from the
-[latest release](https://github.com/berpiztu/wslc-ai-agent/releases/latest),
-or from PowerShell:
+**1. Download and install the agent**, in one PowerShell line: it downloads
+`wslc-ai-agent.msi` from the latest release into your Downloads folder and
+opens it.
 
 ```powershell
-Invoke-WebRequest https://github.com/berpiztu/wslc-ai-agent/releases/latest/download/wslc-ai-agent.msi -OutFile "$env:USERPROFILE\Downloads\wslc-ai-agent.msi"
+$ProgressPreference = 'SilentlyContinue'; $msi = "$env:USERPROFILE\Downloads\wslc-ai-agent.msi"; Invoke-WebRequest https://github.com/Berpiztu/wslc-ai-agent/releases/latest/download/wslc-ai-agent.msi -OutFile $msi; Start-Process $msi
 ```
 
-**2. Install it.** It installs for your user only, with no administrator
-rights; its wizard asks for the address and port the agent listens on
-(`127.0.0.1` and `8069` unless you change them) and for its package folder
-([How to update](#how-to-update)). If Windows warns that the installer is
-from an unknown publisher: **More info → Run anyway**.
+It installs for your user only, with no administrator rights; its wizard asks
+for the address and port the agent listens on (`127.0.0.1` and `8069` unless
+you change them) and for its package folder ([How to update](#how-to-update)).
+If Windows warns that the installer is from an unknown publisher: **More info
+→ Run anyway**. Prefer the browser? Download it from the
+[latest release](https://github.com/Berpiztu/wslc-ai-agent/releases/latest).
 
-```powershell
-Start-Process "$env:USERPROFILE\Downloads\wslc-ai-agent.msi"
-```
-
-**3. Open it.** The agent starts at once, and at every logon from then on;
+**2. Open it.** The agent starts at once, and at every logon from then on;
 its icon sits beside the clock. All is well when http://127.0.0.1:8069 opens
 the dashboard:
 
@@ -168,14 +165,18 @@ the dashboard:
 Start-Process http://127.0.0.1:8069
 ```
 
-**4. Optional: the clients and your AI assistant.**
+**3. Optional: the clients and your AI assistant.**
 
-- **Windows client**: `wslc-ai-client.msi`, and **Android client**:
-  `wslc-ai-client.apk`, from the same
-  [release](https://github.com/berpiztu/wslc-ai-agent/releases/latest). The
-  Windows client connects to the agent on the same machine unless its
-  installer is told another address; either client changes it in
-  **Settings → This client**.
+- **Windows client**, downloaded and installed the same way:
+
+```powershell
+$ProgressPreference = 'SilentlyContinue'; $msi = "$env:USERPROFILE\Downloads\wslc-ai-client.msi"; Invoke-WebRequest https://github.com/Berpiztu/wslc-ai-agent/releases/latest/download/wslc-ai-client.msi -OutFile $msi; Start-Process $msi
+```
+
+- **Android client**: `wslc-ai-client.apk`, from the same
+  [release](https://github.com/Berpiztu/wslc-ai-agent/releases/latest), opened
+  on the phone. Either client connects to the agent on the same machine unless
+  told another address, and changes it in **Settings → This client**.
 - **Claude Code** (or any MCP client) reaches the agent's tools with:
 
 ```powershell
