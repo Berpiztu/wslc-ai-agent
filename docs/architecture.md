@@ -132,6 +132,14 @@ deployment: no host names, addresses or certificates.
 | `wslc-networks` | The two ways to a container's page: the host browser with nothing to set up, and the published proxy (an nginx container whose map the agent writes) behind an optional public host. |
 | `wslc-mcp` | The wslc skill in Hermes, OpenClaw and Claude Code, the MCP endpoint, the tools, the approval gate for destructive tools and the operator's switches. |
 
-To change one, edit its `.architecture.json`, then validate and deliver it with
-the skill at showcase quality (`archify validate` / `deliver` / `visual-check`);
-the HTML is the delivered artifact, never edited by hand.
+To change one, edit its `.architecture.json` (which keeps `meta.animation:
+"trace"`, the motion of the Live button), then validate and deliver it with
+the skill at showcase quality (`archify validate` / `deliver` / `visual-check`),
+and run `node packaging/patch-archify-motion.mjs`. The HTML is the delivered
+artifact, never edited by hand: the script is the one change made to it, so
+the Live button always plays, a reduced-motion preference only starting the
+diagram paused, and a press plays the trace again.
+
+GitHub Pages publishes the four at
+https://berpiztu.github.io/wslc-ai-agent/architecture/
+(`.github/workflows/pages.yml`) whenever they change.

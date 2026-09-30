@@ -4918,7 +4918,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         animation: none !important;
       }
       .pulse-dot { animation: none !important; }
-      svg[data-animation="trace"] [data-animate] {
+      html[data-motion="still"] svg[data-animation="trace"] [data-animate] {
         animation: none !important;
         stroke-dashoffset: 0;
       }
@@ -4973,6 +4973,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       svg [data-node-id], svg [data-edge-from], svg [data-detail], svg [data-detail-anchor], svg [data-legend-hit], svg { transition: none !important; }
     }
   </style>
+<style>/* wslc-agent: motion patched */</style>
 </head>
 <body>
   <!-- Toolbar: theme, live visual style, trace motion, presentation stage, and export.
@@ -7358,7 +7359,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         } catch (_) {}
       }
       function reducedMotion() {
-        return !!(motionQuery && motionQuery.matches);
+        return false;
       }
       function hasSuspension() {
         return Object.keys(suspensions).length > 0;
@@ -7390,7 +7391,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           startAmbient();
         }
         btn.setAttribute('aria-pressed', paused ? 'false' : 'true');
-        btn.disabled = systemPaused;
+        btn.disabled = false;
         label.textContent = viewerText(paused ? 'viewer.motion.still' : 'viewer.motion.live');
         if (paused && lastEffectivePaused !== true && Archify.guidedViews && Archify.guidedViews.isPlaying()) {
           Archify.guidedViews.pause();
@@ -7519,8 +7520,20 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
       html.setAttribute('data-motion-capable', 'true');
       btn.hidden = false;
-      readerPaused = readStored() === 'still';
-      btn.addEventListener('click', function () { setPaused(!readerPaused); });
+      readerPaused = readStored() === 'still' || !!(motionQuery && motionQuery.matches);
+      function replayAmbient() {
+        if (!capable || effectivePaused() || owner) return;
+        ambientStarted = false;
+        html.setAttribute('data-ambient-motion', 'settled');
+        void svg.getBoundingClientRect();
+        startAmbient();
+      }
+      btn.addEventListener('click', function () {
+        if (!readerPaused && html.getAttribute('data-ambient-motion') === 'settled') { replayAmbient(); return; }
+        var resuming = readerPaused;
+        setPaused(!readerPaused);
+        if (resuming) replayAmbient();
+      });
       if (motionQuery) {
         if (typeof motionQuery.addEventListener === 'function') motionQuery.addEventListener('change', render);
         else if (typeof motionQuery.addListener === 'function') motionQuery.addListener(render);
