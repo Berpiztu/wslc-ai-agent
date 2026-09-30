@@ -175,7 +175,7 @@ Start-Process http://127.0.0.1:8069
 - **Windows client**, downloaded and installed the same way:
 
 ```powershell
-& ([scriptblock]::Create((irm https://berpiztu.github.io/wslc-ai-agent/install.ps1))) -Client
+irm https://berpiztu.github.io/wslc-ai-agent/install-client.ps1 | iex
 ```
 
 - **Android client**: `wslc-ai-client.apk`, from the same
@@ -317,7 +317,8 @@ All scripts live in the repository root and work from any current directory.
 
 | Script | What it does |
 |---|---|
-| `install.ps1` | Install the agent from the latest release, or update it when it is installed already; the Windows client's installer with `-Client`. What the Quick start and How to update run, through GitHub Pages, with `irm ... \| iex`. |
+| `install.ps1` | Install the agent from the latest release, or update it when it is installed already. What the Quick start and How to update run, through GitHub Pages, with `irm ... \| iex`. |
+| `install-client.ps1` | Install the Windows client from the latest release: `install.ps1 -Client`, in a line as short as the agent's. |
 | `check-prereqs.ps1` | What the machine needs to build, test, run and package, and the command that installs what is missing. Changes nothing. |
 | `install-prereqs.ps1` | Install everything `check-prereqs.ps1` finds missing, in order, after one administrator prompt. |
 | `check-private.ps1` | The private files this checkout has and what each enables, without printing a secret. |

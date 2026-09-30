@@ -8,9 +8,10 @@
     release's installers go into the agent's package folder, and the agent
     installs its own at once; the clients then offer theirs.
 
-    The Windows client instead of the agent:
+    The Windows client instead of the agent (install-client.ps1 runs this
+    with -Client):
 
-        & ([scriptblock]::Create((irm https://berpiztu.github.io/wslc-ai-agent/install.ps1))) -Client
+        irm https://berpiztu.github.io/wslc-ai-agent/install-client.ps1 | iex
 .DESCRIPTION
     Downloads the installer of the latest GitHub release into the Downloads
     folder and opens it: a per-user installer, no administrator rights. Says
