@@ -553,6 +553,8 @@
                         <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@context.OpenFilePickerAsync"
                                    title="Read a look from a file and put it in the fields, ready to try with Apply">Import</MudButton>
                     </CustomContent>
+                    @* No chip of the file chosen: it would push the row's buttons apart. *@
+                    <SelectedTemplate></SelectedTemplate>
                 </MudFileUpload>
                 <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="ExportStyleAsync" Class="mt-2 mr-2"
                            title="The whole look as a file, to carry to another machine or into wslc-style.json">Export</MudButton>

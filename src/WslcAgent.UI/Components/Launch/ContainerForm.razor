@@ -143,12 +143,15 @@
    takes back, red destroys. Every button is always there; one that cannot act
    greys out, so the rail never moves. *@
 <div class="wslc-action-rail wslc-files-rail" role="toolbar">
-    @* Load JSON file: an inspect output or an exported launch request fills the fields. *@
+    @* Load JSON file: an inspect output or an exported launch request fills the fields. The
+       file chosen is not shown here (MudBlazor's own chip would push the rail out of line):
+       the fill status and the snackbar name it. *@
     <MudFileUpload T="IBrowserFile" FilesChanged="LoadJsonAsync" Accept=".json,application/json">
         <CustomContent>
             <MudIconButton Color="Color.Success" Icon="@Icons.Material.Filled.UploadFile" Size="Size.Small" Variant="Variant.Filled"
                            title="Load JSON file" Disabled="_busy" OnClick="@context.OpenFilePickerAsync" />
         </CustomContent>
+        <SelectedTemplate></SelectedTemplate>
     </MudFileUpload>
     @* Full variables: a switch on Export, green while on. Off, the export is what wslc knows
        (View & edit: the inspect JSON; Run and Create: the form without the agent's fields). On,

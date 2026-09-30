@@ -12,11 +12,14 @@
         <VerbFab StartIcon="@Icons.Material.Filled.Input" Label="Import" OnClick="@context.OpenFilePickerAsync" Disabled="_archiveBusy"
                  Title="Import an image archive (named after the search text, when there is one)" />
     </CustomContent>
+    @* No chip of the file chosen: it would break the bar; the snackbar says how it went. *@
+    <SelectedTemplate></SelectedTemplate>
 </MudFileUpload>
 <MudFileUpload T="IBrowserFile" FilesChanged="LoadArchiveAsync" Class="ma-0 flex-grow-0">
     <CustomContent>
         <VerbFab StartIcon="@Icons.Material.Filled.Unarchive" Label="Load" OnClick="@context.OpenFilePickerAsync" Disabled="_archiveBusy" Title="Load an image archive" />
     </CustomContent>
+    <SelectedTemplate></SelectedTemplate>
 </MudFileUpload>
 <VerbFab StartIcon="@Icons.Material.Filled.TravelExplore" Label="Hub" Href="https://hub.docker.com/search" Target="_blank" Title="Search images on Docker Hub" />
 <VerbFab StartIcon="@Icons.Material.Filled.DeleteSweep" Label="Prune" Color="Color.Error" OnClick="PruneAsync" Title="Remove dangling images (no name, no tag)" />
