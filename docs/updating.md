@@ -10,6 +10,23 @@ follows.
 | `wslc-ai-client.msi` | The Windows client |
 | `wslc-ai-client.apk` | The Android client |
 
+## In one line
+
+On the agent's machine, the line that installs the agent updates it:
+
+```powershell
+irm https://berpiztu.github.io/wslc-ai-agent/install.ps1 | iex
+```
+
+With the agent installed and answering, it asks the agent its version
+(`GET /api/v1/agent/update`) and GitHub the latest release's. When the release
+is newer, it downloads the three installers into the package folder and asks
+the agent to install its own at once (`POST /api/v1/agent/update`, Settings →
+Update's **Update now**): the agent waits for any transfer in progress, and
+starts again as the new version. When it is not newer, nothing changes. An
+agent installed but not answering is installed again from the release, whose
+installer upgrades it in place.
+
 ## Where the package folder is
 
 The agent's installer asks for it, beside the address and the port, and

@@ -1,8 +1,12 @@
 <#
 .SYNOPSIS
-    Download and install WSLC AI Agent from its latest release, in one line:
+    Install WSLC AI Agent from its latest release, or update it, in one line:
 
         irm https://berpiztu.github.io/wslc-ai-agent/install.ps1 | iex
+
+    With the agent already installed, the same line updates it: the latest
+    release's installers go into the agent's package folder, and the agent
+    installs its own at once; the clients then offer theirs.
 
     The Windows client instead of the agent:
 
@@ -34,6 +38,16 @@ param([switch]$Client)
     # Windows PowerShell draws a progress bar that slows a large download to a crawl.
     $ProgressPreference = "SilentlyContinue"
 
+    # The installed agent's address, where its installer's wizard left the
+    # bind address and port, the agent's own source of them; none when the
+    # agent is not installed.
+    function InstalledAgent {
+        $key = Get-ItemProperty -Path "HKCU:\Software\Berpiztu\wslc-agent\Agent" -ErrorAction SilentlyContinue
+        if (-not $key) { return $null }
+        $bindHost = if ($key.BindHost -and $key.BindHost -ne "0.0.0.0") { $key.BindHost } else { "127.0.0.1" }
+        "http://${bindHost}:$($key.Port)"
+    }
+
     $name = if ($Client) { "wslc-ai-client.msi" } else { "wslc-ai-agent.msi" }
     $product = if ($Client) { "WSLC AI Client" } else { "WSLC AI Agent" }
     $url = "https://github.com/Berpiztu/wslc-ai-agent/releases/latest/download/$name"
@@ -54,6 +68,38 @@ param([switch]$Client)
         }
     }
 
+    # An agent already installed, and answering, is updated rather than
+    # installed again: the newer installers go into its package folder, and
+    # the agent installs its own there at once, as Settings > Update's Update
+    # now does; the clients then offer theirs. One that does not answer is
+    # installed again: its installer upgrades it in place.
+    if (-not $Client -and ($agent = InstalledAgent)) {
+        $status = try { Invoke-RestMethod -Uri "$agent/api/v1/agent/update" -TimeoutSec 15 } catch { $null }
+        if ($status) {
+            $running = [version](($status.version -split '[^0-9.]')[0])
+            $latest = [version](Invoke-RestMethod -Uri "https://api.github.com/repos/Berpiztu/wslc-ai-agent/releases/latest" -TimeoutSec 30).tag_name.TrimStart("v")
+            if ($latest -le $running) {
+                Write-Host "WSLC AI Agent $running is installed: the latest release. Nothing to update." -ForegroundColor Green
+                return
+            }
+            Write-Host "Updating WSLC AI Agent $running to $latest..." -ForegroundColor Cyan
+            New-Item -ItemType Directory -Force -Path $status.packageFolder | Out-Null
+            foreach ($package in @("wslc-ai-agent.msi", "wslc-ai-client.msi", "wslc-ai-client.apk")) {
+                Write-Host "Downloading $package into the agent's package folder..." -ForegroundColor Cyan
+                Invoke-WebRequest -Uri "https://github.com/Berpiztu/wslc-ai-agent/releases/latest/download/$package" -OutFile (Join-Path $status.packageFolder $package) -UseBasicParsing
+            }
+            try {
+                Invoke-RestMethod -Method Post -Uri "$agent/api/v1/agent/update" -TimeoutSec 30 | Out-Null
+                Write-Host "The agent installs $latest now: it waits for any transfer in progress, and starts again as $latest in a minute or two. The clients then offer their update." -ForegroundColor Green
+            } catch {
+                $reason = if ($_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
+                Write-Host "The installers are in $($status.packageFolder), but the agent did not start its update: $reason" -ForegroundColor Yellow
+                Write-Host "Settings > Update shows why, and has Update now." -ForegroundColor Yellow
+            }
+            return
+        }
+    }
+
     New-Item -ItemType Directory -Force -Path $downloads | Out-Null
     Write-Host "Downloading $product from the latest release..." -ForegroundColor Cyan
     Invoke-WebRequest -Uri $url -OutFile $msi -UseBasicParsing
@@ -65,14 +111,11 @@ param([switch]$Client)
         return
     }
 
-    # The address and port chosen in the installer's wizard.
-    $installed = Get-ItemProperty -Path "HKCU:\Software\Berpiztu\wslc-agent\Agent" -ErrorAction SilentlyContinue
-    if (-not $installed) {
+    $agent = InstalledAgent
+    if (-not $agent) {
         Write-Host "The agent was not installed." -ForegroundColor Yellow
         return
     }
-    $bindHost = if ($installed.BindHost -and $installed.BindHost -ne "0.0.0.0") { $installed.BindHost } else { "127.0.0.1" }
-    $agent = "http://${bindHost}:$($installed.Port)"
     Write-Host "Done. The agent starts at logon; its dashboard: $agent" -ForegroundColor Green
 
     # The agent starts right after its installer; give it a minute to answer.

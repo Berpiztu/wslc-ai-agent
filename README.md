@@ -284,13 +284,26 @@ notifications: [docs/developer/private-files.md](docs/developer/private-files.md
 
 ## How to update
 
-The agent updates itself, and offers its clients their updates, from its
-**package folder**: put newer installers there and, with **Auto update** on
-(Settings → Update), the rest follows.
+**Installed a release?** The same line that installs it updates it:
 
-- **Installed a release?** The package folder is `C:\Berpiztu\wslc-ai-agent`
-  unless you chose another when installing: copy the new
-  `wslc-ai-agent.msi`, `wslc-ai-client.msi` and `wslc-ai-client.apk` there.
+```powershell
+irm https://berpiztu.github.io/wslc-ai-agent/install.ps1 | iex
+```
+
+With the agent already installed, it compares its version with the latest
+release. When there is a newer one, it downloads the three installers into the
+agent's **package folder** and has the agent install its own at once: the
+agent waits for any transfer in progress and starts again as the new version
+in a minute or two, and its clients then offer theirs. When there is none, it
+says so and changes nothing.
+
+The agent updates itself, and offers its clients their updates, from that
+package folder: the line above fills it, and so can you by hand.
+
+- **By hand**: copy the new `wslc-ai-agent.msi`, `wslc-ai-client.msi` and
+  `wslc-ai-client.apk` into the package folder (`C:\Berpiztu\wslc-ai-agent`
+  unless you chose another when installing); with **Auto update** on
+  (Settings → Update) the agent installs itself, or press **Update now**.
 - **Built it yourself?** The agent takes its updates from your clone's
   `dist`, where the build scripts put them. To keep it from updating itself
   every time you build, turn **Auto update** off in Settings → Update.
@@ -304,7 +317,7 @@ All scripts live in the repository root and work from any current directory.
 
 | Script | What it does |
 |---|---|
-| `install.ps1` | Download the latest release's installer and open it: the agent's, or the Windows client's with `-Client`. What the Quick start runs, through GitHub Pages, with `irm ... \| iex`. |
+| `install.ps1` | Install the agent from the latest release, or update it when it is installed already; the Windows client's installer with `-Client`. What the Quick start and How to update run, through GitHub Pages, with `irm ... \| iex`. |
 | `check-prereqs.ps1` | What the machine needs to build, test, run and package, and the command that installs what is missing. Changes nothing. |
 | `install-prereqs.ps1` | Install everything `check-prereqs.ps1` finds missing, in order, after one administrator prompt. |
 | `check-private.ps1` | The private files this checkout has and what each enables, without printing a secret. |
