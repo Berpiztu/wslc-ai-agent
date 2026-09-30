@@ -1,0 +1,115 @@
+{
+  "Config": {
+    "Cmd": [
+      "gateway",
+      "run"
+    ],
+    "Entrypoint": [
+      "/opt/hermes/docker/entrypoint-dispatch.sh"
+    ],
+    "Env": [
+      "HERMES_DASHBOARD=1",
+      "API_SERVER_ENABLED=true",
+      "API_SERVER_HOST=0.0.0.0",
+      "API_SERVER_KEY=<your-api-key>",
+      "API_SERVER_CORS_ORIGINS=*",
+      "HERMES_DASHBOARD_BASIC_AUTH_USERNAME=<your-username>",
+      "HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=<your-password>",
+      "HERMES_DASHBOARD_BASIC_AUTH_SECRET=<your-secret>",
+      "PATH=/opt/hermes/bin:/opt/hermes/.venv/bin:/opt/data/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "PYTHONUNBUFFERED=1",
+      "PYTHONDONTWRITEBYTECODE=1",
+      "PLAYWRIGHT_BROWSERS_PATH=/opt/hermes/.playwright",
+      "npm_config_install_links=false",
+      "HERMES_WEB_DIST=/opt/hermes/hermes_cli/web_dist",
+      "HERMES_TUI_DIR=/opt/hermes/ui-tui",
+      "HERMES_HOME=/opt/data",
+      "HERMES_WRITE_SAFE_ROOT=/opt/data",
+      "HERMES_DISABLE_LAZY_INSTALLS=1",
+      "HERMES_LAZY_INSTALL_TARGET=/opt/data/lazy-packages",
+      "XDG_RUNTIME_DIR=/tmp/hermes-runtime",
+      "HERMES_RUNTIME_DIR=/opt/hermes/tools",
+      "HERMES_PYTHON=/usr/local/bin/python3",
+      "CC=gcc",
+      "CXX=g\u002B\u002B"
+    ],
+    "Healthcheck": null,
+    "Image": "nousresearch/hermes-agent:main",
+    "Labels": {
+      "org.opencontainers.image.revision": "666f313d1d3abd8077291ba464cf0a10f1a6157f"
+    },
+    "StopTimeout": null,
+    "User": "root",
+    "WorkingDir": "/opt/hermes"
+  },
+  "Created": "2026-09-29T07:59:41.7629208Z",
+  "HostConfig": {
+    "Memory": 4294967296,
+    "NanoCpus": 0,
+    "NetworkMode": "bridge",
+    "Ulimits": []
+  },
+  "Id": "cd8a5531d705d5556d12569bd87897c95daa43e77acc399c0b7f6052bf28dc71",
+  "Image": "sha256:dbe431e199f93b97004eb5bbe6459c17c4c32a9ebcc1b394583f0f785e3066f9",
+  "Labels": {
+    "org.opencontainers.image.revision": "666f313d1d3abd8077291ba464cf0a10f1a6157f"
+  },
+  "Mounts": [
+    {
+      "Destination": "/opt/data",
+      "Name": "hermes-data",
+      "ReadWrite": true,
+      "Source": "hermes-data",
+      "Type": "volume"
+    }
+  ],
+  "Name": "/hermes",
+  "NetworkSettings": {
+    "Networks": {
+      "bridge": {
+        "Aliases": [],
+        "DriverOpts": {},
+        "Gateway": "172.17.0.1",
+        "IPAMConfig": null,
+        "IPAddress": "172.17.0.3",
+        "IPPrefixLen": 16,
+        "Links": [],
+        "MacAddress": "02:42:ac:11:00:03"
+      },
+      "publish-proxy": {
+        "Aliases": [
+          "cd8a5531d705"
+        ],
+        "DriverOpts": {},
+        "Gateway": "172.18.0.1",
+        "IPAMConfig": null,
+        "IPAddress": "172.18.0.2",
+        "IPPrefixLen": 16,
+        "Links": [],
+        "MacAddress": "02:42:ac:12:00:02"
+      }
+    }
+  },
+  "Ports": {
+    "8642/tcp": [
+      {
+        "HostIp": "127.0.0.1",
+        "HostPort": "18642"
+      }
+    ],
+    "9119/tcp": [
+      {
+        "HostIp": "127.0.0.1",
+        "HostPort": "19119"
+      }
+    ]
+  },
+  "State": {
+    "ExitCode": 0,
+    "FinishedAt": "0001-01-01T00:00:00Z",
+    "Health": null,
+    "Running": true,
+    "StartedAt": "2026-09-29T07:59:58.9150299Z",
+    "Status": "running"
+  }
+}
