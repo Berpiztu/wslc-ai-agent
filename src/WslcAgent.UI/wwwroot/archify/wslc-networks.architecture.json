@@ -41,7 +41,8 @@
         ],
         "note": "Settings → Publish or the launch form's Reverse proxy row: the agent writes the proxy's map and restarts it; the agent stays on loopback."
       }
-    ]
+    ],
+    "animation": "trace"
   },
   "components": [
     {

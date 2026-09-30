@@ -66,7 +66,8 @@
         ],
         "note": "Playwright + host Edge; screencast pane on the client. Networks → Architecture shows the other way to a container's page."
       }
-    ]
+    ],
+    "animation": "trace"
   },
   "components": [
     {

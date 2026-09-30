@@ -60,7 +60,8 @@
         ],
         "note": "From another machine, a client reaches /api/v1/mcp through a public host's forward (main diagram); at loopback no login is asked."
       }
-    ]
+    ],
+    "animation": "trace"
   },
   "components": [
     {

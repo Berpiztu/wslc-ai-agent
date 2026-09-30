@@ -60,7 +60,8 @@
         ],
         "note": "Open in terminal starts Windows Terminal, or a console, on the agent's desktop. A remote client is refused and gets the in-app one."
       }
-    ]
+    ],
+    "animation": "trace"
   },
   "components": [
     {
