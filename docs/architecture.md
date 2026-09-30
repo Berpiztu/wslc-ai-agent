@@ -19,7 +19,7 @@ src/
   WslcAgent.UI         The UI: Razor Class Library of MudBlazor components (layout, pages).
   WslcAgent.Web        Blazor WebAssembly host of UI, served by Server; PWA manifest + service worker.
   WslcAgent.App        MAUI Blazor Hybrid host of UI: Windows (wslc-ai-client.exe) and Android (ai.berpiztu.wslcagent).
-  WslcAgent.Tray       The installed agent's icon beside the clock: opens the agent's own page in a WebView2 window or the browser. Exe: wslc-ai-agent-tray.exe
+  WslcAgent.Tray       The installed agent's icon beside the clock: a click opens the agent's own page in the browser. Exe: wslc-ai-agent-tray.exe
   WslcAgent.Toasts     The agent's notifications as Windows toasts, shared by App and Tray.
   WslcAgent.ApiClient  Contracts (records) and a typed HttpClient for /api/v1.
   WslcAgent.Mcp        MCP tool types and the interfaces they need from the host.
@@ -43,8 +43,8 @@ records.
 
 ## How requests flow
 
-- **Clients to the agent.** The web UI, the Windows and Android apps and the
-  tray's window all speak to the agent over `/api/v1` through
+- **Clients to the agent.** The web UI (in any browser, the tray's click
+  included) and the Windows and Android apps all speak to the agent over `/api/v1` through
   `WslcAgent.ApiClient`. Terminals use one WebSocket per shell.
 - **AI agents to the agent.** An MCP client connects to `/api/v1/mcp`. Its
   tools call the same service interfaces the endpoints call.

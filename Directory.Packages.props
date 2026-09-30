@@ -40,9 +40,6 @@
     <!-- Host browser (Open with browser from a remote client): drives the host's Edge -->
     <PackageVersion Include="Microsoft.Playwright" Version="1.62.0" />
 
-    <!-- The agent's tray window (WslcAgent.Tray): the same WebView2 the MAUI client runs on Windows -->
-    <PackageVersion Include="Microsoft.Web.WebView2" Version="1.0.3179.45" />
-
     <!-- Installers (WiX 5, built as MSBuild projects under packaging/) -->
     <PackageVersion Include="WixToolset.UI.wixext" Version="5.0.2" />
     <PackageVersion Include="WixToolset.Util.wixext" Version="5.0.2" />

@@ -136,7 +136,8 @@ SOFTWARE.
 
 ## Microsoft Edge WebView2 SDK
 
-- Package: `Microsoft.Web.WebView2`
+- Files: `Microsoft.Web.WebView2.Core.dll` and `WebView2Loader.dll`, which
+  the Windows client carries through .NET MAUI
 - Source: https://aka.ms/webview
 - License: BSD-style, below
 

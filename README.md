@@ -100,7 +100,7 @@ architecture button).
 | `WslcAgent.ApiClient` | Contracts and typed client for `/api/v1`, shared by every host. |
 | `WslcAgent.Mcp` | MCP tools (official C# SDK), hosted by the server. |
 | `Berpiztu.Dashboard` | The dashboard and its designer, a Razor class library on MudBlazor that knows nothing of WSLC. |
-| `WslcAgent.Tray` | The agent's icon beside the clock (`wslc-ai-agent-tray.exe`): its page in a window, its menu and its notifications. |
+| `WslcAgent.Tray` | The agent's icon beside the clock (`wslc-ai-agent-tray.exe`): a click opens its page in the browser; its menu and its notifications. |
 | `WslcAgent.Toasts` | The agent's notifications as Windows toasts, shared by the tray and the Windows client. |
 
 One UI, one language, one API contract.

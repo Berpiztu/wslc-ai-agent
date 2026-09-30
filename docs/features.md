@@ -326,8 +326,8 @@ The Home page is a dashboard designed by each user, not a fixed screen.
   has it; the web UI offers the right app to download.
 - **Android**: the back gesture navigates the app; files saved through the
   system; push notifications.
-- **Tray icon** on the agent's machine: the agent's page in its own window,
-  its notifications, and the dashboard one click away.
+- **Tray icon** on the agent's machine: a click opens the agent's page in the
+  browser; its notifications, and the dashboard one click away.
 - **Multi-client**: every client of an agent sees the same jobs (runs,
   pulls, transfers, updates) and can follow or cancel them; what belongs to
   a device (theme, zoom, views) stays on that device.
