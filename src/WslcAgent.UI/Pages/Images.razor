@@ -208,7 +208,22 @@
 
     protected override string KeyOf(ImageSummary i) => i.Reference;
 
-    protected override int AgeOf(ImageSummary i) => i.Uid;
+    /// <summary>
+    /// A named image, its own number. One whose tag a pull moved to a newer
+    /// image has none, but keeps its repository: it goes right after that
+    /// repository's named image, the one that replaced it, so a pull moves
+    /// nothing. One that never had a name goes last.
+    /// </summary>
+    protected override double AgeOf(ImageSummary i, IReadOnlyList<ImageSummary> rows)
+    {
+        if (!i.IsDangling)
+        {
+            return i.Uid;
+        }
+
+        var named = rows.Where(r => !r.IsDangling && r.Uid > 0 && i.Repository.Length > 0 && r.Repository == i.Repository).Select(r => r.Uid).ToList();
+        return named.Count > 0 ? named.Min() + 0.5 : double.MaxValue;
+    }
 
     protected override string NameOf(ImageSummary i) => i.Reference;
 

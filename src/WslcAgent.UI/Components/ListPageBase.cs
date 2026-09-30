@@ -210,10 +210,12 @@ public abstract class ListPageBase<TItem> : ComponentBase, IDisposable
     /// The agent's own number for the row (its resource registry), which
     /// orders a list not sorted by a column: given in the order things first
     /// appeared and kept through a recreate, so a row keeps its place and what
-    /// is new comes last (<see cref="ListOrder"/>). 0, the default, when the
-    /// page has none.
+    /// is new comes last (<see cref="ListOrder"/>). A row with no number of its
+    /// own takes a place beside the one it belongs with, from
+    /// <paramref name="rows"/>, the list it is in. 0, the default, when the page
+    /// has none.
     /// </summary>
-    protected virtual int AgeOf(TItem item) => 0;
+    protected virtual double AgeOf(TItem item, IReadOnlyList<TItem> rows) => 0;
 
     /// <summary>Whether a verb on the selection may act on this row; a row whose own verbs stand greyed is left out of the selection's too.</summary>
     protected virtual bool CanAct(TItem item) => true;
@@ -433,7 +435,7 @@ public abstract class ListPageBase<TItem> : ComponentBase, IDisposable
             // Rows keep their places: the agent lists what was started or
             // created last first, and a start or a recreate is not a reason to
             // move; what is new comes last.
-            Items = Order.Keep(Section, items, PlaceOf, AgeOf);
+            Items = Order.Keep(Section, items, PlaceOf, item => AgeOf(item, items));
             // The ticks move onto the new rows by key, and a row that vanished drops
             // out.
             var selectedKeys = Selected.Select(row => row.Key).ToHashSet(StringComparer.Ordinal);

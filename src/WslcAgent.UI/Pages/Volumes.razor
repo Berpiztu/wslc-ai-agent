@@ -99,7 +99,7 @@
 
     protected override string KeyOf(VolumeSummary v) => v.Name;
 
-    protected override int AgeOf(VolumeSummary v) => v.Uid;
+    protected override double AgeOf(VolumeSummary v, IReadOnlyList<VolumeSummary> rows) => v.Uid;
 
     protected override string NameOf(VolumeSummary v) => v.Name;
 }

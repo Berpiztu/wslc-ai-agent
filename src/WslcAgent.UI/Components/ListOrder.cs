@@ -18,14 +18,15 @@ public sealed class ListOrder
 
     /// <summary>
     /// <paramref name="incoming"/> in the order of <paramref name="ageOf"/>,
-    /// the agent's number for each row, when every row has one (above 0);
+    /// the agent's number for each row — or a place between two of them, for
+    /// a row that belongs beside another — when every row has one (above 0);
     /// otherwise in the order <paramref name="list"/> was last shown in.
     /// <paramref name="placeOf"/> is the identity a row keeps through what
     /// moved it — a container's recreate changes its id, not its number in the
     /// agent's registry. An empty answer (a session stopped, a list emptied)
     /// leaves the order remembered for when the rows come back.
     /// </summary>
-    public IReadOnlyList<T> Keep<T>(string list, IReadOnlyList<T> incoming, Func<T, string> placeOf, Func<T, int> ageOf)
+    public IReadOnlyList<T> Keep<T>(string list, IReadOnlyList<T> incoming, Func<T, string> placeOf, Func<T, double> ageOf)
     {
         if (incoming.Count == 0)
         {

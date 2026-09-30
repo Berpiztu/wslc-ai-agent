@@ -405,7 +405,7 @@
     /// <summary>A change to a container recreates it under a new id; its number in the agent's registry is what stays, and so does its place.</summary>
     protected override string PlaceOf(ContainerSummary c) => c.Uid > 0 ? $"uid:{c.Uid}" : c.Id;
 
-    protected override int AgeOf(ContainerSummary c) => c.Uid;
+    protected override double AgeOf(ContainerSummary c, IReadOnlyList<ContainerSummary> rows) => c.Uid;
 
     /// <summary>A container being recreated is left out of Start, Stop and Remove on the selection, as its own verbs are greyed.</summary>
     protected override bool CanAct(ContainerSummary c) => !c.IsRecreating;
