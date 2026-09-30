@@ -355,3 +355,5 @@ their licenses are listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 WSLC AI Agent is built by [Berpiztu](https://github.com/Berpiztu), a team
 that builds AI agents and the tools they work with, and the team behind
 [Virtus](https://github.com/berpiztu/virtus).
+
+Special thanks to Alex, the AI agent who helped me create this project.
