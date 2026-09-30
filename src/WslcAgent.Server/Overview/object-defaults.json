@@ -10,7 +10,6 @@
       "w": 6,
       "h": 3,
       "size": "small",
-      "foreground": "tertiary",
       "parts": {
         "value": {
           "size": "small",
@@ -48,7 +47,6 @@
       "w": 6,
       "h": 3,
       "size": "small",
-      "foreground": "tertiary",
       "parts": {
         "label": {
           "hidden": true,
@@ -78,7 +76,6 @@
       "w": 5,
       "h": 2,
       "size": "small",
-      "foreground": "tertiary",
       "parts": {
         "value": {
           "size": "small",
@@ -107,7 +104,6 @@
       "w": 4,
       "h": 2,
       "size": "small",
-      "foreground": "tertiary",
       "parts": {
         "label": {
           "hidden": true,
@@ -159,6 +155,7 @@
       "h": 2,
       "size": "medium",
       "horizontal": "center",
+      "foreground": "tertiary",
       "parts": {
         "label": {
           "size": "large",
@@ -174,7 +171,6 @@
       "h": 2,
       "size": "medium",
       "horizontal": "right",
-      "foreground": "tertiary",
       "parts": {
         "value": {
           "size": "small",
@@ -190,7 +186,6 @@
       "w": 8,
       "h": 2,
       "size": "medium",
-      "foreground": "tertiary",
       "marginX": 8,
       "x": 11,
       "y": 2
@@ -215,7 +210,6 @@
       "size": "small",
       "horizontal": "center",
       "vertical": "bottom",
-      "foreground": "tertiary",
       "marginX": 8,
       "x": 0,
       "y": 2
@@ -225,6 +219,7 @@
       "h": 2,
       "size": "medium",
       "horizontal": "center",
+      "foreground": "tertiary",
       "x": 0,
       "y": 0,
       "elevation": 1
@@ -237,6 +232,165 @@
       "foreground": "text",
       "x": 0,
       "y": 4
+    },
+    "wslc.host-containers": {
+      "w": 5,
+      "h": 4,
+      "size": "small"
+    },
+    "wslc.host-cpu": {
+      "w": 8,
+      "h": 4,
+      "size": "small"
+    },
+    "wslc.host-disk": {
+      "w": 8,
+      "h": 4,
+      "size": "small"
+    },
+    "wslc.host-images": {
+      "w": 6,
+      "h": 4,
+      "size": "small"
+    },
+    "wslc.host-memory": {
+      "w": 8,
+      "h": 4,
+      "size": "small"
+    },
+    "wslc.host-networks": {
+      "w": 5,
+      "h": 4,
+      "size": "small"
+    },
+    "wslc.host-volumes": {
+      "w": 5,
+      "h": 4,
+      "size": "small"
+    },
+    "wslc.system-agent": {
+      "w": 6,
+      "h": 3,
+      "size": "medium",
+      "x": 0,
+      "y": 0
+    },
+    "wslc.system-client": {
+      "w": 6,
+      "h": 3,
+      "size": "medium",
+      "foreground": "tertiary",
+      "x": 6,
+      "y": 0
+    },
+    "wslc.system-wslc": {
+      "w": 6,
+      "h": 3,
+      "size": "medium",
+      "x": 12,
+      "y": 0
+    },
+    "wslc.system-windows": {
+      "w": 6,
+      "h": 3,
+      "size": "medium",
+      "x": 18,
+      "y": 0
+    },
+    "wslc.system-kernel": {
+      "w": 6,
+      "h": 3,
+      "size": "medium",
+      "x": 18,
+      "y": 3
+    },
+    "wslc.host-cpu-dial": {
+      "w": 6,
+      "h": 6,
+      "size": "medium",
+      "parts": {
+        "figure": {
+          "bold": true,
+          "isDesign": false
+        },
+        "ring": {
+          "thickness": "large",
+          "isDesign": false
+        }
+      },
+      "x": 0,
+      "y": 3
+    },
+    "wslc.host-memory-dial": {
+      "w": 6,
+      "h": 6,
+      "size": "medium",
+      "parts": {
+        "ring": {
+          "thickness": "large",
+          "isDesign": false
+        }
+      },
+      "x": 6,
+      "y": 3
+    },
+    "wslc.host-disk-dial": {
+      "w": 6,
+      "h": 6,
+      "size": "medium",
+      "parts": {
+        "ring": {
+          "thickness": "large",
+          "isDesign": false
+        }
+      },
+      "x": 12,
+      "y": 3
+    },
+    "wslc.system-card": {
+      "w": 24,
+      "h": 9,
+      "size": "medium"
+    },
+    "wslc.host-cpu-activity": {
+      "w": 10,
+      "h": 4,
+      "size": "medium",
+      "parts": {
+        "hint": {
+          "size": "small",
+          "isDesign": false
+        }
+      },
+      "x": 0,
+      "y": 0
+    },
+    "wslc.host-memory-activity": {
+      "w": 10,
+      "h": 4,
+      "size": "medium",
+      "parts": {
+        "hint": {
+          "size": "small",
+          "isDesign": false
+        }
+      },
+      "x": 0,
+      "y": 0
+    },
+    "wslc.host-disk-legend": {
+      "w": 10,
+      "h": 4,
+      "size": "medium",
+      "x": 12,
+      "y": 0
+    },
+    "wslc.host-network-legend": {
+      "w": 10,
+      "h": 4,
+      "size": "medium",
+      "x": 12,
+      "y": 0
     }
   },
   "portrait": {
@@ -257,7 +411,6 @@
       "w": 6,
       "h": 3,
       "size": "small",
-      "foreground": "tertiary",
       "parts": {
         "label": {
           "hidden": true,
@@ -286,7 +439,6 @@
       "w": 6,
       "h": 3,
       "size": "small",
-      "foreground": "tertiary",
       "parts": {
         "label": {
           "hidden": true,
@@ -322,7 +474,6 @@
       "w": 5,
       "h": 2,
       "size": "small",
-      "foreground": "tertiary",
       "parts": {
         "label": {
           "hidden": true,
@@ -351,7 +502,6 @@
       "w": 3,
       "h": 2,
       "size": "small",
-      "foreground": "tertiary",
       "parts": {
         "label": {
           "hidden": true,
@@ -425,7 +575,6 @@
       "w": 9,
       "h": 2,
       "size": "medium",
-      "foreground": "tertiary",
       "parts": {
         "hint": {
           "bold": true,
@@ -462,7 +611,6 @@
       "size": "medium",
       "horizontal": "right",
       "vertical": "middle",
-      "foreground": "tertiary",
       "x": 0,
       "y": 2
     },
@@ -474,6 +622,128 @@
       "x": 0,
       "y": 0,
       "elevation": 1
+    },
+    "wslc.host-containers": {
+      "w": 6,
+      "h": 4,
+      "size": "medium",
+      "parts": {
+        "hint": {
+          "size": "small",
+          "isDesign": false
+        }
+      }
+    },
+    "wslc.host-cpu": {
+      "w": 8,
+      "h": 4,
+      "size": "small"
+    },
+    "wslc.host-disk": {
+      "w": 8,
+      "h": 4,
+      "size": "small"
+    },
+    "wslc.host-images": {
+      "w": 6,
+      "h": 4,
+      "size": "medium",
+      "parts": {
+        "hint": {
+          "size": "small",
+          "isDesign": false
+        }
+      }
+    },
+    "wslc.host-memory": {
+      "w": 8,
+      "h": 4,
+      "size": "small"
+    },
+    "wslc.host-networks": {
+      "w": 6,
+      "h": 4,
+      "size": "medium"
+    },
+    "wslc.host-volumes": {
+      "w": 5,
+      "h": 4,
+      "size": "medium"
+    },
+    "wslc.system-agent": {
+      "w": 6,
+      "h": 4,
+      "size": "medium",
+      "x": 0,
+      "y": 0
+    },
+    "wslc.system-client": {
+      "w": 7,
+      "h": 4,
+      "size": "medium",
+      "x": 6,
+      "y": 0
+    },
+    "wslc.system-wslc": {
+      "w": 6,
+      "h": 4,
+      "size": "medium",
+      "x": 13,
+      "y": 0
+    },
+    "wslc.system-kernel": {
+      "w": 6,
+      "h": 4,
+      "size": "medium",
+      "x": 25,
+      "y": 0
+    },
+    "wslc.host-cpu-dial": {
+      "w": 6,
+      "h": 6,
+      "size": "medium",
+      "background": "primaryTint",
+      "x": 0,
+      "y": 4,
+      "elevation": 5
+    },
+    "wslc.host-memory-dial": {
+      "w": 6,
+      "h": 6,
+      "size": "medium",
+      "background": "primaryTint",
+      "x": 11,
+      "y": 4,
+      "elevation": 5
+    },
+    "wslc.host-disk-dial": {
+      "w": 6,
+      "h": 6,
+      "size": "medium",
+      "background": "primaryTint",
+      "x": 19,
+      "y": 4,
+      "elevation": 5
+    },
+    "wslc.system-events": {
+      "w": 6,
+      "h": 4,
+      "size": "medium",
+      "x": 25,
+      "y": 4
+    },
+    "wslc.system-card": {
+      "w": 32,
+      "h": 10,
+      "size": "medium",
+      "background": "primaryTint"
+    },
+    "wslc.system-windows": {
+      "w": 6,
+      "h": 4,
+      "size": "small",
+      "x": 19,
+      "y": 0
     }
   }
 }
