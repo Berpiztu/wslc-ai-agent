@@ -154,9 +154,9 @@ It installs for your user only, with no administrator rights; its wizard asks
 for the address and port the agent listens on (`127.0.0.1` and `8069` unless
 you change them) and for its package folder ([How to update](#how-to-update)).
 If Windows warns that the installer is from an unknown publisher: **More info
-→ Run anyway**. Once installed, it downloads the Windows and Android clients
-into the agent's package folder, so anyone opening the agent's web page can
-download them from there; asks whether to install the Windows client on this
+→ Run anyway**. Once installed, it leaves the three installers in the agent's
+package folder (the agent's, and the Windows and Android clients', so anyone
+opening the agent's web page can download the clients from there); asks whether to install the Windows client on this
 machine too; and asks whether to create the publishing
 container, the nginx proxy that puts a container on a public HTTPS name
 (default: no); its domain is then set in **Settings → Publish**. Prefer the browser? Download it from the

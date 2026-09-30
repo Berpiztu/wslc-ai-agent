@@ -18,7 +18,8 @@
     manage containers.
     Once the agent is installed, it downloads the Windows and Android clients'
     installers into the agent's package folder, from which the agent's web
-    page offers them and the agent updates the clients, and offers to install
+    page offers them and the agent updates the clients, with its own beside
+    them; and offers to install
     the Windows client on this machine too. Then it offers to create the
     publishing container
     (the network, the proxy's map and the nginx proxy that put a container on
@@ -129,12 +130,15 @@ param([switch]$Client)
         return
     }
 
-    # The clients' installers go into the agent's package folder: the web UI
-    # offers them to download from there, and the agent updates the clients
-    # from there.
+    # The three installers go into the agent's package folder, as an update
+    # leaves them: the web UI offers the clients' to download from there, the
+    # agent updates the clients from there, and its own waits there beside
+    # them (the version it runs, so it updates nothing).
     try {
         $folder = (Invoke-RestMethod -Uri "$agent/api/v1/agent/update" -TimeoutSec 30).packageFolder
         New-Item -ItemType Directory -Force -Path $folder | Out-Null
+        Write-Host "Copying wslc-ai-agent.msi into the agent's package folder..." -ForegroundColor Cyan
+        Copy-Item -LiteralPath $msi -Destination (Join-Path $folder "wslc-ai-agent.msi") -Force
         foreach ($package in @("wslc-ai-client.msi", "wslc-ai-client.apk")) {
             Write-Host "Downloading $package into the agent's package folder..." -ForegroundColor Cyan
             Invoke-WebRequest -Uri "https://github.com/Berpiztu/wslc-ai-agent/releases/latest/download/$package" -OutFile (Join-Path $folder $package) -UseBasicParsing
