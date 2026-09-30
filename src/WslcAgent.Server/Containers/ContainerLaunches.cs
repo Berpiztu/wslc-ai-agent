@@ -32,7 +32,9 @@ public sealed class ContainerLaunches(IContainerService containers, IImageServic
         var image = ImageReference.Normalize(WslcArgs.Require(request.Image, "image"));
         var id = Guid.NewGuid().ToString("N");
         var name = request.Name.Trim().Length > 0 ? request.Name.Trim() : $"run-{id[..8]}";
-        var job = new Job(id, image, name, request with { Image = image, Start = true });
+        // Run and Create alike: the image pulled first when missing, the
+        // container then started or only created, as the request says.
+        var job = new Job(id, image, name, request with { Image = image });
         _jobs[id] = job;
         _ = Task.Run(() => ExecuteAsync(job, job.Request));
         return job.Snapshot();
@@ -122,9 +124,9 @@ public sealed class ContainerLaunches(IContainerService containers, IImageServic
                 return;
             }
 
-            job.Progress("run", "Starting container…", 100);
-            var created = await containers.RunAsync(request);
-            job.Finish(created);
+            job.Progress("run", request.Start ? "Starting container…" : "Creating container…", 100);
+            var created = request.Start ? await containers.RunAsync(request) : await containers.CreateAsync(request);
+            job.Finish(created, request.Start);
         }
         catch (Exception ex) when (ex is WslcException or WslcNotFoundException or TimeoutException or ArgumentException or InvalidOperationException)
         {
@@ -221,7 +223,7 @@ public sealed class ContainerLaunches(IContainerService containers, IImageServic
             }
         }
 
-        public void Finish(ContainerCreated created)
+        public void Finish(ContainerCreated created, bool started)
         {
             lock (_gate)
             {
@@ -230,7 +232,7 @@ public sealed class ContainerLaunches(IContainerService containers, IImageServic
                     return;
                 }
 
-                (Phase, _status, _pct, _containerId, _notes) = ("done", "Started", 100, created.Id, created.Notes);
+                (Phase, _status, _pct, _containerId, _notes) = ("done", started ? "Started" : "Created", 100, created.Id, created.Notes);
                 FinishedAt = DateTimeOffset.UtcNow;
             }
         }

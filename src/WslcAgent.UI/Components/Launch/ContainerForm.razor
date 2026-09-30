@@ -48,7 +48,7 @@
     @* What the container is. *@
     <div class="wslc-field-pick has-note">
         <MudTextField Margin="Margin.Dense" T="string" @bind-Value="Form.ImageName" Label="Image" Immediate="true" HelperTextOnFocus="true" Required="true" RequiredError="Image is required"
-                      Variant="Variant.Filled" HelperText="Repository. Type a name that is not local; Run will pull it." Error="@Has(LaunchFields.Image)" ErrorText="@Error(LaunchFields.Image)" />
+                      Variant="Variant.Filled" HelperText="Repository. Type a name that is not local; Run and Save pull it." Error="@Has(LaunchFields.Image)" ErrorText="@Error(LaunchFields.Image)" />
         <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick a local image" OnClick="PickImageAsync" />
     </div>
     <MudTextField Margin="Margin.Dense" T="string" @bind-Value="Form.ImageTag" Label="Tag" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled"
@@ -182,9 +182,9 @@
                    title="Cancel the changes made in this form" Disabled="_busy" OnClick="CancelAsync" />
 </div>
 
-@* The veil while the agent works: what is being done, and for a run the pull's own progress.
-   Nothing here is clickable; the rail's Close is the way out, and only for a run, which
-   goes on in the Containers table. *@
+@* The veil while the agent works: what is being done, and for a run or a create the pull's
+   own progress. Nothing here is clickable; the rail's Close is the way out, and only for a
+   run or a create, which goes on in the Containers table. *@
 <MudOverlay Visible="_busy" Absolute="true" DarkBackground="true" AutoClose="false" LockScroll="false" ZIndex="10">
     <MudPaper Class="pa-4" Elevation="4">
         <MudStack AlignItems="AlignItems.Center" Spacing="2">
@@ -200,7 +200,7 @@
             }
             @if (_following)
             {
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">This window can be closed: the run goes on in the Containers table.</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">This window can be closed: it goes on in the Containers table.</MudText>
             }
         </MudStack>
     </MudPaper>
@@ -382,7 +382,7 @@
 
     private string SaveTitle => Mode == LaunchMode.Edit
         ? "Save: remove the container and create it again with these settings, left stopped"
-        : "Save: create the container with these settings, left stopped";
+        : "Save: create the container with these settings, left stopped (the image is pulled first when it is not local)";
 
     private string RunTitle => Mode == LaunchMode.Edit
         ? "Save & start: remove the container, create it again with these settings and start it"
@@ -557,8 +557,7 @@
         try
         {
             var id = Mode == LaunchMode.Edit ? await RecreateAsync(request)
-                : start ? await LaunchAndFollowAsync(request)
-                : await CreateAsync(request);
+                : await LaunchAndFollowAsync(request);
             Snackbar.Add(Mode == LaunchMode.Edit ? $"Recreated {Named}" : start ? $"{Named} is running" : $"{Named} created, stopped", Severity.Success);
             await OnDone.InvokeAsync(id);
         }
@@ -639,20 +638,19 @@
         _ when start => DialogFlow.ConfirmAsync(Dialogs, "Run container",
             $"Run {Form.Image}{(Form.Name.Length > 0 ? $" as {Form.Name}" : "")}? It is pulled first if it is not on this machine.", "Run"),
         _ => DialogFlow.ConfirmAsync(Dialogs, "Create container",
-            $"Create {(Form.Name.Length > 0 ? Form.Name : "a container")} from {Form.Image}, stopped?", "Save"),
+            $"Create {(Form.Name.Length > 0 ? Form.Name : "a container")} from {Form.Image}, stopped? The image is pulled first if it is not on this machine.", "Save"),
     };
 
     private async Task<string> RecreateAsync(ContainerLaunchRequest request) =>
         Noted(await Api.RecreateContainerAsync(SourceId, request));
 
-    private async Task<string> CreateAsync(ContainerLaunchRequest request) =>
-        Noted(await Api.CreateContainerAsync(request));
-
     /// <summary>
-    /// The agent owns pull-then-run, so the run outlives this window; the veil
-    /// follows the job every second (the pull's progress, then the start) and the
-    /// form closes only when the agent says the container is up. A failed job comes
-    /// back as a failed launch, its fields included.
+    /// Run and Create alike: the agent owns pull-then-run (or pull-then-create),
+    /// so the job outlives this window, which can be closed while the image
+    /// downloads; the veil follows the job every second (the pull's progress, then
+    /// the start or the creation) and the form closes only when the agent says the
+    /// container is there. A failed job comes back as a failed launch, its fields
+    /// included.
     /// </summary>
     private async Task<string> LaunchAndFollowAsync(ContainerLaunchRequest request)
     {
@@ -683,7 +681,7 @@
                     throw new AgentApiException(409, "The run was cancelled.");
             }
 
-            _busyTitle = job.Phase == "pull" ? $"Pulling {job.Image}…" : $"Starting {job.Name}…";
+            _busyTitle = job.Phase == "pull" ? $"Pulling {job.Image}…" : $"{(request.Start ? "Starting" : "Creating")} {job.Name}…";
             _busyStatus = job.Status;
             _busyPct = job.Phase == "pull" ? job.Pct : null;
             StateHasChanged();

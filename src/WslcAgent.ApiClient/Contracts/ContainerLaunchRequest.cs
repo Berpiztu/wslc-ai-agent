@@ -135,13 +135,14 @@ public sealed record HostFolderListing(string Path, string Parent, IReadOnlyList
 public sealed record CreateHostFolderRequest(string Parent, string Name);
 
 /// <summary>
-/// A Run the agent carries out after the dialog closed: the image is pulled
-/// first when it is not local, then the container is run. Rows of
+/// A Run or a Create the agent carries out after the dialog closed: the image
+/// is pulled first when it is not local, then the container is run, or only
+/// created when the request's <c>Start</c> is false. Rows of
 /// <c>GET /api/v1/containers/launches</c>.
 /// </summary>
 /// <param name="Name">The container name asked for, or <c>run-</c> and a short id.</param>
 /// <param name="Phase"><c>pull</c>, <c>run</c>, <c>done</c>, <c>error</c> or <c>cancelled</c>.</param>
-/// <param name="Status">The line to show: the pull's progress, <c>Starting container…</c>, or why it ended.</param>
+/// <param name="Status">The line to show: the pull's progress, <c>Starting container…</c> or <c>Creating container…</c>, or why it ended.</param>
 /// <param name="Pct">The pull's percentage; 100 once the run starts.</param>
 /// <param name="ContainerId">The container created, once done.</param>
 /// <param name="Notes">What the run had to adjust (a static ip dropped), once done.</param>
