@@ -12,7 +12,10 @@
     folder and opens it: a per-user installer, no administrator rights. Says
     first when WSL is missing or too old for WSLC, which the agent needs to
     manage containers.
-    Once the agent is installed, it offers to create the publishing container
+    Once the agent is installed, it downloads the Windows and Android clients'
+    installers into the agent's package folder, from which the agent's web
+    page offers them and the agent updates the clients. Then it offers to
+    create the publishing container
     (the network, the proxy's map and the nginx proxy that put a container on
     a public HTTPS name): the agent's own Set up, which leaves alone what
     exists. The domain and the rest are set afterwards in Settings > Publish.
@@ -71,6 +74,33 @@ param([switch]$Client)
     $agent = "http://${bindHost}:$($installed.Port)"
     Write-Host "Done. The agent starts at logon; its dashboard: $agent" -ForegroundColor Green
 
+    # The agent starts right after its installer; give it a minute to answer.
+    $deadline = (Get-Date).AddSeconds(60)
+    $up = $false
+    while (-not $up -and (Get-Date) -lt $deadline) {
+        try { Invoke-RestMethod -Uri "$agent/api/v1/health" -TimeoutSec 5 | Out-Null; $up = $true } catch { Start-Sleep -Seconds 2 }
+    }
+    if (-not $up) {
+        Write-Host "The agent does not answer at $agent yet. Copy wslc-ai-client.msi and wslc-ai-client.apk from the release into its package folder, and Settings > Publish > Set up creates the publishing container." -ForegroundColor Yellow
+        return
+    }
+
+    # The clients' installers go into the agent's package folder: the web UI
+    # offers them to download from there, and the agent updates the clients
+    # from there.
+    try {
+        $folder = (Invoke-RestMethod -Uri "$agent/api/v1/agent/update" -TimeoutSec 30).packageFolder
+        New-Item -ItemType Directory -Force -Path $folder | Out-Null
+        foreach ($package in @("wslc-ai-client.msi", "wslc-ai-client.apk")) {
+            Write-Host "Downloading $package into the agent's package folder..." -ForegroundColor Cyan
+            Invoke-WebRequest -Uri "https://github.com/Berpiztu/wslc-ai-agent/releases/latest/download/$package" -OutFile (Join-Path $folder $package) -UseBasicParsing
+        }
+        Write-Host "The Windows and Android clients can now be downloaded from the agent's web page ($folder)." -ForegroundColor Green
+    } catch {
+        Write-Host "The clients' installers were not downloaded: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "Copy wslc-ai-client.msi and wslc-ai-client.apk from the release into the package folder shown in Settings > Update." -ForegroundColor Yellow
+    }
+
     # Set up runs wslc, so it needs WSLC; without it the button in Settings
     # does it later.
     if (-not $hasWslc) { return }
@@ -80,17 +110,6 @@ param([switch]$Client)
     $answer = try { Read-Host "Create the publishing container now? [y/N]" } catch { "" }
     if ($answer -notmatch '^\s*(y|yes)\s*$') {
         Write-Host "Skipped. Settings > Publish > Set up creates it whenever you want." -ForegroundColor DarkGray
-        return
-    }
-
-    # The agent starts right after its installer; give it a minute to answer.
-    $deadline = (Get-Date).AddSeconds(60)
-    $up = $false
-    while (-not $up -and (Get-Date) -lt $deadline) {
-        try { Invoke-RestMethod -Uri "$agent/api/v1/health" -TimeoutSec 5 | Out-Null; $up = $true } catch { Start-Sleep -Seconds 2 }
-    }
-    if (-not $up) {
-        Write-Host "The agent does not answer at $agent yet. Settings > Publish > Set up creates the publishing container once it does." -ForegroundColor Yellow
         return
     }
 
