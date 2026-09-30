@@ -1,13 +1,15 @@
-name: Architecture diagrams
+name: GitHub Pages
 
-# Publishes the app's own interactive architecture diagrams on GitHub Pages,
-# straight from where the app serves them, so the README can link to them:
-# a README cannot run the diagrams' JavaScript itself.
+# Publishes on GitHub Pages the app's own interactive architecture diagrams,
+# straight from where the app serves them, so the README can link to them (a
+# README cannot run the diagrams' JavaScript itself), and install.ps1, the
+# one-line installer the README runs with `irm ... | iex`.
 on:
   push:
     branches: [main]
     paths:
       - src/WslcAgent.UI/wwwroot/archify/**
+      - install.ps1
       - .github/workflows/pages.yml
   workflow_dispatch:
 
@@ -29,10 +31,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Gather the diagrams
+      - name: Gather the diagrams and the installer
         run: |
           mkdir -p _site/architecture
           cp src/WslcAgent.UI/wwwroot/archify/*.html _site/architecture/
+          cp install.ps1 _site/
 
       - uses: actions/configure-pages@v5
 

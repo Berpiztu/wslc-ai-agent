@@ -144,10 +144,10 @@ Two ways in:
 
 **1. Download and install the agent**, in one PowerShell line: it downloads
 `wslc-ai-agent.msi` from the latest release into your Downloads folder and
-opens it.
+opens it ([install.ps1](install.ps1)).
 
 ```powershell
-$ProgressPreference = 'SilentlyContinue'; $msi = "$env:USERPROFILE\Downloads\wslc-ai-agent.msi"; Invoke-WebRequest https://github.com/Berpiztu/wslc-ai-agent/releases/latest/download/wslc-ai-agent.msi -OutFile $msi; Start-Process $msi
+irm https://berpiztu.github.io/wslc-ai-agent/install.ps1 | iex
 ```
 
 It installs for your user only, with no administrator rights; its wizard asks
@@ -170,7 +170,7 @@ Start-Process http://127.0.0.1:8069
 - **Windows client**, downloaded and installed the same way:
 
 ```powershell
-$ProgressPreference = 'SilentlyContinue'; $msi = "$env:USERPROFILE\Downloads\wslc-ai-client.msi"; Invoke-WebRequest https://github.com/Berpiztu/wslc-ai-agent/releases/latest/download/wslc-ai-client.msi -OutFile $msi; Start-Process $msi
+& ([scriptblock]::Create((irm https://berpiztu.github.io/wslc-ai-agent/install.ps1))) -Client
 ```
 
 - **Android client**: `wslc-ai-client.apk`, from the same
@@ -299,6 +299,7 @@ All scripts live in the repository root and work from any current directory.
 
 | Script | What it does |
 |---|---|
+| `install.ps1` | Download the latest release's installer and open it: the agent's, or the Windows client's with `-Client`. What the Quick start runs, through GitHub Pages, with `irm ... \| iex`. |
 | `check-prereqs.ps1` | What the machine needs to build, test, run and package, and the command that installs what is missing. Changes nothing. |
 | `install-prereqs.ps1` | Install everything `check-prereqs.ps1` finds missing, in order, after one administrator prompt. |
 | `check-private.ps1` | The private files this checkout has and what each enables, without printing a secret. |
