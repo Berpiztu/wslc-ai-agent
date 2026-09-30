@@ -94,6 +94,21 @@ param([switch]$Client)
         return
     }
 
+    # WSLC does not start its session on its own, and Set up runs in it: the
+    # session the agent works in is started first when it is not running.
+    try {
+        $sessions = Invoke-RestMethod -Uri "$agent/api/v1/sessions" -TimeoutSec 60
+        $selected = @($sessions.sessions) | Where-Object { $_.name -eq $sessions.selected } | Select-Object -First 1
+        if (-not ($selected -and $selected.active)) {
+            Write-Host "Starting the WSLC session $($sessions.selected)..." -ForegroundColor Cyan
+            Invoke-RestMethod -Method Post -Uri "$agent/api/v1/sessions/start" -ContentType "application/json" -Body '{"name":""}' -TimeoutSec 300 | Out-Null
+        }
+    } catch {
+        Write-Host "The WSLC session could not be started: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "Start it from the agent's session menu, then Settings > Publish > Set up creates the publishing container." -ForegroundColor Yellow
+        return
+    }
+
     Write-Host "Creating the publishing container (the first time, WSLC downloads nginx)..." -ForegroundColor Cyan
     try {
         $setup = Invoke-RestMethod -Method Post -Uri "$agent/api/v1/publishing/setup" -TimeoutSec 600
