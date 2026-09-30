@@ -1,0 +1,48 @@
+@* The controls an action window of the Logs page carries at the right end of
+   its header row (the grid's and the Activity list's, one each;
+   the same buttons for both, in the row, because two
+   vertical rails of eight did not fit the height; and, from the right, first
+   the ring, then the filters). The rail's own drawing, laid across: the
+   filters as one group — All, then a toggle per type; pressed, that type is
+   shown, the counts in the tooltips — then, a gap along, the Autorefresh at
+   the end: a ring with a round button inside and no box around it. The button
+   is the switch: pressed, the ring goes round in blue and the window follows
+   what arrives; pressed again, both stop and the ring turns green; while the
+   reader holds the window (the list's pointer, finger or open command) the
+   ring stands still without switching off. *@
+<div class="wslc-action-rail wslc-action-row" role="toolbar">
+    <MudIconButton Icon="@Icons.Material.Filled.SelectAll" Color="@RailToggle.Color(Hidden.Count == 0)" Class="@RailToggle.Class(Hidden.Count == 0)" Size="Size.Small" Variant="Variant.Filled"
+                   title="@($"All ({Count(null)}) — {(Hidden.Count == 0 ? "every type shown, click to hide all" : "click to show every type")}")" aria-pressed="@(Hidden.Count == 0 ? "true" : "false")"
+                   OnClick="ToggleAll" />
+    @foreach (var (key, label, icon) in CliKinds.Groups)
+    {
+        var shown = !Hidden.Contains(key);
+        <MudIconButton Icon="@icon" Color="@RailToggle.Color(shown)" Class="@RailToggle.Class(shown)" Size="Size.Small" Variant="Variant.Filled"
+                       title="@($"{label} ({Count(key)}) — {(shown ? "shown, click to hide" : "hidden, click to show")}")" aria-pressed="@(shown ? "true" : "false")"
+                       OnClick="@(() => ToggleKind.InvokeAsync(key))" />
+    }
+    <div class="wslc-rail-gap" aria-hidden="true"></div>
+    <FollowRing Follow="Follow" Held="Held" Title="@FollowTitle" FollowChanged="FollowChanged" />
+</div>
+
+@code {
+    /// <summary>Autorefresh on.</summary>
+    [Parameter] public bool Follow { get; set; }
+
+    /// <summary>The reader holds the window: the ring stands still without switching off.</summary>
+    [Parameter] public bool Held { get; set; }
+
+    [Parameter] public string FollowTitle { get; set; } = "";
+
+    [Parameter] public EventCallback FollowChanged { get; set; }
+
+    /// <summary>The types hidden.</summary>
+    [Parameter, EditorRequired] public IReadOnlySet<string> Hidden { get; set; } = new HashSet<string>();
+
+    /// <summary>How many of that type the window holds (null: every type), for the tooltips.</summary>
+    [Parameter, EditorRequired] public Func<string?, int> Count { get; set; } = _ => 0;
+
+    [Parameter] public EventCallback ToggleAll { get; set; }
+
+    [Parameter] public EventCallback<string> ToggleKind { get; set; }
+}

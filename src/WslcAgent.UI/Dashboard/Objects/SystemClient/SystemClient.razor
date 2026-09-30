@@ -1,0 +1,12 @@
+@* The native client's version, green, or amber with its install waiting: the
+   System card's Client reading (ClientVersionLink), standing alone. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits WslcObject
+@attribute [DashboardObject("wslc.system-client", "Client version", Group = "System", Subgroup = "System", Icon = Icons.Material.Filled.PhoneAndroid, Columns = 4, Rows = 4, Background = ThemeColor.BackgroundGray)]
+@attribute [DashboardObjectPart("label", "Label")]
+
+<div class="@SummaryClass">
+    <SummaryReading Label="Client"><VerbTaps><ClientVersionLink /></VerbTaps></SummaryReading>
+</div>

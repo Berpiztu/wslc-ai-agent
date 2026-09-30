@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <!-- The one user interface: Razor components on MudBlazor, hosted by
+       WslcAgent.Web (browser, PWA) and WslcAgent.App (MAUI Blazor Hybrid). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>WslcAgent.UI</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+    <PackageReference Include="MudBlazor" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WslcAgent.ApiClient\WslcAgent.ApiClient.csproj" />
+    <!-- The dashboard: Berpiztu's, which knows nothing of WSLC. -->
+    <ProjectReference Include="..\Berpiztu.Dashboard\Berpiztu.Dashboard.csproj" />
+  </ItemGroup>
+
+</Project>

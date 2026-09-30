@@ -1,0 +1,121 @@
+@* A network's View & edit: the read-only facts on top, the
+   create-time settings as the Create form below, the raw inspect JSON folded
+   away. Save cannot change a network in place: after a warning it replaces the
+   network and reconnects its containers. The built-in networks are shown and
+   never saved. *@
+@using WslcAgent.ApiClient
+@inject WslcAgentApi Api
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())" Disabled="_busy">Cancel</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync"
+                       Disabled="@(_details is null || _details.BuiltIn || _busy)">@(_busy ? "Recreating…" : "Save")</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        @if (_details is null && _error is null)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        @if (_details is not null)
+        {
+            <div class="wslc-summary mb-2">
+                <div><span class="wslc-summary-label">ID</span><span class="wslc-summary-value" title="@_details.Id">@_details.Id</span></div>
+                <div><span class="wslc-summary-label">Scope</span><span class="wslc-summary-value">@_details.Scope</span></div>
+                <div><span class="wslc-summary-label">Created</span><span class="wslc-summary-value">@_details.Created</span></div>
+                <div><span class="wslc-summary-label">Containers</span><span class="wslc-summary-value" title="@ContainersText">@ContainersText</span></div>
+            </div>
+            <MudForm @ref="_formRef">
+                <NetworkFields Model="_form" Disabled="@(_details.BuiltIn || _busy)" />
+            </MudForm>
+            <MudExpansionPanels Class="mt-2">
+                <MudExpansionPanel Text="Raw inspect JSON">
+                    <pre class="wslc-logs-output wslc-logs-wrap wslc-logs-pre">@_details.Inspect</pre>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        }
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-2">@_error</MudAlert>
+        }
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private NetworkDetails? _details;
+    private NetworkFields.NetworkForm _form = new();
+    private MudForm? _formRef;
+    private string? _error;
+    private bool _busy;
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public string Network { get; set; } = "";
+
+    private string ContainersText =>
+        _details is null || _details.Containers.Count == 0 ? "none" : $"{_details.Containers.Count}: {string.Join(", ", _details.Containers)}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _details = await Api.GetNetworkDetailsAsync(Network);
+            _form = NetworkFields.NetworkForm.From(_details.Form);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_formRef is null)
+        {
+            return;
+        }
+
+        await _formRef.ValidateAsync();
+        if (!_formRef.IsValid)
+        {
+            return;
+        }
+
+        var request = _form.ToRequest();
+        var question = $"This will REMOVE network {request.Name} and create a replacement with the edited settings (driver, subnet, gateway). "
+            + "Attached containers will disconnect briefly, then reconnect. Static IPs on the old subnet will not apply. Continue?";
+        if (!await DialogFlow.ConfirmAsync(Dialogs, "View & edit", question, "Save", destructive: true))
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+        try
+        {
+            var result = await Api.RecreateNetworkAsync(Network, request);
+            if (result.ConnectFailed.Count > 0)
+            {
+                Snackbar.Add($"Recreated {result.Name}; could not reconnect: {string.Join(", ", result.ConnectFailed)}", Severity.Error);
+            }
+            else
+            {
+                Snackbar.Add($"Recreated {result.Name}", Severity.Success);
+            }
+
+            Dialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

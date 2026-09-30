@@ -1,0 +1,26 @@
+@* One of a network's two dials: what the containers on it have received, or
+   sent, as its share of what every container has. The card's body draws
+   both (NetworkCardBody); the dashboard draws each as an object. *@
+
+@if (Sent)
+{
+    <UsageDial Label="Sent" Text="@Readings.Traffic(Network.InUse, Network.NetSentBytes)" Reading="@UsageDial.Share(Network.NetSentBytes, Total)" Live="@Network.InUse" Tone="Color.Secondary"
+               Size="Size.Large" Title="@Readings.TrafficTitle(Network.NetSentBytes, "sent", Network.Containers, Where, Total)" />
+}
+else
+{
+    <UsageDial Label="Received" Text="@Readings.Traffic(Network.InUse, Network.NetReceivedBytes)" Reading="@UsageDial.Share(Network.NetReceivedBytes, Total)" Live="@Network.InUse" Tone="Color.Primary"
+               Size="Size.Large" Title="@Readings.TrafficTitle(Network.NetReceivedBytes, "received", Network.Containers, Where, Total)" />
+}
+
+@code {
+    private const string Where = "on this network";
+
+    [Parameter, EditorRequired] public NetworkSummary Network { get; set; } = default!;
+
+    /// <summary>The Sent dial; the Received dial when false.</summary>
+    [Parameter] public bool Sent { get; set; }
+
+    /// <summary>What every container has received, or sent: what the dial is a share of.</summary>
+    [Parameter] public long Total { get; set; }
+}

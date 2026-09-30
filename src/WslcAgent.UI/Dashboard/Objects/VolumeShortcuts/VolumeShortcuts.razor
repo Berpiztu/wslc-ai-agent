@@ -1,0 +1,22 @@
+@* A volume's shortcuts: view and edit, and container usage, the group the
+   Volumes list's card leads its actions row with, standing alone; its own
+   verbs are another object (VolumeVerbs). It stands at the left until
+   another alignment is chosen. In design the canvas makes it inert. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits VolumeObject
+@attribute [DashboardObject("wslc.volume-shortcuts", "Volume shortcuts", Group = "Volume", Subgroup = "User", Icon = Icons.Material.Filled.Apps, Source = VolumeSourceFamily.FamilyKey, Columns = 4, Rows = 2, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Left, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Left)]
+
+@if (Volume is { } r)
+{
+    <div class="@SectionClass()">
+        <EntityCardPart>
+            <MudCardActions Class="py-1">
+                <VerbTaps>
+                    <VolumeActions Volume="r" ShortcutsAlone="true" Changed="@(() => Volumes.RefreshAsync())" />
+                </VerbTaps>
+            </MudCardActions>
+        </EntityCardPart>
+    </div>
+}

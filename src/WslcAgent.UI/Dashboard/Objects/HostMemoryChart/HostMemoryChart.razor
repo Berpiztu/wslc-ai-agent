@@ -1,0 +1,17 @@
+@* Memory over the last two minutes: the containers' aggregate, or one
+   container's, its axis up to the container's limit, as its Stats tab
+   draws it. Its subject — the host, or a container — is its property (ChartObject). *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@inherits ChartObject
+@attribute [DashboardObject("wslc.host-memory-chart", "Memory chart", Group = "Charts", Icon = Icons.Material.Filled.StackedLineChart, Source = SubjectSourceFamily.FamilyKey, DefaultSource = SubjectSourceFamily.Host, Columns = 16, Rows = 6, Fills = true, CardOnly = true)]
+@attribute [DashboardObjectAlarm(DashboardMeasures.Memory, "Memory", On = true)]
+
+@if (Data is { } data)
+{
+    <HostChart Data="data" Class="@TypeClass" />
+}
+
+@code {
+    protected override string Chart => HostCharts.Memory;
+}

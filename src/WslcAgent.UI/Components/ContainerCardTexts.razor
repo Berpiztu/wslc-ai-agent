@@ -1,0 +1,16 @@
+@* What a container's card says about it in words: its Id, its Status, its
+   Ports, its Networks and when it was created. The card's body draws them
+   beside its dials (ContainerCardBody); the dashboard's details object draws
+   them alone, the dials being objects of their own. *@
+
+<div class="wslc-card-texts">
+    <MudText Typo="Typo.body2" title="@Container.Id"><b>Id</b> @Container.Id</MudText>
+    <MudText Typo="Typo.body2" title="@Container.Status"><b>Status</b> @Container.Status</MudText>
+    <MudText Typo="Typo.body2"><b>Ports</b> <PortsLink Ports="Container.Ports" Container="@Container.Id" Publications="Container.Published" /></MudText>
+    <MudText Typo="Typo.body2" title="@Container.Networks"><b>Networks</b> @Readings.Dash(Container.Networks)</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary" title="@Container.CreatedAt">Created @Container.RunningFor</MudText>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ContainerSummary Container { get; set; } = default!;
+}

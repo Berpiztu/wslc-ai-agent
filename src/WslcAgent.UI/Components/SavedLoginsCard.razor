@@ -1,0 +1,104 @@
+@* Settings → Saved logins: the titles, users and passwords the host browser pane
+   offers to copy or to type into the page. Kept on the agent, encrypted, so every
+   client signed in to it sees the same list. *@
+@inject WslcAgentApi Api
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+<MudPaper Outlined="true" Class="@($"pa-4 {Class}")">
+    <MudText Typo="Typo.h6">Saved logins</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+        Logins for the pages you open with the browser. The browser bar lists them by title and shows the email, the user
+        and the password, to copy to this device or to type into the page — a sign-in page asks for one or the other.
+        Kept on the agent, encrypted.
+    </MudText>
+    @if (_logins is null)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (_logins.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">No saved logins yet.</MudText>
+    }
+    else
+    {
+        <MudSimpleTable Dense="true" Bordered="true" Striped="true" Class="mb-2">
+            <thead><tr><th>Title</th><th>Email</th><th>User</th><th>Password</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var login in _logins)
+                {
+                    <tr @key="login.Id">
+                        <td>@login.Title</td>
+                        <td class="wslc-mono">@login.Email</td>
+                        <td class="wslc-mono">@login.User</td>
+                        <td class="wslc-mono">@login.Password</td>
+                        <td class="text-nowrap">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" title="Change" OnClick="@(() => EditAsync(login))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="Remove" OnClick="@(() => RemoveAsync(login))" />
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => EditAsync(null))">Add login</MudButton>
+</MudPaper>
+
+@code {
+    private IReadOnlyList<SavedLogin>? _logins;
+
+    [Parameter] public string Class { get; set; } = "";
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _logins = await Api.GetSavedLoginsAsync();
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            // Refused: the sign-in screen takes over and says so itself. Leaving the
+            // 401 out of the catch would let it out of a lifecycle method, which is
+            // the unhandled-error bar across the bottom of the app.
+            _logins = [];
+            if (!ex.IsSignInRequired())
+            {
+                Snackbar.Add($"Saved logins: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task EditAsync(SavedLogin? login)
+    {
+        var parameters = new DialogParameters<Dialogs.SavedLoginDialog> { { d => d.Existing, login } };
+        if (await DialogFlow.ShowAsync<Dialogs.SavedLoginDialog>(Dialogs, login is null ? "Add login" : $"Change {login.Title}", parameters))
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task RemoveAsync(SavedLogin login)
+    {
+        if (!await DialogFlow.ConfirmRemoveAsync(Dialogs, "saved login", login.Title))
+        {
+            return;
+        }
+
+        try
+        {
+            await Api.DeleteSavedLoginAsync(login.Id);
+            Snackbar.Add($"{login.Title} removed", Severity.Success);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            if (!ex.IsSignInRequired())
+            {
+                Snackbar.Add($"{login.Title}: remove failed. {ex.Message}", Severity.Error);
+            }
+        }
+
+        await LoadAsync();
+    }
+}

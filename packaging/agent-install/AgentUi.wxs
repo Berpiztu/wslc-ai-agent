@@ -1,0 +1,108 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <!-- First-run wizard: welcome (with the version), licence (must be accepted),
+       then the listen settings the agent reads from HKCU: bind host and port.
+       WixUI_Minimal cannot be used: its licence page's Install button starts
+       the install straight away and the settings page would never show. -->
+  <Fragment>
+    <UI Id="WslcAgentUI">
+      <TextStyle Id="WixUI_Font_Normal" FaceName="Tahoma" Size="8" />
+      <TextStyle Id="WixUI_Font_Bigger" FaceName="Tahoma" Size="12" />
+      <TextStyle Id="WixUI_Font_Title" FaceName="Tahoma" Size="9" Bold="yes" />
+      <Property Id="DefaultUIFont" Value="WixUI_Font_Normal" />
+      <Property Id="ARPNOMODIFY" Value="1" />
+
+      <DialogRef Id="ErrorDlg" />
+      <DialogRef Id="FatalError" />
+      <DialogRef Id="FilesInUse" />
+      <DialogRef Id="MsiRMFilesInUse" />
+      <DialogRef Id="PrepareDlg" />
+      <DialogRef Id="ProgressDlg" />
+      <DialogRef Id="ResumeDlg" />
+      <DialogRef Id="UserExit" />
+      <DialogRef Id="ExitDialog" />
+      <DialogRef Id="CancelDlg" />
+      <DialogRef Id="WaitForCostingDlg" />
+      <DialogRef Id="OutOfDiskDlg" />
+      <DialogRef Id="OutOfRbDiskDlg" />
+      <DialogRef Id="MaintenanceWelcomeDlg" />
+      <DialogRef Id="MaintenanceTypeDlg" />
+      <DialogRef Id="VerifyReadyDlg" />
+      <DialogRef Id="LicenseAgreementDlg" />
+
+      <Dialog Id="WelcomeVersionDlg" Width="370" Height="270" Title="[ProductName] [ProductVersion] Setup">
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="WixUI_Bmp_Banner" />
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="340" Height="15" Transparent="yes" NoPrefix="yes"
+                 Text="{\WixUI_Font_Title}Welcome to [ProductName] [ProductVersion] Setup" />
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="330" Height="15" Transparent="yes" NoPrefix="yes"
+                 Text="This installs [ProductName] [ProductVersion] on this PC." />
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
+        <Control Id="Body" Type="Text" X="25" Y="70" Width="320" Height="40" Transparent="yes" NoPrefix="yes"
+                 Text="The Setup Wizard will install [ProductName] [ProductVersion]. Click Next to continue." />
+        <!-- A newer agent is on this PC: said, with its number when it left one, and Next goes on. -->
+        <Control Id="NewerInstalled" Type="Text" X="25" Y="115" Width="320" Height="60" Transparent="yes" NoPrefix="yes" Hidden="yes"
+                 ShowCondition="NEWERVERSIONDETECTED AND INSTALLEDVERSION"
+                 Text="{\WixUI_Font_Title}A newer version, [INSTALLEDVERSION], is already installed on this PC. Next replaces it with [ProductVersion]; its settings are kept. Cancel keeps [INSTALLEDVERSION]." />
+        <Control Id="NewerInstalledUnknown" Type="Text" X="25" Y="115" Width="320" Height="60" Transparent="yes" NoPrefix="yes" Hidden="yes"
+                 ShowCondition="NEWERVERSIONDETECTED AND NOT INSTALLEDVERSION"
+                 Text="{\WixUI_Font_Title}A newer version is already installed on this PC (one that left no version number). Next replaces it with [ProductVersion]; its settings are kept. Cancel keeps it." />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="&amp;Next">
+          <Publish Event="NewDialog" Value="LicenseAgreementDlg" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="Cancel">
+          <Publish Event="SpawnDialog" Value="CancelDlg" />
+        </Control>
+      </Dialog>
+
+      <Dialog Id="AgentNetworkDlg" Width="370" Height="270" Title="[ProductName] [ProductVersion] Setup">
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="WixUI_Bmp_Banner" />
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="340" Height="15" Transparent="yes" NoPrefix="yes"
+                 Text="{\WixUI_Font_Title}Agent listen settings" />
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="330" Height="15" Transparent="yes" NoPrefix="yes"
+                 Text="Choose the server address, the port and the package folder, or keep the defaults." />
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
+
+        <Control Id="ServerLabel" Type="Text" X="25" Y="52" Width="320" Height="15" Text="Server:" />
+        <Control Id="ServerEdit" Type="Edit" X="25" Y="66" Width="320" Height="18" Property="WSLC_BINDHOST" />
+
+        <Control Id="PortLabel" Type="Text" X="25" Y="92" Width="320" Height="15" Text="Port:" />
+        <Control Id="PortEdit" Type="Edit" X="25" Y="106" Width="120" Height="18" Property="WSLC_AGENTPORT" Integer="yes" />
+
+        <Control Id="PackagesLabel" Type="Text" X="25" Y="132" Width="320" Height="15" Text="Package folder (updates and client downloads):" />
+        <Control Id="PackagesEdit" Type="Edit" X="25" Y="146" Width="320" Height="18" Property="WSLC_PACKAGESFOLDER" />
+
+        <Control Id="Hint" Type="Text" X="25" Y="172" Width="320" Height="56" Transparent="yes" NoPrefix="yes"
+                 Text="Default is 127.0.0.1 on port 8069 (this PC only); enter this PC's LAN address to reach the agent from other devices. Newer installers of the agent and its clients go in the package folder, created if missing; Settings, Update changes it later." />
+
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+        <Control Id="Back" Type="PushButton" X="156" Y="243" Width="56" Height="17" Text="&amp;Back">
+          <Publish Event="NewDialog" Value="LicenseAgreementDlg" />
+        </Control>
+        <Control Id="Install" Type="PushButton" X="212" Y="243" Width="80" Height="17" Default="yes" Text="&amp;Install">
+          <Publish Event="SpawnWaitDialog" Value="WaitForCostingDlg" Condition="CostingComplete = 1" />
+          <Publish Event="EndDialog" Value="Return" Condition="WSLC_BINDHOST AND WSLC_AGENTPORT AND WSLC_PACKAGESFOLDER AND OutOfDiskSpace &lt;&gt; 1" />
+          <Publish Event="SpawnDialog" Value="OutOfRbDiskDlg" Condition="OutOfDiskSpace = 1 AND OutOfNoRbDiskSpace = 0 AND (PROMPTROLLBACKCOST=&quot;P&quot; OR NOT PROMPTROLLBACKCOST)" />
+          <Publish Event="SpawnDialog" Value="OutOfDiskDlg" Condition="(OutOfDiskSpace = 1 AND OutOfNoRbDiskSpace = 1) OR (OutOfDiskSpace = 1 AND PROMPTROLLBACKCOST=&quot;F&quot;)" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="Cancel">
+          <Publish Event="SpawnDialog" Value="CancelDlg" />
+        </Control>
+      </Dialog>
+
+      <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return" Order="999" />
+      <Publish Dialog="LicenseAgreementDlg" Control="Back" Event="NewDialog" Value="WelcomeVersionDlg" />
+      <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="AgentNetworkDlg" Condition="LicenseAccepted = &quot;1&quot;" />
+      <Publish Dialog="MaintenanceWelcomeDlg" Control="Next" Event="NewDialog" Value="MaintenanceTypeDlg" />
+      <Publish Dialog="MaintenanceTypeDlg" Control="RepairButton" Event="NewDialog" Value="VerifyReadyDlg" />
+      <Publish Dialog="MaintenanceTypeDlg" Control="RemoveButton" Event="NewDialog" Value="VerifyReadyDlg" />
+      <Publish Dialog="MaintenanceTypeDlg" Control="Back" Event="NewDialog" Value="MaintenanceWelcomeDlg" />
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="MaintenanceTypeDlg" />
+
+      <InstallUISequence>
+        <Show Dialog="WelcomeVersionDlg" Before="ProgressDlg" Condition="NOT Installed" />
+      </InstallUISequence>
+    </UI>
+
+    <UIRef Id="WixUI_Common" />
+  </Fragment>
+</Wix>

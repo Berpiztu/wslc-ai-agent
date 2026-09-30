@@ -1,0 +1,20 @@
+@* The logs window: the same view the details tab shows, in its own
+   window, with its action rail (search, wrap, autorefresh, refresh, jump to
+   end, copy, clear). Everything the row menu opens opens like this. *@
+
+<MudDialog ContentClass="wslc-dialog-action">
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <LogsView Container="@Container" />
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public string Container { get; set; } = "";
+}

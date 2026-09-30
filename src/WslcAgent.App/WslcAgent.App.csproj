@@ -1,0 +1,144 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <!-- .NET MAUI Blazor Hybrid shell for Windows and Android. It hosts
+       WslcAgent.UI in a WebView; native code is limited to connection
+       settings, login and self-update. -->
+  <PropertyGroup>
+    <!-- The installer script publishes with -r win-x64 and passes
+         WslcAgentWindowsOnly=true: restore would otherwise also reach the
+         Android leg (a Mono target) and fail on a non-existent
+         Microsoft.NETCore.App.Runtime.Mono.win-x64 package. Overriding
+         TargetFrameworks on the command line is not an option because it is a
+         global property and would also hit the net10.0 project references. -->
+    <TargetFrameworks Condition="'$(WslcAgentWindowsOnly)' == 'true'">net10.0-windows10.0.19041.0</TargetFrameworks>
+    <TargetFrameworks Condition="'$(WslcAgentWindowsOnly)' != 'true'">net10.0-android;net10.0-windows10.0.19041.0</TargetFrameworks>
+
+    <OutputType>Exe</OutputType>
+    <AssemblyName>wslc-ai-client</AssemblyName>
+    <RootNamespace>WslcAgent.App</RootNamespace>
+    <UseMaui>true</UseMaui>
+    <SingleProject>true</SingleProject>
+    <EnableDefaultCssItems>false</EnableDefaultCssItems>
+    <MauiXamlInflator>SourceGen</MauiXamlInflator>
+
+    <ApplicationTitle>WSLC AI Client</ApplicationTitle>
+    <ApplicationId>ai.berpiztu.wslcagent</ApplicationId>
+
+    <!-- Client version of the release, independent of the agent's and changed
+         only when one is published: Display is the Windows EXE ProductVersion
+         and the Android versionName; ApplicationVersion is the Android
+         versionCode. The packaging scripts bump this checkout's own in
+         private\version.props (Directory.Build.props imports it), taken
+         below when above these. -->
+    <ApplicationDisplayVersion>0.2.34</ApplicationDisplayVersion>
+    <ApplicationVersion>234</ApplicationVersion>
+    <ApplicationDisplayVersion Condition="'$(WslcLocalClientVersion)' != '' And $([MSBuild]::VersionGreaterThan('$(WslcLocalClientVersion)', '$(ApplicationDisplayVersion)'))">$(WslcLocalClientVersion)</ApplicationDisplayVersion>
+    <ApplicationVersion Condition="'$(WslcLocalClientBuild)' != '' And $(WslcLocalClientBuild) &gt; $(ApplicationVersion)">$(WslcLocalClientBuild)</ApplicationVersion>
+    <Version>$(ApplicationDisplayVersion)</Version>
+    <FileVersion>$(ApplicationDisplayVersion).$(ApplicationVersion)</FileVersion>
+    <InformationalVersion>$(ApplicationDisplayVersion)</InformationalVersion>
+
+    <!-- Unpackaged Windows app: no MSIX, the WiX installer wraps the publish output. -->
+    <WindowsPackageType>None</WindowsPackageType>
+
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
+    <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- No Color on the icon: the background SVG is a rounded tile and the
+         corners must stay transparent in the Windows .ico and taskbar. -->
+    <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" />
+    <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#1e293b" BaseSize="128,128" />
+    <MauiImage Include="Resources\Images\*" />
+    <MauiFont Include="Resources\Fonts\*" />
+    <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- Every Android build of this client signs with the same key: the one the
+       installer uses. Android refuses an update whose APK is signed with
+       another key, so a release APK could not replace a build deployed over a
+       cable — Android says only "App not installed" and leaves you to guess.
+       The key is found the way packaging/Packaging.ps1 finds it: the
+       WSLC_AGENT_KEYSTORE override, then the checkout's private/ folder, then
+       the per-user copy. With none of them the build falls back to the SDK's
+       debug key, so a fresh clone still runs; it just cannot update an
+       installed release (docs/developer/private-files.md). -->
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <_WslcPrivate>$(MSBuildThisFileDirectory)..\..\private\</_WslcPrivate>
+    <_WslcRepoKeystore>$(_WslcPrivate)android.keystore</_WslcRepoKeystore>
+    <_WslcUserKeystore>$(USERPROFILE)\.wslc-agent\android.keystore</_WslcUserKeystore>
+    <_WslcKeystore Condition="'$(WSLC_AGENT_KEYSTORE)' != '' And Exists('$(WSLC_AGENT_KEYSTORE)')">$(WSLC_AGENT_KEYSTORE)</_WslcKeystore>
+    <_WslcKeystore Condition="'$(_WslcKeystore)' == '' And Exists('$(_WslcRepoKeystore)')">$(_WslcRepoKeystore)</_WslcKeystore>
+    <_WslcKeystore Condition="'$(_WslcKeystore)' == '' And Exists('$(_WslcUserKeystore)')">$(_WslcUserKeystore)</_WslcKeystore>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(_WslcKeystore)' != '' And Exists('$(_WslcKeystore).pass')">
+    <AndroidKeyStore>true</AndroidKeyStore>
+    <AndroidSigningKeyStore>$(_WslcKeystore)</AndroidSigningKeyStore>
+    <AndroidSigningKeyAlias Condition="'$(WSLC_AGENT_KEY_ALIAS)' != ''">$(WSLC_AGENT_KEY_ALIAS)</AndroidSigningKeyAlias>
+    <AndroidSigningKeyAlias Condition="'$(AndroidSigningKeyAlias)' == ''">wslc-agent</AndroidSigningKeyAlias>
+    <AndroidSigningStorePass>$([System.IO.File]::ReadAllText('$(_WslcKeystore).pass').Trim())</AndroidSigningStorePass>
+    <AndroidSigningKeyPass>$(AndroidSigningStorePass)</AndroidSigningKeyPass>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
+  </ItemGroup>
+
+  <!-- The agent's notifications, pushed through Firebase Cloud Messaging. The
+       app's Firebase configuration is WSLC_AGENT_GOOGLE_SERVICES, else
+       private/google-services.json beside the Android key; a checkout without
+       it builds a client that simply gets no token. -->
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <_WslcGoogleServices Condition="'$(WSLC_AGENT_GOOGLE_SERVICES)' != ''">$(WSLC_AGENT_GOOGLE_SERVICES)</_WslcGoogleServices>
+    <_WslcGoogleServices Condition="'$(_WslcGoogleServices)' == ''">$(_WslcPrivate)google-services.json</_WslcGoogleServices>
+  </PropertyGroup>
+
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <PackageReference Include="Xamarin.Firebase.Messaging" />
+    <!-- MAUI's AndroidX extension packages at the versions Firebase's libraries
+         take, or the build finds classes twice (Directory.Packages.props). -->
+    <PackageReference Include="Xamarin.AndroidX.Fragment.Ktx" />
+    <PackageReference Include="Xamarin.AndroidX.Collection.Ktx" />
+    <PackageReference Include="Xamarin.AndroidX.Lifecycle.LiveData" />
+    <PackageReference Include="Xamarin.AndroidX.Lifecycle.LiveData.Core.Ktx" />
+    <PackageReference Include="Xamarin.AndroidX.Lifecycle.Process" />
+    <GoogleServicesJson Include="$(_WslcGoogleServices)" Condition="Exists('$(_WslcGoogleServices)')" />
+  </ItemGroup>
+
+  <!-- On Windows, the agent's notifications as toasts, the ones its tray icon shows too. -->
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">
+    <ProjectReference Include="..\WslcAgent.Toasts\WslcAgent.Toasts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WslcAgent.UI\WslcAgent.UI.csproj" />
+    <ProjectReference Include="..\WslcAgent.ApiClient\WslcAgent.ApiClient.csproj" />
+  </ItemGroup>
+
+  <!-- MAUI decides whether to generate the splash from one stamp file alone
+       (ProcessMauiSplashScreens takes the stamp as its only output), and the
+       images it writes do not survive every build: the stamp is left behind and
+       every later build skips the work. What ships then is MAUI's own default —
+       an empty layer-list over the app's primary colour — which is the plain
+       blue screen with no glyph the clients showed. The stamp goes before the
+       target runs, so the splash is generated on every build; it is a handful
+       of PNGs. -->
+  <Target Name="WslcAgentRegenerateSplash" BeforeTargets="ProcessMauiSplashScreens">
+    <Delete Files="$(_MauiSplashStampFile)" ContinueOnError="true" />
+  </Target>
+
+  <!-- The app icon, the same way: ResizetizeImages decides from its own stamp
+       (mauiimage.stamp), the stamp outlived the mipmaps it had written, and a
+       Release build after a good one stopped at the manifest with "resource
+       mipmap/appicon not found". The stamp goes before the
+       target runs, so the icons are written on every build; they are a few PNGs. -->
+  <Target Name="WslcAgentRegenerateImages" BeforeTargets="ResizetizeImages">
+    <Delete Files="$(_ResizetizerStampFile)" ContinueOnError="true" />
+  </Target>
+
+</Project>

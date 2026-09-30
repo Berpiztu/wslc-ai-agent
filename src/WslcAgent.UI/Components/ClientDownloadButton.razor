@@ -1,0 +1,46 @@
+@* The client download button: a browser on an Android device is
+   offered the APK, on anything else the Windows installer; iOS has no client
+   yet and sees nothing. Inside a native client it is not shown: the client
+   updates itself. The agent says first whether it has the package, so a
+   missing one is a notice rather than a broken download. *@
+@using WslcAgent.UI.Updates
+@inject IClientUpdates NativeClient
+@inject IJSRuntime Js
+@inject WslcAgentApi Api
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+@if (ClientDownloads.Offered(_platform))
+{
+    <MudIconButton Icon="@Icons.Material.Filled.Download" Color="Color.Success" Size="Size.Small" Variant="Variant.Filled"
+                   title="@Title" aria-label="@Title" Disabled="_checking" OnClick="DownloadAsync" />
+}
+
+@code {
+    private string _platform = "";
+    private bool _checking;
+
+    private string Title => $"Download {ClientDownloads.Name(_platform)}";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !NativeClient.Supported)
+        {
+            _platform = await ClientDownloads.PlatformAsync(Js);
+            StateHasChanged();
+        }
+    }
+
+    private async Task DownloadAsync()
+    {
+        _checking = true;
+        try
+        {
+            await ClientDownloads.DownloadAsync(Api, Navigation, Snackbar, _platform);
+        }
+        finally
+        {
+            _checking = false;
+        }
+    }
+}

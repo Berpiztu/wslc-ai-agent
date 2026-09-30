@@ -1,0 +1,24 @@
+@inject WslcAgent.UI.Access.IClientServers Servers
+
+@* The boot splash, drawn again by the application while it works out what it
+   is drawing on (MainLayout): the host page's splash hands over to this one,
+   the same in every line, so the start is one screen from the first frame to
+   the page instead of the splash, then a blank page with a ring on it. Its markup is the host pages' (wwwroot/index.html
+   of the browser and of the native client), its rules wslc-agent-ui.css's.
+   The bar waits: there is nothing left to count. *@
+<div class="wslc-splash" style="--blazor-load-percentage-text: 'Starting…'" role="status">
+    <svg class="wslc-splash-glyph" viewBox="0 0 456 456" aria-hidden="true">
+        <g fill="none" stroke="#e2e8f0" stroke-width="22" stroke-linejoin="round" stroke-linecap="round">
+            <path d="M228 78 L352 150 V306 L228 378 L104 306 V150 Z" />
+            <path d="M104 150 L228 222 L352 150" />
+            <path d="M228 222 V378" />
+        </g>
+        <g fill="none" stroke="#818cf8" stroke-width="22" stroke-linejoin="round" stroke-linecap="round">
+            <path d="M140 262 L172 286 L140 310" />
+            <path d="M186 322 H226" />
+        </g>
+    </svg>
+    <div class="wslc-splash-title">@(Servers.Supported ? "WSLC AI Client" : "WSLC AI Agent")</div>
+    <div class="wslc-splash-bar"><div class="wslc-splash-fill wslc-splash-waiting"></div></div>
+    <div class="wslc-splash-text"></div>
+</div>

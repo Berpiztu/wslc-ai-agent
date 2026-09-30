@@ -1,0 +1,67 @@
+@* The Ports field of the launch form: the --publish values on one line, as
+   the other multi-value fields show theirs, a published pair followed by its
+   name in parentheses — 3000:8080 (open-webui) — so the names are seen
+   without opening the popup; and beside it the button that opens the Ports
+   popup, one row per port pair with the Reverse proxy check and the name.
+   Typing in the line reads the pairs back
+   through the plain split rule and keeps the names of the pairs still there;
+   the names themselves only change through the popup, since the agent, not
+   wslc, keeps them. *@
+@inject IDialogService Dialogs
+
+<div class="wslc-field-pick has-note">
+    <MudTextField Margin="Margin.Dense" T="string" Value="@Line" ValueChanged="Typed" Label="Publish" Immediate="true" HelperTextOnFocus="true"
+                  Variant="Variant.Filled" HelperText="Example: 8080:80. Several separated by commas, or edited as rows with ⋮, where a row is published on a public name, shown here in parentheses."
+                  Error="@(Error is not null)" ErrorText="@Error" />
+    <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Edit Publish values" OnClick="EditAsync" />
+</div>
+
+@code {
+    /// <summary>The form's own list of <c>--publish</c> values: edited in place, like the Volumes and Networks rows.</summary>
+    [Parameter, EditorRequired] public List<string> Publish { get; set; } = [];
+
+    /// <summary>The form's own list of public names, <c>containerPort:prefix</c>; edited in place by the popup.</summary>
+    [Parameter, EditorRequired] public List<string> PublicNames { get; set; } = [];
+
+    /// <summary>The container's name, what a default public name starts with.</summary>
+    [Parameter] public string ContainerName { get; set; } = "";
+
+    /// <summary>What the check or a failed launch said about the ports or their public names: shown in the field, in place of its example.</summary>
+    [Parameter] public string? Error { get; set; }
+
+    /// <summary>The pairs, each published one with its name after it: <c>3000:8080 (open-webui)</c>.</summary>
+    private string Line => string.Join(", ", Publish.Select(pair => NameOf(pair) is { } name ? $"{pair} ({name})" : pair));
+
+    /// <summary>The public name of a pair's container port, the part after the last colon of the pair.</summary>
+    private string? NameOf(string pair)
+    {
+        var port = pair[(pair.LastIndexOf(':') + 1)..].Split('/')[0].Trim();
+        return PublicNames.Select(n => n.Split(':', 2)).FirstOrDefault(p => p.Length == 2 && p[0].Trim() == port)?[1];
+    }
+
+    /// <summary>The pairs typed, their parentheses dropped; a pair taken out of the line takes its name with it.</summary>
+    private void Typed(string text)
+    {
+        Publish.Clear();
+        Publish.AddRange(ValueList.Split(text).Select(v => v.Contains('(') ? v[..v.IndexOf('(')].Trim() : v).Where(v => v.Length > 0));
+        var ports = Publish.Select(pair => pair[(pair.LastIndexOf(':') + 1)..].Split('/')[0].Trim()).ToHashSet();
+        PublicNames.RemoveAll(n => !ports.Contains(n.Split(':', 2)[0].Trim()));
+    }
+
+    private async Task EditAsync()
+    {
+        var parameters = new DialogParameters<Dialogs.PortRowsDialog>
+        {
+            { d => d.Publish, Publish.ToList() },
+            { d => d.PublicNames, PublicNames.ToList() },
+            { d => d.ContainerName, ContainerName },
+        };
+        if (await DialogFlow.ChooseAsync<Dialogs.PortRowsDialog, PortRowsResult>(Dialogs, "Edit Publish", parameters) is { } edited)
+        {
+            Publish.Clear();
+            Publish.AddRange(edited.Publish);
+            PublicNames.Clear();
+            PublicNames.AddRange(edited.PublicNames);
+        }
+    }
+}

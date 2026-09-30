@@ -1,0 +1,1306 @@
+@* The Files browser:
+
+   - path row: "↑ Up" and a breadcrumb whose segments are buttons, the last
+     one the current folder; a status line under it (items, loading, error);
+   - table Name / Size / Mode / Modified / Actions, a ".." row when not at the
+     root, 📁 📄 🔗 by type and a link's target beside its name;
+   - click selects (it does not open), Ctrl or Cmd toggles, Shift takes the
+     range, and a plain click on a folder that is already the only selection
+     opens it; Enter and Space do what a click does;
+   - the actions live on the primary row only — copy ⧉, cut ✂, edit ✎,
+     rename ↔, download ⬇, delete 🗑 — and with several rows selected only the
+     ones that make sense for a set: copy, cut and delete;
+   - cut rows are dimmed until they are pasted; paste gives a copy its own
+     name (name-copy, name-copy2…), skips a cut into its own folder and
+     refuses a folder into itself;
+   - the rail holds Upload, New folder, Paste (only with a clipboard of this
+     container) and Refresh;
+   - the editor opens in the table's place, with the path and Save / Close.
+
+   Beyond the listing: the container's
+   mounts are marked — a mount point by what is mounted there, a folder with
+   one further down more quietly, and the path row says when the folder shown
+   lives in one — and in a read-only mount, or on a mount point, the verbs
+   that would only fail stand greyed. *@
+@using Microsoft.AspNetCore.Components.Routing
+@using WslcAgent.ApiClient
+@implements IDisposable
+@inject WslcAgentApi Api
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject IJSRuntime Js
+@inject FileTransfers Transfers
+
+<div class="wslc-action-body">
+    <div class="wslc-action-main wslc-fill">
+        <div class="wslc-files-toolbar">
+            @* One character wide: the arrow carries it and the tooltip spells it. *@
+            <MudIconButton Icon="@WslcIcons.UpFolder" Size="Size.Small" Class="wslc-files-up"
+                           Disabled="@AtRoot" title="Up — parent directory"
+                           OnClick="@(() => OpenAsync(ContainerPath.Parent(_path)))" />
+            <nav class="wslc-files-crumbs" aria-label="Current path">
+                <button type="button" class="wslc-files-crumb" title="@RootPath" @onclick="@(() => OpenAsync(RootPath))">/</button>
+                @foreach (var crumb in Crumbs())
+                {
+                    <span class="wslc-files-crumb-sep">/</span>
+                    @if (crumb.Current)
+                    {
+                        <span class="wslc-files-crumb-current" title="@crumb.Path">@crumb.Name</span>
+                    }
+                    else
+                    {
+                        <button type="button" class="wslc-files-crumb" title="@crumb.Path" @onclick="@(() => OpenAsync(crumb.Path))">@crumb.Name</button>
+                    }
+                }
+            </nav>
+            @* The folder being shown lives in a mount: what the user puts here
+               outlives the container, and a host folder's shows on the host too.
+               Written out in blue: a tooltip is
+               never seen on Android, so the line says it — the mount's icon and
+               source:destination (mode), as --volume writes it. *@
+            @if (_mounts.Holding(_path) is { } here)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Info" Class="wslc-files-mount-here">
+                    <span class="wslc-files-mount"><MudIcon Icon="@ContainerMounts.Icon(here)" Color="Color.Info" /></span>
+                    @ContainerMounts.Spec(here)
+                </MudText>
+            }
+            @* The count rides with the path instead of taking a line of its own:
+               that line was a row of files. It sits outside the breadcrumb so it
+               can be pushed to the end of the row. *@
+            <span class="wslc-files-status @_statusClass" role="status">@_status</span>
+        </div>
+
+        @if (_editing is not null)
+        {
+            <div class="wslc-files-editor">
+                <div class="wslc-files-editor-bar">
+                    <span class="wslc-mono" title="@_editing">@_editing</span>
+                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveEditorAsync" Disabled="@(_busy || EditingReadOnly)"
+                                   title="@(EditingReadOnly ? ReadOnlyTitle("Save") : "Save")">Save</MudButton>
+                        <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="CloseEditorAsync" Disabled="_busy">Close</MudButton>
+                    </MudStack>
+                </div>
+                <MudTextField Margin="Margin.Dense" T="string" Value="@_editorText" ValueChanged="Typed" Variant="Variant.Filled" Class="wslc-fill-scroll wslc-mono" Lines="20"
+                              Immediate="true" spellcheck="false" autocomplete="off" />
+            </div>
+        }
+        else
+        {
+            <div class="wslc-files-wrap">
+                <table class="wslc-files-table">
+                    <thead>
+                        @* An untitled column of its own where the names end, holding nothing
+                           but the verbs of the selected row. A fixed width, so it neither
+                           takes room from the names as the selection walks the list nor lets
+                           the columns shift when the button comes and goes. *@
+                        <tr>
+                            <th class="wslc-files-name">Name</th>
+                            <th class="wslc-files-verbs-cell"></th>
+                            <th class="wslc-files-size">Size</th>
+                            <th class="wslc-files-mode">Mode</th>
+                            <th class="wslc-files-mtime">Modified</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!AtRoot)
+                        {
+                            <tr class="wslc-files-parent" tabindex="0" title="Parent directory"
+                                @onclick="@(() => OpenAsync(ContainerPath.Parent(_path)))">
+                                <td class="wslc-files-name">📁 <span class="wslc-files-entry">..</span></td>
+                                <td class="wslc-files-verbs-cell"></td>
+                                <td class="wslc-files-size">—</td>
+                                <td class="wslc-files-mode">—</td>
+                                <td class="wslc-files-mtime">—</td>
+                                </tr>
+                        }
+                        @foreach (var entry in _entries)
+                        {
+                            <tr class="@RowClass(entry)" tabindex="0" aria-selected="@(Selected(entry) ? "true" : "false")"
+                                @onclick="@(mouse => ClickedAsync(entry, mouse))" @onkeydown="@(key => KeyedAsync(entry, key))">
+                                @* A mount point takes the name, the free column and
+                                   Size, which a folder never fills, in one cell: its blue folder and its
+                                   name, then source:destination (mode), written out
+                                   because a tooltip is never seen on Android. Mode
+                                   and the date are the folder's own, and stay. *@
+                                @if (_mounts.At(entry.Path) is { } mount)
+                                {
+                                    <td class="wslc-files-name wslc-files-mount-cell" colspan="3">
+                                        @Name(entry)
+                                        @ContainerMounts.Spec(mount)
+                                        @RowVerbs(entry)
+                                    </td>
+                                }
+                                else
+                                {
+                                    <td class="wslc-files-name">@Name(entry)</td>
+                                    <td class="wslc-files-verbs-cell">
+                                        @MountMark(entry)
+                                        @RowVerbs(entry)
+                                    </td>
+                                    <td class="wslc-files-size">@(entry.IsDirectory ? "—" : entry.SizeHuman)</td>
+                                }
+                                <td class="wslc-files-mode">@entry.Mode</td>
+                                <td class="wslc-files-mtime">@entry.Mtime</td>
+                            </tr>
+                        }
+                        @if (_entries.Count == 0)
+                        {
+                            <tr><td colspan="5">@(_loading ? "Loading…" : "Empty directory")</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+    @* The rail's verbs are MudBlazor's filled small icon buttons with its own
+       Material icons, exactly as it draws them. The colours are the app's verb
+       colours, the same on every screen: blue creates, green starts or puts
+       something in, light blue copies, orange cuts, red stops or destroys, and
+       the neutral one changes nothing. *@
+    <div class="wslc-action-rail wslc-files-rail" role="toolbar">
+        @* Verbs that belong together share one round button that opens to the
+           left, over the table, where nothing else stands; each verb inside keeps
+           a colour of its own, so the open menu is not one block of a single tone.
+           Upload and download are the first. *@
+        @* The file the web UI sends goes through this input: only the browser
+           can send a file of gigabytes without holding it in memory
+           (FileTransfers), and what it chose is parked in the page, not in this
+           element. The native client does not use it at all — it picks through
+           the OS and reads the file from its own path, because what a WebView's
+           input answers dies with the screen it was on, and an upload outlives
+           the screen. One button, one menu, one verb — two ways of carrying it. *@
+        <input type="file" multiple class="d-none" @ref="_fileInput" aria-hidden="true" tabindex="-1" />
+        @* Several files at once, in both pickers: each one is a transfer of
+           its own, they go up in turn, and the container's row adds them into
+           one ring. *@
+        <MudFabMenu StartIcon="@Icons.Material.Filled.SwapVert" Size="Size.Small" Color="Color.Success"
+                    Open="_transferOpen" OpenChanged="TransferOpenChanged" Disabled="Editing"
+                    Direction="Direction.Left" OpenOnMouseHover="false" CloseOnMenuItemClicked="true"
+                    DampenItemsBackgroundColor="false" title="Upload or download">
+            <MudFabMenuItem StartIcon="@Icons.Material.Filled.Backup" Size="Size.Small" Color="Color.Success"
+                            title="@(ReadOnlyHere ? ReadOnlyTitle("Upload") : "Upload file to current directory")" OnClick="PickAsync" Disabled="ReadOnlyHere" />
+            @* Download takes the selection, not one row: three files
+               chosen are three transfers, and the container's row adds
+               them into one ring. A folder in the selection is left
+               where it is — a directory is not a file to carry. *@
+            <MudFabMenuItem StartIcon="@Icons.Material.Filled.BrowserUpdated" Size="Size.Small" Color="Color.Info"
+                            title="@DownloadTitle" OnClick="Download" Disabled="@(SelectedFiles.Count == 0)" />
+        </MudFabMenu>
+        @* Making and changing: a new folder, editing a file, renaming an item. *@
+        <MudFabMenu StartIcon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                    Open="_changeOpen" OpenChanged="ChangeOpenChanged" Disabled="Editing"
+                    Direction="Direction.Left" OpenOnMouseHover="false" CloseOnMenuItemClicked="true"
+                    DampenItemsBackgroundColor="false" title="New folder, edit or rename">
+            <MudFabMenuItem StartIcon="@Icons.Material.Filled.CreateNewFolder" Size="Size.Small" Color="Color.Success"
+                            title="@(ReadOnlyHere ? ReadOnlyTitle("New folder") : "New folder")" OnClick="NewFolderAsync" Disabled="ReadOnlyHere" />
+            <MudFabMenuItem StartIcon="@Icons.Material.Filled.EditNote" Size="Size.Small" Color="Color.Primary"
+                            title="Edit" OnClick="@(() => EditAsync(SingleEntry!))" Disabled="@(SingleEntry is not { IsDirectory: false })" />
+            <MudFabMenuItem StartIcon="@Icons.Material.Filled.TextFields" Size="Size.Small" Color="Color.Warning"
+                            title="@(SelectionLocked ? LockedTitle("Rename") : "Rename")" OnClick="@(() => RenameAsync(SingleEntry!))" Disabled="@(SingleEntry is null || SelectionLocked)" />
+        </MudFabMenu>
+        @* The selection's verbs, which used to open from a button on the row: the
+           row is already chosen, so the verb does not need to stand beside it.
+           Copy, cut and delete take the whole selection; edit, rename and download
+           take one item, and edit and download a file, so they grey out otherwise
+           — the same rules the row's menu kept. *@
+        <MudIconButton Color="Color.Info" Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" Variant="Variant.Filled"
+                       title="Copy" OnClick="@(() => Hold(cut: false))" Disabled="@(Editing || _selected.Count == 0)" />
+        <MudIconButton Color="Color.Warning" Icon="@Icons.Material.Filled.ContentCut" Size="Size.Small" Variant="Variant.Filled"
+                       title="@(SelectionLocked ? LockedTitle("Cut") : "Cut")" OnClick="@(() => Hold(cut: true))" Disabled="@(Editing || _selected.Count == 0 || SelectionLocked)" />
+        @* Paste and cancel-cut are always on the rail and only enabled when they
+           can act: a button that appears and disappears moves everything under
+           it, and the rail has to stand still. Cancelling a cut stands under
+           paste, not on a row: there is only ever one cut, since cutting again
+           replaces what was held, so taking it back is a thing the screen does. *@
+        <MudIconButton Color="Color.Success" Icon="@Icons.Material.Filled.ContentPaste" Size="Size.Small" Variant="Variant.Filled"
+                       title="@(ReadOnlyHere ? ReadOnlyTitle("Paste") : _held.Count > 0 ? PasteTitle : "Paste (nothing copied or cut)")" OnClick="PasteAsync" Disabled="@(Editing || _held.Count == 0 || ReadOnlyHere)" />
+        @* Under paste, one button with two jobs: undo while there is a paste or a
+           delete to take back, cancel a cut while one is pending. Filled like the
+           rest of the rail, in amber, the palette's nearest to yellow. *@
+        <MudIconButton Color="Color.Warning" Size="Size.Small" OnClick="UndoOrCancelAsync"
+                       Icon="@(_undo.Count > 0 ? Icons.Material.Filled.Undo : Icons.Material.Filled.Close)"
+                       Variant="Variant.Filled"
+                       title="@(_undo.Count > 0 ? $"Undo ({_undo.Count} to undo)" : "Cancel cut")"
+                       Disabled="@(Editing || (_undo.Count == 0 && !(_heldAreCut && _held.Count > 0)))" />
+        <MudIconButton Color="Color.Error" Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Variant="Variant.Filled"
+                       title="@(SelectionLocked ? LockedTitle("Delete") : "Delete")" OnClick="DeleteAsync" Disabled="@(Editing || _selected.Count == 0 || SelectionLocked)" />
+        @* Refresh is the bare icon, with no fill: it changes nothing, so it does not
+           stand out like the verbs that do. *@
+        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" title="Refresh" OnClick="RefreshAsync" Disabled="@(Editing || _loading)" />
+    </div>
+</div>
+
+@code {
+    /// <summary>
+    /// The row's own button of verbs is parked, not removed: the verbs now stand
+    /// on the rail and act on the selection. Set true to bring the row's menu
+    /// back; it is kept whole while the rail is tried out.
+    /// </summary>
+    private static readonly bool ShowRowVerbs = false;
+
+    // The rail's two grouped menus open one at a time: each keeps its own open
+    // state, so opening the second left the first spread across the table.
+    private bool _transferOpen;
+    private bool _changeOpen;
+
+    private void TransferOpenChanged(bool open)
+    {
+        _transferOpen = open;
+        if (open)
+        {
+            _changeOpen = false;
+        }
+    }
+
+    private void ChangeOpenChanged(bool open)
+    {
+        _changeOpen = open;
+        if (open)
+        {
+            _transferOpen = false;
+        }
+    }
+
+    private readonly List<ContainerFileEntry> _held = [];
+    private readonly HashSet<string> _selected = new(StringComparer.Ordinal);
+    private List<ContainerFileEntry> _entries = [];
+    private string _path = "/";
+    private string _primary = "";
+    private string _anchor = "";
+    private string _status = "";
+    private string _statusClass = "";
+    private bool _heldAreCut;
+
+    /// <summary>
+    /// Every paste and every delete since the last copy or cut, the newest on
+    /// top: each undo takes back one, so three pastes can be undone three times.
+    /// Copying or cutting something else starts the history again.
+    /// </summary>
+    private readonly Stack<IReadOnlyList<UndoStep>> _undo = new();
+
+    /// <summary>
+    /// Where a delete puts what it removes, so it can be put back. It exists for
+    /// one thing: undoing, at once, something just deleted by mistake. It is not
+    /// a trash with a retention, and nothing here empties it or reaches into it
+    /// later — the container's own /tmp cleanup takes what it takes. A container
+    /// or volume that needs a retention, legal or otherwise, mounts a system built
+    /// for that and runs it; a trash anyone with the dashboard could read would
+    /// get round the permissions of what was put in it, which is why this one is
+    /// kept to the immediate undo and nothing more. One folder per delete, so two
+    /// deletes of the same name never meet. A delete from another filesystem (a
+    /// bind mount such as /workspace) is a copy and a removal rather than a
+    /// rename, so a large folder takes its time.
+    /// </summary>
+    private const string TrashRoot = "/tmp/.wslc-trash";
+
+    private static readonly TimeSpan TransfersEvery = TimeSpan.FromSeconds(1);
+
+    /// <summary>How many quiet ticks the follower gives a transfer to appear before it stops looking.</summary>
+    private const int QuietTicks = 3;
+
+    /// <summary>Ends the following of a transfer when the view goes, so a closed dialog stops asking about it.</summary>
+    private readonly CancellationTokenSource _closing = new();
+
+    /// <summary>The web UI's own file input, in the rail: the browser picks into it and sends from it.</summary>
+    private ElementReference _fileInput;
+
+    /// <summary>The container's mounts, read once for the container shown: they change only when it is recreated.</summary>
+    private ContainerMounts _mounts = ContainerMounts.None;
+
+    /// <summary>The container <see cref="_mounts"/> were read for.</summary>
+    private string? _mountsOf;
+
+    private bool _followingTransfers;
+    private bool _loading;
+    private string? _editing;
+    private string _editorText = "";
+    private bool _editorDirty;
+    private bool _busy;
+    private IDisposable? _guard;
+
+    /// <summary>Container name or id whose files these are.</summary>
+    [Parameter, EditorRequired] public string Container { get; set; } = "";
+
+    /// <summary>
+    /// The folder shown as <c>/</c>, above which the view does not go: a volume's
+    /// mount point inside the helper container that browses it. The whole
+    /// container by default.
+    /// </summary>
+    [Parameter] public string Root { get; set; } = "/";
+
+    /// <summary>
+    /// The folder being shown. A host that can keep it in the URL (the details
+    /// page) passes it and listens to <see cref="PathChanged"/>, so Back walks
+    /// the folders the user opened; a dialog leaves it alone and the browser
+    /// keeps its own trail.
+    /// </summary>
+    [Parameter] public string Path { get; set; } = "";
+
+    [Parameter] public EventCallback<string> PathChanged { get; set; }
+
+    /// <summary>
+    /// The name of the file open in the editor, empty when the listing is
+    /// showing. It is part of what the screen shows, so the host keeps it in
+    /// the URL too: opening a file is a step, and Back from it returns to its
+    /// folder — not to the folder before that. Only the name travels; the
+    /// folder is already there.
+    /// </summary>
+    [Parameter] public string File { get; set; } = "";
+
+    [Parameter] public EventCallback<string> FileChanged { get; set; }
+
+    private string PasteTitle => _held.Count == 1
+        ? $"Paste ({(_heldAreCut ? "move" : "copy")} {_held[0].Name})"
+        : $"Paste ({(_heldAreCut ? "move" : "copy")} {_held.Count} items)";
+
+    /// <summary>
+    /// Leaving with the text touched asks first, wherever the leaving comes
+    /// from: the back button, the back gesture, a link or a tab. The guard
+    /// lives as long as the view does and only speaks while there is something
+    /// to lose.
+    /// </summary>
+    protected override void OnInitialized()
+    {
+        _guard = Navigation.RegisterLocationChangingHandler(LeavingAsync);
+        Transfers.Finished += TransferFinished;
+    }
+
+    private async ValueTask LeavingAsync(LocationChangingContext context)
+    {
+        if (!_editorDirty)
+        {
+            return;
+        }
+
+        var name = _editing is null ? "This file" : ContainerPath.Name(_editing);
+        if (await DialogFlow.ConfirmAsync(Dialogs, "Discard changes?", $"{name} has changes that are not saved. Leave and discard them?", "Discard", destructive: true))
+        {
+            _editorDirty = false;
+            return;
+        }
+
+        context.PreventNavigation();
+    }
+
+    /// <summary>
+    /// The folder and the open file come from the host (and so from the URL):
+    /// a Back, a Forward or a pasted link all land here and the view follows.
+    /// </summary>
+    protected override async Task OnParametersSetAsync()
+    {
+        // The view never stands above its root, not even before its first
+        // listing: reading the mounts yields, and the render in between drew
+        // the crumbs of the starting "/" under a volume's root
+        // (/mnt/wslc-volume) and cut past its end — the volume's files never
+        // opened.
+        _path = Within(_path);
+
+        // The mounts and the listing are asked for together: the inspect only
+        // colours the rows, and waiting for it before listing added its whole
+        // round trip to every first opening.
+        var mounts = ReadMountsAsync();
+        var wanted = Within(Path);
+        if (_entries.Count == 0 || wanted != _path)
+        {
+            await OpenAsync(wanted, tell: false);
+        }
+
+        await mounts;
+
+        var name = File.Trim();
+        if (name.Length == 0 && _editing is not null)
+        {
+            // Navigated away from the editor: the view lets go of it.
+            _editing = null;
+            _editorDirty = false;
+        }
+        else if (name.Length > 0 && ContainerPath.Join(_path, name) is var file && file != _editing)
+        {
+            await ReadIntoEditorAsync(file);
+        }
+    }
+
+    /// <summary>
+    /// The mounts, from the container's inspect, the one place that knows
+    /// them (the details view shows the same list). A container that cannot
+    /// be inspected shows its files unmarked, as they were before.
+    /// </summary>
+    private async Task ReadMountsAsync()
+    {
+        if (_mountsOf == Container)
+        {
+            return;
+        }
+
+        _mountsOf = Container;
+        try
+        {
+            _mounts = new ContainerMounts((await Api.GetContainerDetailsAsync(Container)).Mounts);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _mounts = ContainerMounts.None;
+        }
+    }
+
+    /// <summary>Nothing can be written in the folder shown: it lives in a read-only mount.</summary>
+    private bool ReadOnlyHere => _mounts.IsReadOnly(_path);
+
+    /// <summary>The file open in the editor lives in a read-only mount, so Save would only fail.</summary>
+    private bool EditingReadOnly => _editing is not null && _mounts.IsReadOnly(_editing);
+
+    /// <summary>
+    /// An item that cannot be moved, renamed or deleted from here: it lives
+    /// in a read-only mount, or it is a mount point itself, which the kernel
+    /// refuses to move while it is mounted ("Device or resource busy").
+    /// </summary>
+    private bool Locked(ContainerFileEntry entry) => _mounts.IsReadOnly(entry.Path) || _mounts.At(entry.Path) is not null;
+
+    /// <summary>Any of the selection is <see cref="Locked"/>: cut, rename and delete stand greyed rather than fail part-way.</summary>
+    private bool SelectionLocked => _entries.Any(entry => Selected(entry) && Locked(entry));
+
+    private static string ReadOnlyTitle(string verb) => $"{verb} (this folder is a read-only mount)";
+
+    private static string LockedTitle(string verb) => $"{verb} (a mount point, or something in a read-only mount, is selected)";
+
+    /// <summary>
+    /// The mark of a folder with a mount further down, in the free column where
+    /// the names end: the mount's icon in the
+    /// text's own colour, its tooltip naming where, so the mount can be found
+    /// by walking to it. A mount point carries its icon across the size, mode
+    /// and date columns instead, with the mount written out beside it.
+    /// </summary>
+    /// <summary>What the name cell holds: the glyph, the name and a link's target; the same in both shapes of row.</summary>
+    private RenderFragment Name(ContainerFileEntry entry) =>
+        @<text><span class="@GlyphClass(entry)">@Glyph(entry)</span> <span class="wslc-files-entry">@entry.Name</span>@if (entry.Target.Length > 0)
+        {
+            <span class="wslc-files-target">→ @entry.Target</span>
+        }</text>;
+
+    /// <summary>The row's parked verbs, on the primary row only; one place for both shapes of row.</summary>
+    private RenderFragment? RowVerbs(ContainerFileEntry entry) =>
+        ShowRowVerbs && _primary == entry.Path ? Verbs(entry) : null;
+
+    private RenderFragment? MountMark(ContainerFileEntry entry)
+    {
+        if (_mounts.At(entry.Path) is null && entry.IsDirectory && _mounts.Below(entry.Path) is { Count: > 0 } below)
+        {
+            var holds = string.Join("; ", below.Select(inner => $"{inner.Destination}: {ContainerMounts.Describe(inner)}"));
+            return Mark(ContainerMounts.Icon(below[0]), Color.Default, $"Holds {(below.Count == 1 ? "a mount" : $"{below.Count} mounts")} further down — {holds}");
+        }
+
+        return null;
+    }
+
+    private static RenderFragment Mark(string icon, Color color, string tooltip) =>
+        @<MudTooltip Text="@tooltip" ShowOnClick="true" RootClass="wslc-files-mount">
+            <MudIcon Icon="@icon" Color="@color" />
+        </MudTooltip>;
+
+    public void Dispose()
+    {
+        Transfers.Finished -= TransferFinished;
+        _guard?.Dispose();
+        _closing.Cancel();
+        _closing.Dispose();
+    }
+
+    /// <summary>
+    /// A mount and everything it holds, folders and files alike, reads in blue
+    /// — its line and its glyph — so what lives
+    /// on the volume or the host folder is told apart at a glance.
+    /// </summary>
+    private bool InMount(ContainerFileEntry entry) => _mounts.Holding(entry.Path) is not null;
+
+    /// <summary>The glyph's class in a mount: the folder's yellow turned blue, or the page's grey given a tone and turned blue.</summary>
+    private string? GlyphClass(ContainerFileEntry entry) =>
+        !InMount(entry) ? null : entry.IsDirectory ? "wslc-files-glyph-mounted" : "wslc-files-glyph-mounted-file";
+
+    private static string Glyph(ContainerFileEntry entry) => entry.Type switch
+    {
+        ContainerFileEntry.Directory => "📁",
+        ContainerFileEntry.Link => "🔗",
+        _ => "📄",
+    };
+
+    private bool Selected(ContainerFileEntry entry) => _selected.Contains(entry.Path);
+
+    private string RowClass(ContainerFileEntry entry)
+    {
+        var classes = new List<string>();
+        if (Selected(entry))
+        {
+            classes.Add("is-selected");
+        }
+
+        if (_primary == entry.Path)
+        {
+            classes.Add("is-primary");
+        }
+
+        if (Cut(entry))
+        {
+            classes.Add("is-cut");
+        }
+
+        // A mount point, and everything inside one, reads in blue across the
+        // whole row: told apart at a glance.
+        if (InMount(entry))
+        {
+            classes.Add("is-mount");
+        }
+
+        return string.Join(' ', classes);
+    }
+
+    /// <summary>This row is waiting to be moved: dimmed, and its Cut button offers to take it back.</summary>
+    private bool Cut(ContainerFileEntry entry) => _heldAreCut && _held.Any(held => held.Path == entry.Path);
+
+    /// <summary>
+    /// While a file is open in the editor the rail stands greyed from top to
+    /// bottom: its verbs act on the listing, which is not on screen, and a copy
+    /// or a delete landing on a row nobody can see is worse than no verb at all.
+    /// The editor's own text copies, cuts and pastes with the keyboard.
+    /// </summary>
+    private bool Editing => _editing is not null;
+
+    /// <summary>The row the single-item verbs act on: the last one clicked in the selection.</summary>
+    private ContainerFileEntry? PrimaryEntry => _entries.FirstOrDefault(e => e.Path == _primary);
+
+    /// <summary>Edit and rename take one item; with several selected they stand greyed.</summary>
+    private ContainerFileEntry? SingleEntry => _selected.Count == 1 ? PrimaryEntry : null;
+
+    /// <summary>What Download acts on: the files of the selection, in the order the folder lists them.</summary>
+    private IReadOnlyList<ContainerFileEntry> SelectedFiles =>
+        [.. _entries.Where(entry => _selected.Contains(entry.Path) && !entry.IsDirectory)];
+
+    private string DownloadTitle => SelectedFiles switch
+    {
+        [] => "Download (select a file)",
+        [var one] => $"Download {one.Name}",
+        var many => $"Download {many.Count} files",
+    };
+
+    /// <summary>
+    /// The verbs of the selected row, behind one button in the column of its
+    /// own where the names end. They open along the row, towards the columns
+    /// that carry a mode and a date rather than over the name being read, and
+    /// a row is always wider than they are — which upwards could not promise,
+    /// since the table clips whatever leaves it. A press opens them, not a
+    /// pointer passing over, and the one that is used closes them. It is built
+    /// and torn down with the selection, so moving to another row closes it.
+    /// </summary>
+    private RenderFragment<ContainerFileEntry> Verbs => entry =>
+    @<MudFabMenu Class="wslc-files-verbs" MenuClass="wslc-files-verbs-menu"
+                 StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Color="Color.Success"
+                 Direction="Direction.Right" Anchor="Origin.CenterLeft"
+                 OpenOnMouseHover="false" CloseOnMenuItemClicked="true"
+                 UseCloseIcon="false" DampenItemsBackgroundColor="false"
+                 title="Actions">
+        @* The app's verb colours, the same as on every screen: light blue
+           copies, orange cuts, blue creates or changes, green puts something in
+           or starts, red destroys. MudBlazor's own Material icons. *@
+        <MudFabMenuItem StartIcon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" Color="Color.Info" title="Copy" OnClick="@(() => Hold(cut: false))" />
+        @* Cut is always cut: cutting another row replaces what was held, and
+           taking a cut back is on the rail, under paste. *@
+        <MudFabMenuItem StartIcon="@Icons.Material.Filled.ContentCut" Size="Size.Small" Color="Color.Warning" title="Cut" OnClick="@(() => Hold(cut: true))" />
+        @if (_selected.Count <= 1)
+        {
+            @if (!entry.IsDirectory)
+            {
+                <MudFabMenuItem StartIcon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" title="Edit" OnClick="@(() => EditAsync(entry))" />
+            }
+            <MudFabMenuItem StartIcon="@Icons.Material.Filled.DriveFileRenameOutline" Size="Size.Small" Color="Color.Primary" title="Rename" OnClick="@(() => RenameAsync(entry))" />
+            @if (!entry.IsDirectory)
+            {
+                <MudFabMenuItem StartIcon="@Icons.Material.Filled.Download" Size="Size.Small" Color="Color.Info" title="Download" OnClick="@(() => DownloadFiles([entry]))" />
+            }
+        }
+        <MudFabMenuItem StartIcon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="Delete" OnClick="DeleteAsync" />
+    </MudFabMenu>;
+
+    private string RootPath => ContainerPath.Clean(Root);
+
+    private bool AtRoot => _path == RootPath;
+
+    /// <summary>A path kept inside <see cref="Root"/>: anything above it, or empty, is the root itself.</summary>
+    private string Within(string? path)
+    {
+        var clean = ContainerPath.Clean(path);
+        return RootPath == "/" || clean == RootPath || clean.StartsWith(RootPath + "/", StringComparison.Ordinal) ? clean : RootPath;
+    }
+
+    /// <summary>The path split into its clickable parts, the last one the folder being shown.</summary>
+    private IEnumerable<(string Name, string Path, bool Current)> Crumbs()
+    {
+        var segments = (AtRoot ? "" : _path[(RootPath == "/" ? 0 : RootPath.Length)..]).Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var walked = RootPath == "/" ? "" : RootPath;
+        for (var i = 0; i < segments.Length; i++)
+        {
+            walked += "/" + segments[i];
+            yield return (segments[i], walked, i == segments.Length - 1);
+        }
+    }
+
+    /// <summary>
+    /// Re-reads the folder on the spot. It must not go through the host: a
+    /// navigation to the address already shown is no change at all, so nothing
+    /// reloaded and a new folder, a rename or a paste only appeared after
+    /// walking away and back.
+    /// </summary>
+    private Task RefreshAsync() => OpenAsync(_path, tell: false);
+
+    /// <summary>Re-reads the folder without touching the status line, for a save that keeps the editor open.</summary>
+    private async Task ReloadAsync()
+    {
+        var status = _status;
+        var kind = _statusClass;
+        await OpenAsync(_path, tell: false);
+        Status(status, kind);
+    }
+
+    private async Task OpenAsync(string path, bool tell = true)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        // The host puts the folder in the URL; the answer comes back through
+        // Path and this same method, so Back walks the folders.
+        if (tell && PathChanged.HasDelegate)
+        {
+            await PathChanged.InvokeAsync(ContainerPath.Clean(path));
+            return;
+        }
+
+        _loading = true;
+        Status("Loading…", "is-loading");
+        try
+        {
+            var listing = await Api.ListContainerFilesAsync(Container, Within(path));
+            _path = listing.Path;
+            _entries = listing.Entries.ToList();
+            _selected.Clear();
+            _primary = "";
+            _anchor = "";
+            Status($"{_entries.Count} item{(_entries.Count == 1 ? "" : "s")}", "");
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _entries = [];
+            Status(ex.Message, "is-error");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void Status(string text, string kind)
+    {
+        _status = text;
+        _statusClass = kind;
+    }
+
+    private async Task KeyedAsync(ContainerFileEntry entry, KeyboardEventArgs key)
+    {
+        if (key.Key is "Enter" or " ")
+        {
+            await ClickedAsync(entry, new MouseEventArgs { CtrlKey = key.CtrlKey, ShiftKey = key.ShiftKey, MetaKey = key.MetaKey });
+        }
+    }
+
+    private async Task ClickedAsync(ContainerFileEntry entry, MouseEventArgs mouse)
+    {
+        if (mouse.ShiftKey && _anchor.Length > 0)
+        {
+            var paths = _entries.Select(e => e.Path).ToList();
+            var from = paths.IndexOf(_anchor);
+            var to = paths.IndexOf(entry.Path);
+            if (from >= 0 && to >= 0)
+            {
+                _selected.Clear();
+                foreach (var path in paths.GetRange(Math.Min(from, to), Math.Abs(to - from) + 1))
+                {
+                    _selected.Add(path);
+                }
+
+                _primary = entry.Path;
+            }
+
+            return;
+        }
+
+        if (mouse.CtrlKey || mouse.MetaKey)
+        {
+            if (!_selected.Add(entry.Path))
+            {
+                _selected.Remove(entry.Path);
+            }
+
+            _primary = _selected.Contains(entry.Path) ? entry.Path : "";
+            _anchor = entry.Path;
+            return;
+        }
+
+        // A second plain click on the folder that is already the only selection opens it.
+        if (entry.Type is ContainerFileEntry.Directory or ContainerFileEntry.Link && _selected.Count == 1 && Selected(entry))
+        {
+            await OpenAsync(entry.Path);
+            return;
+        }
+
+        _selected.Clear();
+        _selected.Add(entry.Path);
+        _primary = entry.Path;
+        _anchor = entry.Path;
+    }
+
+    /// <summary>The whole selection, which is what copy, cut and delete work on.</summary>
+    private List<ContainerFileEntry> Chosen() => _entries.Where(Selected).ToList();
+
+    private void Hold(bool cut)
+    {
+        _held.Clear();
+        _held.AddRange(Chosen());
+        _heldAreCut = cut;
+        _undo.Clear();
+        var verb = cut ? "Cut" : "Copied";
+        Snackbar.Add(_held.Count == 1 ? $"{verb} {_held[0].Name}" : $"{verb} {_held.Count} items", Severity.Success);
+    }
+
+    /// <summary>
+    /// Takes a cut back: the rows stop being dimmed and the Paste button goes
+    /// away. Without this the only ways out of a cut were pasting it or
+    /// deleting what was cut.
+    /// </summary>
+    private void CancelCut()
+    {
+        var what = _held.Count == 1 ? _held[0].Name : $"{_held.Count} items";
+        _held.Clear();
+        _heldAreCut = false;
+        Snackbar.Add($"Cut cancelled: {what}", Severity.Info);
+    }
+
+    /// <summary>
+    /// Paste, with these rules: a copy that would land on a name
+    /// already there becomes <c>name-copy</c>, a cut into its own folder is
+    /// nothing to do, and a folder cannot be pasted inside itself.
+    /// </summary>
+    private async Task PasteAsync()
+    {
+        var taken = _entries.Select(e => e.Name).ToHashSet(StringComparer.Ordinal);
+        var moving = _heldAreCut;
+        var steps = new List<UndoStep>();
+        Status($"{(moving ? "Moving" : "Copying")} {_held.Count} item{(_held.Count == 1 ? "" : "s")}…", "is-loading");
+        try
+        {
+            foreach (var item in _held)
+            {
+                var sameFolder = ContainerPath.Parent(item.Path) == _path;
+                if (moving && sameFolder)
+                {
+                    continue;
+                }
+
+                if (item.IsDirectory && (_path == item.Path || _path.StartsWith(item.Path + "/", StringComparison.Ordinal)))
+                {
+                    throw new InvalidOperationException($"Cannot paste “{item.Name}” into itself");
+                }
+
+                var name = moving ? item.Name : FreeName(item, taken);
+                taken.Add(name);
+                var destination = ContainerPath.Join(_path, name);
+                if (moving)
+                {
+                    await Api.RenameContainerFileAsync(Container, item.Path, destination);
+                }
+                else
+                {
+                    await Api.CopyContainerFileAsync(Container, item.Path, destination);
+                }
+
+                steps.Add(new UndoStep(item.Path, destination, moving));
+            }
+
+            Snackbar.Add($"{(moving ? "Moved" : "Copied")} {_held.Count} item{(_held.Count == 1 ? "" : "s")}", Severity.Success);
+            if (moving)
+            {
+                _held.Clear();
+            }
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException or InvalidOperationException)
+        {
+            Status(ex.Message, "is-error");
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+
+        // What did happen can be undone even when the paste stopped part-way.
+        if (steps.Count > 0)
+        {
+            _undo.Push(steps);
+        }
+
+        await RefreshAsync();
+    }
+
+    /// <summary>
+    /// Takes back the most recent paste or delete: a moved or deleted item goes
+    /// back where it came from, a copied one is removed. Newest step first, so a
+    /// folder and what went into it come apart in the right order. Nothing is
+    /// put back over something that has taken its name since: that step stops,
+    /// and what was not yet undone stays on the stack to try again.
+    /// </summary>
+    private async Task UndoAsync()
+    {
+        if (!_undo.TryPop(out var steps))
+        {
+            return;
+        }
+
+        var pending = steps.Reverse().ToList();
+        var done = 0;
+        Status($"Undoing {steps.Count} item{(steps.Count == 1 ? "" : "s")}…", "is-loading");
+        try
+        {
+            foreach (var step in pending)
+            {
+                if (step.Moved)
+                {
+                    if (!await IsFreeAsync(step.From))
+                    {
+                        throw new InvalidOperationException(
+                            $"Cannot undo: “{ContainerPath.Name(step.From)}” exists again in {ContainerPath.Parent(step.From)}");
+                    }
+
+                    await Api.RenameContainerFileAsync(Container, step.To, step.From);
+                }
+                else
+                {
+                    await Api.DeleteContainerFileAsync(Container, step.To);
+                }
+
+                done++;
+            }
+
+            Snackbar.Add($"Undone: {steps.Count} item{(steps.Count == 1 ? "" : "s")}", Severity.Success);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException or InvalidOperationException)
+        {
+            // The steps not yet undone go back on the stack, in their own order.
+            var remaining = pending.Skip(done).Reverse().ToList();
+            if (remaining.Count > 0)
+            {
+                _undo.Push(remaining);
+            }
+            Status(ex.Message, "is-error");
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+
+        await RefreshAsync();
+    }
+
+    /// <summary>Whether nothing in the container answers to this path's name in its folder.</summary>
+    private async Task<bool> IsFreeAsync(string path)
+    {
+        var listing = await Api.ListContainerFilesAsync(Container, ContainerPath.Parent(path));
+        var name = ContainerPath.Name(path);
+        return listing.Entries.All(entry => entry.Name != name);
+    }
+
+    /// <summary>
+    /// The rail's second button: undo while there is something to take back,
+    /// otherwise cancel a pending cut. One button in one place, so the rail
+    /// never moves.
+    /// </summary>
+    private Task UndoOrCancelAsync()
+    {
+        if (_undo.Count > 0)
+        {
+            return UndoAsync();
+        }
+
+        CancelCut();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// One item of a paste or a delete: where it was, where it went, and whether
+    /// it moved (a cut pasted, or a delete into the trash) or was copied.
+    /// </summary>
+    private sealed record UndoStep(string From, string To, bool Moved);
+
+    /// <summary>A name nothing in this folder has yet: <c>note.txt</c> becomes <c>note-copy.txt</c>, then <c>note-copy2.txt</c>.</summary>
+    private static string FreeName(ContainerFileEntry entry, HashSet<string> taken)
+    {
+        if (!taken.Contains(entry.Name))
+        {
+            return entry.Name;
+        }
+
+        var dot = entry.Name.LastIndexOf('.');
+        var hasExtension = dot > 0 && !entry.IsDirectory;
+        var stem = hasExtension ? entry.Name[..dot] : entry.Name;
+        var extension = hasExtension ? entry.Name[dot..] : "";
+        for (var i = 1; i < 500; i++)
+        {
+            var candidate = i == 1 ? $"{stem}-copy{extension}" : $"{stem}-copy{i}{extension}";
+            if (!taken.Contains(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return $"{stem}-copy-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}{extension}";
+    }
+
+    private async Task NewFolderAsync()
+    {
+        if (await DialogFlow.PromptAsync(Dialogs, "New folder", "Name", "Created inside the current folder.", "Create") is not { } name)
+        {
+            return;
+        }
+
+        await RunAsync(name, "create", () => Api.MakeContainerDirectoryAsync(Container, ContainerPath.Join(_path, name)));
+        await RefreshAsync();
+    }
+
+    private async Task RenameAsync(ContainerFileEntry entry)
+    {
+        if (await DialogFlow.PromptAsync(Dialogs, "Rename", $"New name for “{entry.Name}”", "The file stays in this folder.", "OK", entry.Name) is not { } name)
+        {
+            return;
+        }
+
+        if (name == entry.Name)
+        {
+            return;
+        }
+
+        if (name.Contains('/') || name.Contains('\\') || name is "." or "..")
+        {
+            Snackbar.Add("Invalid name", Severity.Error);
+            return;
+        }
+
+        var parent = ContainerPath.Parent(entry.Path);
+        await RunAsync(entry.Name, "rename", () => Api.RenameContainerFileAsync(Container, entry.Path, ContainerPath.Join(parent, name)));
+        await RefreshAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        var chosen = Chosen();
+        if (chosen.Count == 0)
+        {
+            return;
+        }
+
+        var label = chosen.Count == 1
+            ? $"{(chosen[0].IsDirectory ? "folder" : "file")} “{chosen[0].Name}”"
+            : $"{chosen.Count} items";
+        if (!await DialogFlow.ConfirmAsync(Dialogs, "Delete", $"Delete {label}? It can be undone from the rail until you copy or cut something else.", "Delete", destructive: true))
+        {
+            return;
+        }
+
+        // Deleting moves into the trash instead of removing, so the rail's undo
+        // can put it back: a folder of its own per delete, named by the moment.
+        Status($"Deleting {label}…", "is-loading");
+        var trash = ContainerPath.Join(TrashRoot, $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}"[..24]);
+        if (!await RunAsync(label, "prepare the trash for", () => Api.MakeContainerDirectoryAsync(Container, trash)))
+        {
+            return;
+        }
+
+        var steps = new List<UndoStep>();
+        foreach (var entry in chosen)
+        {
+            var into = ContainerPath.Join(trash, entry.Name);
+            if (await RunAsync(entry.Name, "delete", () => Api.RenameContainerFileAsync(Container, entry.Path, into)))
+            {
+                steps.Add(new UndoStep(entry.Path, into, Moved: true));
+            }
+
+            _held.RemoveAll(held => held.Path == entry.Path);
+        }
+
+        if (steps.Count > 0)
+        {
+            _undo.Push(steps);
+        }
+
+        await RefreshAsync();
+    }
+
+    /// <summary>Opening a file is a step of its own, so the host is told and the URL carries it.</summary>
+    private async Task EditAsync(ContainerFileEntry entry)
+    {
+        if (FileChanged.HasDelegate)
+        {
+            await FileChanged.InvokeAsync(entry.Name);
+            return;
+        }
+
+        await ReadIntoEditorAsync(entry.Path);
+    }
+
+    private async Task ReadIntoEditorAsync(string path)
+    {
+        _busy = true;
+        Status($"Opening {path}…", "is-loading");
+        try
+        {
+            var file = await Api.ReadContainerFileAsync(Container, path);
+            _editorText = file.Content;
+            _editing = file.Path;
+            _editorDirty = false;
+            Status($"Editing {file.Path}", "");
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Status(ex.Message, "is-error");
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SaveEditorAsync()
+    {
+        if (_editing is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        Status($"Saving {_editing}…", "is-loading");
+        try
+        {
+            await Api.WriteContainerFileAsync(Container, _editing, _editorText);
+            _editorDirty = false;
+            Snackbar.Add($"Saved {ContainerPath.Name(_editing)}", Severity.Success);
+            Status($"Saved {_editing}", "");
+            // The editor stays open: saving is not
+            // leaving. The listing behind is refreshed for when it is closed.
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Status(ex.Message, "is-error");
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <summary>The text was touched: from here on, closing asks before throwing it away.</summary>
+    private void Typed(string text)
+    {
+        _editorText = text;
+        _editorDirty = true;
+    }
+
+    /// <summary>Closing with the text touched asks first: nobody loses what they typed to a stray click.</summary>
+    private async Task CloseEditorAsync()
+    {
+        if (_editorDirty && !await DialogFlow.ConfirmAsync(Dialogs, "Close editor", "Discard unsaved changes?", "Discard", destructive: true))
+        {
+            return;
+        }
+
+        _editorDirty = false;
+        if (FileChanged.HasDelegate)
+        {
+            // Close is the step back the user would take: it walks the history
+            // instead of piling another entry on it, so Back keeps meaning the
+            // folder before this one.
+            await Js.InvokeVoidAsync("history.back");
+            return;
+        }
+
+        _editing = null;
+        await RefreshAsync();
+    }
+
+    /// <summary>
+    /// The files of the selection out of the container: the browser downloads
+    /// them itself, a native client writes them where the user says, and the
+    /// agent carries and counts them either way. It is handed to the
+    /// application, so closing this view does not stop them.
+    /// </summary>
+    private void Download() => DownloadFiles(SelectedFiles);
+
+    /// <summary>The rail's Download takes the selection; the row's own menu, parked but whole, takes the row it opened on.</summary>
+    private void DownloadFiles(IReadOnlyList<ContainerFileEntry> files)
+    {
+        if (files.Count == 0)
+        {
+            return;
+        }
+
+        Transfers.Download(Container, _path, files);
+        Announce(files.Count, files.Count == 1 ? files[0].Name : "", "Downloading");
+    }
+
+    /// <summary>
+    /// The rail's Upload: the browser's own picker in the web UI, the OS's in
+    /// the native client. Both end in the same place — the file is handed to
+    /// the application, which sends it, so closing this view — the dialog, a
+    /// step to another page — does not drop an upload half sent, and the
+    /// container's row keeps its ring and its cross wherever the user goes.
+    /// </summary>
+    private async Task PickAsync()
+    {
+        if (!FileTransfers.BrowserSends)
+        {
+            var picked = await Transfers.PickOnClientAsync();
+            Transfers.Start(Container, _path, picked);
+            Announce(picked.Count, picked is [var one] ? one.Name : "", "Uploading");
+            return;
+        }
+
+        var chosen = await Transfers.PickAsync(_fileInput);
+        Transfers.Send(Container, _path, chosen);
+        Announce(chosen.Files.Count, chosen.Files is [var only] ? only.Name : "", "Uploading");
+    }
+
+    /// <summary>
+    /// A file on the move: the status line says so and then follows the
+    /// agent's count of it, which is the same count the container's row shows.
+    /// </summary>
+    private void Sending(string what)
+    {
+        Status($"{what}…", "is-loading");
+        _ = FollowTransfersAsync();
+    }
+
+    /// <summary>What the status line says when files start moving: the one file by name, or how many there are.</summary>
+    private void Announce(int count, string name, string verb)
+    {
+        if (count > 0)
+        {
+            Sending(count == 1 ? $"{verb} {name}" : $"{verb} {count} files");
+        }
+    }
+
+    /// <summary>
+    /// While files are moving in or out of this container, the status line
+    /// follows the agent's count of them — one file's own step, or how far
+    /// several have got as a whole. Only one follower at a time: files started
+    /// one after another are the same thing to watch.
+    /// <para>
+    /// It goes on while this client is carrying something and while the agent
+    /// says anything is moving, and it waits a few ticks before giving up at
+    /// the start: a download the browser is doing is nobody's here, and its
+    /// job takes a moment to appear.
+    /// </para>
+    /// </summary>
+    private async Task FollowTransfersAsync()
+    {
+        if (_followingTransfers)
+        {
+            return;
+        }
+
+        _followingTransfers = true;
+        try
+        {
+            using var timer = new PeriodicTimer(TransfersEvery);
+            var quiet = 0;
+            while (await timer.WaitForNextTickAsync(_closing.Token))
+            {
+                IReadOnlyList<ContainerTransfer> transfers;
+                try
+                {
+                    transfers = await Api.GetContainerTransfersAsync(_closing.Token);
+                }
+                catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+                {
+                    // The agent did not answer this tick; the next one asks again.
+                    continue;
+                }
+
+                var here = TransferFlow.For(transfers, Container, Container);
+                var mine = TransferFlow.Active(here);
+                // What is still to come: with one queue for every client, only
+                // one file travels at a time, and a line that said nothing of
+                // the rest would read as if the others had been dropped.
+                var queued = here.Count(transfer => transfer.IsWaiting);
+                if (mine.Count > 0 || queued > 0)
+                {
+                    quiet = 0;
+                    var line = mine switch
+                    {
+                        [] => "Waiting its turn",
+                        [var one] => $"{one.Status} {one.Pct}%",
+                        _ => $"{mine.Count} files — {TransferFlow.Pct(mine)}%",
+                    };
+                    Status(queued > 0 ? $"{line} — {queued} waiting" : line, "is-loading");
+                    await InvokeAsync(StateHasChanged);
+                }
+                else if (!Transfers.Busy(Container) && ++quiet >= QuietTicks)
+                {
+                    return;
+                }
+            }
+        }
+        catch (Exception closed) when (closed is OperationCanceledException or ObjectDisposedException)
+        {
+            // The view closed while it was asking; nothing is waiting for the answer.
+        }
+        finally
+        {
+            _followingTransfers = false;
+        }
+    }
+
+    /// <summary>A transfer of this client ended: the folder it touched lists it now, if that folder is still the one showing.</summary>
+    private void TransferFinished(string container, string directory)
+    {
+        if (container != Container)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            if (directory == _path)
+            {
+                await RefreshAsync();
+            }
+            else
+            {
+                Status("", "");
+            }
+
+            StateHasChanged();
+        });
+    }
+
+    /// <summary>Every file verb reports the same way: the name, the verb, and the agent's own message on failure.</summary>
+    /// <summary>Runs one verb and reports it; answers whether it went through, for a caller that has to record what it did.</summary>
+    private async Task<bool> RunAsync(string what, string verb, Func<Task> action)
+    {
+        try
+        {
+            await action();
+            Snackbar.Add($"{what}: {verb} ok", Severity.Success);
+            return true;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Status(ex.Message, "is-error");
+            Snackbar.Add($"{what}: {verb} failed. {ex.Message}", Severity.Error);
+            return false;
+        }
+    }
+}

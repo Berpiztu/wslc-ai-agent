@@ -1,0 +1,31 @@
+@* How many images there are, and the catalog's size under it: one
+   of the host's counts, over the overview they share (HostOverviewRead). *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@inherits WslcObject
+@attribute [DashboardObject("wslc.host-images", "Images count", Group = "Host readings", Subgroup = "System", Icon = Icons.Material.Filled.Layers, Columns = 8, Rows = 4)]
+@attribute [DashboardObjectPart("label", "Label")]
+@attribute [DashboardObjectPart("value", "Value", Bold = true)]
+@attribute [DashboardObjectPart("hint", "Hint")]
+@inject HostOverviewRead Overview
+@inject NavigationManager Navigation
+
+<div class="@ReadingClass">
+    <ReadingSummary Label="Images" Value="@(Images is { } i ? $"{i.Count}" : "—")"
+                    Hint="@ReadingHint(Images is not null, Images?.Error == true, $"{Bytes.Humanize(Images?.SizeBytes ?? 0)} catalog")" Error="@(Images?.Error == true)" />
+</div>
+
+@code {
+    private HomeImages? Images => Overview.Value?.Images;
+
+    protected override void OnInitialized() => Follow(Overview);
+
+    /// <summary>A count opens its page.</summary>
+    public override bool Opens => true;
+
+    public override Task OpenAsync()
+    {
+        Navigation.NavigateTo("images");
+        return Task.CompletedTask;
+    }
+}

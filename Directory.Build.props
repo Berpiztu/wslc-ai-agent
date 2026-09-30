@@ -1,0 +1,33 @@
+<Project>
+
+  <!-- Settings shared by every project in the repository. Target frameworks
+       stay in each project: the MAUI app multi-targets, the rest is net10.0. -->
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- The release's version, changed only when one is published. -->
+    <Version>0.2.39</Version>
+    <Authors>Berpiztu</Authors>
+    <Company>Berpiztu</Company>
+    <Product>wslc-agent</Product>
+    <Copyright>Copyright (c) 2026 Berpiztu</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/Berpiztu/wslc-agent</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+
+  <!-- The versions this checkout's builds have reached (the packaging scripts
+       bump them there, never here), so building installers changes no tracked
+       file, whoever builds. Taken only when above the release's. -->
+  <Import Project="$(MSBuildThisFileDirectory)private\version.props" Condition="Exists('$(MSBuildThisFileDirectory)private\version.props')" />
+  <PropertyGroup Condition="'$(WslcLocalAgentVersion)' != '' And $([MSBuild]::VersionGreaterThan('$(WslcLocalAgentVersion)', '$(Version)'))">
+    <Version>$(WslcLocalAgentVersion)</Version>
+  </PropertyGroup>
+
+</Project>

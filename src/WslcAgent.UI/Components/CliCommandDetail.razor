@@ -1,0 +1,25 @@
+@* What a wslc command shows once opened, as CLI Activity showed it: the
+   labels (Command and output, Output, Errors) one step in, what they label one
+   step further; the output pretty-printed when it is JSON or JSON lines; and
+   a word when there was nothing to show. Used under a log row and in the
+   Activity list alike, so the two never drift apart. *@
+<MudText Typo="Typo.subtitle2" Class="wslc-cli-label">Command and output</MudText>
+<pre class="wslc-logs-output wslc-logs-pre wslc-logs-wrap wslc-cli-block mb-2">@Command.CommandLine</pre>
+@if (CliOutput.Format(Command.Stdout) is { Length: > 0 } output)
+{
+    <MudText Typo="Typo.subtitle2" Class="wslc-cli-label">Output</MudText>
+    <pre class="wslc-logs-output wslc-logs-pre wslc-logs-wrap wslc-cli-block mb-2">@output</pre>
+}
+@if (CliOutput.Format(Command.Stderr) is { Length: > 0 } errors)
+{
+    <MudText Typo="Typo.subtitle2" Class="wslc-cli-label">Errors</MudText>
+    <pre class="wslc-logs-output wslc-logs-pre wslc-logs-wrap wslc-cli-block mb-2">@errors</pre>
+}
+@if (string.IsNullOrWhiteSpace(Command.Stdout) && string.IsNullOrWhiteSpace(Command.Stderr))
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary wslc-cli-block">@(Command.Status == "running" ? "Still running; the output arrives with the end." : "No output captured.")</MudText>
+}
+
+@code {
+    [Parameter, EditorRequired] public CliTraceEntry Command { get; set; } = default!;
+}

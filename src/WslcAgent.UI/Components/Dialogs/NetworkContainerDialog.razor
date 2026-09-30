@@ -1,0 +1,31 @@
+@* Attach a container to a network, or detach it. The container picker
+   replaces the text field when the pickers slice lands. *@
+@using WslcAgent.ApiClient
+@inject WslcAgentApi Api
+
+<FormDialog SubmitText="@(Disconnect ? "Disconnect" : "Connect")" OnSubmit="SubmitAsync">
+    <MudTextField T="string" Value="Network" Label="Network" ReadOnly="true" Variant="Variant.Filled" Margin="Margin.Dense" />
+    <MudTextField T="string" @bind-Value="_container" Label="Container" Placeholder="name or id" Immediate="true"
+                  Required="true" RequiredError="A container is required"
+                  Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+    @if (!Disconnect && AllowsStaticIp)
+    {
+        <MudTextField T="string" @bind-Value="_ip" Label="Static IP (optional)" Placeholder="172.28.0.5" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+    }
+</FormDialog>
+
+@code {
+    private string _container = "";
+    private string _ip = "";
+
+    [Parameter, EditorRequired] public string Network { get; set; } = "";
+
+    /// <summary>Built-in networks (bridge, host, none) take no static ip.</summary>
+    [Parameter] public bool AllowsStaticIp { get; set; }
+
+    [Parameter] public bool Disconnect { get; set; }
+
+    private Task SubmitAsync() => Disconnect
+        ? Api.DisconnectNetworkAsync(Network, _container)
+        : Api.ConnectNetworkAsync(Network, _container, _ip);
+}

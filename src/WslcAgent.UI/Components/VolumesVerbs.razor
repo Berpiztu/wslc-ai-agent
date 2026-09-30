@@ -1,0 +1,11 @@
+@* The Volumes page's verbs in the round button: Create and Prune. Drawn by
+   the page, and by the dashboard while a volume's card is selected. *@
+@inherits PageVerbsBase
+
+<VerbFab StartIcon="@Icons.Material.Filled.Add" Label="Create" Color="Color.Primary" OnClick="@(() => OpenAsync<CreateVolumeDialog>("Create volume"))" Title="Create a volume" />
+<VerbFab StartIcon="@Icons.Material.Filled.DeleteSweep" Label="Prune" Color="Color.Error" OnClick="PruneAsync" Title="Remove every volume no container uses" />
+
+@code {
+    private Task PruneAsync() =>
+        ConfirmAndRunAsync("Prune volumes", "Remove every volume no container uses? Their data is lost.", "Prune", "volumes", Api.PruneVolumesAsync);
+}

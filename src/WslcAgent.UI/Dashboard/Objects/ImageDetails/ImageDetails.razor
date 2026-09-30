@@ -1,0 +1,19 @@
+@* An image's details: what the Images list's card says about it in words —
+   Id, Size, Containers, Created — as one object.
+   It fills its cells as the card's body does, and its type size scales it. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits ImageObject
+@attribute [DashboardObject("wslc.image-details", "Image details", Group = "Image", Subgroup = "User", Icon = Icons.Material.Filled.Article, Source = ImageSourceFamily.FamilyKey, Columns = 12, Rows = 6, Fills = true, Horizontal = HorizontalAlign.Left, Vertical = VerticalAlign.Top, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both)]
+
+@if (Image is { } i)
+{
+    <div class="@SectionClass("wslc-card-part-details")">
+        <EntityCardPart>
+            <MudCardContent>
+                <ImageCardBody Image="i" />
+            </MudCardContent>
+        </EntityCardPart>
+    </div>
+}

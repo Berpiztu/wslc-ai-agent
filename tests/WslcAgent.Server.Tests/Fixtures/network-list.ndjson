@@ -1,0 +1,4 @@
+{"CreatedAt":"2026-09-14 09:12:39.56504384 +0000 UTC","Driver":"bridge","ID":"4265f513e458","IPv4":"true","IPv6":"false","Internal":"false","Labels":"","Name":"bridge","Scope":"local"}
+{"CreatedAt":"2026-07-15 06:57:11.48882044 +0000 UTC","Driver":"host","ID":"c5e27669d0f6","IPv4":"true","IPv6":"false","Internal":"false","Labels":"","Name":"host","Scope":"local"}
+{"CreatedAt":"2026-07-15 06:57:11.344555557 +0000 UTC","Driver":"null","ID":"6c3af5f4d398","IPv4":"true","IPv6":"false","Internal":"false","Labels":"","Name":"none","Scope":"local"}
+{"CreatedAt":"2026-09-10 10:00:00.000000000 +0000 UTC","Driver":"bridge","ID":"aaaaaaaaaaaa","IPv4":"true","IPv6":"false","Internal":"true","Labels":"env=prod","Name":"appnet","Scope":"local"}

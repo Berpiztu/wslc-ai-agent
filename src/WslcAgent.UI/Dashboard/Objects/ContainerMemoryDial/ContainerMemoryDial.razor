@@ -1,0 +1,22 @@
+@* A container's memory, as a dial: the second of the two measures the CLI
+   reports for a container, drawn as the container's card draws it beside the
+   CPU's (ContainerCardBody). *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@inherits ContainerObject
+@attribute [DashboardObject("wslc.container-memory", "Container memory", Group = "Container", Subgroup = "User", Icon = Icons.Material.Filled.Memory, Source = ContainerSourceFamily.FamilyKey, Columns = 6, Rows = 6, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Right)]
+@attribute [DashboardObjectAlarm(DashboardMeasures.Memory, "Memory")]
+@attribute [DashboardObjectPart("ring", "Ring", Text = false, Line = true)]
+@attribute [DashboardObjectPart("figure", "Figure")]
+@attribute [DashboardObjectPart("label", "Label")]
+
+<div class="@TypeClass">
+    <UsageDial Label="Memory" Reading="@(Container?.MemPercent ?? "")" Live="@(Container?.IsRunning == true)" Title="@Tip" />
+</div>
+
+@code {
+    /// <summary>Which container it is, and the memory it takes of how much, as the card's tooltip says it.</summary>
+    private string Tip => Container is { } container
+        ? $"Memory of {container.Name}: {Readings.Dash(container.MemUsage)}"
+        : "Memory: the container is being read";
+}

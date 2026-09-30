@@ -1,0 +1,181 @@
+@* Settings → Notifications: what the agent
+   notifies while no screen is open, the same for every client. The system's,
+   not the screen's: the dashboard's alarms are set on its objects, apart. *@
+@inject WslcAgentApi Api
+@inject ISnackbar Snackbar
+
+<MudPaper Outlined="true" Class="pa-4">
+    <MudText Typo="Typo.h6">Notifications</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+        What the agent tells you while no screen is open: on its own machine, a notification beside the clock from the
+        agent's icon; on another Windows machine, one from the Windows client while it runs; on a phone with the Android
+        client, one pushed through Firebase. The agent watches all of it itself, the same for every client. The dashboard's alarms are the
+        screen's, set on its objects, and do not notify.
+    </MudText>
+    @if (_edited is null)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else
+    {
+        <MudText Typo="Typo.body1" Class="mb-1">Readings</MudText>
+        <NotificationThresholdRow Label="Host disk" Hint="The drive the sessions are kept on" Value="_edited.HostDisk"
+                                  ValueChanged="@(threshold => _edited = _edited with { HostDisk = threshold })" />
+        <NotificationThresholdRow Label="Host memory" Hint="The containers' memory used of the session's" Value="_edited.HostMemory"
+                                  ValueChanged="@(threshold => _edited = _edited with { HostMemory = threshold })" />
+        <NotificationThresholdRow Label="Host CPU" Hint="The containers' CPU used of the machine's" Value="_edited.HostCpu"
+                                  ValueChanged="@(threshold => _edited = _edited with { HostCpu = threshold })" />
+        <NotificationThresholdRow Label="Container memory" Hint="Any container's memory, of its limit: at its limit it is killed" Value="_edited.ContainerMemory"
+                                  ValueChanged="@(threshold => _edited = _edited with { ContainerMemory = threshold })" />
+        <NotificationThresholdRow Label="Container CPU" Hint="Any container's CPU: working hard is usually its job" Value="_edited.ContainerCpu"
+                                  ValueChanged="@(threshold => _edited = _edited with { ContainerCpu = threshold })" />
+        <SquareCheckBox Value="_edited.Recovered" ValueChanged="@(on => _edited = _edited with { Recovered = on })"
+                        Label="Back under the threshold" title="A reading that notified says so again when it is back under its threshold" />
+
+        <MudText Typo="Typo.body1" Class="mt-3 mb-1">Events</MudText>
+        <SquareCheckBox Value="_edited.ContainerStopped" ValueChanged="@(on => _edited = _edited with { ContainerStopped = on })"
+                        Label="A container stopped without being asked to" title="wslc events says it stopped, and nobody stopped it: not the application, not a terminal" />
+        <SquareCheckBox Value="_edited.ContainerNotRestarted" ValueChanged="@(on => _edited = _edited with { ContainerNotRestarted = on })"
+                        Label="A container not brought back at start-up" title="Its restart policy could not start it" />
+        <SquareCheckBox Value="_edited.SessionLost" ValueChanged="@(on => _edited = _edited with { SessionLost = on })"
+                        Label="The WSLC session went down" title="It stopped, and its containers with it, without anyone stopping it from the agent" />
+        <SquareCheckBox Value="_edited.JobFailed" ValueChanged="@(on => _edited = _edited with { JobFailed = on })"
+                        Label="A job failed" title="A file transfer, an image pull or build, or a backup" />
+        <SquareCheckBox Value="_edited.JobFinished" ValueChanged="@(on => _edited = _edited with { JobFinished = on })"
+                        Label="A job finished" title="A file transfer, an image pull or build, or a backup that finished, however short" />
+        <SquareCheckBox Value="_edited.UpdateFailed" ValueChanged="@(on => _edited = _edited with { UpdateFailed = on })"
+                        Label="The agent's update failed" title="The installer could not start, or ended with an error" />
+        <SquareCheckBox Value="_edited.UpdateInstalled" ValueChanged="@(on => _edited = _edited with { UpdateInstalled = on })"
+                        Label="The agent updated itself" title="A newer version is running" />
+        <SquareCheckBox Value="_edited.UpdateAnnounced" ValueChanged="@(on => _edited = _edited with { UpdateAnnounced = on })"
+                        Label="The agent is about to update itself" title="A minute before it installs, with Cancel update on the notification itself" />
+        <SquareCheckBox Value="_edited.UpdateCancelled" ValueChanged="@(on => _edited = _edited with { UpdateCancelled = on })"
+                        Label="The agent's update was cancelled" title="From any client, or from a notification's Cancel update" />
+
+        <MudStack Row="true" Spacing="2" Class="mt-3">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" Disabled="@(_busy || !Changed)" OnClick="SaveAsync">Save notifications</MudButton>
+        </MudStack>
+
+        @* The phones they are pushed to, through Firebase: each registers
+           from the Android client, and is removed here. *@
+        <MudText Typo="Typo.body1" Class="mt-4 mb-1">Phones</MudText>
+        @if (_devices is null)
+        {
+            <MudProgressLinear Indeterminate="true" />
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+                @if (_devices.Push)
+                {
+                    @($"Sent through Firebase, project {_devices.Project}. A phone registers when the Android client signs in to this agent.")
+                }
+                else
+                {
+                    @("Nothing is sent to phones: the agent has no Firebase key. Put the service account's JSON, from the Firebase console, at ")
+                    <span class="wslc-mono">@_devices.KeyFile</span>
+                    @(".")
+                }
+            </MudText>
+            @if (_devices.Devices.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">No phone is registered.</MudText>
+            }
+            else
+            {
+                <MudSimpleTable Dense="true" Bordered="true" Striped="true">
+                    <thead><tr><th>Phone</th><th>Registered</th><th>Last seen</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var device in _devices.Devices)
+                        {
+                            <tr @key="device.Id">
+                                <td>@device.Name</td>
+                                <td>@device.Registered.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                                <td>@device.LastSeen.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                                <td class="text-nowrap">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="Stop sending to this phone" Disabled="_busy"
+                                                   OnClick="@(() => RemoveAsync(device))" />
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+        }
+    }
+</MudPaper>
+
+@code {
+    private NotificationSettings? _saved;
+    private NotificationSettings? _edited;
+    private NotificationDevices? _devices;
+    private bool _busy;
+
+    private bool Changed => _edited is not null && _edited != _saved;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _saved = await Api.GetNotificationSettingsAsync();
+            _edited = _saved;
+            _devices = await Api.GetNotificationDevicesAsync();
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            // Refused: the sign-in screen takes over and says so itself.
+            Refused(ex);
+        }
+    }
+
+    private async Task RemoveAsync(NotificationDevice device)
+    {
+        _busy = true;
+        try
+        {
+            await Api.RemoveNotificationDeviceAsync(device.Id);
+            _devices = await Api.GetNotificationDevicesAsync();
+            Snackbar.Add($"{device.Name} no longer gets notifications", Severity.Success);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Refused(ex);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Refused(Exception ex)
+    {
+        if (!ex.IsSignInRequired())
+        {
+            Snackbar.Add($"Notifications: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_edited is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            _saved = await Api.SetNotificationSettingsAsync(_edited);
+            _edited = _saved;
+            Snackbar.Add("Notifications saved", Severity.Success);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Refused(ex);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

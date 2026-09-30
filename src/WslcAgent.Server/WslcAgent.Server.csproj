@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <!-- The executable users run: wslc-ai-agent.exe -->
+    <AssemblyName>wslc-ai-agent</AssemblyName>
+    <RootNamespace>WslcAgent.Server</RootNamespace>
+    <ApplicationIcon>wslc-ai-agent.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" />
+    <PackageReference Include="Microsoft.Playwright" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WslcAgent.ApiClient\WslcAgent.ApiClient.csproj" />
+    <ProjectReference Include="..\WslcAgent.Mcp\WslcAgent.Mcp.csproj" />
+    <ProjectReference Include="..\WslcAgent.Web\WslcAgent.Web.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="WslcAgent.Server.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The skill an AI client installs travels inside the agent, so what a
+         machine hands out is always the skill of the agent it came from: no
+         copy of it can be older than the tools it describes. -->
+    <EmbeddedResource Include="..\..\mcp-skill\skills\wslc\SKILL.md" LogicalName="wslc-skill.md" />
+    <!-- How each kind of dashboard object is born, landscape and portrait,
+         designed on the board of every object on a development agent. -->
+    <EmbeddedResource Include="Overview\object-defaults.json" LogicalName="object-defaults.json" />
+    <!-- The dashboard a user with none is given, designed on the server's
+         dashboard on a development agent. -->
+    <EmbeddedResource Include="Overview\dashboard-v2.5.default.json" LogicalName="dashboard-v2.5.default.json" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+    <!-- While the dashboard is being designed, a development agent writes the
+         defaults above back to these files, so the next installer ships them.
+         Only a Debug build knows where they are; a Release build, which is
+         what the installer publishes, carries no path and writes no default. -->
+    <AssemblyMetadata Include="ObjectDefaultsSource" Value="$(MSBuildProjectDirectory)\Overview\object-defaults.json" />
+    <AssemblyMetadata Include="DashboardV2DefaultSource" Value="$(MSBuildProjectDirectory)\Overview\dashboard-v2.5.default.json" />
+  </ItemGroup>
+
+</Project>

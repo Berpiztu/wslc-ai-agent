@@ -1,0 +1,23 @@
+@* What a volume's card says about it, as the container card: the readings at
+   the left, the dials at the right — what the containers that mount the
+   volume have read and written, each as its share of what every container
+   has. One body, drawn by the Volumes page's card and by a volume's card on
+   the dashboard. *@
+
+<div class="wslc-card-detail">
+    <VolumeCardTexts Volume="Volume" />
+    <div class="wslc-card-dials">
+        <VolumeDial Volume="Volume" Total="TotalRead" />
+        <VolumeDial Volume="Volume" Written="true" Total="TotalWritten" />
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public VolumeSummary Volume { get; set; } = default!;
+
+    /// <summary>What every container has read: what the Read dial is a share of.</summary>
+    [Parameter] public long TotalRead { get; set; }
+
+    /// <summary>What every container has written: what the Written dial is a share of.</summary>
+    [Parameter] public long TotalWritten { get; set; }
+}

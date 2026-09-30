@@ -1,0 +1,14 @@
+@* What a network's card says about it in words: its Id, its Subnet, its
+   Gateway and its Scope. The card's body draws them beside its dials
+   (NetworkCardBody); the dashboard's details object draws them alone. *@
+
+<div class="wslc-card-texts">
+    <MudText Typo="Typo.body2" title="@Network.Id"><b>Id</b> @Network.Id</MudText>
+    <MudText Typo="Typo.body2" title="@Network.Subnet"><b>Subnet</b> @Readings.Dash(Network.Subnet)</MudText>
+    <MudText Typo="Typo.body2" title="@Network.Gateway"><b>Gateway</b> @Readings.Dash(Network.Gateway)</MudText>
+    <MudText Typo="Typo.body2"><b>Scope</b> @Readings.Dash(Network.Scope)@(Network.Internal ? ", internal" : "")</MudText>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public NetworkSummary Network { get; set; } = default!;
+}

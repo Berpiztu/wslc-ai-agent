@@ -1,0 +1,25 @@
+@* The containers' aggregate memory:
+   what they use, and of how much. It reads the runtime the host's CPU and
+   memory objects share (HostRuntimeRead). *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@inherits WslcObject
+@attribute [DashboardObject("wslc.host-memory", "Memory reading", Group = "Host readings", Subgroup = "System", Icon = Icons.Material.Filled.Memory, Columns = 8, Rows = 4)]
+@attribute [DashboardObjectAlarm(DashboardMeasures.Memory, "Memory", On = true)]
+@attribute [DashboardObjectPart("label", "Label")]
+@attribute [DashboardObjectPart("value", "Value", Bold = true)]
+@attribute [DashboardObjectPart("hint", "Hint")]
+@inject HostRuntimeRead Runtime
+
+<div class="@ReadingClass">
+    <ReadingSummary Label="Aggregate memory" Value="@(Runtime.Value is { } r ? Bytes.Humanize(r.MemoryUsedBytes) : "—")"
+                    Hint="@ReadingHint(Runtime.Value is not null, Runtime.Value?.Error == true, Meaning)" Error="@(Runtime.Value?.Error == true)" />
+</div>
+
+@code {
+    private string Meaning => Runtime.Value is { MemoryTotalBytes: > 0 } r
+        ? $"of {Bytes.Humanize(r.MemoryTotalBytes)}, across containers"
+        : "across containers";
+
+    protected override void OnInitialized() => Follow(Runtime);
+}

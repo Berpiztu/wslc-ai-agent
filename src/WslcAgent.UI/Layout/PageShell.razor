@@ -1,0 +1,62 @@
+@* Every page renders inside this: it hands the title and the top-bar slots
+   to the layout and keeps the content as a full-height column. A page that
+   only shows what lives in the WSLC session (RequiresSession) says so when the
+   session is stopped and goes dead with it — greyed out and deaf to pointer
+   and keyboard, here and in the top bar — because nothing it offers can run
+   against a session that is not there. System and Settings are not such pages:
+   Compact VHDX is precisely what a stopped session is for. *@
+@implements IDisposable
+@inject PageChrome Chrome
+@inject SessionState Session
+
+<PageTitle>@Title</PageTitle>
+@if (Off)
+{
+    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2 flex-shrink-0">
+        The WSLC session is stopped. This screen shows what lives in it, so it is disabled until you start the session with the ▶ button in the session line of the title bar.
+    </MudAlert>
+}
+<div class="@(Off ? "wslc-page-body wslc-session-off" : "wslc-page-body")" inert="@Off">
+    @ChildContent
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    /// <summary>The title as the bar draws it, when it holds more than words (an icon); <see cref="Title"/> stays the tab's name.</summary>
+    [Parameter] public RenderFragment? TitleContent { get; set; }
+
+    /// <summary>Shown next to the title.</summary>
+    [Parameter] public RenderFragment? Status { get; set; }
+
+    /// <summary>The page's search box, centred in the title row.</summary>
+    [Parameter] public RenderFragment? TopbarSearch { get; set; }
+
+    /// <summary>Right side of the title row (e.g. bulk actions).</summary>
+    [Parameter] public RenderFragment? TopbarNav { get; set; }
+
+    /// <summary>Second top-bar row: the section actions.</summary>
+    [Parameter] public RenderFragment? SectionActions { get; set; }
+
+    /// <summary>The page's verbs (Run, Create, Pull…): the navigation button draws them in its list, above itself.</summary>
+    [Parameter] public RenderFragment? Verbs { get; set; }
+
+    /// <summary>The page lists what lives in the session (containers, images, volumes, networks).</summary>
+    [Parameter] public bool RequiresSession { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool Off => RequiresSession && !Session.Active;
+
+    protected override void OnInitialized() => Session.Changed += OnSessionChanged;
+
+    protected override void OnParametersSet() => Chrome.Set(Title, Status, TopbarSearch, TopbarNav, SectionActions, Verbs, RequiresSession, TitleContent);
+
+    private void OnSessionChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Session.Changed -= OnSessionChanged;
+        Chrome.Clear();
+    }
+}

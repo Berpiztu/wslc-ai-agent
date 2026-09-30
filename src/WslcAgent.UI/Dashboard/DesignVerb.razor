@@ -1,0 +1,23 @@
+@* Design, or Done while designing: the dashboard's verb (the board of
+   every object is always designed, and has none). Designing is a step of
+   its own in the history: the address carries it (?design=1), so Back takes
+   the dashboard out of design; the board of every object goes back to it in
+   design by the same parameter. *@
+@namespace WslcAgent.UI.Dashboard
+@inject NavigationManager Navigation
+
+<VerbFab StartIcon="@(Designing ? Icons.Material.Filled.Check : Icons.Material.Filled.DesignServices)"
+         Label="@(Designing ? "Done" : "Design")" Color="Color.Primary" OnClick="Toggle"
+         Title="@(Designing ? "Stop designing: the board as it is shown" : "Design the board: the properties window, and the hand moves the objects")" />
+
+@code {
+    /// <summary>The query parameter that says the board is being designed.</summary>
+    public const string Query = "design";
+
+    [Parameter, EditorRequired] public bool Designing { get; set; }
+
+    /// <summary>Whether the address's value of <see cref="Query"/> says the board is being designed.</summary>
+    public static bool Says(string? value) => value is "1" or "true";
+
+    private void Toggle() => Navigation.NavigateTo(Navigation.GetUriWithQueryParameter(Query, Designing ? null : "1"));
+}

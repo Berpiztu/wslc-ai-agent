@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <!-- Browser host of WslcAgent.UI, served by WslcAgent.Server. Installable as
+       a PWA: manifest.webmanifest plus the service worker below, which caches
+       the published assets for offline start.
+       OverrideHtmlAssetPlaceholders is deliberately off: with it on, index.html
+       references a fingerprinted blazor.webassembly.js that the .NET 10 SDK
+       fails to fill in when the app is published through WslcAgent.Server
+       (dotnet/runtime#121993, fixed in the .NET 12 SDK), so the installed
+       agent served a page pointing at a file that did not exist. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>WslcAgent.Web</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WslcAgent.UI\WslcAgent.UI.csproj" />
+  </ItemGroup>
+
+</Project>

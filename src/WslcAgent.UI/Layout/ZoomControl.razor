@@ -1,0 +1,85 @@
+@* A zoom, as a browser's: − and + step through Chrome's levels, and the
+   percentage can be typed (any value from 25 to 500, applied on Enter or on
+   leaving the field); each device keeps its own. The page's (wslcAgent.zoom),
+   in the title bar, at the right on a desktop and at the left in the hand,
+   scales the app together; the dashboard's (wslcAgent.dashboardZoom),
+   in a window its round button's verb shows out of design,
+   scales the dashboard alone. *@
+@inject IJSRuntime Js
+
+<div class="wslc-zoom" role="group" aria-label="@Label">
+    <MudIconButton Icon="@Icons.Material.Filled.ZoomOut" Size="Size.Small" Color="Color.Inherit" title="Zoom out" aria-label="Zoom out"
+                   Disabled="@(_percent <= Levels[0])" OnClick="@(() => SetAsync(Step(-1)))" />
+    <MudTextField T="string" @bind-Value="_typed" Immediate="true" Variant="Variant.Filled" Margin="Margin.Dense" Class="wslc-zoom-field"
+                  title="Zoom in percent: type a value (25 to 500) and press Enter" aria-label="Zoom in percent"
+                  InputMode="InputMode.numeric" autocomplete="off" OnKeyDown="TypedKeyAsync" OnBlur="ApplyTypedAsync" Adornment="Adornment.End" AdornmentText="%" />
+    <MudIconButton Icon="@Icons.Material.Filled.ZoomIn" Size="Size.Small" Color="Color.Inherit" title="Zoom in" aria-label="Zoom in"
+                   Disabled="@(_percent >= Levels[^1])" OnClick="@(() => SetAsync(Step(1)))" />
+</div>
+
+@code {
+    /// <summary>Chrome's zoom levels from half size to double; − and + step through them.</summary>
+    private static readonly int[] Levels = [50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200];
+
+    private const int Smallest = 25;
+    private const int Largest = 500;
+
+    private int _percent = 100;
+    private string _typed = "100";
+
+    /// <summary>The helper that applies a percentage and remembers it on the device, and answers the one in use when given none.</summary>
+    [Parameter] public string Remembered { get; set; } = "wslcAgent.zoom";
+
+    /// <summary>What a reader of the screen hears it called.</summary>
+    [Parameter] public string Label { get; set; } = "Page zoom";
+
+    /// <summary>Which of the zooms the helper keeps (the dashboard's, one per page and view); none for the helper's one.</summary>
+    [Parameter] public string? Of { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Show(await Js.InvokeAsync<int>(Remembered, Arguments()));
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>What the helper is given: the zoom it keeps, if it keeps several, and the percentage, when one is set.</summary>
+    private object?[] Arguments(int? percent = null) =>
+        Of is null ? (percent is { } set ? [set] : []) : [Of, percent];
+
+    /// <summary>The next level up or down from the one in use, even when a typed one sits between levels.</summary>
+    private int Step(int direction) => direction > 0
+        ? Levels.FirstOrDefault(level => level > _percent, Levels[^1])
+        : Levels.LastOrDefault(level => level < _percent, Levels[0]);
+
+    private async Task TypedKeyAsync(KeyboardEventArgs key)
+    {
+        if (key.Key is "Enter" or "NumpadEnter")
+        {
+            await ApplyTypedAsync();
+        }
+    }
+
+    /// <summary>A typed percentage, kept within 25–500; anything that is not a number puts back the one in use.</summary>
+    private async Task ApplyTypedAsync()
+    {
+        if (int.TryParse(_typed.Trim().TrimEnd('%'), out var typed))
+        {
+            await SetAsync(Math.Clamp(typed, Smallest, Largest));
+        }
+        else
+        {
+            Show(_percent);
+        }
+    }
+
+    private async Task SetAsync(int percent) => Show(await Js.InvokeAsync<int>(Remembered, Arguments(percent)));
+
+    private void Show(int percent)
+    {
+        _percent = percent;
+        _typed = percent.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+}

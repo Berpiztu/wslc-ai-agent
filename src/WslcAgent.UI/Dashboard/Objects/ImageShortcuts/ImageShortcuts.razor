@@ -1,0 +1,22 @@
+@* An image's shortcuts: view and edit, view files and pull, the group the
+   Images list's card leads its actions row with, standing alone; its own
+   verbs are another object (ImageVerbs). It stands at the left until another
+   alignment is chosen. In design the canvas makes it inert. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits ImageObject
+@attribute [DashboardObject("wslc.image-shortcuts", "Image shortcuts", Group = "Image", Subgroup = "User", Icon = Icons.Material.Filled.Apps, Source = ImageSourceFamily.FamilyKey, Columns = 6, Rows = 2, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Left, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Left)]
+
+@if (Image is { } r)
+{
+    <div class="@SectionClass()">
+        <EntityCardPart>
+            <MudCardActions Class="py-1">
+                <VerbTaps>
+                    <ImageActions Image="r" ShortcutsAlone="true" Changed="@(() => Images.RefreshAsync())" />
+                </VerbTaps>
+            </MudCardActions>
+        </EntityCardPart>
+    </div>
+}

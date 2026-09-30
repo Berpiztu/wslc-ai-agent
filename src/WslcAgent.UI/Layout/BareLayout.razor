@@ -1,0 +1,37 @@
+@* A page that is only its content (the detached terminal): the theme and the
+   providers, without the sidebar and the top bars. *@
+@inherits LayoutComponentBase
+@inject WslcAgent.UI.Components.ThemePreference ThemeChoice
+
+<MudThemeProvider Theme="WslcTheme.Theme" IsDarkMode="_darkMode" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<Toasts />
+
+<div class="wslc-bare pa-2">
+    @* The sign-in screen lives here too, so it gets the same panel: this is
+       exactly where a client that cannot reach its agent ends up. *@
+    <ErrorBoundary @ref="_errors">
+        <ChildContent>@Body</ChildContent>
+        <ErrorContent Context="error">
+            <ErrorPanel Error="error" OnRetry="@(() => _errors?.Recover())" />
+        </ErrorContent>
+    </ErrorBoundary>
+</div>
+
+@code {
+    private ErrorBoundary? _errors;
+
+    /// <summary>The theme this client was left in: the sign-in screen and the
+    /// detached terminal open in it too, instead of flashing light.</summary>
+    private bool _darkMode;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _darkMode = await ThemeChoice.ReadAsync();
+            StateHasChanged();
+        }
+    }
+}

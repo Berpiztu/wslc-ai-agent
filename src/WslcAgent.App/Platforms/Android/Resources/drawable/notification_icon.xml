@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The small icon of the agent's notifications: the app's glyph
+     (Resources/AppIcon/appiconfg.svg, the same paths and stroke on its 456
+     viewport), in white alone, as Android requires of a status bar icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="456"
+    android:viewportHeight="456">
+    <path
+        android:pathData="M228,78 L352,150 V306 L228,378 L104,306 V150 Z"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="22"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M104,150 L228,222 L352,150"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="22"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M228,222 V378"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="22"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M140,262 L172,286 L140,310"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="22"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M186,322 H226"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="22"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+</vector>

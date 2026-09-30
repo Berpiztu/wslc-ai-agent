@@ -1,0 +1,3 @@
+{"Availability":"N/A","Driver":"guest","Group":"N/A","Labels":"com.docker.volume.anonymous=","Links":"N/A","Mountpoint":"/var/lib/docker/volumes/8438e4ca2420a7a97866e104d33ede2b5563566146eacb1e63e2099dcfb855d2/_data","Name":"8438e4ca2420a7a97866e104d33ede2b5563566146eacb1e63e2099dcfb855d2","Scope":"local","Size":"N/A","Status":"N/A"}
+{"Availability":"N/A","Driver":"guest","Group":"N/A","Labels":"","Links":"N/A","Mountpoint":"/var/lib/docker/volumes/a0_usr/_data","Name":"a0_usr","Scope":"local","Size":"N/A","Status":"N/A"}
+{"Availability":"N/A","Driver":"guest","Group":"N/A","Labels":"","Links":"N/A","Mountpoint":"N/A","Name":"prueba","Scope":"local","Size":"N/A","Status":"N/A"}

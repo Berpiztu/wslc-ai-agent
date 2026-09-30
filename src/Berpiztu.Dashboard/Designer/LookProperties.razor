@@ -1,0 +1,88 @@
+@* How one object or several look, the same fields for either: its type size, its colours, its elevation, its alignment across and
+   down each with its margin at the end of its row. With one object each
+   field shows its value; with several, the value they share, or nothing
+   while theirs differ, and a change is made to them all in one step. The
+   object's own properties (its source, its cells) and its parts are the
+   caller's: those differ from kind to kind. *@
+@using static Berpiztu.Dashboard.Designer.PropertyChoices
+@inject ObjectCatalogue Catalogue
+
+<div class="@($"bz-dash-props {Class}".Trim())">
+    <ChoiceField T="TypeSize?" Value="@Alike(Objects.Select(o => o.Size))"
+                 ValueChanged="@(size => SetAsync((o, _) => size is { } chosen ? o with { Size = chosen } : o))"
+                 Options="SomeSizeOptions" Label="Size" Class="bz-dash-prop-wide"
+                 Title="Type size: Medium is how the object draws itself; Small a step down, Large a step up" />
+    @* Its colours, the theme's by name, its kind's until another is chosen. *@
+    <ChoiceField T="ThemeColor?" Value="@Alike(Kinds.Select(k => k.Object.Background ?? k.Kind.About.Background))"
+                 ValueChanged="@(color => SetAsync((o, kind) => color is { } chosen ? o with { Background = Kept(chosen, kind.About.Background) } : o))"
+                 Options="SomeColorOptions" Label="Background"
+                 Title="The colour its cells are filled with; Inherited takes its card's" />
+    <ChoiceField T="ThemeColor?" Value="@Alike(Kinds.Select(k => k.Object.Foreground ?? k.Kind.About.Foreground))"
+                 ValueChanged="@(color => SetAsync((o, kind) => color is { } chosen ? o with { Foreground = Kept(chosen, kind.About.Foreground) } : o))"
+                 Options="SomeColorOptions" Label="Foreground"
+                 Title="The colour of its text; Inherited takes its card's" />
+    @* How far it stands off what is under it: every object has one, as every
+       card has. *@
+    <ChoiceField T="int?" Value="@(Objects.Select(o => o.Elevation).Distinct().ToList() is [var elevation] ? elevation : null)"
+                 ValueChanged="@(elevation => SetAsync((o, _) => o with { Elevation = elevation }))"
+                 Options="ElevationOptions" Label="Elevation"
+                 Title="How far it stands off what is under it; Settings is its design's: standing alone, the Settings page's card elevation, in a card none" />
+    @* Which of its card's edges it keeps to as a fluid view widens the card
+       (as Visual Basic's Anchor). *@
+    <ChoiceField T="HorizontalAnchor?" Value="@Alike(Kinds.Select(k => k.Kind.AnchorOf(k.Object)))"
+                 ValueChanged="@(anchor => SetAsync((o, kind) => anchor is { } chosen ? o with { Anchor = Kept(chosen, kind.About.Anchor) } : o))"
+                 Options="AnchorOptions" Label="Anchor"
+                 Title="As a fluid view widens its card: Scale spreads it in proportion; Left or Right keeps its size and its distance to that edge; Both keeps both distances and widens it" />
+</div>
+@* Each alignment with its margin at its end: left, centre, right and the margin across; top, middle, bottom and the
+   margin down. *@
+<div class="bz-dash-align-rows mt-2">
+    <div class="bz-dash-align-row">
+        <MudToggleGroup T="HorizontalAlign?" Value="@Alike(Kinds.Select(k => k.Kind.HorizontalOf(k.Object)))"
+                        ValueChanged="@(across => SetAsync((o, kind) => across is { } chosen ? o with { Horizontal = Kept(chosen, kind.About.Horizontal) } : o))"
+                        Size="Size.Small" Color="Color.Primary" Outlined="true" Delimiters="false">
+            <MudToggleItem Value="@((HorizontalAlign?)HorizontalAlign.Left)" title="Align left"><MudIcon Icon="@Icons.Material.Filled.FormatAlignLeft" Size="Size.Small" /></MudToggleItem>
+            <MudToggleItem Value="@((HorizontalAlign?)HorizontalAlign.Center)" title="Center"><MudIcon Icon="@Icons.Material.Filled.FormatAlignCenter" Size="Size.Small" /></MudToggleItem>
+            <MudToggleItem Value="@((HorizontalAlign?)HorizontalAlign.Right)" title="Align right"><MudIcon Icon="@Icons.Material.Filled.FormatAlignRight" Size="Size.Small" /></MudToggleItem>
+        </MudToggleGroup>
+        <div class="bz-dash-props">
+            <TextField T="int?" Value="@Alike(Objects.Select(o => o.MarginX ?? 0))"
+                       ValueChanged="@(x => SetAsync((o, _) => x is { } chosen ? o with { MarginX = chosen > 0 ? chosen : null } : o))" Label="Margin"
+                       Title="Pixels between its left and right edges and what it shows" />
+        </div>
+    </div>
+    <div class="bz-dash-align-row">
+        <MudToggleGroup T="VerticalAlign?" Value="@Alike(Kinds.Select(k => k.Kind.VerticalOf(k.Object)))"
+                        ValueChanged="@(down => SetAsync((o, kind) => down is { } chosen ? o with { Vertical = Kept(chosen, kind.About.Vertical) } : o))"
+                        Size="Size.Small" Color="Color.Primary" Outlined="true" Delimiters="false">
+            <MudToggleItem Value="@((VerticalAlign?)VerticalAlign.Top)" title="Align top"><MudIcon Icon="@Icons.Material.Filled.VerticalAlignTop" Size="Size.Small" /></MudToggleItem>
+            <MudToggleItem Value="@((VerticalAlign?)VerticalAlign.Middle)" title="Middle"><MudIcon Icon="@Icons.Material.Filled.VerticalAlignCenter" Size="Size.Small" /></MudToggleItem>
+            <MudToggleItem Value="@((VerticalAlign?)VerticalAlign.Bottom)" title="Align bottom"><MudIcon Icon="@Icons.Material.Filled.VerticalAlignBottom" Size="Size.Small" /></MudToggleItem>
+        </MudToggleGroup>
+        <div class="bz-dash-props">
+            <TextField T="int?" Value="@Alike(Objects.Select(o => o.MarginY ?? 0))"
+                       ValueChanged="@(y => SetAsync((o, _) => y is { } chosen ? o with { MarginY = chosen > 0 ? chosen : null } : o))" Label="Margin"
+                       Title="Pixels between its top and bottom edges and what it shows" />
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public DashboardDocument Document { get; set; } = default!;
+
+    /// <summary>The objects these fields show and change: one, or several chosen together.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<ObjectInstance> Objects { get; set; } = [];
+
+    /// <summary>A class for the first row of fields, to stand it clear of what is above it.</summary>
+    [Parameter] public string Class { get; set; } = "";
+
+    /// <summary>The objects with their kinds; one of a kind this build does not know is left alone.</summary>
+    private IEnumerable<(ObjectInstance Object, ObjectDescriptor Kind)> Kinds =>
+        Objects.Select(o => (Object: o, Kind: Catalogue.Find(o.Type)))
+            .Where(pair => pair.Kind is not null)
+            .Select(pair => (pair.Object, pair.Kind!));
+
+    /// <summary>A change made to every object at once, one step undo takes back whole.</summary>
+    private Task SetAsync(Func<ObjectInstance, ObjectDescriptor, ObjectInstance> change) =>
+        Document.SetEachAsync([.. Kinds.Select(pair => change(pair.Object, pair.Kind)).Where(changed => !Objects.Contains(changed))]);
+}

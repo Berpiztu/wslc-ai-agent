@@ -1,0 +1,479 @@
+{
+  "landscape": {
+    "wslc.charts-card": {
+      "w": 26,
+      "h": 27,
+      "size": "medium",
+      "background": "primaryTint"
+    },
+    "wslc.charts-card.wslc.host-network-activity": {
+      "w": 6,
+      "h": 3,
+      "size": "small",
+      "foreground": "tertiary",
+      "parts": {
+        "value": {
+          "size": "small",
+          "isDesign": false
+        },
+        "hint": {
+          "size": "small",
+          "hidden": true,
+          "isDesign": false
+        },
+        "label": {
+          "size": "small",
+          "hidden": true,
+          "isDesign": false
+        }
+      },
+      "x": 13,
+      "y": 14
+    },
+    "wslc.charts-card.wslc.host-network-chart": {
+      "w": 13,
+      "h": 10,
+      "size": "small",
+      "x": 13,
+      "y": 17
+    },
+    "wslc.charts-card.wslc.host-network-legend": {
+      "w": 7,
+      "h": 3,
+      "size": "small",
+      "x": 19,
+      "y": 14
+    },
+    "wslc.charts-card.wslc.host-disk-activity": {
+      "w": 6,
+      "h": 3,
+      "size": "small",
+      "foreground": "tertiary",
+      "parts": {
+        "label": {
+          "hidden": true,
+          "isDesign": false
+        },
+        "value": {
+          "size": "small",
+          "isDesign": false
+        },
+        "hint": {
+          "hidden": true,
+          "isDesign": false
+        }
+      },
+      "x": 0,
+      "y": 14
+    },
+    "wslc.charts-card.wslc.host-disk-legend": {
+      "w": 7,
+      "h": 3,
+      "size": "small",
+      "vertical": "bottom",
+      "x": 6,
+      "y": 14
+    },
+    "wslc.charts-card.wslc.host-cpu-activity": {
+      "w": 5,
+      "h": 2,
+      "size": "small",
+      "foreground": "tertiary",
+      "parts": {
+        "value": {
+          "size": "small",
+          "isDesign": false
+        },
+        "label": {
+          "hidden": true,
+          "isDesign": false
+        },
+        "hint": {
+          "hidden": true,
+          "isDesign": false
+        }
+      },
+      "x": 0,
+      "y": 2
+    },
+    "wslc.charts-card.wslc.host-cpu-legend": {
+      "w": 8,
+      "h": 2,
+      "size": "small",
+      "x": 5,
+      "y": 2
+    },
+    "wslc.charts-card.wslc.host-memory-activity": {
+      "w": 4,
+      "h": 2,
+      "size": "small",
+      "foreground": "tertiary",
+      "parts": {
+        "label": {
+          "hidden": true,
+          "isDesign": false
+        },
+        "hint": {
+          "hidden": true,
+          "isDesign": false
+        },
+        "value": {
+          "size": "small",
+          "isDesign": false
+        }
+      },
+      "x": 13,
+      "y": 2
+    },
+    "wslc.charts-card.wslc.host-cpu-chart": {
+      "w": 13,
+      "h": 10,
+      "size": "small",
+      "x": 0,
+      "y": 4
+    },
+    "wslc.charts-card.wslc.host-disk-chart": {
+      "w": 13,
+      "h": 10,
+      "size": "small",
+      "x": 0,
+      "y": 17
+    },
+    "wslc.charts-card.wslc.host-memory-chart": {
+      "w": 13,
+      "h": 10,
+      "size": "small",
+      "x": 13,
+      "y": 4
+    },
+    "wslc.charts-card.wslc.host-memory-legend": {
+      "w": 9,
+      "h": 2,
+      "size": "small",
+      "foreground": "tertiary",
+      "x": 17,
+      "y": 2
+    },
+    "wslc.host-transfers-title": {
+      "w": 19,
+      "h": 2,
+      "size": "medium",
+      "horizontal": "center",
+      "parts": {
+        "label": {
+          "size": "large",
+          "bold": true,
+          "isDesign": false
+        }
+      },
+      "x": 0,
+      "y": 0
+    },
+    "wslc.host-transfers-count": {
+      "w": 4,
+      "h": 2,
+      "size": "medium",
+      "horizontal": "right",
+      "foreground": "tertiary",
+      "parts": {
+        "value": {
+          "size": "small",
+          "bold": false,
+          "isDesign": false
+        }
+      },
+      "marginX": 9,
+      "x": 7,
+      "y": 2
+    },
+    "wslc.host-transfers-hint": {
+      "w": 8,
+      "h": 2,
+      "size": "medium",
+      "foreground": "tertiary",
+      "marginX": 8,
+      "x": 11,
+      "y": 2
+    },
+    "wslc.host-transfers-lines": {
+      "w": 19,
+      "h": 8,
+      "size": "small",
+      "vertical": "middle",
+      "x": 0,
+      "y": 6
+    },
+    "wslc.transfers-card": {
+      "w": 19,
+      "h": 14,
+      "size": "medium",
+      "background": "primaryTint"
+    },
+    "wslc.host-transfers-filter": {
+      "w": 7,
+      "h": 2,
+      "size": "small",
+      "horizontal": "center",
+      "vertical": "bottom",
+      "foreground": "tertiary",
+      "marginX": 8,
+      "x": 0,
+      "y": 2
+    },
+    "wslc.charts-card.wslc.chart-subject": {
+      "w": 26,
+      "h": 2,
+      "size": "medium",
+      "horizontal": "center",
+      "x": 0,
+      "y": 0,
+      "elevation": 1
+    },
+    "wslc.host-transfers-head": {
+      "w": 18,
+      "h": 2,
+      "size": "medium",
+      "vertical": "bottom",
+      "foreground": "text",
+      "x": 0,
+      "y": 4
+    }
+  },
+  "portrait": {
+    "wslc.charts-card": {
+      "w": 24,
+      "h": 23,
+      "size": "medium",
+      "background": "primaryTint"
+    },
+    "wslc.charts-card.wslc.host-network-chart": {
+      "w": 12,
+      "h": 8,
+      "size": "small",
+      "x": 12,
+      "y": 15
+    },
+    "wslc.charts-card.wslc.host-network-activity": {
+      "w": 6,
+      "h": 3,
+      "size": "small",
+      "foreground": "tertiary",
+      "parts": {
+        "label": {
+          "hidden": true,
+          "isDesign": false
+        },
+        "hint": {
+          "hidden": true,
+          "isDesign": false
+        },
+        "value": {
+          "size": "small",
+          "isDesign": false
+        }
+      },
+      "x": 12,
+      "y": 12
+    },
+    "wslc.charts-card.wslc.host-disk-chart": {
+      "w": 12,
+      "h": 8,
+      "size": "small",
+      "x": 0,
+      "y": 15
+    },
+    "wslc.charts-card.wslc.host-disk-activity": {
+      "w": 6,
+      "h": 3,
+      "size": "small",
+      "foreground": "tertiary",
+      "parts": {
+        "label": {
+          "hidden": true,
+          "isDesign": false
+        },
+        "hint": {
+          "hidden": true,
+          "isDesign": false
+        },
+        "value": {
+          "size": "small",
+          "isDesign": false
+        }
+      },
+      "x": 0,
+      "y": 12
+    },
+    "wslc.charts-card.wslc.host-disk-legend": {
+      "w": 6,
+      "h": 3,
+      "size": "small",
+      "x": 6,
+      "y": 12
+    },
+    "wslc.charts-card.wslc.host-network-legend": {
+      "w": 6,
+      "h": 3,
+      "size": "small",
+      "x": 18,
+      "y": 12
+    },
+    "wslc.charts-card.wslc.host-cpu-activity": {
+      "w": 5,
+      "h": 2,
+      "size": "small",
+      "foreground": "tertiary",
+      "parts": {
+        "label": {
+          "hidden": true,
+          "isDesign": false
+        },
+        "hint": {
+          "hidden": true,
+          "isDesign": false
+        },
+        "value": {
+          "size": "small",
+          "isDesign": false
+        }
+      },
+      "x": 0,
+      "y": 2
+    },
+    "wslc.charts-card.wslc.host-cpu-legend": {
+      "w": 7,
+      "h": 2,
+      "size": "small",
+      "x": 5,
+      "y": 2
+    },
+    "wslc.charts-card.wslc.host-memory-activity": {
+      "w": 3,
+      "h": 2,
+      "size": "small",
+      "foreground": "tertiary",
+      "parts": {
+        "label": {
+          "hidden": true,
+          "isDesign": false
+        },
+        "hint": {
+          "hidden": true,
+          "isDesign": false
+        },
+        "value": {
+          "size": "small",
+          "isDesign": false
+        }
+      },
+      "x": 12,
+      "y": 2
+    },
+    "wslc.charts-card.wslc.host-memory-legend": {
+      "w": 9,
+      "h": 2,
+      "size": "small",
+      "x": 15,
+      "y": 2
+    },
+    "wslc.charts-card.wslc.host-memory-chart": {
+      "w": 12,
+      "h": 8,
+      "size": "small",
+      "x": 12,
+      "y": 4
+    },
+    "wslc.charts-card.wslc.host-cpu-chart": {
+      "w": 12,
+      "h": 8,
+      "size": "small",
+      "x": 0,
+      "y": 4
+    },
+    "wslc.host-transfers-title": {
+      "w": 24,
+      "h": 2,
+      "size": "medium",
+      "horizontal": "center",
+      "parts": {
+        "label": {
+          "size": "large",
+          "bold": true,
+          "isDesign": false
+        }
+      },
+      "x": 0,
+      "y": 0
+    },
+    "wslc.host-transfers-count": {
+      "w": 5,
+      "h": 2,
+      "size": "medium",
+      "horizontal": "right",
+      "foreground": "tertiary",
+      "parts": {
+        "value": {
+          "size": "small",
+          "isDesign": false
+        }
+      },
+      "marginX": 4,
+      "x": 10,
+      "y": 2
+    },
+    "wslc.host-transfers-hint": {
+      "w": 9,
+      "h": 2,
+      "size": "medium",
+      "foreground": "tertiary",
+      "parts": {
+        "hint": {
+          "bold": true,
+          "isDesign": false
+        }
+      },
+      "marginX": 4,
+      "x": 15,
+      "y": 2
+    },
+    "wslc.host-transfers-head": {
+      "w": 23,
+      "h": 2,
+      "size": "medium",
+      "x": 0,
+      "y": 4
+    },
+    "wslc.host-transfers-lines": {
+      "w": 24,
+      "h": 14,
+      "size": "medium",
+      "x": 0,
+      "y": 6
+    },
+    "wslc.transfers-card": {
+      "w": 24,
+      "h": 20,
+      "size": "medium",
+      "background": "primaryTint"
+    },
+    "wslc.host-transfers-filter": {
+      "w": 10,
+      "h": 2,
+      "size": "medium",
+      "horizontal": "right",
+      "vertical": "middle",
+      "foreground": "tertiary",
+      "x": 0,
+      "y": 2
+    },
+    "wslc.charts-card.wslc.chart-subject": {
+      "w": 24,
+      "h": 2,
+      "size": "medium",
+      "horizontal": "center",
+      "x": 0,
+      "y": 0,
+      "elevation": 1
+    }
+  }
+}

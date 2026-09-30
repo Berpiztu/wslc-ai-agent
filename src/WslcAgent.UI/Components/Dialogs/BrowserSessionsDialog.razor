@@ -1,0 +1,74 @@
+@* View browser sessions: the host browsers open on this
+   container's ports, each with who opened it, how many panes watch it and for
+   how long it has been open; Connect joins it as one more viewer. *@
+@inject WslcAgentApi Api
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Open host-browser sessions for this container. Connect joins the same Edge page.</MudText>
+        @if (_sessions is null)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Loading…</MudText>
+        }
+        else if (_sessions.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">No browser sessions open for this container.</MudText>
+        }
+        else
+        {
+            <MudPaper Outlined="true">
+                <MudList T="string" Dense="true" Class="wslc-picker-list" role="list">
+                    @foreach (var session in _sessions)
+                    {
+                        <MudListItem T="string" role="listitem">
+                            <div class="d-flex align-center gap-2">
+                                <div class="flex-grow-1 wslc-browse-session">
+                                    <MudText Typo="Typo.body1"><b>:@session.HostPort — @session.Url</b></MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@Describe(session)</MudText>
+                                </div>
+                                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Link"
+                                           OnClick="@(() => Dialog.Close(DialogResult.Ok(session)))">Connect</MudButton>
+                            </div>
+                        </MudListItem>
+                    }
+                </MudList>
+            </MudPaper>
+        }
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private IReadOnlyList<BrowseSessionInfo>? _sessions;
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public string Container { get; set; } = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _sessions = await Api.GetBrowseSessionsAsync(Container);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            Dialog.Cancel();
+        }
+    }
+
+    /// <summary><c>client · N viewer(s) · age</c>, the age in the largest whole unit (s, m, h).</summary>
+    private static string Describe(BrowseSessionInfo session)
+    {
+        var seconds = Math.Max(0, (long)(DateTimeOffset.UtcNow - session.Created).TotalSeconds);
+        var age = seconds < 60 ? $"{seconds}s" : seconds < 3600 ? $"{seconds / 60}m" : $"{seconds / 3600}h";
+        var client = session.Client.Length == 0 ? "unknown" : session.Client;
+        return $"{client} · {session.Viewers} viewer(s) · {age}";
+    }
+}

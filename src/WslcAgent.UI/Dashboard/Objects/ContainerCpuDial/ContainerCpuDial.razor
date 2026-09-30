@@ -1,0 +1,26 @@
+@* A container's CPU, as a dial: the model every other object follows. It carries its descriptor
+   and draws only what it shows — the dial the container's card draws
+   (UsageDial), never a copy — while the canvas draws its cells, its
+   alignment and the designer's marks around it. What every container object
+   shares, its source and the list it reads, is ContainerObject's. *@
+@* Every object's folder is its own, and its namespace the objects' one: a
+   folder named as its class would otherwise make a namespace of that name. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@inherits ContainerObject
+@attribute [DashboardObject("wslc.container-cpu", "Container CPU", Group = "Container", Subgroup = "User", Icon = Icons.Material.Filled.Speed, Source = ContainerSourceFamily.FamilyKey, Columns = 6, Rows = 6, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Right)]
+@attribute [DashboardObjectAlarm(DashboardMeasures.Cpu, "CPU")]
+@attribute [DashboardObjectPart("ring", "Ring", Text = false, Line = true)]
+@attribute [DashboardObjectPart("figure", "Figure")]
+@attribute [DashboardObjectPart("label", "Label")]
+
+<div class="@TypeClass">
+    <UsageDial Label="CPU" Reading="@(Container?.CpuPercent ?? "")" Live="@(Container?.IsRunning == true)" Title="@Tip" />
+</div>
+
+@code {
+    /// <summary>Which container it is, since the dial alone says only "CPU".</summary>
+    private string Tip => Container is { } container
+        ? $"CPU of {container.Name}: {Readings.Dash(container.CpuPercent)}"
+        : "CPU: the container is being read";
+}

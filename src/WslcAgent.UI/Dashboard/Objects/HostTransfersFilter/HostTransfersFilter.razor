@@ -1,0 +1,34 @@
+@* The File transfers card's filter (TransfersCardObject; the
+   header's three lines objects of their own, and the filter one beside
+   them): the select that filters the card to one
+   container, offering only the containers that have something right now,
+   there only while more than one has. A verb, not a reading, and not kept.
+   The dashboard's own choice, not MudBlazor's select, as everywhere
+   else on the dashboard (ChoiceField). *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Fields
+@using Berpiztu.Dashboard.Model
+@inherits TransfersCardObject
+@attribute [DashboardObject("wslc.host-transfers-filter", "File transfers filter", Group = "System", Subgroup = "System", Icon = Icons.Material.Filled.FilterList, Columns = 7, Rows = 4, Horizontal = HorizontalAlign.Left, Vertical = VerticalAlign.Top, CardOnly = true)]
+
+<div class="@($"{TypeClass} wslc-dash-transfers")">
+    @* In design it is always drawn, as it would stand with nothing filtered:
+       blank, its properties could not be seen changing. *@
+    @if (Named.Count > 1 || Designing)
+    {
+        @* No word on its line: what it shows,
+           All containers or one, says what it is. Its text follows the
+           object's type size, the list it drops too, which opens over the page
+           and so carries the size itself. *@
+        <ChoiceField T="string" Value="Filter" ValueChanged="Choose" Options="Options(Named)" Label="" Bare="true"
+                     Title="Show the transfers of one container, or of all"
+                     Class="wslc-dash-choice" ListClass="@($"{TypeClass} wslc-dash-choice-list")" />
+    }
+</div>
+
+@code {
+    /// <summary>All of them first, then each container that has something, by its name.</summary>
+    private IReadOnlyList<FieldOption<string>> Options(IReadOnlyList<string> containers) =>
+        [new("", "All containers"), .. containers.Select(container => new FieldOption<string>(container, NameOf(container)))];
+}

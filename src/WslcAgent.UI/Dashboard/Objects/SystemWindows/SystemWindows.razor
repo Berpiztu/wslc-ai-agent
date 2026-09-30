@@ -1,0 +1,18 @@
+@* Windows' version: the System card's Windows reading, standing alone. It reads the
+   System page's own reading, which opens no session (SystemInfoRead). *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits WslcObject
+@attribute [DashboardObject("wslc.system-windows", "Windows", Group = "System", Subgroup = "System", Icon = Icons.Material.Filled.DesktopWindows, Columns = 6, Rows = 4, Background = ThemeColor.BackgroundGray)]
+@attribute [DashboardObjectPart("label", "Label")]
+@attribute [DashboardObjectPart("value", "Value")]
+@inject SystemInfoRead Info
+
+<div class="@SummaryClass">
+    <SummaryReading Label="Windows" Value="@(Info.Value is { } system ? Readings.Dash(system.Info.Windows) : "…")" />
+</div>
+
+@code {
+    protected override void OnInitialized() => Follow(Info);
+}

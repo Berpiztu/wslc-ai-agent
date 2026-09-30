@@ -1,0 +1,54 @@
+@* The full chart a dashboard card opens: the chart panel, with
+   its header, its legend and the zoom tools, over the history the card had
+   when it was tapped. Close alone in the title row, as every window that
+   only shows something. *@
+
+<MudDialog>
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <LineChart Title="@Title" Value="@Value" Format="@Format" YMax="YMax" ForceYMax="ForceYMax" Series="Series" Times="Times" Values="Values" Zoom="true" />
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    [Parameter] public string Value { get; set; } = "—";
+
+    [Parameter, EditorRequired] public string Format { get; set; } = "percent";
+
+    [Parameter] public double? YMax { get; set; }
+
+    /// <summary>A ceiling the axis grows to (a container's memory limit); zero for none.</summary>
+    [Parameter] public double ForceYMax { get; set; }
+
+    [Parameter, EditorRequired] public IReadOnlyList<LineChart.Line> Series { get; set; } = [];
+
+    [Parameter, EditorRequired] public IReadOnlyList<long> Times { get; set; } = [];
+
+    [Parameter, EditorRequired] public IReadOnlyList<double[]> Values { get; set; } = [];
+
+    /// <summary>Opens the full chart over the history a card or a chart object had when it was tapped.</summary>
+    public static Task ShowAsync(IDialogService dialogs, string title, string value, string format, double? yMax,
+        IReadOnlyList<LineChart.Line> series, IReadOnlyList<long> times, IReadOnlyList<double[]> values, double forceYMax = 0)
+    {
+        var parameters = new DialogParameters<ChartDialog>
+        {
+            { x => x.Title, title },
+            { x => x.Value, value },
+            { x => x.Format, format },
+            { x => x.YMax, yMax },
+            { x => x.ForceYMax, forceYMax },
+            { x => x.Series, series },
+            { x => x.Times, times },
+            { x => x.Values, values },
+        };
+        return DialogFlow.ShowAsync<ChartDialog>(dialogs, $"{title} chart", parameters, large: true);
+    }
+}

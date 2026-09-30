@@ -1,0 +1,18 @@
+@* The stats window: the live charts for one container. *@
+
+<MudDialog ContentClass="wslc-dialog-action">
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <ContainerStatsView Container="@Container" />
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public string Container { get; set; } = "";
+}

@@ -1,0 +1,20 @@
+@* A container's details: what the Containers list's card says about it in
+   words — Id, Status, Ports, Networks, Created — as one object; its CPU and
+   memory dials are objects of their own. It fills its cells as the card's
+   body does, and its type size steps its lines. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits ContainerObject
+@attribute [DashboardObject("wslc.container-details", "Container details", Group = "Container", Subgroup = "User", Icon = Icons.Material.Filled.Article, Source = ContainerSourceFamily.FamilyKey, Columns = 12, Rows = 6, Fills = true, Horizontal = HorizontalAlign.Left, Vertical = VerticalAlign.Top, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both)]
+
+@if (Container is { } c)
+{
+    <div class="@SectionClass("wslc-card-part-details")">
+        <EntityCardPart>
+            <MudCardContent>
+                <ContainerCardTexts Container="c" />
+            </MudCardContent>
+        </EntityCardPart>
+    </div>
+}

@@ -1,0 +1,64 @@
+@page "/registry"
+@inject WslcAgentApi Api
+@inject ISnackbar Snackbar
+
+<PageShell Title="Registry">
+    <MudPaper Elevation="1" Class="pa-3 mb-2">
+        <MudText Typo="Typo.h6" Class="mb-1">Log in to a registry</MudText>
+        <MudStack Spacing="1">
+            <MudTextField T="string" @bind-Value="_server" Label="Server" Placeholder="registry.example.com" Variant="Variant.Filled" Margin="Margin.Dense" Immediate="true" />
+            <MudTextField T="string" @bind-Value="_username" Label="Username" Variant="Variant.Filled" Margin="Margin.Dense" Immediate="true"
+                          autocapitalize="none" autocorrect="off" spellcheck="false" />
+            <PasswordField @bind-Value="_password" />
+            <div>
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy" OnClick="LoginAsync">Login</MudButton>
+            </div>
+        </MudStack>
+    </MudPaper>
+
+    <MudPaper Elevation="1" Class="pa-3 mb-2">
+        <MudText Typo="Typo.h6" Class="mb-1">Log out</MudText>
+        <MudStack Spacing="1">
+            <MudTextField T="string" @bind-Value="_logoutServer" Label="Server" Placeholder="(optional)" Variant="Variant.Filled" Margin="Margin.Dense" Immediate="true" />
+            <div>
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" Disabled="_busy" OnClick="LogoutAsync">Logout</MudButton>
+            </div>
+        </MudStack>
+    </MudPaper>
+</PageShell>
+
+@code {
+    private string _server = "";
+    private string _username = "";
+    private string _password = "";
+    private string _logoutServer = "";
+    private bool _busy;
+
+    /// <summary>The password is not kept once it has been sent, whatever the answer.</summary>
+    private async Task LoginAsync()
+    {
+        var request = new RegistryLoginRequest(_server, _username, _password);
+        _password = "";
+        await RunAsync("login", ct => Api.RegistryLoginAsync(request, ct));
+    }
+
+    private Task LogoutAsync() => RunAsync("logout", ct => Api.RegistryLogoutAsync(_logoutServer, ct));
+
+    private async Task RunAsync(string verb, Func<CancellationToken, Task> action)
+    {
+        _busy = true;
+        try
+        {
+            await action(CancellationToken.None);
+            Snackbar.Add($"Registry: {verb} ok", Severity.Success);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"Registry: {verb} failed. {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

@@ -1,0 +1,426 @@
+@page "/containers"
+@using WslcAgent.UI.Components.Launch
+@inherits ListPageBase<ContainerSummary>
+@inject OpenDetails Open
+@inject FileTransfers Transfers
+
+<PageShell Title="Containers" RequiresSession="true">
+    <TopbarSearch>
+        <SearchBox @bind-Value="Search" />
+    </TopbarSearch>
+    <TopbarNav>
+        <BulkBar Count="Selected.Count">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success" OnClick="@(() => BulkAsync("start", (c, ct) => Api.StartContainerAsync(c.Id, ct)))">Start</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => BulkAsync("stop", (c, ct) => Api.StopContainerAsync(c.Id, ct)))">Stop</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" OnClick="@(() => BulkRemoveAsync("container", (c, ct) => Api.RemoveContainerAsync(c.Id, force: true, ct)))">Remove</MudButton>
+        </BulkBar>
+    </TopbarNav>
+    <Verbs>
+        <ContainersVerbs Changed="RefreshAsync" />
+    </Verbs>
+    <ChildContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap" Spacing="2" Class="wslc-toolbar mb-1 flex-shrink-0">
+            <PageStats>
+                <PageStat Label="CPU" Value="@CpuText" />
+                <PageStat Label="Memory" Value="@Bytes.Humanize(_aggregate.MemoryUsedBytes)" />
+            </PageStats>
+            @* Both filters stay at every width: when the bar is tight the word gives
+               way to its initial (R, T) and the tooltip, which they already carry,
+               says the whole of it. Two switches nobody can read are worse than
+               two letters with a tooltip, and losing a filter is worse than both. *@
+            <span class="wslc-filter-switch" data-short="R" title="Show running containers only">
+                <MudSwitch T="bool" Value="_runningOnly" ValueChanged="OnRunningOnlyChanged" Label="Running" LabelPlacement="Placement.Start" Color="Color.Warning" Size="Size.Small" title="Show running containers only" />
+            </span>
+            <span class="wslc-filter-switch" data-short="T" title="Also show the agent's temporary Files helper containers, normally hidden">
+                <MudSwitch T="bool" Value="_helpers" ValueChanged="OnHelpersChanged" Label="Temporary" LabelPlacement="Placement.Start" Color="Color.Warning" Size="Size.Small" title="Also show the agent's temporary Files helper containers, normally hidden" />
+            </span>
+            <ViewModeToggle @bind-Value="View" />
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RefreshAsync" Disabled="Loading" title="Refresh" />
+        </MudStack>
+
+        @if (Error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-2 flex-shrink-0">@Error</MudAlert>
+        }
+
+        @if (View == ViewMode.Table)
+        {
+            <ListGrid TItem="ListRow<ContainerSummary>" Items="Rows" Loading="Loading" Page="Page" PageChanged="p => Page = p" SortChanged="SortChanged" EmptyText="@EmptyText"
+                      MultiSelection="true" @bind-SelectedItems="Selected">
+                <Columns>
+                    <SelectColumn T="ListRow<ContainerSummary>" Size="Size.Small" StickyLeft="true" HeaderClass="@GridColumn.Select" CellClass="@GridColumn.Select" />
+                    @* The dot sorts the list by state: running first, then everything stopped. *@
+                    <TemplateColumn T="ListRow<ContainerSummary>" Title="" Sortable="true" SortBy="@(r => r.Value.IsRunning ? 0 : 1)"
+                                    Resizable="false" StickyLeft="true" HeaderClass="@GridColumn.Bullet" CellClass="@GridColumn.Bullet">
+                        <CellTemplate>
+                            <StateDot Active="context.Item.Value.IsRunning" Title="running" Key="@context.Item.Value.Id" />
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <PropertyColumn T="ListRow<ContainerSummary>" TProperty="string" Property="c => c.Value.Name" Title="Name" StickyLeft="true" HeaderClass="@GridColumn.Width(18)" CellClass="@GridColumn.Width(18)">
+                        <CellTemplate>
+                            @if (LaunchOf(context.Item.Value) is { } launch)
+                            {
+                                <ProgressCell Name="@launch.Name" Pct="launch.Pct" Status="@launch.Status" Failed="@(!launch.Active)" LogAfterFailure="false"
+                                              LogTitle="View run progress" CancelTitle="Cancel run" DismissTitle="Dismiss run"
+                                              OnLog="@(() => PullFlow.ShowLogAsync(Dialogs, launch.Image))" OnCancel="@(() => CancelLaunchAsync(launch))"
+                                              OnDismiss="@(() => DismissLaunchAsync(launch))" />
+                            }
+                            else if (TransfersOf(context.Item.Value) is { Count: > 0 } moving)
+                            {
+                                @* Files on the move, in or out: the same bar as a run, on
+                                   the container they are travelling to or from, and one
+                                   bar for all of them however many there are. There is no
+                                   console to open — a transfer is bytes, not output — so
+                                   the row has its percentage and its cross and nothing
+                                   else. *@
+                                <ProgressCell Name="@context.Item.Value.Name" Pct="@TransferFlow.Pct(moving)" Status="@TransferFlow.Status(moving)"
+                                              Failed="@TransferFlow.Failed(moving)" LogTitle="View the transfers" CancelTitle="@CancelTitle(moving)" DismissTitle="Dismiss"
+                                              OnLog="@(() => TransferFlow.ShowAsync(Dialogs, context.Item.Value.Id, context.Item.Value.Name))"
+                                              OnCancel="@(() => CancelTransfersAsync(moving))" OnDismiss="@(() => DismissTransfersAsync(moving))" />
+                            }
+                            else
+                            {
+                                @context.Item.Value.Name
+                            }
+                        </CellTemplate>
+                    </PropertyColumn>
+                    <PropertyColumn T="ListRow<ContainerSummary>" TProperty="string" Property="c => c.Value.Image" Title="Image" HeaderClass="@GridColumn.Width(24)" CellClass="@GridColumn.Width(24)" />
+                    <TemplateColumn T="ListRow<ContainerSummary>" Title="Ports" Sortable="false" Resizable="true" DragAndDropEnabled="true"
+                                    HeaderClass="@GridColumn.Number(14)" CellClass="@GridColumn.Number(14)">
+                        <CellTemplate>
+                            <PortsLink Ports="context.Item.Value.Ports" Container="@context.Item.Value.Id" Publications="context.Item.Value.Published" />
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <PropertyColumn T="ListRow<ContainerSummary>" TProperty="string" Property="c => c.Value.CpuPercent" Title="CPU" HeaderClass="@GridColumn.Number(5)" CellClass="@GridColumn.Number(5)">
+                        <CellTemplate>@Dash(context.Item.Value.CpuPercent)</CellTemplate>
+                    </PropertyColumn>
+                    <PropertyColumn T="ListRow<ContainerSummary>" TProperty="string" Property="c => c.Value.MemPercent" Title="Mem%" HeaderClass="@GridColumn.Number(5)" CellClass="@GridColumn.Number(5)">
+                        <CellTemplate>@Dash(context.Item.Value.MemPercent)</CellTemplate>
+                    </PropertyColumn>
+                    <PropertyColumn T="ListRow<ContainerSummary>" TProperty="string" Property="c => c.Value.MemUsage" Title="Memory" HeaderClass="@GridColumn.Number(8)" CellClass="@GridColumn.Number(8)">
+                        <CellTemplate>
+                            <span title="@context.Item.Value.MemUsage">@Dash(MemoryUsed(context.Item.Value.MemUsage))</span>
+                        </CellTemplate>
+                    </PropertyColumn>
+                    <PropertyColumn T="ListRow<ContainerSummary>" TProperty="string" Property="c => c.Value.DiskIo" Title="Disk" HeaderClass="@GridColumn.Number(12)" CellClass="@GridColumn.Number(12)">
+                        <CellTemplate>@Dash(context.Item.Value.DiskIo)</CellTemplate>
+                    </PropertyColumn>
+                    <PropertyColumn T="ListRow<ContainerSummary>" TProperty="string" Property="c => c.Value.Id" Title="ID" HeaderClass="@GridColumn.Width(13)" CellClass="@($"{GridColumn.Width(13)} mud-text-secondary")">
+                        <CellTemplate>@(LaunchOf(context.Item.Value) is null ? context.Item.Value.Id : "pending")</CellTemplate>
+                    </PropertyColumn>
+                    <PropertyColumn T="ListRow<ContainerSummary>" TProperty="string" Property="c => c.Value.RestartPolicy" Title="Restart" HeaderClass="@GridColumn.Stretch(5)" CellClass="@GridColumn.Stretch(5)">
+                        <CellTemplate>@Dash(context.Item.Value.RestartPolicy)</CellTemplate>
+                    </PropertyColumn>
+                </Columns>
+                <Actions>
+                    <TemplateColumn T="ListRow<ContainerSummary>" Title="Actions" Sortable="false" Resizable="false" DragAndDropEnabled="false" StickyRight="true" HeaderClass="@GridColumn.Actions" CellClass="@GridColumn.Actions">
+                        <CellTemplate>
+                            @if (LaunchOf(context.Item.Value) is { } launch)
+                            {
+                                @EditLaunchButton(launch)
+                            }
+                            else
+                            {
+                                <ContainerActions Container="context.Item.Value" Changed="RefreshAsync" />
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Actions>
+            </ListGrid>
+        }
+        else
+        {
+            <CardsGrid TItem="ContainerSummary" Items="Visible" Loading="Loading" EmptyText="@EmptyText">
+                <ItemTemplate Context="c">
+                    <EntityCard Title="@c.Name" Subtitle="@c.Image" AvatarColor="@StateColors.For(c.State)" Key="@c.Id">
+                        <HeaderActions>
+                            <StateChip State="@c.State" />
+                        </HeaderActions>
+                        <Avatar>
+                            @if (LaunchOf(c) is { } launch)
+                            {
+                                <ProgressRing Pct="launch.Pct" Status="@launch.Status" Failed="@(!launch.Active)" LogAfterFailure="false"
+                                              LogTitle="View run progress" CancelTitle="Cancel run" DismissTitle="Dismiss run"
+                                              OnLog="@(() => PullFlow.ShowLogAsync(Dialogs, launch.Image))" OnCancel="@(() => CancelLaunchAsync(launch))"
+                                              OnDismiss="@(() => DismissLaunchAsync(launch))" />
+                            }
+                            else if (TransfersOf(c) is { Count: > 0 } moving)
+                            {
+                                <ProgressRing Pct="@TransferFlow.Pct(moving)" Status="@TransferFlow.Status(moving)" Failed="@TransferFlow.Failed(moving)"
+                                              LogTitle="View the transfers" CancelTitle="@CancelTitle(moving)" DismissTitle="Dismiss"
+                                              OnLog="@(() => TransferFlow.ShowAsync(Dialogs, c.Id, c.Name))"
+                                              OnCancel="@(() => CancelTransfersAsync(moving))" OnDismiss="@(() => DismissTransfersAsync(moving))" />
+                            }
+                            else
+                            {
+                                <MudAvatar Color="@StateColors.For(c.State)" Variant="Variant.Filled">@(c.Name is { Length: > 0 } name ? name[..1].ToUpperInvariant() : "?")</MudAvatar>
+                            }
+                        </Avatar>
+                        <ChildContent>
+                            <ContainerCardBody Container="c" />
+                        </ChildContent>
+                        <Actions>
+                            @if (LaunchOf(c) is { } launch)
+                            {
+                                @EditLaunchButton(launch)
+                            }
+                            else
+                            {
+                                <ContainerActions Container="c" Changed="RefreshAsync" Shortcuts="true" />
+                            }
+                        </Actions>
+                    </EntityCard>
+                </ItemTemplate>
+            </CardsGrid>
+        }
+    </ChildContent>
+</PageShell>
+
+@code {
+    private ContainerAggregate _aggregate = new(0, 1, 0);
+    private bool _runningOnly;
+    private bool _helpers;
+
+    private string EmptyText => _runningOnly ? "No running containers." : "No containers.";
+
+    /// <summary>used% / total% (N CPUs).</summary>
+    private string CpuText => $"{_aggregate.CpuUsedPercent:0.##}% / {_aggregate.CpuCount * 100}% ({_aggregate.CpuCount} CPUs)";
+
+    /// <summary>
+    /// The used side of <c>899.5MiB / 30.98GiB</c>: the total is the machine's,
+    /// the same in every row, so the column shows what changes and the whole
+    /// reading stays in the cell's tooltip.
+    /// </summary>
+    private static string MemoryUsed(string usage) => usage.Split('/')[0].Trim();
+
+    private const string LaunchPrefix = "launch:";
+    private static readonly TimeSpan JobsEvery = TimeSpan.FromSeconds(1);
+
+    private IReadOnlyList<ContainerLaunch> _launches = [];
+    private IReadOnlyList<ContainerTransfer> _transfers = [];
+    private readonly HashSet<string> _reportedLaunches = [];
+
+    /// <summary>Runs still on their way first, as a temporary row each.</summary>
+    protected override async Task<IReadOnlyList<ContainerSummary>> LoadAsync()
+    {
+        var response = await Api.GetContainersAsync(all: !_runningOnly, helpers: _helpers);
+        _aggregate = response.Aggregate;
+        _launches = await Api.GetContainerLaunchesAsync();
+        _transfers = await Api.GetContainerTransfersAsync();
+        ReportFinishedLaunches();
+        var rows = _launches.Where(l => l.Phase != "done")
+            .Select(l => new ContainerSummary(LaunchPrefix + l.Id, l.Name, l.Image, l.Active ? "created" : "error", l.Status, "", "", "", [], "", "", "", ""));
+        return [.. rows, .. response.Containers];
+    }
+
+    protected override void OnInitialized()
+    {
+        // The section is the list again, however the user arrived: the sidebar's
+        // Containers entry stops pointing at a details page: its memory is
+        // cleared whenever the list itself is showing.
+        Open.ClearContainers();
+        base.OnInitialized();
+        _ = FollowJobsAsync(PageClosing);
+        // The queue is this client's, not the agent's, so no poll hears about
+        // it: a file chosen or let go changes a row this second, not next one.
+        Transfers.QueueChanged += OnQueueChanged;
+        PageClosing.Register(() => Transfers.QueueChanged -= OnQueueChanged);
+    }
+
+    private void OnQueueChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private ContainerLaunch? LaunchOf(ContainerSummary row) =>
+        row.Id.StartsWith(LaunchPrefix, StringComparison.Ordinal) ? _launches.FirstOrDefault(l => LaunchPrefix + l.Id == row.Id) : null;
+
+    /// <summary>
+    /// What this container's row has to show: files on the move, either way
+    /// and whoever started them, the ones waiting their turn in the agent's
+    /// queue, and the ones that ended badly. The waiting ones are the row's
+    /// too — only one travels at a time, so without them a row where sixteen
+    /// files were announced says it has one and the rest look lost — and a
+    /// container whose files are all still queued behind another's shows the
+    /// ring just the same.
+    /// </summary>
+    private IReadOnlyList<ContainerTransfer> TransfersOf(ContainerSummary row) =>
+        TransferFlow.Showing(TransferFlow.For(_transfers, row.Id, row.Name));
+
+    private static string CancelTitle(IReadOnlyList<ContainerTransfer> transfers) =>
+        TransferFlow.Active(transfers) is { Count: > 1 } several ? $"Cancel {several.Count} transfers" : "Cancel transfer";
+
+    /// <summary>A run or an upload under way is followed every second; when one ends the list refreshes so the real row replaces it.</summary>
+    private async Task FollowJobsAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(JobsEvery);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                if (!_launches.Any(l => l.Active) && !_transfers.Any(t => t.Active))
+                {
+                    continue;
+                }
+
+                var launches = _launches;
+                var transfers = _transfers;
+                try
+                {
+                    _launches = await Api.GetContainerLaunchesAsync(cancellationToken);
+                    _transfers = await Api.GetContainerTransfersAsync(cancellationToken);
+                }
+                catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+                {
+                    // The agent did not answer this tick (the layout says so); the next asks again.
+                    continue;
+                }
+
+                if (Ended(launches, _launches, l => l.Id, l => l.Active) || Ended(transfers, _transfers, t => t.Id, t => t.Active))
+                {
+                    await InvokeAsync(RefreshAsync);
+                }
+                else
+                {
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The page closed.
+        }
+    }
+
+    /// <summary>Whether something that was on its way is not any more, whichever kind of job it is: the list has a real row to show in its place.</summary>
+    private static bool Ended<T>(IReadOnlyList<T> before, IReadOnlyList<T> now, Func<T, string> id, Func<T, bool> active) =>
+        before.Where(active).Any(job => !now.Any(fresh => id(fresh) == id(job) && active(fresh)));
+
+    /// <summary>What a finished run had to adjust (the notes the form showed when it waited), and a failure, once each.</summary>
+    private void ReportFinishedLaunches()
+    {
+        foreach (var launch in _launches.Where(l => !l.Active && _reportedLaunches.Add(l.Id)))
+        {
+            foreach (var note in launch.Notes)
+            {
+                Snackbar.Add(note, Severity.Warning);
+            }
+
+            if (launch.Phase == "error")
+            {
+                Snackbar.Add($"{launch.Name}: run failed. {launch.Error}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task CancelLaunchAsync(ContainerLaunch launch)
+    {
+        if (!await DialogFlow.ConfirmAsync(Dialogs, "Cancel run", "Cancel this run?", "Cancel run", destructive: true))
+        {
+            return;
+        }
+
+        try
+        {
+            await Api.CancelContainerLaunchAsync(launch.Id);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            // The refresh shows the agent's state either way.
+        }
+
+        await RefreshAsync();
+    }
+
+    /// <summary>
+    /// The cross of files on the move: the requests are abandoned where they
+    /// are and the bytes already travelled are thrown away. It asks once,
+    /// however many there are — what was sent is sent again from the start or
+    /// not at all.
+    /// </summary>
+    /// <summary>The ring's cross: everything this container is carrying, asked batch by batch — eight files sent as one act are undone as one.</summary>
+    private async Task CancelTransfersAsync(IReadOnlyList<ContainerTransfer> transfers)
+    {
+        await TransferFlow.StopAsync(Dialogs, Api, Snackbar, Transfers, transfers);
+        await RefreshAsync();
+    }
+
+    /// <summary>The cross of transfers that failed or were cancelled: the agent forgets them and the ring goes, for every client.</summary>
+    private async Task DismissTransfersAsync(IReadOnlyList<ContainerTransfer> transfers)
+    {
+        await TransferFlow.DismissAsync(Api, Snackbar, Transfers, transfers);
+        await RefreshAsync();
+    }
+
+    /// <summary>A failed run keeps its settings on the agent: its row's one action opens them in the Run form, to fix and run again.</summary>
+    private RenderFragment EditLaunchButton(ContainerLaunch launch) =>
+        @<text>
+            @if (launch.Phase == "error")
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.EditNote" Size="Size.Small" title="Edit &amp; run again" OnClick="@(() => EditLaunchAsync(launch))" />
+            }
+        </text>;
+
+    /// <summary>The Run form on what the failed run was started with; a run started from it replaces the failed row.</summary>
+    private async Task EditLaunchAsync(ContainerLaunch launch)
+    {
+        ContainerLaunchRequest request;
+        try
+        {
+            request = await Api.GetContainerLaunchRequestAsync(launch.Id);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"{launch.Name}: {ex.Message}", Severity.Error);
+            return;
+        }
+
+        var parameters = new DialogParameters<ContainerFormDialog>
+        {
+            { d => d.Mode, LaunchMode.Run },
+            { d => d.Form, LaunchForm.From(request) },
+        };
+        if (await DialogFlow.ShowAsync<ContainerFormDialog>(Dialogs, $"Edit & run again — {launch.Name}", parameters, large: true))
+        {
+            await DismissLaunchAsync(launch);
+        }
+    }
+
+    /// <summary>The cross of a failed run: the agent forgets it and the row goes, for every client. Nothing to confirm, nothing is lost.</summary>
+    private async Task DismissLaunchAsync(ContainerLaunch launch)
+    {
+        try
+        {
+            await Api.DismissContainerLaunchAsync(launch.Id);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+
+        await RefreshAsync();
+    }
+
+    protected override bool Matches(ContainerSummary c, string search) => Has(c.Name, search) || Has(c.Image, search) || Has(c.Id, search);
+
+    protected override string KeyOf(ContainerSummary c) => c.Id;
+
+    /// <summary>A change to a container recreates it under a new id; its number in the agent's registry is what stays, and so does its place.</summary>
+    protected override string PlaceOf(ContainerSummary c) => c.Uid > 0 ? $"uid:{c.Uid}" : c.Id;
+
+    /// <summary>A container being recreated is left out of Start, Stop and Remove on the selection, as its own verbs are greyed.</summary>
+    protected override bool CanAct(ContainerSummary c) => !c.IsRecreating;
+
+    protected override string NameOf(ContainerSummary c) => c.Name;
+
+    private async Task OnRunningOnlyChanged(bool value)
+    {
+        _runningOnly = value;
+        await RefreshAsync();
+    }
+
+    private async Task OnHelpersChanged(bool value)
+    {
+        _helpers = value;
+        await RefreshAsync();
+    }
+
+    /// <summary>Run and Create are the same form; Create starts only when its Start toggle is on.</summary>
+}

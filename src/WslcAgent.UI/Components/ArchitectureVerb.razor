@@ -1,0 +1,33 @@
+@* The Architecture button, a verb of the round button on every screen. One
+   tap opens a diagram over the whole window. Everywhere it is the control
+   plane; on Networks it is the network diagram — the two ways a container's
+   page reaches someone, the host browser with nothing to set up and the
+   published proxy — and on Settings the skill and MCP diagram — the wslc skill
+   in the AI clients, the endpoint, the tools, the approval gate and the
+   operator's switches — each kept out of the main one so that one stays
+   readable (ArchitectureDiagrams). The window switches between them itself.
+   It stands above the page's own verbs and apart from them, so a stopped
+   session, which greys and stills those, leaves it working. *@
+@implements IDisposable
+@inject IDialogService Dialogs
+@inject NavigationManager Navigation
+
+<VerbFab StartIcon="@Icons.Material.Filled.AccountTree" Label="@Current.Title" OnClick="OpenAsync" Title="@($"{Current.Title} overview")" />
+
+@code {
+    private ArchitectureDiagrams.Diagram Current =>
+        ArchitectureDiagrams.ForRoute(Navigation.ToBaseRelativePath(Navigation.Uri).Split('/', '?', '#')[0]);
+
+    protected override void OnInitialized() => Navigation.LocationChanged += OnLocationChanged;
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) =>
+        _ = InvokeAsync(StateHasChanged);
+
+    private Task OpenAsync()
+    {
+        var parameters = new DialogParameters<ArchitectureDialog> { { d => d.Diagram, Current.File } };
+        return DialogFlow.ShowFullScreenAsync<ArchitectureDialog>(Dialogs, Current.Title, parameters, titled: true);
+    }
+
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+}

@@ -1,0 +1,31 @@
+@page "/containers/{Container}/browse"
+@layout BareLayout
+
+<PageTitle>Browser — WSLC</PageTitle>
+
+@* The pane in a tab of its own: the way back to
+   the dashboard at the start of the pane's bar (no row of its own), unless a
+   native client embeds it. *@
+<div class="wslc-terminal">
+    <BrowserPane Container="@Container" HostPort="@(HostPort ?? "")" SessionId="@(SessionId ?? "")">
+        <Leading>
+            @if (!IsEmbedded)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ArrowBack" Href="containers">Dashboard</MudButton>
+            }
+        </Leading>
+    </BrowserPane>
+</div>
+
+@code {
+    [Parameter] public string Container { get; set; } = "";
+
+    [SupplyParameterFromQuery(Name = "hostPort")] public string? HostPort { get; set; }
+
+    [SupplyParameterFromQuery(Name = "sessionId")] public string? SessionId { get; set; }
+
+    /// <summary><c>1</c> when a native client's WebView hosts the page.</summary>
+    [SupplyParameterFromQuery(Name = "embedded")] public string? EmbeddedQuery { get; set; }
+
+    private bool IsEmbedded => EmbeddedQuery?.Trim().ToLowerInvariant() is "1" or "true" or "yes";
+}

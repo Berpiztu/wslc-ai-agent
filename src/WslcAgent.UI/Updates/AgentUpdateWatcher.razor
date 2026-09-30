@@ -1,0 +1,116 @@
+@* Mounted once by the layout, on every client: listens for the agent's update
+   notices and shows what the agent is about to do. An automatic update is a
+   countdown with Cancel (AgentUpdateToast), which any client can press; an
+   update under way says so and stays said (a toast that went by itself left
+   the update going on unannounced), until the agent comes back as
+   the new version, when it goes and AgentBuild offers the reload. A client that connects in the middle of a
+   countdown sees it too: the first notice of every connection is a complete
+   one. Renders nothing. *@
+@using WslcAgent.ApiClient
+@using WslcAgent.ApiClient.Contracts
+@implements IDisposable
+@inject AgentChanges Changes
+@inject WslcAgentApi Api
+@inject ISnackbar Snackbar
+
+@code {
+    private Snackbar? _countdown;
+
+    /// <summary>The notice of an update under way, standing until the agent is back.</summary>
+    private Snackbar? _installing;
+    private string _shown = AgentUpdateState.Idle;
+
+    protected override void OnInitialized()
+    {
+        Changes.Changed += OnChanged;
+        Changes.Start();
+    }
+
+    private void OnChanged(ChangeNotice notice)
+    {
+        if (notice.Touches(ChangeNotice.AgentUpdate))
+        {
+            _ = InvokeAsync(ReadAsync);
+        }
+    }
+
+    private async Task ReadAsync()
+    {
+        AgentUpdateStatus status;
+        try
+        {
+            status = await Api.GetAgentUpdateAsync();
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            return;
+        }
+
+        if (status.State == _shown)
+        {
+            return;
+        }
+
+        _shown = status.State;
+        TakeDownCountdown();
+        TakeDown(ref _installing);
+        switch (status.State)
+        {
+            case AgentUpdateState.Announced:
+                ShowCountdown(status);
+                break;
+            case AgentUpdateState.Installing:
+                _installing = Snackbar.Add($"The agent is updating itself to {status.AvailableVersion}; it will be back in a moment.", Severity.Info, options =>
+                {
+                    options.RequireInteraction = true;
+                    options.CloseAfterNavigation = false;
+                });
+                break;
+        }
+    }
+
+    private void ShowCountdown(AgentUpdateStatus status)
+    {
+        var parameters = new Dictionary<string, object>
+        {
+            [nameof(AgentUpdateToast.Version)] = status.AvailableVersion,
+            [nameof(AgentUpdateToast.StartsAt)] = DateTimeOffset.Now.AddSeconds(status.SecondsLeft),
+            [nameof(AgentUpdateToast.OnCancel)] = EventCallback.Factory.Create(this, CancelAsync),
+        };
+        _countdown = Snackbar.Add<AgentUpdateToast>(parameters, Severity.Success, options =>
+        {
+            options.RequireInteraction = true;
+            options.ShowCloseIcon = false;
+            options.CloseAfterNavigation = false;
+        });
+    }
+
+    /// <summary>The agent takes the countdown down on every client with its notice; this one's goes at once.</summary>
+    private async Task CancelAsync()
+    {
+        try
+        {
+            await Api.CancelAgentUpdateAsync();
+            Snackbar.Add("Update cancelled. Update now, in Settings › Update, can still start it.", Severity.Success);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"Agent update: {ex.Message}", Severity.Error);
+        }
+
+        TakeDownCountdown();
+    }
+
+    private void TakeDownCountdown() => TakeDown(ref _countdown);
+
+    private void TakeDown(ref Snackbar? shown)
+    {
+        if (shown is not null)
+        {
+            Snackbar.Remove(shown);
+            shown = null;
+        }
+    }
+
+    public void Dispose() => Changes.Changed -= OnChanged;
+}

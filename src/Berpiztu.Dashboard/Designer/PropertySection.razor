@@ -1,0 +1,14 @@
+@* One section of the properties window — the object's own, or one of its
+   parts' — framed and named as a field is: its
+   line round what it holds, its name riding on the top of the line. *@
+
+<div class="bz-dash-section-frame">
+    <MudText Typo="Typo.caption" Class="bz-dash-section-name">@Name</MudText>
+    @ChildContent
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Name { get; set; } = "";
+
+    [Parameter, EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
+}

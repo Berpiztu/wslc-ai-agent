@@ -1,0 +1,40 @@
+@* The second line of the File transfers card's header (TransfersCardObject;
+   each of the header's three lines an object of its own): which file is
+   on its way out of how many ("3 of 8"), or how many it shows while none is still to go. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits TransfersCardObject
+@attribute [DashboardObject("wslc.host-transfers-count", "File transfers count", Group = "System", Subgroup = "System", Icon = Icons.Material.Filled.Numbers, Columns = 9, Rows = 2, Horizontal = HorizontalAlign.Left, CardOnly = true)]
+@* Its one line a part, so its colour and weight are its own to change. *@
+@attribute [DashboardObjectPart("value", "Count", Bold = true)]
+
+<div class="@ReadingClass">
+    <ReadingSummary Label="" Value="@Says" LabelShown="false" HintShown="false" />
+</div>
+
+@code {
+    /// <summary>
+    /// "3 of 8": the files of every batch the card shows — each batch as many
+    /// as it was announced with, so the ones already through still count, and
+    /// a file nobody announced a batch of one — and the first of them still to
+    /// go, moving or waiting. With none still to go, how many it shows: the
+    /// ones that failed or were cancelled.
+    /// </summary>
+    private string Says
+    {
+        get
+        {
+            var shown = Shown;
+            var toGo = shown.Count(transfer => transfer.Active || transfer.IsWaiting);
+            if (toGo == 0)
+            {
+                return $"{shown.Count}";
+            }
+
+            var total = shown.GroupBy(transfer => transfer.Batch.Length > 0 ? transfer.Batch : transfer.Id)
+                .Sum(batch => Math.Max(batch.First().BatchSize, batch.Count()));
+            return $"{total - toGo + 1} of {total}";
+        }
+    }
+}

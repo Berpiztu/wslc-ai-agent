@@ -1,0 +1,18 @@
+@* The Memory legend: a swatch, a name and the last value of each of its chart's
+   lines, all in one object, for the same subject as its chart — the host or
+   a container (one legend per chart, its subject its property). *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@inherits ChartObject
+@attribute [DashboardObject("wslc.host-memory-legend", "Memory legend", Group = "Charts", Icon = Icons.Material.Filled.LegendToggle, Source = SubjectSourceFamily.FamilyKey, DefaultSource = SubjectSourceFamily.Host, Columns = 12, Rows = 4, CardOnly = true)]
+
+@if (Data is { } chart)
+{
+    <div class="@($"{TypeClass} wslc-dash-legend {HorizontalClass}")">
+        <ChartLegend Series="chart.Series" Format="@chart.Format" Values="chart.Values" WithValues="true" />
+    </div>
+}
+
+@code {
+    protected override string Chart => HostCharts.Memory;
+}

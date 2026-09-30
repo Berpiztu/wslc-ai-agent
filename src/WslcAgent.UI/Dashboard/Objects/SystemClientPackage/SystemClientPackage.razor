@@ -1,0 +1,11 @@
+@* The native client's update — Check for update, or Install update in amber
+   when there is one — or, in a browser, its download for this device: the
+   System card's client part (ClientPackageButtons), standing alone. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@inherits WslcObject
+@attribute [DashboardObject("wslc.system-client-package", "Client update", Group = "System", Subgroup = "System", Icon = Icons.Material.Filled.SystemUpdate, Columns = 8, Rows = 2)]
+
+<div class="@TypeClass">
+    <ClientPackageButtons />
+</div>

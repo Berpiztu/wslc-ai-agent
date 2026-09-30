@@ -1,0 +1,20 @@
+@* System → Compact VHDX: the host terminal in the standard dialog, with the
+   compaction job typed into its shell. The shell stays open when the job is
+   done; closing the dialog ends it. *@
+
+<MudDialog>
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Close())">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <div class="wslc-dialog-action">
+            <HostTerminal Job="compact-vhdx" />
+        </div>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+}

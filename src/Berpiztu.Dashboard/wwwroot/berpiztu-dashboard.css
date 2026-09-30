@@ -1,0 +1,792 @@
+/* Berpiztu's dashboard. Layout only, in the
+   palette's own variables: where the toolbox, the canvas, the objects and the
+   properties window stand, and the marks the designer draws around objects.
+   Nothing here restyles a MudBlazor component — save the floating windows'
+   glow, so they stand off the page on the dark theme too — and what an object
+   looks like is the component that draws it. */
+
+/* The canvas takes the whole of the designer and scrolls on its own; the
+   toolbox and the properties window float over it. The designer is a size
+   container, so the windows, which float over the page, can still be
+   measured in the canvas's cells. */
+.bz-dash-designer {
+    --bz-dash-toolbox-width: 12rem;
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    container-type: inline-size;
+}
+
+/* A window floating over the dashboard (FloatingWindow): the toolbox and the
+   properties window. It holds nothing of the page, so the page stays usable
+   around it, and stands one layer under MudBlazor's popovers, so the list
+   its own fields drop open is drawn over it and not under it. Its unit is
+   two of the canvas's cells, so its fields are not cramped by the canvas's
+   small cells. One not placed yet is out of sight until it is. */
+.bz-dash-window {
+    --bz-dash-window-cell: calc(2 * var(--bz-dash-fixed-cell));
+    position: fixed;
+    z-index: calc(var(--mud-zindex-popover) - 1);
+}
+
+.bz-dash-window-placing {
+    visibility: hidden;
+}
+
+/* Hidden, a window is a button of one cell where it stood; a press opens it again, and the hand carries it
+   anywhere on the screen. */
+.bz-dash-window.bz-dash-window-folded {
+    width: auto;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    /* Over everything on the page: the cards,
+       the open windows, the lists they drop, the app bar and its drawer —
+       one layer over MudBlazor's app bar, the highest of those. A dialog and
+       a toast still cover it while they are open, as they cover the page. */
+    z-index: calc(var(--mud-zindex-appbar) + 1);
+}
+
+.bz-dash-window-unfold.mud-icon-button {
+    width: var(--bz-dash-window-cell);
+    height: var(--bz-dash-window-cell);
+    padding: 0;
+}
+
+/* The toolbox: at the canvas's top-left corner until it is moved, as wide as
+   its longest name, its list scrolling inside it when the window is shorter
+   than the list. */
+.bz-dash-toolbox-window {
+    top: 96px;
+    left: 24px;
+    width: var(--bz-dash-toolbox-width);
+}
+
+.bz-dash-toolbox {
+    touch-action: none;
+}
+
+/* The view's size at the toolbox's top, apart from the objects
+   under it. */
+.bz-dash-canvas-size-fields {
+    margin-bottom: 8px;
+}
+
+/* A step of the toolbox in under the one above it: a subgroup under Cards or
+   Objects, a kind's own group under its subgroup, plainly a part of what it
+   stands under. */
+.bz-dash-toolbox-level {
+    padding-inline-start: 12px;
+}
+
+/* What a window holds scrolls inside it when it is taller than the page
+   leaves, its top and bottom lines staying where they are (the properties
+   of an object with parts went past the page's foot). A list a field drops is MudBlazor's popover, drawn over the
+   page, so the scroll never cuts it. The window ends above whatever the
+   application pins to the page's foot (--bz-dash-page-foot, its height: a
+   bar there covered undo and remove), its
+   bottom line and verbs included: the window's top, 96px, its frame's
+   padding above and below, 2 × 16px, and half its verbs' row with air under
+   it, 24px — 152px — and the foot. */
+.bz-dash-window-body {
+    max-height: calc(100vh - 152px - var(--bz-dash-page-foot, 0px));
+    overflow-y: auto;
+    overflow-x: hidden;
+    /* The first field's word rides on its line, above the field: room for
+       it inside the scroll, and the window's contents where they were. */
+    padding-top: 8px;
+    margin-top: -8px;
+}
+
+.bz-dash-tool {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: grab;
+    user-select: none;
+    border-radius: var(--mud-default-borderradius);
+}
+
+.bz-dash-tool:hover {
+    background-color: var(--mud-palette-action-default-hover);
+}
+
+/* The canvas's cells are square and one size on every screen: a list card's
+   cells (--bz-dash-fixed-cell, the designer's, DashboardLayout.CellSize), so
+   a card dropped is as large as the list pages draw it and a wider window is
+   more columns, not larger cells; what
+   the columns do not fit scrolls sideways. */
+.bz-dash-canvas-frame {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    container-type: inline-size;
+}
+
+.bz-dash-canvas {
+    --bz-dash-cell: var(--bz-dash-fixed-cell);
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(var(--bz-dash-columns), var(--bz-dash-cell-x, var(--bz-dash-cell)));
+    grid-auto-columns: var(--bz-dash-cell-x, var(--bz-dash-cell));
+    width: max-content;
+    min-width: 100%;
+    min-height: 100%;
+    outline: none;
+}
+
+/* Out of design a dashboard with views fits the screen: its canvas is as large as the view — its own
+   columns and rows, not the frame (bz-dash-fitted) — and scales by the zoom
+   the designer works out, --bz-dash-fit, the largest at which its width and
+   its height both fit. Every board scales by the dashboard's own zoom on top
+   (--bz-dash-zoom, 1 until the user changes it), on top of the page's. The frame scrolls what no longer fits. In
+   design the canvas is at its size, where objects are placed cell by cell. */
+.bz-dash-designer:not(.bz-dash-designing) .bz-dash-canvas {
+    zoom: calc(var(--bz-dash-fit, 1) * var(--bz-dash-zoom, 1));
+}
+
+/* The view fitted stands in the middle of the frame: where its aspect is not the screen's, the room its zoom leaves over
+   is shared at both sides, or above and below, never left at one; filling the
+   screen, what goes past it is scrolled to. Stretched, its cells are wider
+   or taller than square (--bz-dash-cell-x, --bz-dash-cell-y, the designer's). */
+.bz-dash-fitted .bz-dash-canvas-frame {
+    display: flex;
+}
+
+.bz-dash-fitted .bz-dash-canvas {
+    min-width: 0;
+    min-height: 0;
+    margin: auto;
+}
+
+/* Fitted to the width: the view fills the
+   frame across and scrolls down, never sideways. The room a scrollbar down
+   takes is kept aside from the start, and the zoom is worked out on what is
+   left, so the scrollbar coming never pushes the view past the edge. */
+.bz-dash-canvas-frame.bz-dash-fit-width {
+    overflow-x: hidden;
+    scrollbar-gutter: stable;
+}
+
+/* A view shown on a screen of the other orientation is unseen, so it is
+   painted once: a phone turned is repainted by the
+   browser before the page hears it turn and shows the other view, and the
+   view it leaves would be seen for that moment in the new shape. The rule
+   is the browser's, so it holds from the very paint the turn makes. */
+@media (orientation: portrait) {
+    .bz-dash-fitted[data-bz-view="landscape"] .bz-dash-canvas {
+        visibility: hidden;
+    }
+}
+
+@media (orientation: landscape) {
+    .bz-dash-fitted[data-bz-view="portrait"] .bz-dash-canvas {
+        visibility: hidden;
+    }
+}
+
+/* In design, a dashboard with views stands in a frame of its view's size, in
+   the middle of the page, outlined; no larger than the page,
+   what stands past it scrolls. */
+.bz-dash-canvas-frame.bz-dash-framed {
+    flex: 0 0 auto;
+    margin: auto;
+    max-width: 100%;
+    max-height: 100%;
+    outline: 1px solid var(--mud-palette-lines-default);
+}
+
+/* One cell, out of sight: the designer measures it to turn the pointer into
+   cells, whatever the zoom, and, standing out of the canvas the zoom scales,
+   to work that zoom out. Its size is the designer's fixed cell, which stands
+   on the whole designer; the canvas's own name for it stands on the canvas
+   alone, and out of it would be none. */
+.bz-dash-cell-probe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: var(--bz-dash-fixed-cell);
+    height: var(--bz-dash-fixed-cell);
+    visibility: hidden;
+    pointer-events: none;
+}
+
+/* In design the cells are drawn, so where an object would go is plain to see.
+   A finger's swipe scrolls the dashboard, across and down, on the floor, an
+   object or a card alike (otherwise in design it could not be scrolled by
+   hand, and a finger on an object carried it off); held
+   still half a second it takes what it is on, or begins the rectangle on the
+   floor (watchHold). A handle belongs to the designer at once. */
+.bz-dash-designing .bz-dash-canvas {
+    background-image:
+        linear-gradient(to right, var(--mud-palette-lines-default) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--mud-palette-lines-default) 1px, transparent 1px);
+    background-size: var(--bz-dash-cell) var(--bz-dash-cell);
+    touch-action: pan-x pan-y;
+}
+
+.bz-dash-designing .bz-dash-handle {
+    touch-action: none;
+}
+
+/* An object in its cells. What it draws stands in the middle unless its
+   alignment says otherwise: across is the column's cross axis, down its main
+   one. */
+.bz-dash-object {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* An object standing alone is a card of its own, as a group is: its line and
+   its corners. In a group the group's card is drawn round it instead. */
+.bz-dash-object.bz-dash-loose {
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borderradius);
+}
+
+/* An object in a group stands inside its card's line: on the same cells as
+   the line it covered it in pieces. It keeps clear of the
+   line at its widest, a group taken whole. In a fluid view, placed rather
+   than on cells, the designer takes the same 2px off its box instead
+   (DashboardDesigner.MemberKeep). */
+.bz-dash-object.bz-dash-member {
+    margin: 2px;
+}
+
+/* Out of design, a card or an object standing alone is drawn as a card: its
+   line the primary
+   colour under the pointer, green and a pixel wider inside once it is
+   selected. An object in a card shows through its card. */
+.bz-dash-object.bz-dash-loose.bz-dash-hovered,
+.bz-dash-group.bz-dash-hovered {
+    border-color: var(--mud-palette-primary);
+}
+
+.bz-dash-object.bz-dash-loose.bz-dash-picked,
+.bz-dash-group.bz-dash-picked {
+    border-color: var(--mud-palette-success);
+    box-shadow: inset 0 0 0 1px var(--mud-palette-success);
+}
+
+.bz-dash-align-left {
+    align-items: flex-start;
+    text-align: left;
+}
+
+.bz-dash-align-right {
+    align-items: flex-end;
+    text-align: right;
+}
+
+.bz-dash-valign-top {
+    justify-content: flex-start;
+}
+
+.bz-dash-valign-bottom {
+    justify-content: flex-end;
+}
+
+.bz-dash-content {
+    display: flex;
+    flex-direction: column;
+    align-items: inherit;
+    min-width: 0;
+    min-height: 0;
+    max-width: 100%;
+    max-height: 100%;
+}
+
+/* An object that takes all its cells (its descriptor's Fills): what it
+   shows covers them, and places what it holds by its alignment itself. The
+   content stretches what it holds across its width too: it inherits the
+   object's alignment otherwise, and centred, what it holds shrank to no
+   width — a row of verbs drew as its padding alone, a thick vertical line. */
+.bz-dash-content.bz-dash-fill {
+    align-self: stretch;
+    align-items: stretch;
+    flex: 1 1 auto;
+}
+
+.bz-dash-content.bz-dash-fill > * {
+    flex: 1 1 auto;
+}
+
+/* Until its dashboard is read the canvas is laid out but not seen: it would
+   show the empty dashboard's cells, a width over its columns, and then the
+   dashboard's own, fixed cells, larger or smaller (on a phone's width the
+   cells doubled as the objects came). It opens once, in its own cells. */
+.bz-dash-canvas.bz-dash-unread {
+    visibility: hidden;
+}
+
+/* A free text (FreeText): the theme's body text times the
+   object's size — Small three quarters, Large a third more, the proportion
+   every object of the dashboard steps by (TypeSizes.Scale) — times its Text
+   part's; its lines kept as they were written, cut where the cells end, and
+   aligned across as the object is. Its colour is the object's Foreground,
+   or its part's once chosen, and its weight the part's. */
+.bz-dash-size-small {
+    --bz-dash-scale: 0.75;
+}
+
+.bz-dash-size-medium {
+    --bz-dash-scale: 1;
+}
+
+.bz-dash-size-large {
+    --bz-dash-scale: 1.3333;
+}
+
+.bz-dash-text {
+    font-size: calc(var(--mud-typography-body1-size) * var(--bz-dash-scale, 1) * var(--bz-part-text-scale, 1));
+    line-height: var(--mud-typography-body1-lineheight);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    min-width: 0;
+}
+
+.bz-dash-text-left {
+    text-align: left;
+}
+
+.bz-dash-text-center {
+    text-align: center;
+}
+
+.bz-dash-text-right {
+    text-align: right;
+}
+
+.bz-part-text-color .bz-dash-text {
+    color: var(--bz-part-text-color);
+}
+
+.bz-part-text-weight .bz-dash-text {
+    font-weight: var(--bz-part-text-weight);
+}
+
+/* The list of Status alarms (StatusAlarmsList): as tall as its lines up to
+   half the window, scrolling past it, so a dialog opens at one size. */
+.bz-dash-status-list {
+    max-height: 50vh;
+    overflow-y: auto;
+}
+
+/* In design what an object shows is inert: the press is the designer's, to
+   select it and move it. */
+.bz-dash-designing .bz-dash-object {
+    outline: 1px dashed var(--mud-palette-lines-inputs);
+    outline-offset: -1px;
+    cursor: grab;
+}
+
+.bz-dash-designing .bz-dash-content {
+    pointer-events: none;
+}
+
+/* A drag is not a selection of text: in
+   design nothing on the canvas is selected as text, or pressing and moving
+   painted every word it passed in the selection's blue. */
+.bz-dash-designing .bz-dash-canvas {
+    user-select: none;
+}
+
+/* While a drag lasts the canvas holds the pointer, or the toolbox while an
+   object is carried from it, so the cursor is its own:
+   the closed hand carrying, the diagonal pulling a corner — not the arrow it
+   fell back to. */
+.bz-dash-designing .bz-dash-canvas.bz-dash-dragging,
+.bz-dash-designing .bz-dash-canvas.bz-dash-dragging *,
+.bz-dash-toolbox.bz-dash-dragging,
+.bz-dash-toolbox.bz-dash-dragging * {
+    cursor: grabbing;
+}
+
+.bz-dash-designing .bz-dash-canvas.bz-dash-resizing,
+.bz-dash-designing .bz-dash-canvas.bz-dash-resizing * {
+    cursor: nwse-resize;
+}
+
+/* Under the pointer, an object's line is the primary colour, as a card's
+   line is; selected, it is green, and green wins. */
+.bz-dash-designing .bz-dash-object:hover {
+    outline-style: solid;
+    outline-color: var(--mud-palette-primary);
+}
+
+.bz-dash-designing .bz-dash-object.bz-dash-selected {
+    outline: 2px solid var(--mud-palette-success);
+    outline-offset: -2px;
+}
+
+.bz-dash-designing .bz-dash-object.bz-dash-blocked {
+    outline-color: var(--mud-palette-error);
+}
+
+/* The handle that sizes what is selected, in its corner, with room round its
+   glyph to take it by: eighteen points above and to the left of the glyph. */
+.bz-dash-handle {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    padding: 18px 0 0 18px;
+    cursor: nwse-resize;
+    color: var(--mud-palette-success);
+}
+
+/* A taken group's handle stands over its objects, on a layer as large as the frame that lets every press through but
+   the handle's. */
+.bz-dash-frame-handle {
+    position: relative;
+    z-index: 1;
+    pointer-events: none;
+}
+
+.bz-dash-frame-handle .bz-dash-handle {
+    pointer-events: auto;
+}
+
+/* A group: drawn as a card — its line, its
+   corners and the card's ground — under the objects it keeps. In design its
+   frame is dashed as an object's is, green once it is taken whole, red where
+   a move would not fit; the object another is carried over is marked, since
+   letting go there makes a group of the two. */
+.bz-dash-group {
+    position: relative;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borderradius);
+    background-color: var(--mud-palette-surface);
+}
+
+.bz-dash-designing .bz-dash-group {
+    border-style: dashed;
+    border-color: var(--mud-palette-lines-inputs);
+    cursor: grab;
+}
+
+.bz-dash-designing .bz-dash-group:hover {
+    border-style: solid;
+    border-color: var(--mud-palette-primary);
+}
+
+.bz-dash-designing .bz-dash-group.bz-dash-selected {
+    border: 2px solid var(--mud-palette-success);
+}
+
+.bz-dash-designing .bz-dash-group.bz-dash-blocked {
+    border-color: var(--mud-palette-error);
+}
+
+.bz-dash-designing .bz-dash-group.bz-dash-target {
+    border: 2px solid var(--mud-palette-success);
+    background-color: color-mix(in srgb, var(--mud-palette-success) 8%, var(--mud-palette-surface));
+}
+
+.bz-dash-designing .bz-dash-object.bz-dash-target {
+    outline: 2px solid var(--mud-palette-success);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, var(--mud-palette-success) 12%, transparent);
+}
+
+/* The rectangle drawn on the canvas's floor to choose what it touches: over
+   everything, in the primary colour, and
+   deaf to the pointer, which the canvas keeps while it is drawn. */
+.bz-dash-marquee {
+    position: relative;
+    z-index: 2;
+    border: 1px dashed var(--mud-palette-primary);
+    background-color: color-mix(in srgb, var(--mud-palette-primary) 10%, transparent);
+    pointer-events: none;
+}
+
+/* Where an object carried from the toolbox would stand. */
+.bz-dash-ghost {
+    outline: 2px dashed var(--mud-palette-success);
+    outline-offset: -2px;
+    background-color: color-mix(in srgb, var(--mud-palette-success) 12%, transparent);
+    pointer-events: none;
+}
+
+.bz-dash-ghost.bz-dash-blocked {
+    outline-color: var(--mud-palette-error);
+    background-color: color-mix(in srgb, var(--mud-palette-error) 12%, transparent);
+}
+
+/* The properties window, at the page's right until it is moved, measured in
+   the canvas's cells: five of them wide — four left an alignment's margin no
+   room at the end of its row, and undo fell off the bottom line once reset
+   stood beside it; as tall as its fields. */
+.bz-dash-properties {
+    top: 96px;
+    right: 24px;
+    width: calc(5 * var(--bz-dash-window-cell));
+}
+
+/* An alignment and its margin in one row: the
+   three keys at their size, the margin's field taking the rest, in its own
+   one-column grid of the properties' cells so it is a field as the others. */
+.bz-dash-align-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.bz-dash-align-row + .bz-dash-align-row {
+    margin-top: 8px;
+}
+
+/* The keys keep their size; the field takes only what they leave, from
+   nothing up (grown from a text field's own width, it pressed the keys). */
+.bz-dash-align-row > .mud-toggle-group {
+    flex: 0 0 auto;
+}
+
+.bz-dash-align-row > .bz-dash-props {
+    flex: 1 1 0;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+/* The properties on the canvas's own cells: each property two cells wide and one high, its word inside its outlined
+   field: Col and Row side by side in the window's four cells, Size across
+   all four in the row under them, every row as tall as a row of the
+   canvas. The rows stand 8px apart: a field's word rides 6px above its
+   line, and with the rows touching it sat on the line of the field above;
+   6px for the word and 2 of air. */
+.bz-dash-props {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: var(--bz-dash-window-cell);
+    column-gap: 4px;
+    row-gap: 8px;
+}
+
+/* Each field is its cells, height included: MudBlazor's dense margin goes, and the field — a text field or a select,
+   and the wrapper a select puts around it — is as tall as its row, its value
+   in the middle of it. Only here, in the properties' grid. */
+.bz-dash-props > *,
+.bz-dash-props .mud-input-control,
+.bz-dash-props .mud-input-control-input-container,
+.bz-dash-props .mud-input {
+    height: 100%;
+    margin: 0;
+}
+
+.bz-dash-props .mud-input-control.mud-input-control-margin-dense {
+    margin: 0;
+}
+
+/* Less margin at the left, and the word and the value starting at one line.
+   The value eight points in instead of
+   fourteen; the label, drawn at three quarters with five points of padding,
+   four points in, so its text starts where the value does (4 + 5 × 0.75 ≈ 8);
+   and the gap the border leaves for it just behind it, as MudBlazor keeps it. */
+.bz-dash-props .mud-input > .mud-input-slot.mud-input-root {
+    padding-inline-start: 8px;
+}
+
+.bz-dash-props .mud-input ~ label.mud-input-label.mud-input-label-inputcontrol.mud-input-label-outlined {
+    transform: translate(4px, -6px) scale(0.75);
+}
+
+.bz-dash-props .mud-input.mud-input-outlined > .mud-input-outlined-border legend {
+    margin-left: 1px;
+}
+
+/* Every field's value one of the theme's steps smaller than MudBlazor's,
+   body2, the source's and the numbers' alike.
+   Set on the input's box, whose type MudBlazor's value inherits (its own rule
+   gives the value `font: inherit` and outranks one on the value). */
+.bz-dash-props .mud-input {
+    font-size: var(--mud-typography-body2-size);
+}
+
+/* A field's word in the palette's blue-grey while the field is not being
+   used, as the dashboard's own labels are; in use it takes MudBlazor's
+   primary. */
+.bz-dash-props .mud-input:not(:focus-within) ~ label.mud-input-label.mud-input-label-inputcontrol {
+    color: var(--mud-palette-text-secondary);
+}
+
+/* A picker's button — every picker field's green arrow (PickerField) — is
+   half a cell across and down, its glyph
+   filling it, with no margins round it: MudBlazor's icon button, twelve
+   points of padding round a 24-point glyph, took nearly the whole cell, and
+   it puts eight points before the adornment, fourteen after it inside the
+   field, and pulls the button twelve out of its box. */
+.bz-dash-props .mud-input-adornment-end .mud-icon-button {
+    width: calc(var(--bz-dash-window-cell) / 2);
+    height: calc(var(--bz-dash-window-cell) / 2);
+    padding: 0;
+    margin: 0;
+}
+
+.bz-dash-props .mud-input-adornment-end .mud-icon-button .mud-icon-root {
+    width: 100%;
+    height: 100%;
+}
+
+.bz-dash-props .mud-input.mud-input-adorned-end {
+    padding-right: 0;
+}
+
+.bz-dash-props .mud-input-adornment-end {
+    margin: 0;
+}
+
+/* A choice among fixed values (ChoiceField) sits in a menu: the menu and what
+   opens it are stretched to the cell, so its field fills it as the others do. */
+.bz-dash-props .bz-dash-choice,
+.bz-dash-props .bz-dash-choice .mud-menu-activator,
+.bz-dash-props .bz-dash-choice-field {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+}
+
+.bz-dash-props .bz-dash-choice-field {
+    cursor: pointer;
+}
+
+.bz-dash-props .bz-dash-choice .mud-menu-activator > *,
+.bz-dash-props .bz-dash-choice-field > * {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* A group's "Apply to every object": its
+   words at the caption the window's notes stand at, and its box at the
+   words' size — 16px, its button's air taken off — not MudBlazor's 20px in
+   a 28px button, which stood over everything round it. */
+.bz-dash-every {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.bz-dash-every .mud-checkbox .mud-icon-button {
+    padding: 0;
+}
+
+.bz-dash-every-words {
+    cursor: pointer;
+}
+
+.bz-dash-every .mud-checkbox .mud-icon-root {
+    font-size: 1rem;
+}
+
+/* A section of the properties — the object's, a part's — framed and named as
+   a field is (PropertySection): the fields'
+   line round it, its name riding on the top of the line on the window's
+   ground. Its top padding keeps its first field's word clear of the name:
+   the name hangs half its line under the line (caption, 0.72rem × 1.66 =
+   19.1px, so 9.6px), the word rides 6px over its own field, and 2px of
+   air: 18px. */
+.bz-dash-section-frame {
+    position: relative;
+    padding: 18px 6px 6px;
+    border: 1px solid var(--mud-palette-lines-inputs);
+    border-radius: var(--mud-default-borderradius);
+}
+
+.bz-dash-section-name {
+    position: absolute;
+    top: 0;
+    left: 8px;
+    transform: translateY(-50%);
+    padding: 0 4px;
+    background-color: var(--mud-palette-surface);
+    color: var(--mud-palette-text-secondary);
+}
+
+/* A part's bold key in its cell, at its left: a key, not a field, so it keeps its own size in the cell. */
+.bz-dash-props > .bz-dash-prop-toggle {
+    display: flex;
+    align-items: center;
+}
+
+/* A property as wide as the window, all four cells: Size. A text field takes its Class on the element the grid
+   places; a select puts it one element in, under its own wrapper, so the
+   rule reaches the grid's child either way. */
+.bz-dash-props > .bz-dash-prop-wide,
+.bz-dash-props > :has(> .bz-dash-prop-wide) {
+    grid-column: 1 / -1;
+}
+
+
+/* A window outlined as its fields are: its
+   line the fields' colour; on its top line its name at the left, the line
+   that moves the window, and the key that hides it at the right where it
+   can be hidden; on its bottom line its verbs at the right. Each stands on
+   the window's own ground, so the line stops where they stand, as it stops
+   round a field's word. */
+.bz-dash-window-frame {
+    position: relative;
+    border-color: var(--mud-palette-lines-inputs);
+}
+
+/* Raised over the dashboard in either theme (MudBlazor's shadow is black, and on the dark theme's near-black page it did
+   not show at all). MudBlazor's elevation, and under it a glow of the theme's
+   own text colour — dark on the light theme, light on the dark one — so the
+   window stands off the page whichever it is. */
+.bz-dash-window-frame.mud-elevation-8 {
+    box-shadow:
+        var(--mud-elevation-8),
+        0 4px 24px 4px color-mix(in srgb, var(--mud-palette-text-primary) 30%, transparent);
+}
+
+.bz-dash-window-title {
+    position: absolute;
+    top: 0;
+    left: 8px;
+    right: 8px;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    cursor: move;
+    touch-action: none;
+    user-select: none;
+}
+
+.bz-dash-window-verbs {
+    position: absolute;
+    bottom: 0;
+    right: 8px;
+    transform: translateY(50%);
+    display: flex;
+}
+
+.bz-dash-window-name,
+.bz-dash-window-verbs,
+.bz-dash-window-hide {
+    padding: 0 4px;
+    background-color: var(--mud-palette-surface);
+}
+
+/* The key that hides a window, at its top line's right. */
+.bz-dash-window-hide {
+    margin-left: auto;
+    cursor: default;
+}
+
+.bz-dash-window-name {
+    color: var(--mud-palette-text-secondary);
+}
+
+.bz-dash-window-name {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}

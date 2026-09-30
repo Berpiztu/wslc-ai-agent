@@ -1,0 +1,6 @@
+@* Container state as a coloured chip (cards); the table uses StateDot. *@
+<MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@StateColors.For(State)">@State</MudChip>
+
+@code {
+    [Parameter, EditorRequired] public string State { get; set; } = "";
+}

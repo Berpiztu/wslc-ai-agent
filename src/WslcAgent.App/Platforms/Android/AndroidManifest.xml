@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- usesCleartextTraffic: the agent speaks plain HTTP on the LAN / emulator host (10.0.2.2).
+         The FileProvider exposes the downloaded APK (cache folder) to the package
+         installer for self-update; REQUEST_INSTALL_PACKAGES lets the app start it. -->
+    <application android:allowBackup="true" android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round" android:supportsRtl="true" android:usesCleartextTraffic="true">
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+        <!-- Pushed notifications: the agent sends
+             data and the app draws them; these are for a message that carries
+             a notification of its own, which Android draws itself — a test
+             from the Firebase console: the app's glyph in white, the alerts
+             channel. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/notification_icon" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="alerts" />
+    </application>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Android 13 and later show a notification only with this, asked for at run time. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+</manifest>

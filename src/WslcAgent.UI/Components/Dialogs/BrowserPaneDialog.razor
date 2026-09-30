@@ -1,0 +1,20 @@
+@* Open with browser from a client that is not the agent's machine: the host
+   browser pane over the whole window, with no
+   title at all: the pane's one bar is the whole chrome. Its Close is the only
+   way out; Escape belongs to the page inside. *@
+
+<MudDialog ContentClass="wslc-dialog-full">
+    <DialogContent>
+        <BrowserPane Container="@Container" HostPort="@HostPort" SessionId="@SessionId" OnClose="@(() => Dialog.Close())" />
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public string Container { get; set; } = "";
+
+    [Parameter] public string HostPort { get; set; } = "";
+
+    [Parameter] public string SessionId { get; set; } = "";
+}

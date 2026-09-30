@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:WslcAgent.App"
+             xmlns:components="clr-namespace:WslcAgent.App.Components"
+             x:Class="WslcAgent.App.MainPage"
+             BackgroundColor="#1e293b">
+
+    <!-- The splash's ground (the csproj's MauiSplashScreen colour, the host
+         page's .wslc-splash): a web view is white until its page paints, and
+         that white stood between the system splash and ours. -->
+
+    <BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html" BackgroundColor="#1e293b">
+        <BlazorWebView.RootComponents>
+            <RootComponent Selector="#app" ComponentType="{x:Type components:Routes}" />
+        </BlazorWebView.RootComponents>
+    </BlazorWebView>
+
+</ContentPage>

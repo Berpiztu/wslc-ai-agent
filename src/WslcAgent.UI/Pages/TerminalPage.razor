@@ -1,0 +1,9 @@
+@page "/terminal"
+
+@* The host shell of the agent's machine, filling the page: the pane owns the
+   scroll, as the exec terminal does, and the page never scrolls itself. *@
+<PageShell Title="Terminal">
+    <div class="wslc-fill">
+        <HostTerminal />
+    </div>
+</PageShell>

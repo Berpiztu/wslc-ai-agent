@@ -1,0 +1,19 @@
+@* Files from the row menu: the browser in its own window, as every other
+   entry of that menu opens. *@
+
+<MudDialog ContentClass="wslc-dialog-action">
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <FilesView Container="@Container" />
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public string Container { get; set; } = "";
+}

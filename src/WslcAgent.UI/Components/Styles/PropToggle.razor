@@ -1,0 +1,11 @@
+@* A boolean style property (Dense, Outlined, Disabled…) in Settings → Layout's
+   properties column. *@
+<SquareCheckBox Value="Value" ValueChanged="ValueChanged" Label="@Label" />
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    [Parameter] public bool Value { get; set; }
+
+    [Parameter] public EventCallback<bool> ValueChanged { get; set; }
+}

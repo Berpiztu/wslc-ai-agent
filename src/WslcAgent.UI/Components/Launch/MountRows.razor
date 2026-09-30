@@ -1,0 +1,45 @@
+@* The Volumes rows of the launch form: bind a host folder or select a managed
+   volume, target, read-only; several rows become several -v flags. *@
+@inject IDialogService Dialogs
+@inject WslcAgentApi Api
+
+<RowsHeader Label="Volumes" OnAdd="@(() => Rows.Add(new MountRow()))" />
+@if (Error is not null)
+{
+    <MudText Typo="Typo.caption" Class="mud-error-text d-block mb-1">@Error</MudText>
+}
+@foreach (var row in Rows)
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-1">
+        <MudSelect T="string" @bind-Value="row.Mode" Dense="true" Margin="Margin.Dense" Variant="Variant.Filled" Class="wslc-mount-mode">
+            <MudSelectItem T="string" Value="@MountRow.Bind">bind</MudSelectItem>
+            <MudSelectItem T="string" Value="@MountRow.Volume">vlm.</MudSelectItem>
+        </MudSelect>
+        <div class="wslc-field-pick">
+            <MudTextField T="string" @bind-Value="row.Source" Placeholder="@(row.Mode == MountRow.Bind ? "host path" : "select or create a volume")" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" Margin="Margin.Dense" />
+            <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="@(row.Mode == MountRow.Bind ? "Pick a host folder" : "Pick a volume")" OnClick="@(() => PickAsync(row))" />
+        </div>
+        <MudTextField T="string" @bind-Value="row.Target" Placeholder="/workspace" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" Margin="Margin.Dense" />
+        <SquareCheckBox @bind-Value="row.ReadOnly" Label="ro" />
+        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error" Class="wslc-row-remove" title="Remove row" OnClick="@(() => Rows.Remove(row))" />
+    </MudStack>
+}
+<MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-2">Bind a host folder or select an existing managed volume. Several rows become several -v flags.</MudText>
+
+@code {
+    [Parameter, EditorRequired] public List<MountRow> Rows { get; set; } = [];
+
+    /// <summary>What the check or a failed launch said about the volumes: shown under the header, in the error colour.</summary>
+    [Parameter] public string? Error { get; set; }
+
+    private async Task PickAsync(MountRow row)
+    {
+        var picked = row.Mode == MountRow.Bind
+            ? await Pickers.HostFolderAsync(Dialogs, row.Source)
+            : await Pickers.VolumeAsync(Dialogs, Api, row.Source);
+        if (picked is not null)
+        {
+            row.Source = picked;
+        }
+    }
+}

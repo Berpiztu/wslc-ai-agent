@@ -1,0 +1,19 @@
+@* Placed inside a grid row's detail (ChildRowContent), which MudBlazor renders
+   only while the row is open: this component's lifetime is the row's open
+   state — created when the detail opens, disposed when it closes or scrolls
+   out of a virtualised grid — so the page knows which rows are open without
+   a hook the grid does not offer. It draws nothing. *@
+@implements IDisposable
+
+@code {
+    /// <summary>What names the row.</summary>
+    [Parameter, EditorRequired] public string Key { get; set; } = "";
+
+    [Parameter] public EventCallback<string> Opened { get; set; }
+
+    [Parameter] public EventCallback<string> Closed { get; set; }
+
+    protected override void OnInitialized() => _ = Opened.InvokeAsync(Key);
+
+    public void Dispose() => _ = Closed.InvokeAsync(Key);
+}

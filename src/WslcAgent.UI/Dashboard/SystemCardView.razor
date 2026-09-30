@@ -1,0 +1,52 @@
+@* The System card on a page of its own (the agent's page shows it over its
+   log): the one the user laid out on the
+   landscape view of the dashboard's System page, where this device keeps it —
+   or the default's, which a blank dashboard shows — drawn as the dashboard
+   draws it, alarms and all, and never saved from here. A dashboard with no
+   System card shows the card made already, as it is born in the landscape view. *@
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Designer
+@using Berpiztu.Dashboard.Model
+@using BoardLayout = Berpiztu.Dashboard.Model.DashboardLayout
+@using BoardView = Berpiztu.Dashboard.Model.DashboardView
+@using Berpiztu.Dashboard.Storage
+@using WslcAgent.UI.Dashboard.Cards
+@inject AgentObjectDefaults Defaults
+@inject DashboardMeasures Measures
+@inject DashboardPlace Place
+
+<div class="wslc-agent-system">
+    @if (_store is not null)
+    {
+        <DashboardDesigner Store="_store" Designing="false" Measures="Measures" Defaults="Defaults" />
+    }
+</div>
+
+@code {
+    private MemoryDashboardStore? _store;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Defaults.LoadAsync();
+        await Place.LoadAsync();
+        var landscape = BoardLayout.Read(DashboardViews.Read(DashboardPages.Read(await Place.Store.LoadAsync(), null), BoardView.Landscape));
+        _store = new MemoryDashboardStore(Alone(landscape).Write());
+    }
+
+    /// <summary>The dashboard's System card alone, at the canvas's corner.</summary>
+    private BoardLayout Alone(BoardLayout landscape)
+    {
+        if (landscape.Groups.FirstOrDefault(group => group.Template == WslcCards.SystemCard.Type) is { } card)
+        {
+            IReadOnlyList<ObjectInstance> members = [.. landscape.Members(card.Id).Select(o => o.MovedBy(-card.X, -card.Y))];
+            return new BoardLayout(card.W, members) { Groups = [card with { X = 0, Y = 0 }] };
+        }
+
+        var born = WslcCards.SystemCard.Born(Defaults, BoardView.Landscape);
+        const string group = "system";
+        return new BoardLayout(born.W, [.. born.Objects.Select(o => o with { Group = group })])
+        {
+            Groups = [born.Framed(group, 0, 0)],
+        };
+    }
+}

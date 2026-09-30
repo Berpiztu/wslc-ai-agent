@@ -1,0 +1,54 @@
+@* A row that is still on its way (an image being pulled, a run waiting for its
+   image), in its Name cell: the name, the
+   percentage, the console and cancel while it runs, the bar under them. A
+   failed one keeps the bar in the error colour, says why in its tooltip, keeps
+   the console when its output has the reason, and its cross becomes Dismiss:
+   the agent remembers a failure for a while, and the row must not outlive the
+   user's interest in it. *@
+
+<div title="@Status" class="wslc-progress-cell">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Wrap="Wrap.NoWrap">
+        <span class="wslc-progress-name">@Name</span>
+        @if (!Failed)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary wslc-progress-pct">@(Pct)%</MudText>
+        }
+        @* No console, no button: an upload is bytes on their way, not output
+           to read, and a magnifier that opens nothing is worse than none. *@
+        @if (OnLog.HasDelegate && (!Failed || LogAfterFailure))
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Subject" Size="Size.Small" title="@LogTitle" aria-label="@LogTitle" OnClick="OnLog" />
+        }
+        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error" title="@(Failed ? DismissTitle : CancelTitle)" aria-label="@(Failed ? DismissTitle : CancelTitle)"
+                       OnClick="@(Failed ? OnDismiss : OnCancel)" />
+    </MudStack>
+    @* Info, the ring's blue in the cards: the same work in the same colour in both views. *@
+    <MudProgressLinear Value="@(Failed ? 100 : Math.Max(Pct, 2))" Color="@(Failed ? Color.Error : Color.Info)" Size="Size.Small" />
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Name { get; set; } = "";
+
+    [Parameter] public int Pct { get; set; }
+
+    /// <summary>The step under way, or why it failed.</summary>
+    [Parameter] public string Status { get; set; } = "";
+
+    [Parameter] public bool Failed { get; set; }
+
+    /// <summary>Whether the console still has the reason once the row failed: a pull's output does, a run that failed after its pull has none.</summary>
+    [Parameter] public bool LogAfterFailure { get; set; } = true;
+
+    [Parameter] public string LogTitle { get; set; } = "View pull output";
+
+    [Parameter] public string CancelTitle { get; set; } = "Cancel pull";
+
+    [Parameter] public string DismissTitle { get; set; } = "Dismiss";
+
+    [Parameter] public EventCallback OnLog { get; set; }
+
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    /// <summary>The cross of a failed row: forget it.</summary>
+    [Parameter] public EventCallback OnDismiss { get; set; }
+}

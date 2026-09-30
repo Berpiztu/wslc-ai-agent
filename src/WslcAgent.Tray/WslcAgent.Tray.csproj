@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The installed agent's icon beside the clock and its window: the agent
+       runs with no console, and its own page
+       (/agent: the System card over the log) opens in a window of its own,
+       WebView2, or in the browser. A program apart from the agent, so the
+       agent stays the server it is. Windows only; installed under tray\ in
+       the agent's folder, published self-contained beside it. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- A Windows 10 SDK version, for Windows' own notifications (toasts,
+         WslcAgent.Toasts), which stay in the notification centre as the
+         icon's balloons did not; the client's version. -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>wslc-ai-agent-tray</AssemblyName>
+    <RootNamespace>WslcAgent.Tray</RootNamespace>
+    <ApplicationIcon>..\WslcAgent.Server\wslc-ai-agent.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" />
+  </ItemGroup>
+
+  <!-- The agent's notifications, shown as Windows toasts: the same contracts
+       and the same events stream the UI reads, and the toasts the Windows
+       client shows too. -->
+  <ItemGroup>
+    <ProjectReference Include="..\WslcAgent.ApiClient\WslcAgent.ApiClient.csproj" />
+    <ProjectReference Include="..\WslcAgent.Toasts\WslcAgent.Toasts.csproj" />
+  </ItemGroup>
+
+  <!-- The package references its WPF control on every .NET 5+ app, WinForms
+       or not, and that one is built against another WindowsBase (MSB3277).
+       A WinForms window has no use for it. -->
+  <Target Name="DropWebView2Wpf" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
+
+</Project>

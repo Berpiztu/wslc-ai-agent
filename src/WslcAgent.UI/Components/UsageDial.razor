@@ -1,0 +1,60 @@
+@* One measure of a row as a dial: the ring at its percentage with the number
+   inside it and the name underneath. A container that is not running reports no
+   measure, so the ring stands at zero in grey rather than disappearing — the
+   cell keeps its size and the cards in a row keep the same height. A count
+   (containers on a network, on a volume) is the same dial: the ring at the
+   count's share, the count itself inside, and one colour for it instead of the
+   four steps a measure climbs through. *@
+@using WslcAgent.ApiClient
+
+<div class="@(Size == Size.Large ? "wslc-dial wslc-dial-large" : "wslc-dial")" title="@Title">
+    <MudProgressCircular Class="wslc-dial-ring" Color="@Colour" Value="@Value" Min="0" Max="100">
+        <MudText Typo="Typo.caption">@Shown</MudText>
+    </MudProgressCircular>
+    <span class="wslc-dial-label">@Label</span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    /// <summary>The percentage as the CLI prints it (<c>"0.40%"</c>); empty when there is none.</summary>
+    [Parameter] public string Reading { get; set; } = "";
+
+    /// <summary>False for a container that is not running: there is nothing to measure.</summary>
+    [Parameter] public bool Live { get; set; }
+
+    /// <summary>What the whole reading says, for the tooltip: "891.8MiB / 30.98GiB".</summary>
+    [Parameter] public string Title { get; set; } = "";
+
+    /// <summary>What to write inside the ring instead of the percentage: a count.</summary>
+    [Parameter] public string Text { get; set; } = "";
+
+    /// <summary>One colour for a live dial, for a count that has no danger level; empty for the measure's four steps.</summary>
+    [Parameter] public Color? Tone { get; set; }
+
+    /// <summary>
+    /// Large for a dial whose figure is a byte count ("2.00MB"): the ring is
+    /// wide enough for it on one line, so the figure sits on the ring's centre
+    /// whatever its value. Medium is the container card's ring for a percentage.
+    /// </summary>
+    [Parameter] public Size Size { get; set; } = Size.Medium;
+
+    /// <summary>A part of a whole as a reading: 3 of 12 → "25%"; nothing of nothing → 0.</summary>
+    public static string Share(double part, double whole) => whole > 0 ? $"{100.0 * part / whole:0.#}%" : "0%";
+
+    private double Value => Live ? Math.Clamp(Percents.Parse(Reading), 0, 100) : 0;
+
+    private string Shown => Text.Length > 0 ? Text : Live && Reading.Length > 0 ? $"{Value:0.#}%" : "—";
+
+    /// <summary>
+    /// The ring climbs through four colours as the measure does — green, blue,
+    /// amber, red — and a row that is not running is grey. It turns blue at a
+    /// half, amber at three quarters and red at nine tenths.
+    /// </summary>
+    private Color Colour => !Live
+        ? Color.Default
+        : Tone ?? (Value >= 90 ? Color.Error
+        : Value >= 75 ? Color.Warning
+        : Value >= 50 ? Color.Info
+        : Color.Success);
+}

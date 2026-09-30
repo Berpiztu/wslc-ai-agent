@@ -1,0 +1,16 @@
+@* Disk reads and writes over the last two minutes: every container's, or one
+   container's, as its Stats tab draws it. Its subject — the host, or a
+   container — is its property (ChartObject). *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@inherits ChartObject
+@attribute [DashboardObject("wslc.host-disk-chart", "Disk chart", Group = "Charts", Icon = Icons.Material.Filled.Timeline, Source = SubjectSourceFamily.FamilyKey, DefaultSource = SubjectSourceFamily.Host, Columns = 16, Rows = 6, Fills = true, CardOnly = true)]
+
+@if (Data is { } data)
+{
+    <HostChart Data="data" Class="@TypeClass" />
+}
+
+@code {
+    protected override string Chart => HostCharts.Disk;
+}

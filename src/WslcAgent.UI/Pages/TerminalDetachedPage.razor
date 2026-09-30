@@ -1,0 +1,28 @@
+@page "/terminal/detached"
+@layout BareLayout
+
+<PageTitle>@(IsCompactJob ? "Compact VHDX — WSLC" : "Terminal — WSLC")</PageTitle>
+
+@* The detached terminal: the shell alone in its own tab, with a way
+   back unless a native client embeds it (it has its own navigation). *@
+<div class="wslc-terminal">
+    @if (!IsEmbedded)
+    {
+        <div class="flex-shrink-0">
+            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ArrowBack" Href="terminal">Dashboard</MudButton>
+        </div>
+    }
+    <HostTerminal Detached="true" Job="@(IsCompactJob ? "compact-vhdx" : "")" />
+</div>
+
+@code {
+    /// <summary><c>compact-vhdx</c> runs the System page's job in this tab.</summary>
+    [SupplyParameterFromQuery(Name = "job")] public string? JobQuery { get; set; }
+
+    /// <summary><c>1</c> when a native client's WebView hosts the page.</summary>
+    [SupplyParameterFromQuery(Name = "embedded")] public string? EmbeddedQuery { get; set; }
+
+    private bool IsCompactJob => string.Equals(JobQuery?.Trim(), "compact-vhdx", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsEmbedded => EmbeddedQuery?.Trim().ToLowerInvariant() is "1" or "true" or "yes";
+}

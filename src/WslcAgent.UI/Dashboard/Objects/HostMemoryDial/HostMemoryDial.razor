@@ -1,0 +1,23 @@
+@* The containers' memory as a dial: what they use of the session's, in
+   percent, as the System card's ring and the memory alarm show it. It reads
+   the runtime the host's CPU and memory objects share (HostRuntimeRead). *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@inherits WslcObject
+@attribute [DashboardObject("wslc.host-memory-dial", "Memory dial", Group = "Host dials", Subgroup = "System", Icon = Icons.Material.Filled.DonutLarge, Columns = 6, Rows = 6)]
+@attribute [DashboardObjectAlarm(DashboardMeasures.Memory, "Memory", On = true)]
+@attribute [DashboardObjectPart("ring", "Ring", Text = false, Line = true)]
+@attribute [DashboardObjectPart("figure", "Figure")]
+@attribute [DashboardObjectPart("label", "Label")]
+@inject HostRuntimeRead Runtime
+
+<div class="@TypeClass">
+    <UsageDial Label="Memory" Reading="@(Used is { } v ? Percents.Text(v) : "")" Live="@(Used is not null)"
+               Title="@($"Memory {(Used is { } shown ? Percents.Text(shown) : "not known yet")}")" />
+</div>
+
+@code {
+    private double? Used => HostUsage.MemoryPercent(Runtime.Value);
+
+    protected override void OnInitialized() => Follow(Runtime);
+}

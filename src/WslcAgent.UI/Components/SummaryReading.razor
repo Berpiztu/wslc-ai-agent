@@ -1,0 +1,28 @@
+@* A label over what it names, in the inspect summary's tone: one reading of
+   the System card and the dashboard's objects of it alike. What it names is a text (Value) or anything drawn in its place
+   (ChildContent, as the session's line or the client's version). *@
+
+<div class="@($"wslc-system-reading {Class}".Trim())">
+    <span class="wslc-summary-label">@Label</span>
+    @if (ChildContent is not null)
+    {
+        @ChildContent
+    }
+    else
+    {
+        <span class="wslc-summary-value" title="@Value">@Value</span>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    /// <summary>The text it names, when it names a text.</summary>
+    [Parameter] public string Value { get; set; } = "";
+
+    /// <summary>What it names when it is not a text.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>A reading laid out otherwise, as the session's grid.</summary>
+    [Parameter] public string Class { get; set; } = "";
+}

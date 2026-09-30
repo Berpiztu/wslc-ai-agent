@@ -1,0 +1,49 @@
+@* The one card for list pages in cards view. Header (EntityCardHeader: avatar,
+   title, subtitle, an optional badge on the right) and the actions row share
+   the tinted tone of the table header and pager; the body carries the data.
+   The header is a component of its own so a resource's card on the
+   dashboard wears the same one. *@
+@implements IDisposable
+@inject WslcAgent.UI.Components.Styles.UiStyle Style
+
+<MudCard Elevation="Style.Applied.CardElevation" Outlined="Style.Applied.CardOutlined" Square="Style.Applied.CardSquare" Class="wslc-card d-flex flex-column" Style="height: 100%">
+    <EntityCardHeader Title="@Title" Subtitle="@Subtitle" AvatarText="@AvatarText" AvatarColor="AvatarColor" Avatar="Avatar" Key="@Key" HeaderActions="HeaderActions" />
+    <MudCardContent Class="flex-grow-1">
+        @ChildContent
+    </MudCardContent>
+    @if (Actions is not null)
+    {
+        <MudCardActions Class="py-1 justify-end">
+            @Actions
+        </MudCardActions>
+    }
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    [Parameter] public string Subtitle { get; set; } = "";
+
+    /// <summary>Avatar letter; defaults to the first character of the title.</summary>
+    [Parameter] public string? AvatarText { get; set; }
+
+    [Parameter] public Color AvatarColor { get; set; } = Color.Primary;
+
+    /// <summary>Drawn instead of the avatar: a row on its way shows its progress there.</summary>
+    [Parameter] public RenderFragment? Avatar { get; set; }
+
+    /// <summary>The row's key, the one its actions component reports busy with.</summary>
+    [Parameter] public string? Key { get; set; }
+
+    [Parameter] public RenderFragment? HeaderActions { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public RenderFragment? Actions { get; set; }
+
+    protected override void OnInitialized() => Style.Changed += OnChanged;
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Style.Changed -= OnChanged;
+}

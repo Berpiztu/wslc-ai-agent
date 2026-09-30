@@ -1,0 +1,53 @@
+name: Bug report
+description: Something does not work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. A security problem goes through SECURITY.md, not here.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Press ...
+        3. See ...
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      multiple: true
+      options:
+        - Web interface (browser)
+        - Windows client
+        - Android client
+        - Tray icon
+        - MCP / AI agent
+        - Installer or update
+        - Build from source
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: The agent's version (http://127.0.0.1:8069/api/v1/health), `wslc version`, and Windows' build.
+      placeholder: "agent 1.0.0, wslc 3.0.1, Windows 11 26200"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: The relevant lines of the Logs page, or a screenshot. Remove anything private first.

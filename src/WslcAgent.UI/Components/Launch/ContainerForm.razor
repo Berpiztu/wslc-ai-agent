@@ -1,0 +1,721 @@
+@* The one launch form, in three uses: Run (with the Fill bar),
+   Create and View & edit (the same fields pre-filled from inspect; saving
+   removes and recreates). The fields are in one order for the
+   three: what the container is (image, tag, name), what it exposes and mounts,
+   its variables and networks, what it runs, where and as whom, its policies,
+   and the short numbers together at the end; the two commands span the width,
+   since a port hidden past the edge of a narrow Command field is how a wrong
+   port went unseen. The actions are a rail, with two verbs in
+   every use: Save (create, or recreate, stopped) and Run (create and start).
+   Neither closes the window before the agent has said the container is there:
+   a veil over the fields says what is being done meanwhile, and a failure
+   comes back into the fields it is about, the rest above them, where a small
+   screen still shows it. *@
+@using System.Text.Json
+@using WslcAgent.ApiClient
+@implements IDisposable
+@inject WslcAgentApi Api
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+@inject IClientFiles Files
+
+<div class="wslc-action-body">
+<div class="wslc-action-main @MainClass">
+@Above
+@* What is not about one field: above the fields, where every screen shows it. *@
+@foreach (var (severity, text) in _general)
+{
+    <MudAlert Severity="@severity" Dense="true" Class="mb-2">@text</MudAlert>
+}
+<MudForm @ref="_form" Class="wslc-form-grid">
+    @if (Mode == LaunchMode.Run)
+    {
+        <div class="wslc-span2">
+            @* Fill acts on its own field, so its button is inside it, as a picker's is. *@
+            <div class="wslc-field-pick has-note">
+                <MudTextField Margin="Margin.Dense" T="string" @bind-Value="_fill" Label="Fill" Immediate="true" HelperTextOnFocus="true"
+                              Variant="Variant.Filled" OnKeyDown="OnFillKey"
+                              HelperText="Example: paste a wslc run command (or a docker run one, including \ or ` line breaks) and press Fill." />
+                <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.AutoFixHigh" Size="Size.Small" title="Fill the form from the command" OnClick="Fill" />
+            </div>
+            @if (_fillStatus.Length > 0)
+            {
+                <MudText Typo="Typo.caption" Class="@(_fillFlagged ? "mud-error-text" : "mud-text-secondary")">@_fillStatus</MudText>
+            }
+        </div>
+    }
+
+    @* What the container is. *@
+    <div class="wslc-field-pick has-note">
+        <MudTextField Margin="Margin.Dense" T="string" @bind-Value="Form.ImageName" Label="Image" Immediate="true" HelperTextOnFocus="true" Required="true" RequiredError="Image is required"
+                      Variant="Variant.Filled" HelperText="Repository. Type a name that is not local; Run will pull it." Error="@Has(LaunchFields.Image)" ErrorText="@Error(LaunchFields.Image)" />
+        <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick a local image" OnClick="PickImageAsync" />
+    </div>
+    <MudTextField Margin="Margin.Dense" T="string" @bind-Value="Form.ImageTag" Label="Tag" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled"
+                  HelperText="Example: latest. Leave empty if the image has no tag." Error="@Has(LaunchFields.Image)" ErrorText="@Error(LaunchFields.Image)" />
+    @* Name is the filled field as MudBlazor gives it, with nothing added. *@
+    <MudTextField Margin="Margin.Dense" T="string" @bind-Value="Form.Name" Label="Name" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" HelperText="Example: my-app"
+                  Error="@Has(LaunchFields.Name)" ErrorText="@Error(LaunchFields.Name)" />
+    @* Ports, with its popup: one row per port pair, the Reverse proxy check and the
+       name the port is published under. The names
+       are the agent's, not a flag; saving the form publishes the difference. *@
+    <PortsField Publish="Form.Publish" PublicNames="Form.PublicNames" ContainerName="@Form.Name" Error="@(Error(LaunchFields.Publish) ?? Error(LaunchFields.PublicNames))" />
+
+    @* What it mounts, its variables, its networks. *@
+    <div class="wslc-span2"><MountRows Rows="Form.Mounts" Error="@Error(LaunchFields.Volumes)" /></div>
+    <div class="wslc-span2">
+        <MultiValueField Values="Form.Env" Label="Env" Split="ValueList.SplitPairs" Placeholder="KEY=value"
+                         HelperText="Example: KEY=value. Several separated by commas, or edited as rows with ⋮."
+                         Hint="One variable per row: KEY=value. A comma inside a value (MSG=hello, world) stays part of it." Error="@Error(LaunchFields.Env)" />
+    </div>
+    <div class="wslc-span2"><NetworkRows Rows="Form.Networks" Error="@Error(LaunchFields.Networks)" /></div>
+
+    @* What it runs: the two commands take the whole width, so every flag is seen. *@
+    <div class="wslc-span2">
+        <MudTextField Margin="Margin.Dense" T="string" @bind-Value="Form.Entrypoint" Label="Entrypoint" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled"
+                      HelperText="Example: /bin/sh. Its arguments (tini -s --) go before the command." Error="@Has(LaunchFields.Entrypoint)" ErrorText="@Error(LaunchFields.Entrypoint)" />
+    </div>
+    @* Keep running is a switch on this field, so it rides inside it: green while on,
+       and the field keeps the grid's width. *@
+    <div class="wslc-span2 wslc-field-pick has-note">
+        <MudTextField Margin="Margin.Dense" T="string" @bind-Value="Form.Command" Label="Command" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled"
+                      HelperText="Empty runs the image ENTRYPOINT/CMD. Example: python app.py. ∞ keeps a bare base image running."
+                      Error="@Has(LaunchFields.Command)" ErrorText="@Error(LaunchFields.Command)" />
+        <MudFab Color="@(Form.KeepRunning ? Color.Success : Color.Default)" StartIcon="@Icons.Material.Filled.AllInclusive" Size="Size.Small"
+                title="@(Form.KeepRunning ? "Keep running: on (sleep infinity) — click to turn off" : "Keep running: run sleep infinity so a bare base image stays alive")"
+                OnClick="@(() => ToggleKeepRunning(!Form.KeepRunning))" />
+    </div>
+
+    @* Where and as whom. *@
+    <div class="wslc-field-pick has-note">
+        <MudTextField Margin="Margin.Dense" T="string" @bind-Value="Form.Workdir" Label="Workdir" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" HelperText="Container path. Example: /workspace"
+                      Error="@Has(LaunchFields.Workdir)" ErrorText="@Error(LaunchFields.Workdir)" />
+        <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick a host folder as workdir (bound at /workspace)" OnClick="PickWorkdirAsync" />
+    </div>
+    <MudTextField Margin="Margin.Dense" T="string" @bind-Value="Form.User" Label="User" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" HelperText="Example: 1000 or www-data"
+                  Error="@Has(LaunchFields.User)" ErrorText="@Error(LaunchFields.User)" />
+
+    @* Its policies and limits: short values, two to a column. *@
+    <div class="wslc-form-pair">
+        <MudSelect Margin="Margin.Dense" T="string" @bind-Value="Form.RestartPolicy" Label="Restart policy" Dense="true" HelperTextOnFocus="true" Variant="Variant.Filled" HelperText="Dashboard-owned; production container"
+                   Error="@Has(LaunchFields.RestartPolicy)" ErrorText="@Error(LaunchFields.RestartPolicy)">
+            <MudSelectItem T="string" Value="@RestartPolicyInfo.No">No</MudSelectItem>
+            <MudSelectItem T="string" Value="@RestartPolicyInfo.UnlessStopped">Unless stopped</MudSelectItem>
+            <MudSelectItem T="string" Value="@RestartPolicyInfo.Always">Always</MudSelectItem>
+        </MudSelect>
+        <MudTextField Margin="Margin.Dense" T="string" @bind-Value="Form.StopTimeout" Label="Stop timeout" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" HelperText="Example: 10 (0 immediate, -1 infinite)"
+                      Error="@Has(LaunchFields.StopTimeout)" ErrorText="@Error(LaunchFields.StopTimeout)" />
+    </div>
+    <div class="wslc-form-pair">
+        <MudTextField T="string" @bind-Value="Form.Memory" Label="Memory" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" Margin="Margin.Dense" HelperText="Example: 512m"
+                      Error="@Has(LaunchFields.Memory)" ErrorText="@Error(LaunchFields.Memory)" />
+        <MudTextField T="string" @bind-Value="Form.Cpus" Label="CPUs" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" Margin="Margin.Dense" HelperText="Example: 1.5"
+                      Error="@Has(LaunchFields.Cpus)" ErrorText="@Error(LaunchFields.Cpus)" />
+    </div>
+
+    @* Its health check: the switch, the command across the width, the four times two to a column. *@
+    <div class="wslc-span2">
+        <SquareCheckBox @bind-Value="Form.NoHealthcheck" Label="Disable healthcheck" />
+    </div>
+    <div class="wslc-span2">
+        <MudTextField Margin="Margin.Dense" T="string" @bind-Value="Form.HealthCmd" Label="Health cmd" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" Disabled="Form.NoHealthcheck" HelperText="Example: curl -f http://localhost/"
+                      Error="@Has(LaunchFields.HealthCmd)" ErrorText="@Error(LaunchFields.HealthCmd)" />
+    </div>
+    <div class="wslc-form-pair">
+        <MudTextField Margin="Margin.Dense" T="string" @bind-Value="Form.HealthInterval" Label="Health interval" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" Disabled="Form.NoHealthcheck" HelperText="Example: 30s"
+                      Error="@Has(LaunchFields.HealthInterval)" ErrorText="@Error(LaunchFields.HealthInterval)" />
+        <MudTextField Margin="Margin.Dense" T="string" @bind-Value="Form.HealthTimeout" Label="Health timeout" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" Disabled="Form.NoHealthcheck" HelperText="Example: 5s"
+                      Error="@Has(LaunchFields.HealthTimeout)" ErrorText="@Error(LaunchFields.HealthTimeout)" />
+    </div>
+    <div class="wslc-form-pair">
+        <MudTextField Margin="Margin.Dense" T="string" @bind-Value="Form.HealthRetries" Label="Health retries" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" Disabled="Form.NoHealthcheck" HelperText="Example: 3"
+                      Error="@Has(LaunchFields.HealthRetries)" ErrorText="@Error(LaunchFields.HealthRetries)" />
+        <MudTextField Margin="Margin.Dense" T="string" @bind-Value="Form.HealthStartPeriod" Label="Health start period" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" Disabled="Form.NoHealthcheck" HelperText="Example: 10s"
+                      Error="@Has(LaunchFields.HealthStartPeriod)" ErrorText="@Error(LaunchFields.HealthStartPeriod)" />
+    </div>
+</MudForm>
+@Below
+</div>
+
+@* The action rail, drawn as the Files rail: MudBlazor's filled small
+   icon buttons with its own Material icons, in the app's verb colours — green
+   puts something in or starts, light blue takes a copy out, blue creates, amber
+   takes back, red destroys. Every button is always there; one that cannot act
+   greys out, so the rail never moves. *@
+<div class="wslc-action-rail wslc-files-rail" role="toolbar">
+    @* Load JSON file: an inspect output or an exported launch request fills the fields. *@
+    <MudFileUpload T="IBrowserFile" FilesChanged="LoadJsonAsync" Accept=".json,application/json">
+        <CustomContent>
+            <MudIconButton Color="Color.Success" Icon="@Icons.Material.Filled.UploadFile" Size="Size.Small" Variant="Variant.Filled"
+                           title="Load JSON file" Disabled="_busy" OnClick="@context.OpenFilePickerAsync" />
+        </CustomContent>
+    </MudFileUpload>
+    @* Full variables: a switch on Export, green while on. Off, the export is what wslc knows
+       (View & edit: the inspect JSON; Run and Create: the form without the agent's fields). On,
+       the form as a launch request with what only the agent keeps, the restart policy and the
+       public names, for another WSLC AI Agent. Load JSON reads both. *@
+    <MudIconButton Color="@(_fullVariables ? Color.Success : Color.Default)" Icon="@Icons.Material.Filled.DataObject" Size="Size.Small" Variant="Variant.Filled"
+                   title="@(_fullVariables ? "Full variables (WSLC AI Agent compatible): on — Export carries the restart policy and the public names" : "Full variables (WSLC AI Agent compatible): off — Export is what wslc knows")"
+                   Disabled="_busy" OnClick="@(() => _fullVariables = !_fullVariables)" />
+    @* Export JSON: in View & edit the container's inspect JSON from the agent; otherwise the form as a
+       launch request. The browser downloads the link; a native client writes the file itself. *@
+    @if (Files.Supported)
+    {
+        <MudIconButton Color="Color.Info" Icon="@Icons.Material.Filled.FileDownload" Size="Size.Small" Variant="Variant.Filled"
+                       title="@ExportTitle" Disabled="_busy" OnClick="SaveExportAsync" />
+    }
+    else
+    {
+        <MudIconButton Color="Color.Info" Icon="@Icons.Material.Filled.FileDownload" Size="Size.Small" Variant="Variant.Filled"
+                       title="@ExportTitle" Disabled="_busy" Href="@ExportHref" Target="_blank" download="@ExportName" />
+    }
+    @* Save creates (or recreates) and leaves the container stopped; Run creates and starts it.
+       In View & edit both remove the container first, so both wear the destroying colour. *@
+    <MudIconButton Color="@(Mode == LaunchMode.Edit ? Color.Error : Color.Primary)" Icon="@Icons.Material.Filled.Save" Size="Size.Small" Variant="Variant.Filled"
+                   title="@SaveTitle" Disabled="_busy" OnClick="@(() => SubmitAsync(start: false))" />
+    <MudIconButton Color="@(Mode == LaunchMode.Edit ? Color.Error : Color.Success)" Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" Variant="Variant.Filled"
+                   title="@RunTitle" Disabled="_busy" OnClick="@(() => SubmitAsync(start: true))" />
+    <MudIconButton Color="Color.Warning" Icon="@Icons.Material.Filled.Close" Size="Size.Small" Variant="Variant.Filled"
+                   title="Cancel the changes made in this form" Disabled="_busy" OnClick="CancelAsync" />
+</div>
+
+@* The veil while the agent works: what is being done, and for a run the pull's own progress.
+   Nothing here is clickable; the rail's Close is the way out, and only for a run, which
+   goes on in the Containers table. *@
+<MudOverlay Visible="_busy" Absolute="true" DarkBackground="true" AutoClose="false" LockScroll="false" ZIndex="10">
+    <MudPaper Class="pa-4" Elevation="4">
+        <MudStack AlignItems="AlignItems.Center" Spacing="2">
+            <MudProgressCircular Color="Color.Info" Size="Size.Large" Indeterminate="true" />
+            <MudText Typo="Typo.subtitle1" role="status">@_busyTitle</MudText>
+            @if (_busyStatus.Length > 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@_busyStatus</MudText>
+            }
+            @if (_busyPct is { } pct)
+            {
+                <MudProgressLinear Value="@Math.Max(pct, 2)" Color="Color.Info" Size="Size.Small" Class="wslc-busy-bar" />
+            }
+            @if (_following)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">This window can be closed: the run goes on in the Containers table.</MudText>
+            }
+        </MudStack>
+    </MudPaper>
+</MudOverlay>
+</div>
+
+@code {
+    private static readonly TimeSpan FollowEvery = TimeSpan.FromSeconds(1);
+    private readonly CancellationTokenSource _closing = new();
+    private MudForm _form = default!;
+    private string _fill = "";
+    private string _fillStatus = "";
+
+    /// <summary>The status says something was not used: shown as an error line.</summary>
+    private bool _fillFlagged;
+
+    private bool _busy;
+    private string _busyTitle = "";
+    private string _busyStatus = "";
+    private int? _busyPct;
+
+    /// <summary>A run job under way: the veil follows it, and the window may be closed under it.</summary>
+    private bool _following;
+
+    /// <summary>What the check or the failed launch said about one field: shown in that field instead of its example.</summary>
+    private readonly Dictionary<string, string> _fields = new(StringComparer.Ordinal);
+
+    /// <summary>What is about no field in particular: shown above the fields.</summary>
+    private readonly List<(Severity Severity, string Text)> _general = [];
+
+    private string _commandBeforeKeepRunning = "";
+
+    /// <summary>Export carries the agent's own fields as well; off by default, the export is wslc's.</summary>
+    private bool _fullVariables;
+
+    /// <summary>What the form was opened with: Cancel puts the fields back to it, and it tells whether anything was changed.</summary>
+    private ContainerLaunchRequest _opened = default!;
+
+    private string _openedJson = "";
+    private LaunchForm? _snapshotOf;
+
+    [Parameter, EditorRequired] public LaunchMode Mode { get; set; }
+
+    /// <summary>The fields, pre-filled for Edit from the container's details.</summary>
+    [Parameter] public LaunchForm Form { get; set; } = new();
+
+    /// <summary>Edit only: the container to remove and recreate.</summary>
+    [Parameter] public string SourceId { get; set; } = "";
+
+    /// <summary>What the main column shows above the fields (the details page's summary card).</summary>
+    [Parameter] public RenderFragment? Above { get; set; }
+
+    /// <summary>What the main column shows below the fields (the raw inspect JSON).</summary>
+    [Parameter] public RenderFragment? Below { get; set; }
+
+    /// <summary>Extra classes for the main column: the details page hands it the panel's scroll.</summary>
+    [Parameter] public string MainClass { get; set; } = "";
+
+    /// <summary>Raised when Fill, Load JSON or the image picker changed the image, for a title that shows it.</summary>
+    [Parameter] public EventCallback OnImageChanged { get; set; }
+
+    /// <summary>Raised with the new container's id once the agent said it is there (created, or created and started).</summary>
+    [Parameter] public EventCallback<string> OnDone { get; set; }
+
+    /// <summary>Raised after the rail's Cancel put the fields back, for a host that shows the same data elsewhere.</summary>
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    /// <summary>The fields as they were handed over are the mark: a form opened again on another container takes a new one.</summary>
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_snapshotOf, Form))
+        {
+            _snapshotOf = Form;
+            _opened = Form.ToRequest();
+            _openedJson = JsonSerializer.Serialize(_opened, ExportJson);
+        }
+    }
+
+    public void Dispose() => _closing.Cancel();
+
+    /// <summary>True while the fields hold something other than what the form was opened with.</summary>
+    private bool Changed => JsonSerializer.Serialize(Form.ToRequest(), ExportJson) != _openedJson;
+
+    /// <summary>
+    /// Asks before leaving the form with edits in it and answers whether to go on;
+    /// nothing changed, nothing to ask. The window's Close calls it, so no way out
+    /// of the form drops what was typed in silence. While the agent is creating or
+    /// recreating there is no leaving: closing would not stop it, only hide how it
+    /// ended. A run under way is the one exception: the table follows it.
+    /// </summary>
+    public async Task<bool> ConfirmLeaveAsync()
+    {
+        if (_busy && !_following)
+        {
+            Snackbar.Add($"{_busyTitle} Wait for it to finish.", Severity.Info);
+            return false;
+        }
+
+        return !Changed || await DialogFlow.ConfirmAsync(Dialogs, "Close",
+            "The changes made in this form have not been saved. Close anyway?", "Close", destructive: true);
+    }
+
+    /// <summary>
+    /// The rail's Cancel: it cancels the edits, not the window. After asking, the fields
+    /// go back to what they held when the form opened and the form stays where it is.
+    /// </summary>
+    private async Task CancelAsync()
+    {
+        if (!Changed || !await DialogFlow.ConfirmAsync(Dialogs, "Cancel changes",
+                "Put the fields back to what this form was opened with? The changes made here are lost.", "Discard changes", destructive: true))
+        {
+            return;
+        }
+
+        Form.CopyFrom(LaunchForm.From(_opened));
+        ClearMessages();
+        await OnImageChanged.InvokeAsync();
+        await OnCancel.InvokeAsync();
+    }
+
+    /// <summary>
+    /// A row with Reverse proxy ticked needs the container to share a
+    /// user-defined network with the nginx container, and the agent never
+    /// attaches it: the form checks here, before the verb asks anything. Sharing
+    /// none, it offers the default network of Settings — a yes adds the row to
+    /// Networks and goes on; a no stops with nothing touched. The agent refuses
+    /// the same way should a request arrive otherwise.
+    /// </summary>
+    private async Task<bool> PublishableAsync()
+    {
+        if (Form.PublicNames.Count == 0)
+        {
+            return true;
+        }
+
+        PublishingSettings settings;
+        IReadOnlyList<string> proxyNetworks;
+        try
+        {
+            settings = await Api.GetPublishingSettingsAsync();
+            var proxy = (await Api.GetContainersAsync(all: true)).Containers.FirstOrDefault(c => c.Name.Equals(settings.ProxyContainer, StringComparison.OrdinalIgnoreCase));
+            if (proxy is null)
+            {
+                await DialogFlow.ExplainAsync(Dialogs, "Reverse proxy",
+                    $"The nginx container '{settings.ProxyContainer}' is not on this machine.",
+                    "Reverse proxy needs it running here: it is the container that reads the map and answers the public names. "
+                    + "Settings → Publish names it; docs/developer/remote-access.md is how to set it up.");
+                return false;
+            }
+
+            proxyNetworks = proxy.Networks.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"Publishing: {ex.Message}", Severity.Error);
+            return false;
+        }
+
+        var shared = Form.Networks.Select(n => n.Name.Trim())
+            .Where(n => n.Length > 0 && !NetworkSummary.IsBuiltIn(n.ToLowerInvariant()))
+            .Any(n => proxyNetworks.Contains(n, StringComparer.OrdinalIgnoreCase));
+        if (shared)
+        {
+            return true;
+        }
+
+        var add = await DialogFlow.ConfirmAsync(Dialogs, "Reverse proxy",
+            $"This container shares no user-defined network with the nginx container '{settings.ProxyContainer}', so the proxy cannot reach it by name "
+            + $"(names resolve only on a user-defined network, never on the default bridge).\n\nAdd the network '{settings.Network}' to its Networks and go on?",
+            $"Add {settings.Network}");
+        if (!add)
+        {
+            return false;
+        }
+
+        Form.Networks.Add(new NetworkRow { Name = settings.Network });
+        return true;
+    }
+
+    private string SaveTitle => Mode == LaunchMode.Edit
+        ? "Save: remove the container and create it again with these settings, left stopped"
+        : "Save: create the container with these settings, left stopped";
+
+    private string RunTitle => Mode == LaunchMode.Edit
+        ? "Save & start: remove the container, create it again with these settings and start it"
+        : "Run: create the container and start it (the image is pulled first when it is not local)";
+
+    private string Named => Form.Name.Length > 0 ? Form.Name : Mode == LaunchMode.Edit ? SourceId : "the container";
+
+    /// <summary>View &amp; edit exports the inspect JSON unless Full variables asks for the form.</summary>
+    private bool ExportsInspect => Mode == LaunchMode.Edit && !_fullVariables;
+
+    private string ExportTitle => ExportsInspect ? "Export inspect JSON" : _fullVariables ? "Export the form as JSON, full variables" : "Export the form as JSON";
+
+    private string ExportName => ExportsInspect
+        ? $"{(Form.Name.Length > 0 ? Form.Name : SourceId)}-inspect.json"
+        : $"{(Form.Name.Length > 0 ? Form.Name : "container")}.json";
+
+    /// <summary>The form as the export writes it: the agent's own fields only with Full variables on.</summary>
+    private string FormJson => JsonSerializer.Serialize(LaunchExport.Of(Form.ToRequest(), _fullVariables), ExportJson);
+
+    /// <summary>View &amp; edit downloads the inspect JSON from the agent; the form is handed over as a data URL, no round trip.</summary>
+    private string ExportHref => ExportsInspect
+        ? Api.ContainerInspectJsonUrl(SourceId).ToString()
+        : "data:application/json;charset=utf-8," + Uri.EscapeDataString(FormJson);
+
+    private static readonly JsonSerializerOptions ExportJson = new(JsonSerializerDefaults.Web) { WriteIndented = true };
+
+    /// <summary>The native clients' Export: the same document the link serves, written through the OS Save As.</summary>
+    private Task SaveExportAsync() =>
+        ClientFileSave.TextAsync(Files, Snackbar, ExportName, () => ExportsInspect
+            ? Api.GetContainerInspectJsonAsync(SourceId)
+            : Task.FromResult(FormJson));
+
+    private async Task LoadJsonAsync(IBrowserFile? file)
+    {
+        if (file is null)
+        {
+            return;
+        }
+
+        try
+        {
+            using var reader = new StreamReader(file.OpenReadStream(maxAllowedSize: 4 * 1024 * 1024));
+            var request = await Api.ParseLaunchFormAsync(await reader.ReadToEndAsync());
+            Form.CopyFrom(LaunchForm.From(request));
+            _fillStatus = $"Loaded {file.Name}";
+            _fillFlagged = false;
+            await OnImageChanged.InvokeAsync();
+            Snackbar.Add($"Loaded {file.Name}", Severity.Success);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException or IOException)
+        {
+            Snackbar.Add($"Load JSON failed: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task PickImageAsync()
+    {
+        var picked = await Pickers.ImageAsync(Dialogs, Api, Form.ImageRef);
+        if (picked is not null)
+        {
+            Form.ImageRef = picked;
+            await OnImageChanged.InvokeAsync();
+        }
+    }
+
+    /// <summary>A host folder as workdir: the server binds it at /workspace and sets the workdir there.</summary>
+    private async Task PickWorkdirAsync()
+    {
+        var picked = await Pickers.HostFolderAsync(Dialogs, Form.Workdir);
+        if (picked is not null)
+        {
+            Form.Workdir = picked;
+        }
+    }
+
+    /// <summary>Ticked: the command becomes sleep infinity (the previous one kept aside); unticked: it comes back.</summary>
+    private void ToggleKeepRunning(bool on)
+    {
+        if (on)
+        {
+            _commandBeforeKeepRunning = Form.Command;
+            Form.Command = LaunchForm.KeepRunningCommand;
+        }
+        else
+        {
+            Form.Command = _commandBeforeKeepRunning == LaunchForm.KeepRunningCommand ? "" : _commandBeforeKeepRunning;
+        }
+    }
+
+    private async Task OnFillKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await Fill();
+        }
+    }
+
+    /// <summary>The pasted run line into the fields; unsupported flags are named, never silently dropped.</summary>
+    private async Task Fill()
+    {
+        var parse = RunCommandLine.Parse(_fill);
+        _fillStatus = parse.Summary;
+        _fillFlagged = parse.Request is null || parse.Unsupported.Count > 0;
+        if (parse.Request is not null)
+        {
+            Form.CopyFrom(LaunchForm.From(parse.Request));
+            await OnImageChanged.InvokeAsync();
+        }
+    }
+
+    private bool Has(string field) => _fields.ContainsKey(field);
+
+    private string? Error(string field) => _fields.GetValueOrDefault(field);
+
+    private void ClearMessages()
+    {
+        _fields.Clear();
+        _general.Clear();
+    }
+
+    /// <summary>Each finding into its field, or above the fields when it names none; warnings always above as well, since a field has no warning colour.</summary>
+    private void Show(IEnumerable<LaunchFinding> findings, Severity severity)
+    {
+        foreach (var finding in findings)
+        {
+            if (severity == Severity.Error && finding.Field != LaunchFields.General)
+            {
+                _fields[finding.Field] = _fields.TryGetValue(finding.Field, out var already) ? $"{already} {finding.Message}" : finding.Message;
+            }
+            else
+            {
+                _general.Add((severity, finding.Message));
+            }
+        }
+    }
+
+    /// <summary>A failed launch: the fields it is about carry the reason; what is about none, or the whole message when it named no field, goes above.</summary>
+    private void ShowFailure(string message, IReadOnlyDictionary<string, string> fields)
+    {
+        if (fields.Count == 0)
+        {
+            _general.Add((Severity.Error, message));
+            return;
+        }
+
+        Show(fields.Select(f => new LaunchFinding(f.Key, f.Value)), Severity.Error);
+    }
+
+    /// <summary>
+    /// Save or Run: the fields validated, the public names made possible, the
+    /// agent's check (errors stop here, warnings are confirmed), the verb's own
+    /// question, then the launch under the veil until the agent says the container
+    /// is there. Whatever fails comes back into the form; the form never closes on
+    /// a failure.
+    /// </summary>
+    private async Task SubmitAsync(bool start)
+    {
+        // The veil at the press, painted before anything is asked of the agent:
+        // on a slower machine the checks take seconds, and a button that shows
+        // nothing for that long looks as if it did nothing.
+        Busy("Checking the settings…");
+        await Task.Yield();
+        if (await ReadyAsync(start) is not { } request)
+        {
+            Idle();
+            return;
+        }
+
+        Busy(Mode == LaunchMode.Edit
+            ? $"Recreating {Named}: the new settings are rehearsed first, then the container is replaced. This can take a minute."
+            : start ? $"Starting {Named}…" : $"Creating {Named}…");
+        try
+        {
+            var id = Mode == LaunchMode.Edit ? await RecreateAsync(request)
+                : start ? await LaunchAndFollowAsync(request)
+                : await CreateAsync(request);
+            Snackbar.Add(Mode == LaunchMode.Edit ? $"Recreated {Named}" : start ? $"{Named} is running" : $"{Named} created, stopped", Severity.Success);
+            await OnDone.InvokeAsync(id);
+        }
+        catch (AgentApiException ex)
+        {
+            ShowFailure(ex.Message, ex.Fields);
+        }
+        catch (HttpRequestException ex)
+        {
+            _general.Add((Severity.Error, ex.Message));
+        }
+        catch (OperationCanceledException)
+        {
+            // The window closed under a run: the table has it from here.
+        }
+        finally
+        {
+            Idle();
+        }
+    }
+
+    /// <summary>The request once the fields are valid, the public names possible, the agent's check passed and the verb confirmed; null when any of them stops it.</summary>
+    private async Task<ContainerLaunchRequest?> ReadyAsync(bool start)
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid || !await PublishableAsync())
+        {
+            return null;
+        }
+
+        ClearMessages();
+        var request = Form.ToRequest() with { Start = start };
+        return await CheckedAsync(request, start) && await ConfirmVerbAsync(start) ? request : null;
+    }
+
+    /// <summary>The agent's check under the veil: errors go into the fields and stop; warnings are listed above the fields and asked about.</summary>
+    private async Task<bool> CheckedAsync(ContainerLaunchRequest request, bool start)
+    {
+        Busy("Checking the settings…");
+        LaunchCheck check;
+        try
+        {
+            check = await Api.CheckContainerLaunchAsync(request, Mode == LaunchMode.Edit ? SourceId : "");
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"The settings could not be checked: {ex.Message}", Severity.Warning);
+            Idle();
+            return true;
+        }
+
+        Idle();
+        Show(check.Errors, Severity.Error);
+        Show(check.Warnings, Severity.Warning);
+        if (!check.Ok)
+        {
+            return false;
+        }
+
+        if (check.Warnings.Count == 0)
+        {
+            return true;
+        }
+
+        var text = string.Join("\n\n", check.Warnings.Select(w => "• " + w.Message));
+        return await DialogFlow.ConfirmAsync(Dialogs, "Worth a look",
+            $"{text}\n\nThese do not stop the launch, and a product may well be right where the form looks wrong. Go on?",
+            start ? "Run anyway" : "Save anyway");
+    }
+
+    /// <summary>The rail's verb asks before it acts, whichever verb it is.</summary>
+    private Task<bool> ConfirmVerbAsync(bool start) => Mode switch
+    {
+        LaunchMode.Edit => DialogFlow.ConfirmAsync(Dialogs, "View & edit",
+            $"This will REMOVE container {Named} and create a new one with the edited settings (ports, env, etc.), {(start ? "then start it" : "left stopped")}.\n\n"
+            + "The new settings are tried first under a temporary name: if they cannot start, the container is left as it is.\n\n"
+            + "Container filesystem data is lost unless volumes are remounted.\n\nContinue?", "Recreate", destructive: true),
+        _ when start => DialogFlow.ConfirmAsync(Dialogs, "Run container",
+            $"Run {Form.Image}{(Form.Name.Length > 0 ? $" as {Form.Name}" : "")}? It is pulled first if it is not on this machine.", "Run"),
+        _ => DialogFlow.ConfirmAsync(Dialogs, "Create container",
+            $"Create {(Form.Name.Length > 0 ? Form.Name : "a container")} from {Form.Image}, stopped?", "Save"),
+    };
+
+    private async Task<string> RecreateAsync(ContainerLaunchRequest request) =>
+        Noted(await Api.RecreateContainerAsync(SourceId, request));
+
+    private async Task<string> CreateAsync(ContainerLaunchRequest request) =>
+        Noted(await Api.CreateContainerAsync(request));
+
+    /// <summary>
+    /// The agent owns pull-then-run, so the run outlives this window; the veil
+    /// follows the job every second (the pull's progress, then the start) and the
+    /// form closes only when the agent says the container is up. A failed job comes
+    /// back as a failed launch, its fields included.
+    /// </summary>
+    private async Task<string> LaunchAndFollowAsync(ContainerLaunchRequest request)
+    {
+        var launch = await Api.LaunchContainerAsync(request);
+        _following = true;
+        using var timer = new PeriodicTimer(FollowEvery);
+        while (await timer.WaitForNextTickAsync(_closing.Token))
+        {
+            var job = (await Api.GetContainerLaunchesAsync(_closing.Token)).FirstOrDefault(l => l.Id == launch.Id);
+            if (job is null)
+            {
+                // Done and already forgotten by the agent: the list shows the container.
+                return "";
+            }
+
+            switch (job.Phase)
+            {
+                case "done":
+                    foreach (var note in job.Notes)
+                    {
+                        Snackbar.Add(note, Severity.Warning);
+                    }
+
+                    return job.ContainerId;
+                case "error":
+                    throw new AgentApiException(502, job.Error, job.FieldErrors);
+                case "cancelled":
+                    throw new AgentApiException(409, "The run was cancelled.");
+            }
+
+            _busyTitle = job.Phase == "pull" ? $"Pulling {job.Image}…" : $"Starting {job.Name}…";
+            _busyStatus = job.Status;
+            _busyPct = job.Phase == "pull" ? job.Pct : null;
+            StateHasChanged();
+        }
+
+        return "";
+    }
+
+    private string Noted(ContainerCreated created)
+    {
+        foreach (var note in created.Notes)
+        {
+            Snackbar.Add(note, Severity.Warning);
+        }
+
+        return created.Id;
+    }
+
+    // Both paint at once: a click paints by itself only at its first wait and
+    // at its end, and the veil goes up and down several times in between.
+    private void Busy(string title)
+    {
+        _busy = true;
+        _busyTitle = title;
+        _busyStatus = "";
+        _busyPct = null;
+        StateHasChanged();
+    }
+
+    private void Idle()
+    {
+        _busy = false;
+        _following = false;
+        _busyStatus = "";
+        _busyPct = null;
+        StateHasChanged();
+    }
+}

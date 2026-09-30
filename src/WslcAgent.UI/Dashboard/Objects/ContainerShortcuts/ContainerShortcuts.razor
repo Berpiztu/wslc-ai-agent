@@ -1,0 +1,24 @@
+@* A container's shortcuts: details, edit, exec, files, browser, its browser
+   sessions and logs, the group the Containers list's card leads its actions
+   row with, standing alone; its own verbs are another object
+   (ContainerVerbs), so the user places each.
+   It fills its cells with the row's tone and stands at the left, until
+   another alignment is chosen. In design the canvas makes it inert. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits ContainerObject
+@attribute [DashboardObject("wslc.container-shortcuts", "Container shortcuts", Group = "Container", Subgroup = "User", Icon = Icons.Material.Filled.Apps, Source = ContainerSourceFamily.FamilyKey, Columns = 10, Rows = 2, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Left, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Left)]
+
+@if (Container is { } c)
+{
+    <div class="@SectionClass()">
+        <EntityCardPart>
+            <MudCardActions Class="py-1">
+                <VerbTaps>
+                    <ContainerActions Container="c" ShortcutsAlone="true" Changed="@(() => Containers.RefreshAsync())" />
+                </VerbTaps>
+            </MudCardActions>
+        </EntityCardPart>
+    </div>
+}

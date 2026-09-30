@@ -1,0 +1,33 @@
+@* A chart's legend: a swatch and a label per series, and, when asked, each
+   series' last reading beside its label — the form a dashboard card uses,
+   where the legend is a part of its own and the chart above it has no
+   header to say the value. *@
+@using WslcAgent.ApiClient
+
+<div class="wslc-chart-legend">
+    @foreach (var (line, index) in Series.Select((line, index) => (line, index)))
+    {
+        <span><i class="@(line.Secondary ? "wslc-chart-swatch-secondary" : "wslc-chart-swatch-primary")"></i>@line.Label@(WithValues ? $" {Last(index)}" : "")</span>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<LineChart.Line> Series { get; set; } = [];
+
+    /// <summary><c>percent</c> or <c>bytes</c>: how a value is written.</summary>
+    [Parameter, EditorRequired] public string Format { get; set; } = "percent";
+
+    /// <summary>One array per series; only read when <see cref="WithValues"/>.</summary>
+    [Parameter] public IReadOnlyList<double[]> Values { get; set; } = [];
+
+    /// <summary>Each entry with its series' last reading.</summary>
+    [Parameter] public bool WithValues { get; set; }
+
+    /// <summary>The last value of a series, written the way the axis writes it; a dash before the first sample.</summary>
+    private string Last(int index) =>
+        index < Values.Count && Values[index] is { Length: > 0 } values
+            ? Format == "percent"
+                ? values[^1].ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + "%"
+                : Bytes.Humanize((long)values[^1])
+            : "—";
+}

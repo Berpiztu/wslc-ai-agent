@@ -1,0 +1,93 @@
+@* The Images page's verbs in the round button: Pull, Build, Import, Load,
+   Hub and Prune. Drawn by the page, and by the dashboard while an image's
+   card is selected. Import names the image after the page's search text,
+   and clears it; on
+   the dashboard there is none, and the archive keeps its own name. *@
+@inherits PageVerbsBase
+
+<VerbFab StartIcon="@Icons.Material.Filled.Download" Label="Pull" Color="Color.Primary" OnClick="@(() => OpenAsync<PullImageDialog>("Pull image"))" Title="Pull an image" />
+<VerbFab StartIcon="@Icons.Material.Filled.Build" Label="Build" OnClick="BuildAsync" Title="Build an image from a Dockerfile" />
+<MudFileUpload T="IBrowserFile" FilesChanged="ImportArchiveAsync" Class="ma-0 flex-grow-0">
+    <CustomContent>
+        <VerbFab StartIcon="@Icons.Material.Filled.Input" Label="Import" OnClick="@context.OpenFilePickerAsync" Disabled="_archiveBusy"
+                 Title="Import an image archive (named after the search text, when there is one)" />
+    </CustomContent>
+</MudFileUpload>
+<MudFileUpload T="IBrowserFile" FilesChanged="LoadArchiveAsync" Class="ma-0 flex-grow-0">
+    <CustomContent>
+        <VerbFab StartIcon="@Icons.Material.Filled.Unarchive" Label="Load" OnClick="@context.OpenFilePickerAsync" Disabled="_archiveBusy" Title="Load an image archive" />
+    </CustomContent>
+</MudFileUpload>
+<VerbFab StartIcon="@Icons.Material.Filled.TravelExplore" Label="Hub" Href="https://hub.docker.com/search" Target="_blank" Title="Search images on Docker Hub" />
+<VerbFab StartIcon="@Icons.Material.Filled.DeleteSweep" Label="Prune" Color="Color.Error" OnClick="PruneAsync" Title="Remove dangling images (no name, no tag)" />
+
+@code {
+    /// <summary>An archive is uploaded whole before the CLI sees it: the size a browser can hand over at once.</summary>
+    private const long MaxArchiveBytes = 64L * 1024 * 1024 * 1024;
+
+    private bool _archiveBusy;
+
+    /// <summary>The page's search text: the name an imported image takes.</summary>
+    [Parameter] public string Search { get; set; } = "";
+
+    /// <summary>The search text cleared once an import has used it.</summary>
+    [Parameter] public EventCallback<string> SearchChanged { get; set; }
+
+    private async Task BuildAsync()
+    {
+        await DialogFlow.ShowPersistentAsync<BuildImageDialog>(Dialogs, "Build image");
+        await Changed.InvokeAsync();
+    }
+
+    /// <summary>An imported image is named after what is typed in the search box.</summary>
+    private Task ImportArchiveAsync(IBrowserFile? file) =>
+        ArchiveAsync(file, "Importing image...", async (content, name) =>
+        {
+            await Api.ImportImageAsync(content, name, Search.Trim());
+            Snackbar.Add("Image imported", Severity.Success);
+            await SearchChanged.InvokeAsync("");
+        });
+
+    private Task LoadArchiveAsync(IBrowserFile? file) =>
+        ArchiveAsync(file, "Loading image archive...", async (content, name) =>
+        {
+            var loaded = (await Api.LoadImagesAsync(content, name)).Loaded;
+            Snackbar.Add(
+                loaded.Count == 0 ? "Image loaded" : $"Loaded: {string.Join(", ", loaded.Take(3))}{(loaded.Count > 3 ? $" (+{loaded.Count - 3} more)" : "")}",
+                Severity.Success);
+        });
+
+    private async Task ArchiveAsync(IBrowserFile? file, string progress, Func<Stream, string, Task> send)
+    {
+        if (file is null)
+        {
+            return;
+        }
+
+        _archiveBusy = true;
+        var note = Snackbar.Add(progress, Severity.Info, options => options.RequireInteraction = true);
+        try
+        {
+            await using var content = file.OpenReadStream(MaxArchiveBytes);
+            await send(content, file.Name);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException or IOException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            if (note is not null)
+            {
+                Snackbar.Remove(note);
+            }
+
+            _archiveBusy = false;
+        }
+
+        await Changed.InvokeAsync();
+    }
+
+    private Task PruneAsync() =>
+        ConfirmAndRunAsync("Prune images", "Remove every dangling image (no name, no tag)?", "Prune", "images", Api.PruneImagesAsync);
+}

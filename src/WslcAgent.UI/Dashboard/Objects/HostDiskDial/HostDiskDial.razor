@@ -1,0 +1,23 @@
+@* The drive as a dial: its used share, in percent, as the System card's ring
+   and the disk alarm show it. It reads the drive the host's disk objects
+   share (HostDiskRead). *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@inherits WslcObject
+@attribute [DashboardObject("wslc.host-disk-dial", "Disk dial", Group = "Host dials", Subgroup = "System", Icon = Icons.Material.Filled.PieChart, Columns = 6, Rows = 6)]
+@attribute [DashboardObjectAlarm(DashboardMeasures.Disk, "Disk", On = true)]
+@attribute [DashboardObjectPart("ring", "Ring", Text = false, Line = true)]
+@attribute [DashboardObjectPart("figure", "Figure")]
+@attribute [DashboardObjectPart("label", "Label")]
+@inject HostDiskRead Disk
+
+<div class="@TypeClass">
+    <UsageDial Label="Disk" Reading="@(Used is { } v ? Percents.Text(v) : "")" Live="@(Used is not null)"
+               Title="@($"Disk {(Used is { } shown ? Percents.Text(shown) : "not known yet")}")" />
+</div>
+
+@code {
+    private double? Used => HostUsage.DiskPercent(Disk.Value);
+
+    protected override void OnInitialized() => Follow(Disk);
+}

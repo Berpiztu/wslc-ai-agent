@@ -1,0 +1,236 @@
+@* Per-container actions: [start or stop] [⋮ more] [remove], with the menu
+   in its order. No entry is disabled by state: the CLI answers — with one
+   exception, a container being recreated, which for those seconds may not exist at all
+   (Locked). Entries later slices bring say so. *@
+@inherits EntityActionsBase
+@using WslcAgent.UI.Components.Launch
+@inject NavigationManager Navigation
+@inject IJSRuntime Js
+@inject IClientFiles Files
+@inject WslcAgent.UI.Links.IClientLinks Links
+@inject HttpClient Http
+@inject SimulatedRemote Simulated
+
+@* A card has room a table row has not, so it leads with the six verbs most
+   reached for — details, edit, exec, files, browser, its sessions,
+   logs — and keeps
+   the row's own verbs (start or stop, the menu, remove) at the far end. They
+   stay in the menu as well, which is the whole list; a table row draws that
+   group alone. The dashboard's objects draw each group alone (ShortcutsAlone,
+   and the row's group with its whole menu), so the user places each where
+   they want it. *@
+<div class="@(Shortcuts ? "wslc-row-verbs" : "")">
+@if (Shortcuts || ShortcutsAlone)
+{
+    <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center" Class="wslc-row-shortcuts">
+        <MudIconButton Icon="@Icons.Material.Filled.Article" Size="Size.Small" title="View details" Disabled="Locked"
+                       OnClick="@(() => Navigation.NavigateTo($"containers/{Container.Id}"))" />
+        <MudIconButton Icon="@Icons.Material.Filled.EditNote" Size="Size.Small" title="View &amp; edit" Disabled="Locked" OnClick="EditAsync" />
+        <MudIconButton Icon="@Icons.Material.Filled.Terminal" Size="Size.Small" title="Exec" Disabled="Locked" OnClick="ExecAsync" />
+        <MudIconButton Icon="@Icons.Material.Filled.Folder" Size="Size.Small" title="View files" Disabled="Locked" OnClick="FilesAsync" />
+        <MudIconButton Icon="@Icons.Material.Filled.OpenInBrowser" Size="Size.Small" title="Open with browser" Disabled="Locked" OnClick="OpenWithBrowserAsync" />
+        <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" title="View browser sessions" Disabled="Locked" OnClick="BrowserSessionsAsync" />
+        <MudIconButton Icon="@Icons.Material.Filled.Subject" Size="Size.Small" title="Logs" Disabled="Locked" OnClick="LogsAsync" />
+    </MudStack>
+}
+@if (!ShortcutsAlone)
+{
+<MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center">
+    @if (Container.IsRunning)
+    {
+        <MudIconButton Icon="@Icons.Material.Filled.Stop" Size="Size.Small" Color="Color.Primary" title="Stop"
+                       Disabled="Locked" OnClick="@(() => RunAsync(Container.Name, "stop", ct => Api.StopContainerAsync(Container.Id, ct)))" />
+    }
+    else
+    {
+        <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" Color="Color.Success" title="Start"
+                       Disabled="Locked" OnClick="@(() => RunAsync(Container.Name, "start", ct => Api.StartContainerAsync(Container.Id, ct)))" />
+    }
+    @* Restart beside start and stop, in amber: the third thing anyone does to a
+       container, and it was two clicks deep in the menu. In the table row too. *@
+    <MudIconButton Icon="@Icons.Material.Filled.RestartAlt" Size="Size.Small" Color="Color.Warning" title="Restart"
+                   Disabled="Locked" OnClick="@(() => RunAsync(Container.Name, "restart", ct => Api.RestartContainerAsync(Container.Id, ct)))" />
+    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" title="More actions" Disabled="Locked" OpenChanged="MenuOpenChanged">
+        @* The menu is the whole list minus whatever this view already has within
+           reach: on a card those verbs are buttons a centimetre away, and a menu
+           that repeats them is a menu nobody reads to the end. Restart is a button
+           in both views now, so it leaves both menus. One component, one list, two
+           behaviours — nothing is written twice. *@
+        @if (!Shortcuts)
+        {
+            <MudMenuItem Icon="@Icons.Material.Filled.Article" OnClick="@(() => Navigation.NavigateTo($"containers/{Container.Id}"))">View details</MudMenuItem>
+            <MudDivider />
+            <MudMenuItem Icon="@Icons.Material.Filled.EditNote" OnClick="EditAsync">View &amp; edit</MudMenuItem>
+        }
+        <MudMenuItem Icon="@Icons.Material.Filled.Security" OnClick="ViewImagePackagesAsync">View image packages and CVEs</MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Filled.ContentCopy" OnClick="@(() => CopyRunAsync(false))">Copy run command</MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Filled.ContentCopy" OnClick="@(() => CopyRunAsync(true))">Copy run command, full variables</MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Filled.BugReport" OnClick="@(() => Snackbar.Add($"wslc Debug not yet implemented for {Container.Id}", Severity.Info))">Use wslc Debug</MudMenuItem>
+        @if (!Shortcuts)
+        {
+            <MudMenuItem Icon="@Icons.Material.Filled.Folder" OnClick="FilesAsync">View files</MudMenuItem>
+            <MudMenuItem Icon="@Icons.Material.Filled.OpenInBrowser" OnClick="OpenWithBrowserAsync">Open with browser</MudMenuItem>
+            <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="BrowserSessionsAsync">View browser sessions</MudMenuItem>
+        }
+        <MudDivider />
+        @if (!Shortcuts)
+        {
+            <MudMenuItem Icon="@Icons.Material.Filled.Subject" OnClick="LogsAsync">Logs</MudMenuItem>
+        }
+        <MudMenuItem Icon="@Icons.Material.Filled.BarChart" OnClick="StatsAsync">Stats</MudMenuItem>
+        @if (!Shortcuts)
+        {
+            <MudMenuItem Icon="@Icons.Material.Filled.Terminal" OnClick="ExecAsync">Exec</MudMenuItem>
+        }
+        <MudMenuItem Icon="@Icons.Material.Filled.FileDownload" OnClick="ExportJson">Export JSON</MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Filled.DataObject" OnClick="ExportFullAsync">Export JSON, full variables</MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Filled.Backup" OnClick="BackupAsync">Backup</MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Filled.Bolt" OnClick="@(() => RunAsync(Container.Name, "kill", ct => Api.KillContainerAsync(Container.Id, ct)))">Kill</MudMenuItem>
+    </MudMenu>
+    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="Remove"
+                   Disabled="Locked" OnClick="@(() => RemoveAsync("container", $"{Container.Name} ({Container.Id})", ct => Api.RemoveContainerAsync(Container.Id, force: true, ct)))" />
+</MudStack>
+}
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ContainerSummary Container { get; set; } = default!;
+
+    /// <summary>The card's second group: the verbs worth reaching without the menu.</summary>
+    [Parameter] public bool Shortcuts { get; set; }
+
+    /// <summary>The shortcuts with nothing else: the dashboard's object of them, the row's own verbs being another.</summary>
+    [Parameter] public bool ShortcutsAlone { get; set; }
+
+    protected override string Key => Container.Id;
+
+    /// <summary>
+    /// Every verb stands greyed while one of them runs, and while the
+    /// container is being recreated: for those
+    /// seconds it may not exist, and a start pressed then would fail or cross
+    /// the recreate.
+    /// </summary>
+    private bool Locked => Busy || Container.IsRecreating;
+
+    /// <summary>The launch form pre-filled from inspect; saving removes and recreates.</summary>
+    private async Task EditAsync()
+    {
+        ContainerDetails details;
+        try
+        {
+            details = await Api.GetContainerDetailsAsync(Container.Id);
+        }
+        catch (Exception ex) when (ex is ApiClient.AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"{Container.Name}: inspect failed. {ex.Message}", Severity.Error);
+            return;
+        }
+
+        var parameters = new DialogParameters<Dialogs.ContainerFormDialog>
+        {
+            { d => d.Mode, LaunchMode.Edit },
+            { d => d.Form, LaunchForm.From(details.Form) },
+            { d => d.SourceId, Container.Id },
+        };
+        if (await DialogFlow.ShowAsync<Dialogs.ContainerFormDialog>(Dialogs, $"View & edit — {Container.Name}", parameters, large: true))
+        {
+            await Changed.InvokeAsync();
+        }
+    }
+
+    /// <summary>The raw image inspect JSON under this name, until a real package and CVE view exists.</summary>
+    private Task ViewImagePackagesAsync() =>
+        DialogFlow.ShowAsync<Dialogs.JsonDialog>(Dialogs, "Image packages / CVEs (raw inspect)",
+            new DialogParameters<Dialogs.JsonDialog> { { d => d.Load, (Func<Task<string>>)(async () => (await Api.GetImageInspectAsync(Container.Image)).Json) } }, large: true);
+
+    private Task OpenWithBrowserAsync() => BrowserFlow.OpenAsync(Dialogs, Snackbar, Js, Links, Http.BaseAddress, Simulated, Container.Id, Container.Ports, Container.Published);
+
+    /// <summary>The host browsers open on this container; Connect joins the one chosen.</summary>
+    private async Task BrowserSessionsAsync()
+    {
+        if (await DialogFlow.ChooseAsync<Dialogs.BrowserSessionsDialog, BrowseSessionInfo>(Dialogs, "Browser sessions",
+                new DialogParameters<Dialogs.BrowserSessionsDialog> { { d => d.Container, Container.Id } }) is { } session)
+        {
+            await BrowserFlow.JoinAsync(Dialogs, Snackbar, Container.Id, session);
+        }
+    }
+
+    /// <summary>The interactive shell in a dialog.</summary>
+    private Task ExecAsync() =>
+        DialogFlow.ShowAsync<Dialogs.ContainerTerminalDialog>(Dialogs, $"Exec — {Container.Name}",
+            new DialogParameters<Dialogs.ContainerTerminalDialog> { { d => d.Container, Container.Id } }, large: true);
+
+    /// <summary>The files inside the container, in their own window.</summary>
+    private Task FilesAsync() =>
+        DialogFlow.ShowAsync<Dialogs.ContainerFilesDialog>(Dialogs, $"Files — {Container.Name}",
+            new DialogParameters<Dialogs.ContainerFilesDialog> { { d => d.Container, Container.Id } }, large: true);
+
+    /// <summary>Logs in their own window, as every other entry of this menu: the details page is what "View details" is for.</summary>
+    private Task LogsAsync() =>
+        DialogFlow.ShowAsync<Dialogs.ContainerLogsDialog>(Dialogs, $"Logs — {Container.Name}",
+            new DialogParameters<Dialogs.ContainerLogsDialog> { { d => d.Container, Container.Id } }, large: true);
+
+    private Task StatsAsync() =>
+        DialogFlow.ShowAsync<Dialogs.ContainerStatsDialog>(Dialogs, $"Container stats — {Container.Name}",
+            new DialogParameters<Dialogs.ContainerStatsDialog> { { d => d.Container, Container.Id } }, large: true);
+
+    /// <summary>
+    /// The inspect JSON as a file (<c>name-inspect.json</c>): the browser
+    /// downloads it, a native client writes it through the OS Save As so it
+    /// lands on the user's machine and not on the agent host.
+    /// </summary>
+    private Task ExportJson()
+    {
+        if (!Files.Supported)
+        {
+            Navigation.NavigateTo(Api.ContainerInspectJsonUrl(Container.Id).ToString(), forceLoad: true);
+            return Task.CompletedTask;
+        }
+
+        return ClientFileSave.TextAsync(Files, Snackbar, $"{Container.Name}-inspect.json", () => Api.GetContainerInspectJsonAsync(Container.Id));
+    }
+
+    private async Task BackupAsync()
+    {
+        await DialogFlow.ShowPersistentAsync<Dialogs.BackupDialog>(Dialogs, $"Backup — {Container.Name}",
+            new DialogParameters<Dialogs.BackupDialog> { { d => d.Container, Container.Id } });
+        await Changed.InvokeAsync();
+    }
+
+    /// <summary>
+    /// The form as a launch request with what only the agent keeps (the restart
+    /// policy, the public names), for another WSLC AI Agent; Export JSON is the
+    /// inspect output, what wslc knows. Load JSON reads both.
+    /// </summary>
+    private Task ExportFullAsync() =>
+        ClientFileSave.TextAsync(Files, Snackbar, $"{Container.Name}.json", async () =>
+            System.Text.Json.JsonSerializer.Serialize((await Api.GetContainerDetailsAsync(Container.Id)).Form, FullExportJson));
+
+    private static readonly System.Text.Json.JsonSerializerOptions FullExportJson = new(System.Text.Json.JsonSerializerDefaults.Web) { WriteIndented = true };
+
+    /// <summary>
+    /// It prints wslc, not docker. The line that would run this container again, on
+    /// the clipboard: paste it in a shell, or in the Run form's Fill bar, which
+    /// reads the same flags back into the fields. It is built from the
+    /// container's own launch form, so nothing it holds is left out; with full
+    /// variables it also carries the agent's own flags (--restart, --public-name),
+    /// which wslc itself does not take.
+    /// </summary>
+    private async Task CopyRunAsync(bool fullVariables)
+    {
+        try
+        {
+            var details = await Api.GetContainerDetailsAsync(Container.Id);
+            var line = ApiClient.RunCommandLine.Write(details.Form, fullVariables);
+            await Js.InvokeVoidAsync("navigator.clipboard.writeText", line);
+            // The line itself is on the clipboard, which is where it was asked
+            // for; a toast that prints the whole run command covers half the
+            // screen and says nothing the clipboard does not already hold.
+            Snackbar.Add("Run command copied", Severity.Success);
+        }
+        catch (Exception ex) when (ex is ApiClient.AgentApiException or HttpRequestException or JSException)
+        {
+            Snackbar.Add($"Failed to copy: {ex.Message}", Severity.Error);
+        }
+    }
+}

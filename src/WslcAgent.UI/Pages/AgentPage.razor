@@ -1,0 +1,12 @@
+@page "/agent"
+@using WslcAgent.UI.Dashboard
+@* The agent's own page: what the agent's
+   window shows — the tray icon's Open, or Open in browser — instead of a
+   console of log lines: the System card at the top, the agent at a glance,
+   and the log beneath it, the Logs page whole, with its Activity. *@
+
+<AgentLogsPage Title="WSLC AI Agent">
+    <Above>
+        <SystemCardView />
+    </Above>
+</AgentLogsPage>

@@ -1,0 +1,26 @@
+@* One of a volume's two dials: what the containers that mount it have read,
+   or written, as its share of what every container has. The card's body
+   draws both (VolumeCardBody); the dashboard draws each as an object. *@
+
+@if (Written)
+{
+    <UsageDial Label="Written" Text="@Readings.Traffic(Volume.InUse, Volume.DiskWriteBytes)" Reading="@UsageDial.Share(Volume.DiskWriteBytes, Total)" Live="@Volume.InUse" Tone="Color.Secondary"
+               Size="Size.Large" Title="@Readings.TrafficTitle(Volume.DiskWriteBytes, "written", Volume.Containers, Where, Total)" />
+}
+else
+{
+    <UsageDial Label="Read" Text="@Readings.Traffic(Volume.InUse, Volume.DiskReadBytes)" Reading="@UsageDial.Share(Volume.DiskReadBytes, Total)" Live="@Volume.InUse" Tone="Color.Primary"
+               Size="Size.Large" Title="@Readings.TrafficTitle(Volume.DiskReadBytes, "read", Volume.Containers, Where, Total)" />
+}
+
+@code {
+    private const string Where = "that mount this volume";
+
+    [Parameter, EditorRequired] public VolumeSummary Volume { get; set; } = default!;
+
+    /// <summary>The Written dial; the Read dial when false.</summary>
+    [Parameter] public bool Written { get; set; }
+
+    /// <summary>What every container has read, or written: what the dial is a share of.</summary>
+    [Parameter] public long Total { get; set; }
+}

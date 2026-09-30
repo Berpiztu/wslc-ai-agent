@@ -1,0 +1,28 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+
+  <!-- Per-user MSI for the Windows client. build-client-installer.ps1
+       publishes the MAUI app, writes GeneratedFiles.wxs from the payload and
+       builds this. -->
+  <PropertyGroup>
+    <MsiVersion Condition="'$(MsiVersion)' == ''">0.0.0</MsiVersion>
+    <!-- RemovePreferences.ps1 encoded, from build-client-installer.ps1. -->
+    <DefineConstants>$(DefineConstants);MsiVersion=$(MsiVersion);RemovePreferencesCommand=$(RemovePreferencesCommand)</DefineConstants>
+    <OutputType>Package</OutputType>
+    <OutputName>wslc-ai-client</OutputName>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <SuppressIces>ICE03;ICE38;ICE64;ICE91</SuppressIces>
+    <SuppressValidation>true</SuppressValidation>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Package.wxs" />
+    <Compile Include="GeneratedFiles.wxs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" />
+    <PackageReference Include="WixToolset.Util.wixext" />
+  </ItemGroup>
+
+</Project>

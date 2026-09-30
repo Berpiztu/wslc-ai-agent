@@ -1,0 +1,103 @@
+@* The toolbox: every kind of object, and the cards made already (templates),
+   in its group under the group's heading and a line, in a window floating
+   over the dashboard as the properties window does, moved by its title,
+   that can be hidden into a button of one cell and opened again by it. It
+   first stands at the canvas's top-left corner, folded into its button (the
+   list open by default hid the dashboard being designed). An object is taken with the pointer and carried
+   onto the canvas; the pointer stays with the toolbox while it is carried
+   (DashboardInterop.CaptureAsync), so the designer hears where it goes and
+   where it is let go. Only a drag adds it: a press that carries it nowhere
+   adds nothing. *@
+@inject DashboardInterop Interop
+
+<FloatingWindow Name="Objects" Class="bz-dash-toolbox-window" Hideable="true" StartsFolded="true" FoldedIcon="@Icons.Material.Filled.Widgets" FoldedColor="Color.Tertiary" Anchor="Anchor">
+    <div class="@(Carrying ? "bz-dash-toolbox bz-dash-dragging" : "bz-dash-toolbox")" @ref="_root" @onpointermove="OnCarry" @onpointerup="OnRelease">
+        @Header
+        @foreach (var group in Entries.GroupBy(entry => entry.Group))
+        {
+            @if (group.Key.Length > 0)
+            {
+                @* Each step its own of the theme's colours: a group the tertiary — the theme's
+                   magenta —, a subgroup the secondary, a kind's group the
+                   secondary text. *@
+                <MudDivider Class="my-1" />
+                @* Bold: the magenta in the
+                   overline's thin stroke read faint beside the filled button. *@
+                <MudText Typo="Typo.overline" Color="Color.Tertiary" Class="px-1 font-weight-bold">@group.Key</MudText>
+            }
+            @foreach (var subgroup in group.GroupBy(entry => entry.Subgroup))
+            {
+                @* A subgroup — User, System — a step in under its group, its
+                   heading over a line, what it holds a step in again
+                   (plainly a part of Cards or of Objects). *@
+                <div class="@(subgroup.Key.Length > 0 ? "bz-dash-toolbox-level" : "")">
+                    @if (subgroup.Key.Length > 0)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="px-1 d-block">@subgroup.Key</MudText>
+                        <MudDivider Class="mb-1" />
+                    }
+                    @foreach (var section in subgroup.GroupBy(entry => entry.Section))
+                    {
+                        @* A kind's own group within it (Container, Host dials), one
+                           more step in; none where it would only repeat the subgroup. *@
+                        var named = section.Key.Length > 0 && section.Key != subgroup.Key;
+                        <div class="@(named ? "bz-dash-toolbox-level" : "")">
+                            @if (named)
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary px-1 d-block">@section.Key</MudText>
+                            }
+                            @foreach (var entry in section)
+                            {
+                                <div class="bz-dash-tool px-1 py-1" title="@($"{entry.Label}: drag it onto the dashboard")"
+                                     @onpointerdown="@(pointer => TakeAsync(entry, pointer))">
+                                    <MudIcon Icon="@entry.Icon" Size="Size.Small" />
+                                    <MudText Typo="Typo.body2">@entry.Label</MudText>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        }
+    </div>
+</FloatingWindow>
+
+@code {
+    private ElementReference _root;
+
+    /// <summary>The element whose top-left corner the toolbox first stands in: the canvas's frame.</summary>
+    [Parameter] public Func<ElementReference>? Anchor { get; set; }
+
+    /// <summary>
+    /// An entry taken from it is being carried: the toolbox holds the pointer
+    /// meanwhile, so the cursor is its own, and it shows the closed hand, not
+    /// the arrow it fell back to.
+    /// </summary>
+    [Parameter] public bool Carrying { get; set; }
+
+    /// <summary>What stands at the toolbox's top, over its objects: the dashboard's canvas size.</summary>
+    [Parameter] public RenderFragment? Header { get; set; }
+
+    /// <summary>What the toolbox offers — objects and cards made already — in its order.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<ToolboxEntry> Entries { get; set; } = [];
+
+    /// <summary>An entry was taken: where the pointer pressed it.</summary>
+    [Parameter] public EventCallback<(ToolboxEntry Entry, PointerEventArgs Pointer)> OnTake { get; set; }
+
+    /// <summary>The entry taken is being carried: where the pointer is now.</summary>
+    [Parameter] public EventCallback<PointerEventArgs> OnCarry { get; set; }
+
+    /// <summary>The entry taken was let go: where.</summary>
+    [Parameter] public EventCallback<PointerEventArgs> OnRelease { get; set; }
+
+    private async Task TakeAsync(ToolboxEntry entry, PointerEventArgs pointer)
+    {
+        if (pointer.Button != 0)
+        {
+            return;
+        }
+
+        await OnTake.InvokeAsync((entry, pointer));
+        await Interop.CaptureAsync(_root, pointer.PointerId);
+    }
+}

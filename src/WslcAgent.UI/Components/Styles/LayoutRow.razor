@@ -1,0 +1,75 @@
+@* One control of the Layout tab, in three columns: what can be changed, the
+   two verbs that decide how far the change goes, and the control itself drawn
+   with what is applied right now.
+
+   Apply and Save stand beside every control on purpose: from wherever the
+   person is looking, Apply puts the whole draft on the screens without writing
+   anything down, and Save is what makes this device open that way tomorrow. *@
+@inject WslcAgent.UI.Components.Styles.UiStyle Style
+
+<section class="wslc-layout-row">
+    <div class="wslc-layout-props">
+        <MudText Typo="Typo.subtitle2">@Title</MudText>
+        @if (Fixed.Length > 0)
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">@Fixed</MudText>
+        }
+        <div class="wslc-layout-fields">
+            @Properties
+        </div>
+    </div>
+    <div class="wslc-layout-verbs">
+        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyAsync" Disabled="@(!Style.HasPending)"
+                   title="Show it on every screen, without writing it down: walk through the application and come back, the changes are still here">Apply</MudButton>
+        <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="SaveAsync" Disabled="@(!Style.HasPending && !Style.HasUnsaved)"
+                   title="Keep it on this device: the application opens this way from now on">Save</MudButton>
+        <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="ResetAsync"
+                   title="This control back to what the application ships with, on the screens at once; the other controls keep what you have given them">Reset</MudButton>
+    </div>
+    <div class="wslc-layout-sample">
+        @Control
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    /// <summary>What the application fixes for this control, for the person deciding what to change (docs/ui-controls.md).</summary>
+    [Parameter] public string Fixed { get; set; } = "";
+
+    [Parameter, EditorRequired] public RenderFragment Control { get; set; } = default!;
+
+    [Parameter] public RenderFragment? Properties { get; set; }
+
+    /// <summary>Raised after any of the three verbs, so the page can tell the person where the change stands.</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    /// <summary>Puts this control's own values back to their defaults in the draft; the page knows which they are.</summary>
+    [Parameter] public EventCallback Reset { get; set; }
+
+    private async Task ApplyAsync()
+    {
+        await Style.ApplyAsync();
+        await Changed.InvokeAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        await Style.SaveAsync();
+        await Changed.InvokeAsync();
+    }
+
+    /// <summary>
+    /// The draft goes back for this control alone, and stays a draft: nothing
+    /// is on the screens until Apply, which is what makes Reset safe to press.
+    /// </summary>
+    private async Task ResetAsync()
+    {
+        await Reset.InvokeAsync();
+        // And straight onto the screens: a reset that only moved the draft
+        // looked like a button that did nothing, because the corner it had just
+        // given the buttons was still there.
+        await Style.ApplyAsync();
+        await Changed.InvokeAsync();
+    }
+}

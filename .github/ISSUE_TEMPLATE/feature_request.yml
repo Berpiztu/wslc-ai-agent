@@ -1,0 +1,20 @@
+name: Feature request
+description: An idea to make WSLC AI Agent better.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you want to do
+      description: The problem or the task, in your own words, before any solution.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How it could work
+      description: Your idea of the solution, if you have one.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do today instead

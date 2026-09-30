@@ -1,0 +1,22 @@
+@* A network's verbs: connect and disconnect a container, view and edit, and
+   remove, the Networks list's card actions row, which has one group only,
+   standing alone. It stands at the right until another alignment is chosen.
+   In design the canvas makes it inert. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits NetworkObject
+@attribute [DashboardObject("wslc.network-verbs", "Network verbs", Group = "Network", Subgroup = "User", Icon = Icons.Material.Filled.SmartButton, Source = NetworkSourceFamily.FamilyKey, Columns = 6, Rows = 2, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Right, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both)]
+
+@if (Network is { } r)
+{
+    <div class="@SectionClass()">
+        <EntityCardPart>
+            <MudCardActions Class="py-1">
+                <VerbTaps>
+                    <NetworkActions Network="r" Changed="@(() => Networks.RefreshAsync())" />
+                </VerbTaps>
+            </MudCardActions>
+        </EntityCardPart>
+    </div>
+}

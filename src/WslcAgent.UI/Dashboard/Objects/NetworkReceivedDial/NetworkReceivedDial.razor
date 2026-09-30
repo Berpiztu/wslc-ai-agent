@@ -1,0 +1,17 @@
+@* What the containers on a network have received, as its share of what every
+   container has: the Received dial of the Networks list's card, standing
+   alone. The share's whole comes with the network list (NetworkRows). *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@inherits NetworkObject
+@attribute [DashboardObject("wslc.network-received", "Network received", Group = "Network", Subgroup = "User", Icon = Icons.Material.Filled.CallReceived, Source = NetworkSourceFamily.FamilyKey, Columns = 6, Rows = 6, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Right)]
+@attribute [DashboardObjectPart("ring", "Ring", Text = false, Line = true)]
+@attribute [DashboardObjectPart("figure", "Figure")]
+@attribute [DashboardObjectPart("label", "Label")]
+
+@if (Network is { } n)
+{
+    <div class="@TypeClass">
+        <NetworkDial Network="n" Total="@(List?.NetReceivedBytes ?? 0)" />
+    </div>
+}

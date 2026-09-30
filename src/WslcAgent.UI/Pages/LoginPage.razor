@@ -1,0 +1,113 @@
+@page "/login"
+@layout BareLayout
+@using WslcAgent.UI.Access
+@inject WslcAgentApi Api
+@inject AgentAccessToken Session
+@inject IAgentTokenStore Tokens
+@inject NavigationManager Navigation
+@inject IClientServers Servers
+@inject AgentLink Link
+@inject HttpClient Http
+
+<PageTitle>Sign in — WSLC AI Agent</PageTitle>
+
+@* The sign-in screen: the agent keeps its own login, asked of anyone
+   who does not sit at the agent's machine, whatever proxy stands in front. With
+   no password set the fields wait and the screen says where to set one. *@
+<div class="wslc-login">
+    <MudPaper Class="wslc-login-card pa-6" Elevation="2">
+        <MudText Typo="Typo.overline" Color="Color.Success">WSLC AI Agent</MudText>
+        <MudText Typo="Typo.h6" Class="mb-1">Sign in</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">This agent keeps its own login. The public proxy does not add another password.</MudText>
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-3" role="alert">@_error</MudAlert>
+        }
+        <form @onsubmit="SignInAsync" @onsubmit:preventDefault="true">
+            <MudTextField T="string" @bind-Value="_username" Label="Username" Variant="Variant.Filled" Margin="Margin.Dense" Immediate="true"
+                          Disabled="@(!_configured || _busy)" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" />
+            <PasswordField @bind-Value="_password" Disabled="@(!_configured || _busy)" Autocomplete="current-password" Class="mt-2" />
+            <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Login" Class="mt-4"
+                       FullWidth="true" Disabled="@(!_configured || _busy || _password.Length == 0)">Sign in</MudButton>
+        </form>
+    </MudPaper>
+    <ClientServersCard Class="wslc-login-card mt-3" />
+</div>
+
+@code {
+    private string _username = "";
+    private string _password = "";
+    private string? _error;
+    private bool _configured = true;
+    private bool _busy;
+
+    /// <summary>Where to go once signed in; only a path of this agent.</summary>
+    [SupplyParameterFromQuery(Name = "next")] public string? Next { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var status = await Api.GetLoginStatusAsync();
+            _username = status.Username;
+            _configured = status.Configured;
+            if (status.SignedIn)
+            {
+                Continue();
+            }
+            else if (!status.Configured)
+            {
+                _error = status.Local
+                    ? "This agent has no Internet login yet. Set the username and password in Settings → Internet login; no login is asked on this machine."
+                    : "This agent has no Internet login yet. On the agent's machine, open Settings (no login is asked there), set the Internet username and password, then come back to this address.";
+            }
+        }
+        catch (Exception ex) when ((ex is AgentApiException or HttpRequestException) && !Link.Online && Servers.Supported)
+        {
+            // Nothing of the agent answered: it is stopped, or a gateway in front
+            // of it is answering for it (an address whose agent was down said
+            // "Bad Gateway", which reads as a refused password). The password is
+            // not the matter; the address is.
+            _configured = false;
+            _error = $"The agent at {Servers.Current} does not answer. Add the agent's address below (its LAN address or the public one) and connect to it.";
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task SignInAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            var result = await Api.LoginAsync(_username, _password);
+            Session.Value = result.Token;
+            Tokens.Save(result.Token);
+            Continue();
+        }
+        catch (Exception ex) when ((ex is AgentApiException or HttpRequestException) && !Link.Online)
+        {
+            // The agent is not there to take a password; saying "Bad Gateway" here
+            // would read as the password being wrong.
+            _error = $"The agent at {Http.BaseAddress} does not answer, so there is nothing to sign in to yet. Check the address below, or that the agent is running.";
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _password = "";
+            _busy = false;
+        }
+    }
+
+    private void Continue()
+    {
+        var next = Next is { Length: > 0 } value && value.StartsWith('/') && !value.StartsWith("//", StringComparison.Ordinal) ? value : "/";
+        Navigation.NavigateTo(next.TrimStart('/'), replace: true);
+    }
+}

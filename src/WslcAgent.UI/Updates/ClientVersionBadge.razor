@@ -1,0 +1,43 @@
+@* The installed client version — on the
+   System card and the System page, no longer beside the brand, where it
+   pushed the title bar off a phone's width —
+   green while it matches the agent's package, yellow and underlined
+   when a newer package exists (click installs it); grey while the agent has
+   not answered, and green or grey a tap asks the agent again, forgotten
+   versions included, and says what it has. Nothing in the browser. *@
+@implements IDisposable
+@inject ClientUpdateChecker Checker
+@inject IClientUpdates Client
+@inject ISnackbar Snackbar
+
+@if (Client.Supported && Client.InstalledVersion.Length > 0)
+{
+    <MudText Typo="Typo.caption" Color="@Color" Style="@Style" title="@Title" @onclick="InstallAsync">@Client.InstalledVersion</MudText>
+}
+
+@code {
+    private Color Color => Checker.IsCurrent switch
+    {
+        true => Color.Success,
+        false => Color.Warning,
+        null => Color.Default,
+    };
+
+    private string Style => Checker.IsCurrent == false ? "text-decoration: underline; cursor: pointer;" : "";
+
+    private string Title => Checker.IsCurrent switch
+    {
+        false when Checker.Package is not null => $"New version available ({Checker.Package.Version}). Click to install.",
+        true => $"Installed client version, the agent's latest ({Checker.Package?.Version}). Click to ask again.",
+        _ => "Installed client version. Click to ask the agent for its latest.",
+    };
+
+    protected override void OnInitialized() => Checker.Changed += OnChanged;
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    /// <summary>Amber: the same install the offer's toast runs, counted in the same toast. Otherwise: the agent asked again, and its answer said.</summary>
+    private Task InstallAsync() => UpdateFlow.CheckOrInstallAsync(Snackbar, Checker);
+
+    public void Dispose() => Checker.Changed -= OnChanged;
+}

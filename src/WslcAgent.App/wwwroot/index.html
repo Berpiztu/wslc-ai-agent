@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>WSLC AI Client</title>
+    <base href="/" />
+    <!-- Same UI assets as the browser build; MudBlazor ships its own. -->
+    <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
+    <link href="_content/WslcAgent.UI/wslc-agent-ui.css" rel="stylesheet" />
+    <link href="_content/Berpiztu.Dashboard/berpiztu-dashboard.css" rel="stylesheet" />
+    <link rel="stylesheet" href="app.css" />
+    <link rel="icon" href="data:,">
+</head>
+
+<body>
+    <div id="app">
+        <!-- Boot splash: the same one the browser client shows (its rules live in
+             wslc-agent-ui.css). Nothing is downloaded here, so the bar waits
+             instead of filling, and the word sits under it, centred, rather than
+             in the corner of an empty page. -->
+        <div class="wslc-splash" style="--blazor-load-percentage-text: 'Starting…'">
+            <svg class="wslc-splash-glyph" viewBox="0 0 456 456" aria-hidden="true">
+                <g fill="none" stroke="#e2e8f0" stroke-width="22" stroke-linejoin="round" stroke-linecap="round">
+                    <path d="M228 78 L352 150 V306 L228 378 L104 306 V150 Z" />
+                    <path d="M104 150 L228 222 L352 150" />
+                    <path d="M228 222 V378" />
+                </g>
+                <g fill="none" stroke="#818cf8" stroke-width="22" stroke-linejoin="round" stroke-linecap="round">
+                    <path d="M140 262 L172 286 L140 310" />
+                    <path d="M186 322 H226" />
+                </g>
+            </svg>
+            <div class="wslc-splash-title">WSLC AI Client</div>
+            <div class="wslc-splash-bar"><div class="wslc-splash-fill wslc-splash-waiting"></div></div>
+            <div class="wslc-splash-text"></div>
+        </div>
+    </div>
+
+    <!-- No #blazor-error-ui: an error nothing caught goes to a toast (UnhandledErrors, read from the web view renderer's log), not to Blazor's yellow bar. -->
+    <script src="_framework/blazor.webview.js" autostart="false"></script>
+    <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+    <script src="_content/WslcAgent.UI/wslc-agent-ui.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,362 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "WSLC AI Agent — control plane",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1040,
+      560
+    ],
+    "views": [
+      {
+        "id": "client-to-wslc",
+        "label": "Client → wslc",
+        "focus": [
+          "clients",
+          "api",
+          "wslc",
+          "runtime"
+        ],
+        "note": "One Blazor UI, in the browser or inside the MAUI app → agent /api/v1 → local wslc in the user session."
+      },
+      {
+        "id": "llm-mcp",
+        "label": "LLM agent → MCP",
+        "focus": [
+          "llm",
+          "vps",
+          "mcp",
+          "api"
+        ],
+        "note": "The wslc skill drives MCP tools at /api/v1/mcp, direct or through a public host's forward; tools call the same services in process."
+      },
+      {
+        "id": "packaging",
+        "label": "Packaging ports",
+        "focus": [
+          "api",
+          "mcp",
+          "clients",
+          "vps"
+        ],
+        "note": "Same wslc-ai-agent.exe: installed 8069 (per-user logon task), development 8070 (start-agent.ps1)."
+      },
+      {
+        "id": "terminal",
+        "label": "Remote terminal",
+        "focus": [
+          "clients",
+          "api",
+          "terminal",
+          "wslc",
+          "runtime"
+        ],
+        "note": "Host shell and any container's shell in the app: xterm.js, a WebSocket, a ConPTY on the agent. The whole of it: Terminal → Architecture."
+      },
+      {
+        "id": "remote-browse",
+        "label": "Remote browse",
+        "focus": [
+          "clients",
+          "api",
+          "hostbrowser",
+          "runtime"
+        ],
+        "note": "Playwright + host Edge; screencast pane on the client. Networks → Architecture shows the other way to a container's page."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "vps",
+      "type": "cloud",
+      "label": "Public host",
+      "sublabel": "TLS → loopback",
+      "pos": [
+        40,
+        60
+      ],
+      "size": [
+        140,
+        56
+      ],
+      "tag": "optional"
+    },
+    {
+      "id": "clients",
+      "type": "frontend",
+      "label": "Clients",
+      "sublabel": "Blazor UI · PWA + MAUI",
+      "pos": [
+        40,
+        200
+      ],
+      "size": [
+        140,
+        64
+      ],
+      "tag": "/api/v1"
+    },
+    {
+      "id": "llm",
+      "type": "external",
+      "label": "LLM agent",
+      "sublabel": "Hermes · Claude Code",
+      "pos": [
+        40,
+        340
+      ],
+      "size": [
+        140,
+        64
+      ],
+      "tag": "wslc skill"
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "Agent API",
+      "sublabel": "ASP.NET Core /api/v1",
+      "pos": [
+        260,
+        200
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "tag": "8069 / 8070"
+    },
+    {
+      "id": "mcp",
+      "type": "backend",
+      "label": "MCP endpoint",
+      "sublabel": "/api/v1/mcp · C# SDK",
+      "pos": [
+        260,
+        340
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "tag": "tools"
+    },
+    {
+      "id": "hostbrowser",
+      "type": "backend",
+      "label": "Host browser",
+      "sublabel": "Playwright + Edge",
+      "pos": [
+        500,
+        420
+      ],
+      "size": [
+        160,
+        56
+      ],
+      "tag": "CDP"
+    },
+    {
+      "id": "policies",
+      "type": "database",
+      "label": "Restart policies",
+      "sublabel": "restart-policies.json",
+      "pos": [
+        500,
+        60
+      ],
+      "size": [
+        150,
+        56
+      ],
+      "tag": "owned"
+    },
+    {
+      "id": "wslc",
+      "type": "external",
+      "label": "wslc CLI",
+      "sublabel": "Microsoft WSLC",
+      "pos": [
+        500,
+        200
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "runtime",
+      "type": "cloud",
+      "label": "Containers",
+      "sublabel": "Hyper-V utility VM",
+      "pos": [
+        720,
+        200
+      ],
+      "size": [
+        160,
+        64
+      ]
+    },
+    {
+      "id": "terminal",
+      "type": "backend",
+      "label": "Terminals",
+      "sublabel": "host shell · wslc exec",
+      "pos": [
+        720,
+        60
+      ],
+      "size": [
+        160,
+        56
+      ],
+      "tag": "xterm.js"
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Windows host (user session)",
+      "wraps": [
+        "api",
+        "mcp",
+        "hostbrowser",
+        "wslc",
+        "policies",
+        "terminal"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "wslc-ai-agent.exe (.NET)",
+      "wraps": [
+        "api",
+        "mcp"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "clients-to-api",
+      "from": "clients",
+      "to": "api",
+      "label": "HTTP /api/v1",
+      "variant": "emphasis"
+    },
+    {
+      "id": "llm-to-mcp",
+      "from": "llm",
+      "to": "mcp",
+      "label": "MCP · direct or via forward",
+      "variant": "emphasis",
+      "labelAt": [
+        220,
+        418
+      ]
+    },
+    {
+      "id": "vps-to-api",
+      "from": "vps",
+      "to": "api",
+      "label": "reverse forward",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "mcp-to-api",
+      "from": "mcp",
+      "to": "api",
+      "label": "tools share the API's services",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "api-to-wslc",
+      "from": "api",
+      "to": "wslc",
+      "label": "local wslc"
+    },
+    {
+      "id": "wslc-to-runtime",
+      "from": "wslc",
+      "to": "runtime",
+      "label": "run / exec"
+    },
+    {
+      "id": "api-to-hostbrowser",
+      "from": "api",
+      "to": "hostbrowser",
+      "label": "browse WS",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "hostbrowser-to-runtime",
+      "from": "hostbrowser",
+      "to": "runtime",
+      "label": "127.0.0.1:port",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "bottom"
+    },
+    {
+      "id": "api-to-policies",
+      "from": "api",
+      "to": "policies",
+      "label": "reconcile",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "left"
+    },
+    {
+      "id": "api-to-terminal",
+      "from": "api",
+      "to": "terminal",
+      "label": "exec stream WS",
+      "fromSide": "top",
+      "toSide": "top"
+    },
+    {
+      "id": "terminal-to-runtime",
+      "from": "terminal",
+      "to": "runtime",
+      "label": "wslc exec -it",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "One code base",
+      "items": [
+        "One Blazor UI, compiled once: WebAssembly inside the agent, the same components in the Windows and Android apps",
+        "LLM agents: wslc skill + MCP tools; tools and endpoints share one service layer"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Agent",
+      "items": [
+        "One .NET process: UI + API + MCP, user session · 8069 logon task, 8070 development",
+        "Terminals in the app, host shell or any container: xterm.js ↔ WebSocket ↔ ConPTY; at the agent's own machine, Windows Terminal"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Runtime",
+      "items": [
+        "wslc drives WSLC (not Docker)",
+        "Destructive MCP tools: two-step confirm",
+        "A container's page: see Networks → Architecture"
+      ]
+    }
+  ]
+}

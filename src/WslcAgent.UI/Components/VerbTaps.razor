@@ -1,0 +1,13 @@
+@* A row of verbs on a dashboard card: a tap on a
+   button runs it and goes no further, so the card is not selected by it. As
+   wide as the footer, so the row's two groups stand at its two ends as in the
+   list's card. The verbs are View's: in Edit they are inert, and the whole
+   footer answers to the hand that arranges it. *@
+
+<div class="wslc-verb-taps" @onclick:stopPropagation="true">
+    @ChildContent
+</div>
+
+@code {
+    [Parameter, EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
+}

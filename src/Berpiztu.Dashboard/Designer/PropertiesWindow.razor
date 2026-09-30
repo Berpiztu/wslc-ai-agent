@@ -1,0 +1,372 @@
+@* The properties window: small, moved
+   by its title so it is put where it hides nothing being worked on, and
+   there for as long as the dashboard is designed, with nothing to open. It
+   shows the object selected, and each change applies as it is made — there
+   is no Save; the last change is undone from its title. The
+   source's field is the application's (ISourceFamily.Field), so it is drawn
+   by the application's rules and opens its one picker. The other fields are
+   MudBlazor's, as they come. *@
+@using static Berpiztu.Dashboard.Designer.PropertyChoices
+@inject ObjectCatalogue Catalogue
+@inject SourceFamilies Families
+@inject ISnackbar Snackbar
+
+@* Outlined as its fields are: the object's
+   name on its top line, which moves the window, and undo and remove on its
+   bottom line at its right. *@
+<FloatingWindow Name="@Name" Class="bz-dash-properties">
+    <ChildContent>
+        @if (Selected is { } shown && Kind is { } kind)
+        {
+            @* Five of the canvas's cells wide (for an alignment and its margin
+               in one row and the five keys of its bottom line), and as tall as its fields, with no note
+               reserved under any of them: the words and the icons say what they
+               are, and each carries its tooltip. *@
+            <MudStack Spacing="3" Class="mt-2">
+                <PropertySection Name="Object">
+                    @* Each property in the canvas's own cells, one high, its word
+                       inside its own outlined field, and no note under it: the source across all
+                       four cells, its values read from its family (ListField);
+                       Col and Row two each side by side; Size across all four. *@
+                    <div class="bz-dash-props">
+                        @if (kind.HasSource && Families.Find(kind.About.Source) is { } family)
+                        {
+                            <ListField T="string" Value="@(kind.SourceOf(shown) ?? "")" ValueChanged="@(source => SetAsync(shown with { Source = kind.Kept(source) }))"
+                                       Load="family.ListAsync" Label="@family.Label" Class="bz-dash-prop-wide"
+                                       EmptyText="@($"No {family.Noun} to read")" Title="@($"The {family.Noun} this object reads")" />
+                        }
+                        @if (kind.About.Writes)
+                        {
+                            <TextField T="string" Value="@(shown.Text ?? "")" ValueChanged="@(text => SetAsync(shown with { Text = text is { Length: > 0 } ? text : null }))"
+                                       Label="Text" Class="bz-dash-prop-wide" Title="What it says: a label, a note, anything" />
+                        }
+                        <TextField T="int" Value="shown.W" ValueChanged="@(w => SetCellsAsync(shown with { W = w }))" Label="Col"
+                                   Title="@($"Cells side by side, up to the dashboard's edge: {Document.Layout.Columns - shown.X} from here")" />
+                        <TextField T="int" Value="shown.H" ValueChanged="@(h => SetCellsAsync(shown with { H = h }))" Label="Row"
+                                   Title="Cells one under the other" />
+                    </div>
+                    @* A piece that lives only in its card is hidden rather than
+                       removed, and shown again here. *@
+                    @if (Document.CardOnly(shown))
+                    {
+                        <CheckRow Value="@(shown.Hidden != true)" ValueChanged="@(on => SetAsync(shown with { Hidden = on ? null : true }))"
+                                  Label="Shown" Class="mt-1" Title="Shown on the dashboard, or hidden" />
+                    }
+                    @* How it looks: its type size, its colours, its alignment and margins,
+                       the fields several objects chosen together share too. *@
+                    <LookProperties Document="Document" Objects="@([shown])" Class="mt-2" />
+                </PropertySection>
+                @* Each part of what it draws, under its name: whether it is shown, where the object lets it be hidden,
+                   its size on top of the object's, and a part of text its colour
+                   and whether it is bold, each showing the object's design until
+                   it is changed. *@
+                @foreach (var part in kind.Parts)
+                {
+                    var style = shown.PartOf(part.Key);
+                    <PropertySection Name="@part.Label">
+                        <div class="bz-dash-props">
+                            @if (part.Optional)
+                            {
+                                <div class="bz-dash-prop-toggle">
+                                    <MudToggleIconButton Toggled="@(style.Hidden != true)"
+                                                         ToggledChanged="@(shownPart => SetAsync(shown.WithPart(part.Key, style with { Hidden = Kept(!shownPart, false) })))"
+                                                         Icon="@Icons.Material.Filled.VisibilityOff" ToggledIcon="@Icons.Material.Filled.Visibility"
+                                                         Size="Size.Small" ToggledColor="Color.Primary" Variant="Variant.Outlined"
+                                                         title="@($"{part.Label}: shown or hidden")" />
+                                </div>
+                            }
+                            <ChoiceField T="TypeSize" Value="@(style.Size ?? TypeSize.Medium)"
+                                         ValueChanged="@(size => SetAsync(shown.WithPart(part.Key, style with { Size = Kept(size, TypeSize.Medium) })))"
+                                         Options="SizeOptions" Label="Size" Title="@($"{part.Label}: a step down or up from the object's size")" />
+                            @if (part.Line)
+                            {
+                                <ChoiceField T="TypeSize" Value="@(style.Thickness ?? TypeSize.Medium)"
+                                             ValueChanged="@(thickness => SetAsync(shown.WithPart(part.Key, style with { Thickness = Kept(thickness, TypeSize.Medium) })))"
+                                             Options="SizeOptions" Label="Thickness" Title="@($"{part.Label}: its line thinner or thicker than designed")" />
+                            }
+                            @if (part.Text)
+                            {
+                                <div class="bz-dash-prop-toggle">
+                                    <MudToggleIconButton Toggled="@(style.Bold ?? part.Bold)"
+                                                         ToggledChanged="@(bold => SetAsync(shown.WithPart(part.Key, style with { Bold = Kept(bold, part.Bold) })))"
+                                                         Icon="@Icons.Material.Filled.FormatBold" ToggledIcon="@Icons.Material.Filled.FormatBold"
+                                                         Size="Size.Small" ToggledColor="Color.Primary" Variant="Variant.Outlined"
+                                                         title="@($"{part.Label}: bold")" />
+                                </div>
+                                <ChoiceField T="ThemeColor" Value="@(style.Color ?? ThemeColor.Inherited)"
+                                             ValueChanged="@(color => SetAsync(shown.WithPart(part.Key, style with { Color = Kept(color, ThemeColor.Inherited) })))"
+                                             Options="ColorOptions" Label="Colour" Class="bz-dash-prop-wide"
+                                             Title="@($"{part.Label}: its colour; Inherited is the object's design")" />
+                            }
+                        </div>
+                    </PropertySection>
+                }
+                @* Each measure it can raise an alarm on: whether it is on,
+                   and the percent past which it turns red and blinks. *@
+                @foreach (var measure in kind.Alarms)
+                {
+                    var alarm = kind.AlarmOf(shown, measure);
+                    <PropertySection Name="@($"Alarm: {measure.Label}")">
+                        <div class="bz-dash-props">
+                            <ChoiceField T="int" Value="alarm.Threshold" ValueChanged="@(threshold => SetAsync(shown.WithAlarm(alarm with { Threshold = threshold })))"
+                                         Options="ThresholdOptions" Label="Threshold" Class="bz-dash-prop-wide"
+                                         Title="@($"{measure.Label}: past this percent the object turns red and blinks")" />
+                        </div>
+                        <CheckRow Value="@(!alarm.Off)" ValueChanged="@(on => SetAsync(shown.WithAlarm(alarm with { Off = !on })))"
+                                  Label="On" Class="mt-1" Title="@($"{measure.Label}: the alarm is watched, or off with its threshold kept")" />
+                    </PropertySection>
+                }
+            </MudStack>
+        }
+        else if (Document.Chosen.Count > 1)
+        {
+            @* Several objects chosen: carried
+               together by a drag on any of them, made a group by Group. *@
+            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">Drag any of them to move them all together; Group (Ctrl+G) keeps them together in one frame.</MudText>
+            @* What they share, set on them all at once, a card chosen counting
+               as its objects. *@
+            <div class="mt-3">
+                <PropertySection Name="Every object chosen">
+                    <LookProperties Document="Document" Objects="ChosenAndTheirs" />
+                </PropertySection>
+            </div>
+        }
+        else if (Frame is { } frame)
+        {
+            @* A group taken whole: how many objects it keeps, and its frame's
+               size, which its corner on the canvas changes too. *@
+            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">@($"{Document.Layout.Members(frame.Id).Count} objects, kept together")</MudText>
+            @* A card whose pieces live only in it: each shown or hidden here. *@
+            @foreach (var piece in Document.Layout.Members(frame.Id).Where(Document.CardOnly))
+            {
+                <CheckRow Value="@(piece.Hidden != true)" ValueChanged="@(on => SetAsync(piece with { Hidden = on ? null : true }))"
+                          Label="@(Catalogue.Find(piece.Type)?.Label ?? piece.Type)" Title="Shown on the dashboard, or hidden" />
+            }
+            <div class="bz-dash-props mt-1">
+                @* What its objects read, chosen once for them all where they read one
+                   family (a card made already). *@
+                @if (GroupFamily(frame) is { } family)
+                {
+                    <ListField T="string" Value="@(GroupSource(frame) ?? "")" ValueChanged="@(source => SetGroupSourceAsync(frame, source))"
+                               Load="family.ListAsync" Label="@family.Label" Class="bz-dash-prop-wide"
+                               EmptyText="@($"No {family.Noun} to read")" Title="@($"The {family.Noun} every object of the group reads")" />
+                }
+                <TextField T="int" Value="frame.W" ValueChanged="@(w => SetFrameAsync(frame with { W = w }))" Label="Col"
+                           Title="The group's cells side by side; never fewer than its objects take" />
+                <TextField T="int" Value="frame.H" ValueChanged="@(h => SetFrameAsync(frame with { H = h }))" Label="Row"
+                           Title="The group's cells one under the other; never fewer than its objects take" />
+                @* Its card's colours, as an object's: its ground, and the text of its objects that inherit theirs. *@
+                <ChoiceField T="ThemeColor" Value="@(frame.Background ?? ThemeColors.GroupBackground)"
+                             ValueChanged="@(color => SetFrameAsync(frame with { Background = Kept(color, ThemeColors.GroupBackground) }))"
+                             Options="ColorOptions" Label="Background"
+                             Title="The colour its card is filled with; Inherited lets the page show through" />
+                <ChoiceField T="ThemeColor" Value="@(frame.Foreground ?? ThemeColors.GroupForeground)"
+                             ValueChanged="@(color => SetFrameAsync(frame with { Foreground = Kept(color, ThemeColors.GroupForeground) }))"
+                             Options="ColorOptions" Label="Foreground"
+                             Title="The colour of its text, which its objects set to Inherited take" />
+                @* How far its card stands off the page, as the Containers
+                   screen's cards do: Settings is theirs,
+                   the Settings page's, followed as it changes. *@
+                <ChoiceField T="int?" Value="frame.Elevation" ValueChanged="@(elevation => SetFrameAsync(frame with { Elevation = elevation }))"
+                             Options="ElevationOptions" Label="Elevation"
+                             Title="How far the card stands off the page; Settings is the Containers screen's cards', the Settings page's" />
+                @* Which of the view's edges the card keeps to as a fluid view
+                   widens, as its objects keep
+                   to the card's. *@
+                <ChoiceField T="HorizontalAnchor?" Value="@(frame.Anchor ?? HorizontalAnchor.Scale)"
+                             ValueChanged="@(anchor => SetFrameAsync(frame with { Anchor = anchor is { } chosen ? Kept(chosen, HorizontalAnchor.Scale) : null }))"
+                             Options="AnchorOptions" Label="Anchor"
+                             Title="As a fluid view widens: Scale spreads the card in proportion; Left or Right keeps its size and its distance to that edge of the view; Both keeps both distances and widens it" />
+            </div>
+            @* What is set once for every object of the card: shown when asked for, each change made to them
+               all in one step. *@
+            <CheckRow @bind-Value="_toEvery" Label="Apply to every object" Class="mt-1" Title="Set these properties on every object of the group at once" />
+            @if (_toEvery)
+            {
+                <LookProperties Document="Document" Objects="@Document.Layout.Members(frame.Id)" Class="mt-2" />
+            }
+        }
+        else
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">Select an object on the dashboard to see its properties here.</MudText>
+            @* Status alarms: the same list the round button's Status alarms opens. *@
+            <div class="mt-3">
+                <PropertySection Name="Status alarms">
+                    <StatusAlarmsList Document="Document" />
+                </PropertySection>
+            </div>
+        }
+    </ChildContent>
+    <Verbs>
+            <MudIconButton Icon="@Icons.Material.Filled.Undo" Size="Size.Small" Disabled="@(!Document.CanUndo)"
+                           OnClick="Document.UndoAsync" title="Undo the last change (Ctrl+Z)" />
+            <MudIconButton Icon="@Icons.Material.Filled.SettingsBackupRestore" Size="Size.Small" Disabled="@(!CanReset)"
+                           OnClick="ResetAsync" title="Reset what is selected, one object or every one chosen, to its kind's size, cells, alignment, margins, colours and parts; where it stands and what it reads kept (undo takes it back)" />
+            <MudIconButton Icon="@Icons.Material.Filled.Link" Size="Size.Small" Disabled="@(!Document.CanGroup)"
+                           OnClick="@(() => Document.GroupChosenAsync())" title="Group what is chosen, objects and groups, in one frame (Ctrl+G)" />
+            <MudIconButton Icon="@Icons.Material.Filled.LinkOff" Size="Size.Small" Disabled="@(!Document.CanUngroup)"
+                           OnClick="@(() => Document.UngroupAsync())" title="Ungroup the groups chosen: their frames go, their objects stay where they are (Ctrl+Shift+G)" />
+            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" Disabled="@(Document.Chosen.Count == 0)"
+                           OnClick="RemoveAsync" title="Remove what is selected from the dashboard, a group with every object in it (Delete)" />
+    </Verbs>
+</FloatingWindow>
+
+@code {
+    [Parameter, EditorRequired] public DashboardDocument Document { get; set; } = default!;
+
+    /// <summary>How each kind is born, which Reset brings back; none, and Reset brings back its descriptor's.</summary>
+    [Parameter] public IObjectDefaults? Defaults { get; set; }
+
+    /// <summary>The view designed, whose defaults Reset brings back.</summary>
+    [Parameter] public string View { get; set; } = DashboardView.Landscape;
+
+    private ObjectInstance? Selected => Document.SelectedObject;
+
+    /// <summary>The group taken whole, when one is.</summary>
+    private DashboardGroup? Frame => Document.SelectedFrame;
+
+    private ObjectDescriptor? Kind => Selected is { } selected ? Catalogue.Find(selected.Type) : null;
+
+    /// <summary>A field changed: applied at once, or refused when the object would not fit where it stands.</summary>
+    private async Task SetAsync(ObjectInstance changed)
+    {
+        if (!await Document.SetAsync(changed))
+        {
+            Snackbar.Add("There is no room for that: it would take cells another object stands on, or go past the dashboard's edge.", Severity.Warning);
+        }
+    }
+
+    /// <summary>
+    /// Col or Row typed: applied as it is typed, like any field. A size under
+    /// one — the field emptied on the way to another number — is let pass
+    /// without a word; one that does not fit says so.
+    /// </summary>
+    private Task SetCellsAsync(ObjectInstance changed) =>
+        changed is { W: >= 1, H: >= 1 } ? SetAsync(changed) : Task.CompletedTask;
+
+    /// <summary>The group's Col or Row typed: its frame resized, refused when it would leave one of its objects out or take cells that are not its own.</summary>
+    private async Task SetFrameAsync(DashboardGroup changed)
+    {
+        if (changed is { W: >= 1, H: >= 1 } && !await Document.SetGroupAsync(changed))
+        {
+            Snackbar.Add("There is no room for that: the group would leave one of its objects out, or take cells that are not its own.", Severity.Warning);
+        }
+    }
+
+    /// <summary>
+    /// The object selected as its kind makes it (after trying things, back to
+    /// where it started): as its default in
+    /// this view has it where one was designed; otherwise its type size, its
+    /// alignment and margins, its colours and its parts as designed, and the
+    /// cells it is dropped with where they fit. Where it stands and what it
+    /// reads stay.
+    /// </summary>
+    private ObjectInstance Reset(ObjectInstance o, ObjectDescriptor kind) =>
+        Defaults?.For(View, kind.Type) is { } designed
+            ? designed.On(o) with { W = Math.Min(designed.W, Document.Layout.Columns) }
+            : Designed(o, kind);
+
+    /// <summary>The object as its descriptor makes it, in either view, where it stands and what it reads kept.</summary>
+    private ObjectInstance Designed(ObjectInstance o, ObjectDescriptor kind) =>
+        o with
+        {
+            W = Math.Min(kind.About.Columns, Document.Layout.Columns),
+            H = kind.About.Rows,
+            Size = TypeSize.Medium,
+            Horizontal = null,
+            Vertical = null,
+            Background = null,
+            Foreground = null,
+            Parts = null,
+            MarginX = null,
+            MarginY = null,
+            Elevation = null,
+            Anchor = null,
+        };
+
+    /// <summary>
+    /// The objects Reset puts back: the one selected, or every one chosen,
+    /// those of the cards chosen included, or, a card taken with "Apply to every
+    /// object" checked, every object of it; a
+    /// card taken alone otherwise resets its own colours.
+    /// </summary>
+    private IReadOnlyList<(ObjectInstance Object, ObjectDescriptor Kind)> ToReset
+    {
+        get
+        {
+            IReadOnlyList<ObjectInstance> objects =
+                Document.SelectedObject is { } one ? [one]
+                : Document.Chosen.Count > 1 ? ChosenAndTheirs
+                : Frame is { } card && _toEvery ? Document.Layout.Members(card.Id)
+                : [];
+            return [.. objects
+                .Select(o => (Object: o, Kind: Catalogue.Find(o.Type)))
+                .Where(pair => pair.Kind is not null)
+                .Select(pair => (pair.Object, pair.Kind!))];
+        }
+    }
+
+    /// <summary>Something selected is not as its kind makes it: an object or several, or a card's colours and elevation.</summary>
+    private bool CanReset =>
+        ToReset.Any(pair => Reset(pair.Object, pair.Kind) != pair.Object)
+        || Frame is { Background: not null } or { Foreground: not null } or { Elevation: not null } or { Anchor: not null };
+
+    /// <summary>
+    /// Reset: each object as its kind makes it, in one change undo takes back
+    /// whole; their cells kept, and said so, when their kinds' would not all
+    /// fit where they stand. A card taken alone: its colours and its elevation.
+    /// </summary>
+    private async Task ResetAsync()
+    {
+        if (ToReset is { Count: > 0 } objects)
+        {
+            IReadOnlyList<ObjectInstance> reset = [.. objects.Select(pair => Reset(pair.Object, pair.Kind))];
+            if (!await Document.SetEachWhereTheyFitAsync(reset))
+            {
+                await Document.SetEachAsync([.. reset.Zip(objects, (back, was) => back with { W = was.Object.W, H = was.Object.H })]);
+                Snackbar.Add("Reset, but the cells kept: their kinds' would take cells another object stands on, or go past the dashboard's edge.", Severity.Info);
+            }
+        }
+        else if (Frame is { } frame)
+        {
+            await SetFrameAsync(frame with { Background = null, Foreground = null, Elevation = null, Anchor = null });
+        }
+    }
+
+    /// <summary>The group's properties for every object are shown ("Apply to every object" checked).</summary>
+    private bool _toEvery;
+
+    /// <summary>The objects chosen, and those of the groups chosen: what the fields of several set.</summary>
+    private IReadOnlyList<ObjectInstance> ChosenAndTheirs =>
+        [.. Document.ChosenObjects, .. Document.ChosenGroups.SelectMany(group => Document.Layout.Members(group.Id))];
+
+    /// <summary>A group's objects that read a source, with their kinds.</summary>
+    private IEnumerable<(ObjectInstance Member, ObjectDescriptor Kind)> Readers(DashboardGroup group) =>
+        Document.Layout.Members(group.Id)
+            .Select(member => (Member: member, Kind: Catalogue.Find(member.Type)))
+            .Where(reader => reader.Kind is { HasSource: true })
+            .Select(reader => (reader.Member, reader.Kind!));
+
+    /// <summary>The family a group's objects all read from; null when none reads, or they read different ones.</summary>
+    private ISourceFamily? GroupFamily(DashboardGroup group) =>
+        Readers(group).Select(reader => reader.Kind.About.Source).Distinct().ToList() is [var key] ? Families.Find(key) : null;
+
+    /// <summary>What a group's objects read, when it is one; null while they read different ones, or nothing yet.</summary>
+    private string? GroupSource(DashboardGroup group) =>
+        Readers(group).Select(reader => reader.Kind.SourceOf(reader.Member)).Distinct().ToList() is [var source] ? source : null;
+
+    /// <summary>The source chosen for a group: every object of it that reads one reads it, in one change.</summary>
+    private Task SetGroupSourceAsync(DashboardGroup group, string source) =>
+        Document.SetEachAsync([.. Readers(group).Select(reader => reader.Member with { Source = reader.Kind.Kept(source) })]);
+
+    /// <summary>What is selected removed: the objects chosen, or a group with every object in it.</summary>
+    private Task RemoveAsync() =>
+        Document.RemoveChosenAsync();
+
+    /// <summary>What the top line calls what is selected: the object's kind, "Group", how many objects are chosen, or nothing.</summary>
+    private string Name =>
+        Kind?.Label
+        ?? (Frame is not null ? "Group"
+            : Document.Chosen.Count > 1 ? $"{Document.Chosen.Count} chosen"
+            : "Properties");
+}

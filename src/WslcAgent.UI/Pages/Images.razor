@@ -1,0 +1,220 @@
+@page "/images"
+@inherits ListPageBase<ImageSummary>
+
+<PageShell Title="Images" RequiresSession="true">
+    <TopbarSearch>
+        <SearchBox @bind-Value="Search" />
+    </TopbarSearch>
+    <TopbarNav>
+        <BulkBar Count="Selected.Count">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" OnClick="@(() => BulkRemoveAsync("image", (i, ct) => Api.RemoveImageAsync(i.Reference, force: false, ct)))">Remove</MudButton>
+        </BulkBar>
+    </TopbarNav>
+    <Verbs>
+        <ImagesVerbs Search="@Search" SearchChanged="@(text => Search = text)" Changed="RefreshAsync" />
+    </Verbs>
+    <ChildContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap" Spacing="2" Class="wslc-toolbar mb-1 flex-shrink-0">
+            <PageStats>
+                <PageStat Label="Disk usage" Value="@($"{Bytes.Humanize(_aggregate.SizeBytes)} used across {_aggregate.Count} images")" />
+                <PageStat Label="Image count" Value="@($"{_aggregate.Count} images")" />
+            </PageStats>
+            <ViewModeToggle @bind-Value="View" />
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RefreshAsync" Disabled="Loading" title="Refresh" />
+        </MudStack>
+
+        @if (Error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-2 flex-shrink-0">@Error</MudAlert>
+        }
+
+        @if (View == ViewMode.Table)
+        {
+            <ListGrid TItem="ListRow<ImageSummary>" Items="Rows" Loading="Loading" Page="Page" PageChanged="p => Page = p" SortChanged="SortChanged" EmptyText="No images."
+                      MultiSelection="true" @bind-SelectedItems="Selected">
+                <Columns>
+                    <SelectColumn T="ListRow<ImageSummary>" Size="Size.Small" StickyLeft="true" HeaderClass="@GridColumn.Select" CellClass="@GridColumn.Select" />
+                    @* The dot sorts the list by state: in use first, then the rest. *@
+                    <TemplateColumn T="ListRow<ImageSummary>" Title="" Sortable="true" SortBy="@(r => r.Value.InUse ? 0 : 1)"
+                                    Resizable="false" StickyLeft="true" HeaderClass="@GridColumn.Bullet" CellClass="@GridColumn.Bullet">
+                        <CellTemplate>
+                            <StateDot Active="context.Item.Value.InUse" Title="@UsageText(context.Item.Value)" Key="@context.Item.Value.Reference" />
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <PropertyColumn T="ListRow<ImageSummary>" TProperty="string" Property="i => i.Value.Repository" Title="Name" StickyLeft="true" HeaderClass="@GridColumn.Width(26)" CellClass="@GridColumn.Width(26)">
+                        <CellTemplate>
+                            @if (PullFlow.For(_pulls, context.Item.Value) is { State: not "success" } pull)
+                            {
+                                <ProgressCell Name="@(context.Item.Value.IsDangling ? "<none>" : context.Item.Value.Repository)" Pct="pull.Pct" Status="@pull.Status" Failed="@(pull.State != "running")"
+                                              OnLog="@(() => PullFlow.ShowLogAsync(Dialogs, pull.Image, finished: pull.State != "running"))" OnCancel="@(() => CancelPullAsync(pull.Image))"
+                                              OnDismiss="@(() => DismissPullAsync(pull.Image))" />
+                            }
+                            else
+                            {
+                                @(context.Item.Value.IsDangling ? "<none>" : context.Item.Value.Repository)
+                            }
+                        </CellTemplate>
+                    </PropertyColumn>
+                    <PropertyColumn T="ListRow<ImageSummary>" TProperty="string" Property="i => i.Value.Tag" Title="Tag" StickyLeft="true" HeaderClass="@GridColumn.Width(6)" CellClass="@GridColumn.Width(6)">
+                        <CellTemplate>@Dash(context.Item.Value.Tag)</CellTemplate>
+                    </PropertyColumn>
+                    <PropertyColumn T="ListRow<ImageSummary>" TProperty="string" Property="i => i.Value.Size" Title="Size" HeaderClass="@GridColumn.Number(7)" CellClass="@GridColumn.Number(7)">
+                        <CellTemplate>@Dash(context.Item.Value.Size)</CellTemplate>
+                    </PropertyColumn>
+                    @* The same column as ever; the manifest digest rides in its
+                       tooltip, which is the only place an image's DIGEST has to
+                       be and costs the table nothing. *@
+                    <PropertyColumn T="ListRow<ImageSummary>" TProperty="string" Property="i => i.Value.Id" Title="Image ID" HeaderClass="@GridColumn.Width(13)" CellClass="@($"{GridColumn.Width(13)} mud-text-secondary")">
+                        <CellTemplate><span title="@DigestTitle(context.Item.Value)">@context.Item.Value.Id</span></CellTemplate>
+                    </PropertyColumn>
+                    <PropertyColumn T="ListRow<ImageSummary>" TProperty="string" Property="i => i.Value.CreatedAt" Title="Created" HeaderClass="@GridColumn.StretchNumber(24)" CellClass="@GridColumn.StretchNumber(24)">
+                        <CellTemplate>@Dash(context.Item.Value.CreatedSince)</CellTemplate>
+                    </PropertyColumn>
+                </Columns>
+                <Actions>
+                    <TemplateColumn T="ListRow<ImageSummary>" Title="Actions" Sortable="false" Resizable="false" DragAndDropEnabled="false" StickyRight="true" HeaderClass="@GridColumn.Actions" CellClass="@GridColumn.Actions">
+                        <CellTemplate>
+                            <ImageActions Image="context.Item.Value" Pulling="@(PullFlow.For(_pulls, context.Item.Value) is { State: not "success" })" Changed="RefreshAsync" />
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Actions>
+            </ListGrid>
+        }
+        else
+        {
+            <CardsGrid TItem="ImageSummary" Items="Visible" Loading="Loading" EmptyText="No images.">
+                <ItemTemplate Context="i">
+                    <EntityCard Title="@(i.IsDangling ? "<none>" : i.Repository)" Subtitle="@Dash(i.Tag)" AvatarColor="@(i.InUse ? Color.Success : Color.Default)" Key="@i.Reference">
+                        <HeaderActions>
+                            @if (i.InUse)
+                            {
+                                <StateChip State="in use" />
+                            }
+                        </HeaderActions>
+                        <Avatar>
+                            @if (PullFlow.For(_pulls, i) is { State: not "success" } pull)
+                            {
+                                <ProgressRing Pct="pull.Pct" Status="@pull.Status" Failed="@(pull.State != "running")"
+                                              OnLog="@(() => PullFlow.ShowLogAsync(Dialogs, pull.Image, finished: pull.State != "running"))" OnCancel="@(() => CancelPullAsync(pull.Image))"
+                                              OnDismiss="@(() => DismissPullAsync(pull.Image))" />
+                            }
+                            else
+                            {
+                                <MudAvatar Color="@(i.InUse ? Color.Success : Color.Default)" Variant="Variant.Filled">@((i.IsDangling ? "<none>" : i.Repository) is { Length: > 0 } text ? text[..1].ToUpperInvariant() : "?")</MudAvatar>
+                            }
+                        </Avatar>
+                        <ChildContent>
+                            <ImageCardBody Image="i" />
+                        </ChildContent>
+                        <Actions>
+                            <ImageActions Image="i" Pulling="@(PullFlow.For(_pulls, i) is { State: not "success" })" Changed="RefreshAsync" Shortcuts="true" />
+                        </Actions>
+                    </EntityCard>
+                </ItemTemplate>
+            </CardsGrid>
+        }
+    </ChildContent>
+</PageShell>
+
+@code {
+    private ImageAggregate _aggregate = new(0, 0);
+
+    private static readonly TimeSpan PullsEvery = TimeSpan.FromSeconds(1);
+
+    private IReadOnlyList<ImagePullState> _pulls = [];
+    private readonly HashSet<string> _reportedFailures = [];
+
+    /// <summary>Pulls still under way first, over their catalog row or as a pending row of their own.</summary>
+    protected override async Task<IReadOnlyList<ImageSummary>> LoadAsync()
+    {
+        var response = await Api.GetImagesAsync();
+        _aggregate = response.Aggregate;
+        _pulls = await Api.GetImagePullsAsync();
+        var pending = _pulls.Where(p => p.State != "success" && !response.Images.Any(row => PullFlow.For([p], row) is not null)).Select(PullFlow.PendingRow);
+        var pulling = response.Images.Where(row => PullFlow.For(_pulls, row) is { State: not "success" });
+        return [.. pulling, .. pending, .. response.Images.Where(row => PullFlow.For(_pulls, row) is null or { State: "success" })];
+    }
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        _ = FollowPullsAsync(PageClosing);
+    }
+
+    /// <summary>
+    /// A running pull is followed every second (the list itself refreshes every five): a
+    /// finished one refreshes the catalog, a failed one is reported once. A cancelled pull
+    /// is not a failure.
+    /// </summary>
+    private async Task FollowPullsAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(PullsEvery);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                if (!_pulls.Any(p => p.State == "running"))
+                {
+                    continue;
+                }
+
+                var before = _pulls;
+                try
+                {
+                    _pulls = await Api.GetImagePullsAsync(cancellationToken);
+                }
+                catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+                {
+                    // The agent did not answer this tick (the layout says so); the next asks again.
+                    continue;
+                }
+
+                foreach (var failed in _pulls.Where(p => p.State == "error" && _reportedFailures.Add(p.Image)))
+                {
+                    Snackbar.Add($"Pull failed: {failed.Error}", Severity.Error);
+                }
+
+                if (before.Any(p => p.State == "running" && _pulls.FirstOrDefault(n => n.Image == p.Image)?.State != "running"))
+                {
+                    await InvokeAsync(RefreshAsync);
+                }
+                else
+                {
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The page closed.
+        }
+    }
+
+    private async Task CancelPullAsync(string image)
+    {
+        if (await PullFlow.CancelAsync(Dialogs, Api, Snackbar, image))
+        {
+            await RefreshAsync();
+        }
+    }
+
+    private async Task DismissPullAsync(string image)
+    {
+        await PullFlow.DismissAsync(Api, Snackbar, image);
+        await RefreshAsync();
+    }
+
+    protected override bool Matches(ImageSummary i, string search) => Has(i.Repository, search) || Has(i.Tag, search) || Has(i.Id, search);
+
+    protected override string KeyOf(ImageSummary i) => i.Reference;
+
+    protected override string NameOf(ImageSummary i) => i.Reference;
+
+    private static string UsageText(ImageSummary i) => i.Containers is int n
+        ? $"in use by {n} container{(n == 1 ? "" : "s")}"
+        : "in use";
+
+    /// <summary>The id, and under it the manifest digest when the registry gave one.</summary>
+    private static string DigestTitle(ImageSummary i) =>
+        i.Digest.Length > 0 ? $"{i.Id}\n{i.Digest}" : i.Id;
+}

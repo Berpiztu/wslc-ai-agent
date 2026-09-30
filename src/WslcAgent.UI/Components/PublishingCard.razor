@@ -1,0 +1,238 @@
+@* Settings → Publish: the values this machine
+   publishes a port with — the domain, the name suffix, the nginx container,
+   the network, the map file, all five in the open — and, under them, the
+   maintenance of publications.json as the Saved logins card is for its file:
+   every name with its container and port, open, remove, add. The launch
+   form's Ports popup is the other way in; both end in the same store. *@
+@inject WslcAgentApi Api
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+@inject IJSRuntime Js
+@inject WslcAgent.UI.Links.IClientLinks Links
+
+<MudPaper Outlined="true" Class="@($"pa-4 {Class}")">
+    <MudText Typo="Typo.h6">Publishing</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+        A container port on a public name, open from anywhere: <span class="wslc-mono">https://open-webui@(_settings?.NameSuffix).@(_settings?.Domain)/</span>.
+        The nginx container on this machine reads the names from the map file and reaches each container by name on the
+        network; every name under the domain arrives through the tunnel. Nothing of the agent's stands in front of a
+        published port, so publish only what asks for its own password.
+    </MudText>
+    @if (_settings is null)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else
+    {
+        <MudTextField T="string" @bind-Value="_domain" Label="Domain" Immediate="true" Variant="Variant.Filled" Margin="Margin.Dense"
+                      HelperTextOnFocus="true" HelperText="Example: example.com — a wildcard certificate and DNS cover every name under it" autocapitalize="none" autocorrect="off" spellcheck="false" />
+        <MudTextField T="string" @bind-Value="_suffix" Label="Name suffix" Immediate="true" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2"
+                      HelperTextOnFocus="true" HelperText="Example: -home — added to a container's name, so this machine's names do not collide with another's" autocapitalize="none" autocorrect="off" spellcheck="false" />
+        @* The container and the network are picked, not typed: the same pickers the
+           launch form uses, their button inside the field (RULES.md). *@
+        <div class="wslc-field-pick has-note mt-2">
+            <MudTextField T="string" @bind-Value="_proxy" Label="nginx container" Immediate="true" Variant="Variant.Filled" Margin="Margin.Dense"
+                          HelperTextOnFocus="true" HelperText="Example: wslc-published — restarted after every change so it reads the map" autocapitalize="none" autocorrect="off" spellcheck="false" />
+            <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick a container" OnClick="PickProxyAsync" />
+        </div>
+        <div class="wslc-field-pick has-note mt-2">
+            <MudTextField T="string" @bind-Value="_network" Label="Network" Immediate="true" Variant="Variant.Filled" Margin="Margin.Dense"
+                          HelperTextOnFocus="true" HelperText="Example: published — a user-defined network, where names resolve; a published container has to be on it" autocapitalize="none" autocorrect="off" spellcheck="false" />
+            <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick a network" OnClick="PickNetworkAsync" />
+        </div>
+        <MudTextField T="string" @bind-Value="_mapFile" Label="Map file" Immediate="true" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2 wslc-mono"
+                      HelperTextOnFocus="true" HelperText="Example: C:\wslc\published.conf — the file the nginx container mounts; written whole on every change" autocapitalize="none" autocorrect="off" spellcheck="false" />
+        <MudStack Row="true" Spacing="2" Class="mt-3 mb-4">
+            <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Save" Disabled="@(_busy || !Changed)" OnClick="SaveAsync">Save publishing</MudButton>
+            @* The first use: the network and the nginx container made from these values,
+               once, as the checklist did by hand. What is there already is left alone. *@
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Build" Disabled="@(_busy || Changed)" OnClick="SetUpAsync"
+                       title="@(Changed ? "Save the values first" : "Create the network and run the nginx container from the values above, once")">Set up</MudButton>
+        </MudStack>
+
+        <MudText Typo="Typo.body1" Class="mb-1">Published names</MudText>
+        @if (_publications is null)
+        {
+            <MudProgressLinear Indeterminate="true" />
+        }
+        else if (_publications.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">No port is published yet. A container's View &amp; edit has Reverse proxy in its Ports popup; Add name below is the other way.</MudText>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Bordered="true" Striped="true" Class="mb-2">
+                <thead><tr><th>Name</th><th>Container</th><th>Port</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var publication in _publications)
+                    {
+                        <tr @key="publication.Hostname">
+                            <td class="wslc-mono">@publication.Hostname</td>
+                            <td class="wslc-mono">@publication.Container</td>
+                            <td class="wslc-mono">@publication.ContainerPort</td>
+                            <td class="text-nowrap">
+                                <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" title="@($"Open {publication.Url}")" OnClick="@(() => WslcAgent.UI.Links.ClientLink.OpenAsync(Links, Js, Snackbar, publication.Url))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="Unpublish" Disabled="_busy" OnClick="@(() => UnpublishAsync(publication))" />
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" Disabled="_busy" OnClick="AddAsync">Add name</MudButton>
+    }
+</MudPaper>
+
+@code {
+    private PublishingSettings? _settings;
+    private IReadOnlyList<Publication>? _publications;
+    private string _domain = "";
+    private string _suffix = "";
+    private string _proxy = "";
+    private string _network = "";
+    private string _mapFile = "";
+    private bool _busy;
+
+    [Parameter] public string Class { get; set; } = "";
+
+    private PublishingSettings Edited => new(_domain.Trim(), _suffix.Trim(), _proxy.Trim(), _network.Trim(), _mapFile.Trim());
+
+    private bool Changed => _settings is not null && Edited != _settings;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSettingsAsync();
+        await LoadPublicationsAsync();
+    }
+
+    private async Task LoadSettingsAsync()
+    {
+        try
+        {
+            _settings = await Api.GetPublishingSettingsAsync();
+            (_domain, _suffix, _proxy, _network, _mapFile) = (_settings.Domain, _settings.NameSuffix, _settings.ProxyContainer, _settings.Network, _settings.MapFile);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            // Refused: the sign-in screen takes over and says so itself.
+            _settings ??= new PublishingSettings("", "", "", "", "");
+            if (!ex.IsSignInRequired())
+            {
+                Snackbar.Add($"Publishing: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task LoadPublicationsAsync()
+    {
+        try
+        {
+            _publications = await Api.ListPublicationsAsync();
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _publications = [];
+            if (!ex.IsSignInRequired())
+            {
+                Snackbar.Add($"Published names: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task PickProxyAsync()
+    {
+        if (await Pickers.ContainerAsync(Dialogs, Api, _proxy) is { } picked)
+        {
+            _proxy = picked;
+        }
+    }
+
+    private async Task PickNetworkAsync()
+    {
+        if (await Pickers.NetworkAsync(Dialogs, Api, _network) is { } picked)
+        {
+            _network = picked;
+        }
+    }
+
+    /// <summary>Steps 1 and 2 of the checklist, by the agent, after saying what it is about to do.</summary>
+    private async Task SetUpAsync()
+    {
+        if (_settings is null || !await DialogFlow.ConfirmAsync(Dialogs, "Set up publishing",
+                $"Create the network '{_settings.Network}' if it is missing, write the map file at {_settings.MapFile} if it is missing, "
+                + $"and run the nginx container '{_settings.ProxyContainer}' (nginx:alpine, the map mounted read-only, port 8081 on this machine's loopback, restarted always, on that network) if it is missing?\n\n"
+                + "What is there already is left as it is. The tunnel and the VPS are not touched: docs/developer/remote-access.md.", "Set up"))
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var result = await Api.SetUpPublishingAsync();
+            Snackbar.Add(string.Join(" ", result.Notes), result.NetworkCreated || result.ProxyCreated || result.MapWritten ? Severity.Success : Severity.Info);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"Set up: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+
+        await LoadPublicationsAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        try
+        {
+            _settings = await Api.SetPublishingSettingsAsync(Edited);
+            Snackbar.Add("Publishing saved", Severity.Success);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"Publishing: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task AddAsync()
+    {
+        if (_settings is null)
+        {
+            return;
+        }
+
+        if (await DialogFlow.ShowAsync<Dialogs.PublicationDialog>(Dialogs, "Add name", new DialogParameters<Dialogs.PublicationDialog> { { d => d.Settings, _settings } }))
+        {
+            await LoadPublicationsAsync();
+        }
+    }
+
+    /// <summary>One tap, no question: it only closes a door, and publishing again is one tap too.</summary>
+    private async Task UnpublishAsync(Publication publication)
+    {
+        _busy = true;
+        try
+        {
+            await Api.UnpublishAsync(publication.Hostname);
+            Snackbar.Add($"{publication.Hostname} unpublished", Severity.Success);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"{publication.Hostname}: unpublish failed. {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+
+        await LoadPublicationsAsync();
+    }
+}

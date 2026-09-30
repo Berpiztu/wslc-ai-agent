@@ -1,0 +1,252 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "WSLC AI Agent — a container's page",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1040,
+      560
+    ],
+    "views": [
+      {
+        "id": "host-browser",
+        "label": "No setup: host browser",
+        "focus": [
+          "clients",
+          "api",
+          "hostbrowser",
+          "runtime"
+        ],
+        "note": "Open with browser: the host's Edge opens the container's page and streams it to the client. No proxy, no tunnel, no name."
+      },
+      {
+        "id": "published",
+        "label": "Published: proxy",
+        "focus": [
+          "visitor",
+          "publichost",
+          "proxy",
+          "runtime"
+        ],
+        "note": "A public name reaches the nginx proxy container, which hands the request to the container by name on a shared user network."
+      },
+      {
+        "id": "agent-map",
+        "label": "The agent writes the map",
+        "focus": [
+          "api",
+          "proxy"
+        ],
+        "note": "Settings → Publish or the launch form's Reverse proxy row: the agent writes the proxy's map and restarts it; the agent stays on loopback."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "clients",
+      "type": "frontend",
+      "label": "Clients",
+      "sublabel": "Blazor UI · PWA + MAUI",
+      "pos": [
+        40,
+        200
+      ],
+      "size": [
+        140,
+        64
+      ],
+      "tag": "/api/v1"
+    },
+    {
+      "id": "visitor",
+      "type": "external",
+      "label": "Any browser",
+      "sublabel": "one name per container",
+      "pos": [
+        40,
+        340
+      ],
+      "size": [
+        140,
+        64
+      ],
+      "tag": "HTTPS"
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "Agent",
+      "sublabel": "/api/v1 · loopback only",
+      "pos": [
+        260,
+        200
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "tag": "8069 / 8070"
+    },
+    {
+      "id": "publichost",
+      "type": "cloud",
+      "label": "Public host",
+      "sublabel": "TLS · two forwards",
+      "pos": [
+        260,
+        340
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "tag": "optional"
+    },
+    {
+      "id": "hostbrowser",
+      "type": "backend",
+      "label": "Host browser",
+      "sublabel": "Playwright + Edge",
+      "pos": [
+        500,
+        200
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "tag": "screencast"
+    },
+    {
+      "id": "proxy",
+      "type": "backend",
+      "label": "Published proxy",
+      "sublabel": "nginx container",
+      "pos": [
+        500,
+        340
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "tag": "map by name"
+    },
+    {
+      "id": "runtime",
+      "type": "cloud",
+      "label": "Containers",
+      "sublabel": "Hyper-V utility VM",
+      "pos": [
+        720,
+        200
+      ],
+      "size": [
+        160,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Windows host (user session)",
+      "wraps": [
+        "api",
+        "hostbrowser",
+        "proxy"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "clients-to-api",
+      "from": "clients",
+      "to": "api",
+      "label": "HTTP /api/v1",
+      "variant": "emphasis"
+    },
+    {
+      "id": "api-to-hostbrowser",
+      "from": "api",
+      "to": "hostbrowser",
+      "label": "browse WS",
+      "variant": "emphasis"
+    },
+    {
+      "id": "hostbrowser-to-runtime",
+      "from": "hostbrowser",
+      "to": "runtime",
+      "label": "127.0.0.1:port",
+      "variant": "emphasis",
+      "labelDy": -26
+    },
+    {
+      "id": "visitor-to-publichost",
+      "from": "visitor",
+      "to": "publichost",
+      "label": "HTTPS name",
+      "variant": "dashed"
+    },
+    {
+      "id": "publichost-to-proxy",
+      "from": "publichost",
+      "to": "proxy",
+      "label": "forward → proxy",
+      "variant": "dashed"
+    },
+    {
+      "id": "publichost-to-api",
+      "from": "publichost",
+      "to": "api",
+      "label": "forward → agent",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "api-to-proxy",
+      "from": "api",
+      "to": "proxy",
+      "label": "writes the map · restarts",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "proxy-to-runtime",
+      "from": "proxy",
+      "to": "runtime",
+      "label": "by name · shared network",
+      "fromSide": "right",
+      "toSide": "bottom"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "No setup",
+      "items": [
+        "Open with browser: the host's Edge shows the page, streamed to any client",
+        "Nothing to install, expose or name"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Published",
+      "items": [
+        "One nginx container; the agent writes its map from Settings → Publish",
+        "Containers are reached by name on a shared user network"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Public host",
+      "items": [
+        "Optional: TLS and two forwards, one to the agent, one to the proxy",
+        "The agent listens on loopback only, so the proxy needs its own"
+      ]
+    }
+  ]
+}

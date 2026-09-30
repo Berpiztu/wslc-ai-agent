@@ -1,0 +1,47 @@
+@* A container's header: the Containers list's card header — its name, its
+   image, the avatar in its state's colour, its state chip — standing alone.
+   While
+   files travel in or out of the container, the ring of its transfers takes
+   the avatar's place, as in the list. It fills its cells, as the header's
+   tinted tone does its row; its type size steps its name, its image line,
+   its chip and its avatar. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits ContainerObject
+@attribute [DashboardObject("wslc.container-header", "Container header", Group = "Container", Subgroup = "User", Icon = Icons.Material.Filled.AccountBox, Source = ContainerSourceFamily.FamilyKey, Columns = 16, Rows = 4, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Left, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both)]
+@inject TransferRows Transfers
+@inject FileTransfers Queue
+
+@if (Container is { } c)
+{
+    <div class="@SectionClass("wslc-card-part-summary")">
+        <EntityCardPart>
+            <EntityCardHeader Title="@c.Name" Subtitle="@c.Image" AvatarColor="@StateColors.For(c.State)" Key="@c.Id" Avatar="@Ring(c)">
+                <HeaderActions>
+                    @if (c.State.Length > 0)
+                    {
+                        <StateChip State="@c.State" />
+                    }
+                </HeaderActions>
+            </EntityCardHeader>
+        </EntityCardPart>
+    </div>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Follow(Transfers);
+        // The queue is this client's: a file chosen or let go changes the
+        // ring this second, not at the next read.
+        Hear(h => Queue.QueueChanged += h, h => Queue.QueueChanged -= h);
+    }
+
+    /// <summary>The transfers' ring in the avatar's place; nothing when nothing of the container's is moving or waiting.</summary>
+    private RenderFragment? Ring(ContainerSummary c) =>
+        TransferFlow.Showing(TransferFlow.For(Transfers.Value ?? [], c.Id, c.Name)) is { Count: > 0 } moving
+            ? @<ContainerTransferRing Moving="moving" Id="@c.Id" Name="@c.Name" />
+            : null;
+}

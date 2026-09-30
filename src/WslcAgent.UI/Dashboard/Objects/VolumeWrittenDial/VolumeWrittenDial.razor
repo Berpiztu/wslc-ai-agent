@@ -1,0 +1,17 @@
+@* What the containers that mount a volume have written, as its share of what
+   every container has: the Written dial of the Volumes list's card, standing
+   alone. The share's whole comes with the volume list (VolumeRows). *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@inherits VolumeObject
+@attribute [DashboardObject("wslc.volume-written", "Volume written", Group = "Volume", Subgroup = "User", Icon = Icons.Material.Filled.Upload, Source = VolumeSourceFamily.FamilyKey, Columns = 6, Rows = 6, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Right)]
+@attribute [DashboardObjectPart("ring", "Ring", Text = false, Line = true)]
+@attribute [DashboardObjectPart("figure", "Figure")]
+@attribute [DashboardObjectPart("label", "Label")]
+
+@if (Volume is { } v)
+{
+    <div class="@TypeClass">
+        <VolumeDial Volume="v" Written="true" Total="@(List?.DiskWriteBytes ?? 0)" />
+    </div>
+}

@@ -1,0 +1,14 @@
+@* The header of the File transfers card's lines (TransfersCardObject):
+   the strip that names the columns — the file,
+   and its container and progress — over the lines. Its chrome tone and
+   quieter text are the piece's own colours by default (Primary tint, Text
+   secondary), so the ones chosen in its properties are the ones drawn. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits TransfersCardObject
+@attribute [DashboardObject("wslc.host-transfers-head", "File transfers columns", Group = "System", Subgroup = "System", Icon = Icons.Material.Filled.ViewColumn, Columns = 16, Rows = 2, Fills = true, Background = ThemeColor.PrimaryTint, Foreground = ThemeColor.TextSecondary, Horizontal = HorizontalAlign.Left, Vertical = VerticalAlign.Top, CardOnly = true)]
+
+<div class="@($"{TypeClass} wslc-dash-transfers")">
+    <TransfersList Where="true" Lines="false" />
+</div>

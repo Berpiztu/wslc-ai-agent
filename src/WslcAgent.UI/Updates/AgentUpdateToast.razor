@@ -1,0 +1,56 @@
+@* The agent's announcement of its own update, on every client at once: it
+   counts the seconds down and offers Cancel,
+   which stops it for everyone. Rendered inside the snackbar by
+   AgentUpdateWatcher, which takes it down when the agent says it is over. *@
+@implements IDisposable
+
+@* Green, as good news, its Cancel centred beneath the words, outlined in the
+   toast's own white so it reads on the green. *@
+<MudStack Spacing="1" AlignItems="AlignItems.Center">
+    <MudText Typo="Typo.body2">The agent updates itself to @Version in @Left s.</MudText>
+    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Inherit" Disabled="_cancelling" OnClick="CancelAsync">Cancel</MudButton>
+</MudStack>
+
+@code {
+    private readonly CancellationTokenSource _stop = new();
+    private bool _cancelling;
+
+    [Parameter, EditorRequired] public string Version { get; set; } = "";
+
+    /// <summary>When the update starts, on this client's own clock.</summary>
+    [Parameter, EditorRequired] public DateTimeOffset StartsAt { get; set; }
+
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private int Left => (int)Math.Ceiling(Math.Max(0, (StartsAt - DateTimeOffset.Now).TotalSeconds));
+
+    protected override void OnInitialized() => _ = TickAsync(_stop.Token);
+
+    private async Task TickAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken) && Left > 0)
+            {
+                StateHasChanged();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Taken down.
+        }
+    }
+
+    private async Task CancelAsync()
+    {
+        _cancelling = true;
+        await OnCancel.InvokeAsync();
+    }
+
+    public void Dispose()
+    {
+        _stop.Cancel();
+        _stop.Dispose();
+    }
+}

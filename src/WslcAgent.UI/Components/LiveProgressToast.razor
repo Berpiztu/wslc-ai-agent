@@ -1,0 +1,15 @@
+@* What a live toast shows: the line the work is on, repainted where it stands
+   ("Stopping 2 of 5", "Downloading update… 37%"). *@
+@implements IDisposable
+
+@Progress.Text
+
+@code {
+    [Parameter, EditorRequired] public LiveProgress Progress { get; set; } = default!;
+
+    protected override void OnInitialized() => Progress.Changed += OnChanged;
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Progress.Changed -= OnChanged;
+}

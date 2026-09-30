@@ -1,0 +1,1512 @@
+@* Berpiztu's dashboard: the canvas and its
+   objects, and while it is designed the toolbox at its side and the
+   properties window over it, as the form designer of the early Visual Basic.
+
+   The canvas is a grid of square cells, as many columns as the layout says,
+   the rows following from its width. Objects never overlap: a move, a
+   resize or a drop onto cells another object takes is refused, and while it
+   is carried the place it would take is shown in the error colour.
+
+   Groups: an object let go on another, both
+   standing alone, makes a group of the two — the one that was there stays,
+   the one dropped goes beside it, and a frame is drawn round them. A group
+   then works as a card: a press anywhere on it takes it
+   whole and a drag moves it whole, its objects included; its corner sizes
+   it; once it is taken, a tap (a press let go without moving) on one of its
+   objects gives that object the focus, and the object then moves inside the
+   frame, until a tap on it again gives the focus back to the group. Carried wholly out of the frame it leaves the
+   group, and a group left with one object is a group no more. An object let
+   go on a group joins it. Out of design the frame is drawn as a card.
+
+   Every pointer is followed in C#, JavaScript only where C# cannot: the canvas and the toolbox
+   are measured when a drag begins and keep the pointer until it ends
+   (DashboardInterop), and the cell under the pointer is worked out here. *@
+@implements IAsyncDisposable
+@inject ObjectCatalogue Catalogue
+@inject IEnumerable<IDashboardTemplate> Templates
+@inject SourceFamilies Families
+@inject DashboardInterop Interop
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+<CascadingValue Value="_document" IsFixed="true">
+    <div class="@($"bz-dash-designer{(Designing ? " bz-dash-designing" : Framed ? " bz-dash-fitted" : "")}")" style="@DesignerStyle" data-bz-view="@(Framed ? View : null)">
+        <div class="@FrameClass" style="@CanvasFrameStyle" @ref="_frame">
+            <div class="@CanvasClass" @ref="_canvas" tabindex="0" style="@CanvasStyle"
+                 @onpointerdown="PressCanvasAsync" @onpointermove="Follow" @onpointerup="ReleaseAsync" @onpointercancel="Abandon" @onwheel="Wheeled" @onkeydown="KeyAsync"
+                 @onclick="TapFloorAsync">
+                <div class="bz-dash-cell-probe" @ref="_cellProbe"></div>
+                @* The frames first, so their objects stand over them. *@
+                @foreach (var group in _document.Layout.Groups)
+                {
+                    var frame = ShownFrame(group);
+                    <div class="@GroupClass(frame)" style="@FrameStyle(frame)" @key="group.Id"
+                         @onpointerdown="@(pointer => PressFrameAsync(group, pointer))" @onpointerdown:stopPropagation="true"
+                         @onclick="@(() => TapAsync(group.Id))" @onclick:stopPropagation="true"
+                         @onpointerenter="@(() => Hover(group.Id))" @onpointerleave="@(() => Hover(null))">
+                    </div>
+                }
+                @* A hidden piece is not drawn, in design or out of it; its card's properties show it again. *@
+                @foreach (var instance in _document.Layout.Objects.Where(o => o.Hidden != true))
+                {
+                    if (Catalogue.Find(instance.Type) is not { } kind || (!Designing && Unset(kind, instance)))
+                    {
+                        continue;
+                    }
+
+                    var shown = Shown(instance);
+                    <div class="@ObjectClass(shown, kind)" style="@ObjectStyle(shown, kind)" @key="instance.Id"
+                         @onpointerdown="@(pointer => PressObjectAsync(instance, pointer))" @onpointerdown:stopPropagation="true"
+                         @onclick="@(() => TapAsync(instance.Group ?? instance.Id))" @onclick:stopPropagation="true"
+                         @onpointerenter="@(() => Hover(instance.Group ?? instance.Id))" @onpointerleave="@(() => Hover(null))">
+                        <div class="@(kind.About.Fills ? "bz-dash-content bz-dash-fill" : "bz-dash-content")">
+                            @if (Unset(kind, instance))
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@($"{kind.Label}: choose its {Families.Find(kind.About.Source)?.Noun ?? "source"}")</MudText>
+                            }
+                            else
+                            {
+                                <DynamicComponent Type="kind.Component" Parameters="@Parameters(instance)" @ref="_drawn[instance.Id]" />
+                            }
+                        </div>
+                        @if (Designing && instance.Id == _document.Selected)
+                        {
+                            <div class="bz-dash-handle" title="Drag to resize"
+                                 @onpointerdown="@(pointer => BeginObjectAsync(instance, pointer, resizing: true))" @onpointerdown:stopPropagation="true">
+                                <MudIcon Icon="@Icons.Material.Filled.SouthEast" Size="Size.Small" />
+                            </div>
+                        }
+                    </div>
+                }
+                @* The taken group's handle is drawn after its objects, over them: an object in
+                   the frame's corner would otherwise stand on it and take the press. *@
+                @if (Designing && _document.SelectedFrame is { } taken)
+                {
+                    <div class="bz-dash-frame-handle" style="@Area(ShownFrame(taken).Box)">
+                        <div class="bz-dash-handle" title="Drag to resize"
+                             @onpointerdown="@(pointer => BeginGroupAsync(taken, pointer, resizing: true))" @onpointerdown:stopPropagation="true">
+                            <MudIcon Icon="@Icons.Material.Filled.SouthEast" Size="Size.Small" />
+                        </div>
+                    </div>
+                }
+                @if (_marquee is { } marquee)
+                {
+                    <div class="bz-dash-marquee" style="@Area(marquee.Box)"></div>
+                }
+                @if (_carried is { Ghost: { } ghost })
+                {
+                    <div class="@($"bz-dash-ghost{(_document.Layout.Fits(ghost) ? "" : " bz-dash-blocked")}")" style="@Area(ghost.Box)"></div>
+                }
+            </div>
+        </div>
+        @* A cell at its own size, out of the canvas the zoom scales: what the
+           zoom that fits the view is worked out from. *@
+        <div class="bz-dash-cell-probe" @ref="_baseProbe"></div>
+        @if (Designing)
+        {
+            @if (Toolbox)
+            {
+                <Toolbox Entries="Entries" Carrying="@(_carried is not null)" Anchor="@(() => _frame)" OnTake="TakeAsync" OnCarry="Carry" OnRelease="DropAsync" Header="@(Framed ? CanvasSize : null)" />
+            }
+            <PropertiesWindow Document="_document" Defaults="Defaults" View="@View" />
+        }
+    </div>
+</CascadingValue>
+
+@code {
+    /// <summary>How far the pointer travels before a press on the toolbox is a carry and not a tap.</summary>
+    private const double CarryDistance = 4;
+
+    /// <summary>Rows kept free under the lowest object while it is designed, so there is always somewhere to drag to; out of design the canvas ends with its objects.</summary>
+    private const int RowsBelow = 12;
+
+    private DashboardDocument _document = default!;
+    /// <summary>The canvas's frame, whose top-left corner the toolbox first stands in.</summary>
+    private ElementReference _frame;
+
+    private ElementReference _canvas;
+
+    /// <summary>One cell, measured with the canvas: what a cell is on the screen, whatever the zoom.</summary>
+    private ElementReference _cellProbe;
+
+    /// <summary>One cell at its own size, out of the canvas the zoom scales: what the zoom that fits is worked out from.</summary>
+    private ElementReference _baseProbe;
+
+    /// <summary>A cell's side on the screen, measured when the drag began.</summary>
+    private double _cell;
+
+    /// <summary>The dashboard has been read, so the canvas drawn is its own and can be measured.</summary>
+    private bool _loaded;
+
+    /// <summary>The canvas's box when the drag under way began.</summary>
+    private ScreenBox? _box;
+
+    /// <summary>
+    /// An object on the canvas being moved or resized: as it was, the cell the
+    /// pointer took it at, where it would stand now, and what a drop there would
+    /// make — carried over another object standing alone, that object, which the
+    /// two would make a group with; carried wholly into a group's frame, that
+    /// group, which it would join where it is. <paramref name="BackToGroup"/>:
+    /// the object was already the one selected in its group, so a press let go
+    /// without moving gives the focus back to the group.
+    /// </summary>
+    private sealed record ObjectDrag(bool Resizing, ObjectInstance Origin, int Column, int Row, ObjectInstance Preview, ObjectInstance? Target, DashboardGroup? Joining, bool BackToGroup);
+
+    private ObjectDrag? _drag;
+
+    /// <summary>
+    /// A group being moved or resized: as it was, the cell the pointer took it
+    /// at, and where it would stand now. <paramref name="Tapped"/>: the object
+    /// of the group the press fell on while the group was already taken, which
+    /// a press let go without moving gives the focus to.
+    /// </summary>
+    private sealed record GroupDrag(bool Resizing, DashboardGroup Origin, int Column, int Row, DashboardGroup Preview, ObjectInstance? Tapped);
+
+    private GroupDrag? _groupDrag;
+
+    /// <summary>
+    /// What is chosen — objects standing alone and whole groups — carried
+    /// together: their ids, the box round all of them (which keeps them on the
+    /// canvas together), the cell the pointer took them at, and how far they
+    /// have been carried. A press let go without moving is a tap, not a drag,
+    /// and does what <paramref name="Tap"/> says with what it fell on
+    /// (<paramref name="Pressed"/>, an object's id or a group's).
+    /// </summary>
+    private sealed record ManyDrag(IReadOnlyList<string> Ids, CellBox Bounds, int Column, int Row, int Dx, int Dy, ManyTap Tap, string Pressed)
+    {
+        /// <summary>Whether this object is carried: chosen itself, or in a group that is.</summary>
+        public bool Carries(ObjectInstance o) => Ids.Contains(o.Id) || (o.Group is { } g && Ids.Contains(g));
+    }
+
+    /// <summary>What a tap does on one of several chosen.</summary>
+    private enum ManyTap
+    {
+        /// <summary>Nothing more: Ctrl added it as it was pressed.</summary>
+        None,
+
+        /// <summary>Ctrl on one already chosen: it is taken back.</summary>
+        TakeBack,
+
+        /// <summary>No Ctrl: it alone stays chosen.</summary>
+        KeepOnly,
+    }
+
+    private ManyDrag? _many;
+
+    /// <summary>
+    /// A rectangle drawn on the canvas's floor to choose what it touches: the cell it began at, the cells it covers
+    /// now, and whether Ctrl was held, which adds its catch to what was chosen.
+    /// </summary>
+    private sealed record Marquee(int Column, int Row, CellBox Box, bool Adding);
+
+    private Marquee? _marquee;
+
+    /// <summary>A kind taken from the toolbox: where it was pressed, whether it has been carried, and the place it would take on the canvas.</summary>
+    private sealed record Carried(ToolboxEntry Entry, double X, double Y, bool Moved, ObjectInstance? Ghost);
+
+    private Carried? _carried;
+
+    /// <summary>The toolbox's entries, worked out once.</summary>
+    private IReadOnlyList<ToolboxEntry>? _entries;
+
+    /// <summary>Where the dashboard is kept: the application's.</summary>
+    [Parameter, EditorRequired] public IDashboardStore Store { get; set; } = default!;
+
+    /// <summary>
+    /// Where what is designed is kept until the page's Save (<see cref="DashboardDocument"/>):
+    /// the device's, for a dashboard; none, and every change is kept in the
+    /// store at once — the board of every object's defaults.
+    /// </summary>
+    [Parameter] public IDashboardStore? Draft { get; set; }
+
+    /// <summary>
+    /// A dashboard with views: in design its view stands in a frame of the
+    /// view's size, set at the toolbox's top; out of design that view is
+    /// zoomed to fit the screen. Any other board — the objects' defaults, the
+    /// agent's System card — lays its objects out unframed.
+    /// </summary>
+    [Parameter] public bool Framed { get; set; }
+
+    /// <summary>
+    /// How a framed dashboard's view is fitted to a screen of another aspect,
+    /// out of design: whole, filling it, or stretched to it; null while the
+    /// application has not read it yet, when the view is not shown at all, so
+    /// it is painted once, as it is kept, and never first as it is not.
+    /// </summary>
+    [Parameter] public ViewFit? Fitting { get; set; }
+
+    /// <summary>
+    /// The application's elevation for its cards: what a card with none of its
+    /// own stands at (<see cref="DashboardGroup.Elevation"/>); none on a board
+    /// that is not given one, whose cards stand flat.
+    /// </summary>
+    [Parameter] public int CardElevation { get; set; }
+
+    /// <summary>What is designed became unsaved, or saved: the page offers Save and Discard, and asks before design is left.</summary>
+    [Parameter] public EventCallback DraftChanged { get; set; }
+
+    /// <summary>Being designed: the toolbox and the properties window are there, and the hand moves the objects.</summary>
+    [Parameter] public bool Designing { get; set; }
+
+    /// <summary>The toolbox is offered in design; false on a board whose objects are all there already (the board of every object's default).</summary>
+    [Parameter] public bool Toolbox { get; set; } = true;
+
+    /// <summary>How each kind is born (<see cref="IObjectDefaults"/>): an object dropped takes it and Reset brings it back; none, and each is born as its descriptor says.</summary>
+    [Parameter] public IObjectDefaults? Defaults { get; set; }
+
+    /// <summary>What the objects' alarms watch (<see cref="IMeasures"/>): an object past a threshold, or the card it stands in, is marked up; none, and no alarm is raised.</summary>
+    [Parameter] public IMeasures? Measures { get; set; }
+
+    /// <summary>The view designed (<see cref="DashboardView"/>), whose defaults an object is born with.</summary>
+    [Parameter] public string View { get; set; } = DashboardView.Landscape;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _document = new DashboardDocument(Store, type => Catalogue.Find(type)?.About.CardOnly == true, Draft);
+        _document.Changed += OnChanged;
+        _document.SaveFailed += OnSaveFailed;
+        if (Measures is not null)
+        {
+            Measures.Changed += OnChanged;
+        }
+
+        if (Defaults is not null)
+        {
+            await Defaults.LoadAsync();
+        }
+
+        await _document.LoadAsync();
+        _loaded = true;
+    }
+
+    /// <summary>The mode the designer was last given, so a change of it is heard once; null before the first.</summary>
+    private bool? _wasDesigning;
+
+    /// <summary>Out of design, the card or object standing alone under the pointer: its line is the primary colour.</summary>
+    private string? _hovered;
+
+    /// <summary>What each object is drawn by, so the one selected can be opened.</summary>
+    private readonly Dictionary<string, DynamicComponent> _drawn = [];
+
+    /// <summary>What is selected out of design changed: the page offers its verbs.</summary>
+    [Parameter] public EventCallback<DashboardSelection> SelectionChanged { get; set; }
+
+    /// <summary>
+    /// What is selected out of design: an object standing alone, or a card whole.
+    /// </summary>
+    public DashboardSelection Selection =>
+        _document.SelectedObject is { } one ? new(one, null, [one], Opener() is not null)
+        : _document.SelectedFrame is { } card ? new(null, card, _document.Layout.Members(card.Id), Opener() is not null)
+        : DashboardSelection.None;
+
+    /// <summary>Status alarms, the page's verb in design: the view's alarms to tick for the status bar, in a dialog.</summary>
+    public Task ShowStatusAlarmsAsync() =>
+        Dialogs.ShowAsync<StatusAlarmsDialog>("Status alarms", new DialogParameters<StatusAlarmsDialog> { { d => d.Document, _document } },
+            new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.ExtraSmall, FullWidth = true });
+
+    /// <summary>Open, the page's verb: what is selected opens — its full chart, its page.</summary>
+    public Task OpenAsync() => Opener() is { } opener ? opener.OpenAsync() : Task.CompletedTask;
+
+    /// <summary>
+    /// What opens for the selection: the object selected, or the first of the
+    /// card's objects that opens something — a chart card's chart, its legend
+    /// or its summary, which all open the same chart.
+    /// </summary>
+    private DashboardObject? Opener()
+    {
+        IEnumerable<ObjectInstance> selected = _document.SelectedObject is { } one ? [one]
+            : _document.SelectedFrame is { } card ? _document.Layout.Members(card.Id)
+            : [];
+        return selected.Where(o => o.Hidden != true).Select(Opener).FirstOrDefault(opener => opener is not null);
+    }
+
+    /// <summary>The object drawn for this one, when it opens something.</summary>
+    private DashboardObject? Opener(ObjectInstance o) =>
+        _drawn.TryGetValue(o.Id, out var drawn) && drawn.Instance is DashboardObject { Opens: true } opens ? opens : null;
+
+    /// <summary>
+    /// A tap out of design on a card, or an object standing alone (an object in
+    /// a card counts for its card): it is selected, green; tapped again, it opens what it opens, or
+    /// lets go when it opens nothing.
+    /// </summary>
+    private async Task TapAsync(string unit)
+    {
+        if (Designing)
+        {
+            return;
+        }
+
+        if (_document.Chosen is [var chosen] && chosen == unit)
+        {
+            if (Opener() is { } opener)
+            {
+                await opener.OpenAsync();
+                return;
+            }
+
+            _document.Select(null);
+        }
+        else if (_document.Layout.FindGroup(unit) is not null)
+        {
+            _document.SelectGroup(unit);
+        }
+        else
+        {
+            _document.Select(unit);
+        }
+
+        await SelectionChanged.InvokeAsync(Selection);
+    }
+
+    /// <summary>A tap out of design on the canvas's floor lets go of what is selected.</summary>
+    private async Task TapFloorAsync()
+    {
+        if (Designing || _document.Chosen.Count == 0)
+        {
+            return;
+        }
+
+        _document.Select(null);
+        await SelectionChanged.InvokeAsync(Selection);
+    }
+
+    /// <summary>Out of design, the card or object standing alone the pointer is over; null as it leaves.</summary>
+    private void Hover(string? unit)
+    {
+        if (!Designing)
+        {
+            _hovered = unit;
+        }
+    }
+
+    /// <summary>
+    /// Out of design, or into it, what was taken or chosen lets go — once, as
+    /// the mode changes: out of design the page can select a card or an
+    /// object of its own, and that selection stays while the page draws again.
+    /// </summary>
+    protected override void OnParametersSet()
+    {
+        if (Designing == _wasDesigning)
+        {
+            return;
+        }
+
+        _wasDesigning = Designing;
+        _counted = false;
+        _shown = false;
+        _drag = null;
+        _groupDrag = null;
+        _many = null;
+        _marquee = null;
+        _carried = null;
+        _hovered = null;
+        _document.Select(null);
+        if (Designing)
+        {
+            // A draft left on the device is designed on again.
+            _ = _document.OpenDraftAsync();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _document.Changed -= OnChanged;
+        _document.SaveFailed -= OnSaveFailed;
+        if (Measures is not null)
+        {
+            Measures.Changed -= OnChanged;
+        }
+
+        if (_sizeWatch is not null)
+        {
+            await _sizeWatch.DisposeAsync();
+        }
+
+        if (_holdWatch is not null)
+        {
+            await _holdWatch.DisposeAsync();
+        }
+    }
+
+    /// <summary>Whether what is designed was unsaved at the last change, so the page hears when it turns.</summary>
+    private bool _wasUnsaved;
+
+    private void OnChanged() => _ = InvokeAsync(async () =>
+    {
+        StateHasChanged();
+        if (_document.Unsaved != _wasUnsaved)
+        {
+            _wasUnsaved = _document.Unsaved;
+            await DraftChanged.InvokeAsync();
+        }
+    });
+
+    private void OnSaveFailed(Exception failure) =>
+        _ = InvokeAsync(() => Snackbar.Add(Draft is null
+            ? $"The dashboard could not be kept: {failure.Message}"
+            : $"The dashboard could not be saved; what is designed is kept on this device until it is: {failure.Message}", Severity.Error));
+
+    /// <summary>What is designed is not what the store holds (<see cref="Draft"/>): the page's Save and Discard have something to do.</summary>
+    public bool Unsaved => _document.Unsaved;
+
+    /// <summary>Save, the page's verb: what is designed written to the store.</summary>
+    public Task<bool> SaveAsync() => _document.SaveAsync();
+
+    /// <summary>Discard, the page's verb: the dashboard back as the store holds it.</summary>
+    public Task DiscardAsync() => _document.DiscardAsync();
+
+    /// <summary>An object that needs a source and has none yet: an empty place in design, nothing out of it.</summary>
+    private static bool Unset(ObjectDescriptor kind, ObjectInstance instance) => kind.HasSource && kind.SourceOf(instance) is null;
+
+    private Dictionary<string, object?> Parameters(ObjectInstance instance) => new()
+    {
+        [nameof(DashboardObject.Instance)] = instance,
+        [nameof(DashboardObject.Designing)] = Designing,
+    };
+
+    /// <summary>A group as it is drawn: where the drag under way would put it, or where it stands.</summary>
+    private DashboardGroup ShownFrame(DashboardGroup group) =>
+        _groupDrag is { } drag && drag.Origin.Id == group.Id ? drag.Preview
+        : _many is { } many && many.Ids.Contains(group.Id) ? group with { X = group.X + many.Dx, Y = group.Y + many.Dy }
+        : group;
+
+    /// <summary>What is chosen, carried where the drag under way would put it, fits there; true when nothing is carried.</summary>
+    private bool ManyFits => _many is not { } many
+        || _document.Layout.MovedTogether(many.Ids, many.Dx, many.Dy).FitsAll(many.Ids);
+
+    /// <summary>An object as it is drawn: carried itself, with its group, or with the others chosen, or where it stands.</summary>
+    private ObjectInstance Shown(ObjectInstance instance) =>
+        _drag is { } drag && drag.Origin.Id == instance.Id ? drag.Preview
+        : _groupDrag is { Resizing: false } moving && moving.Origin.Id == instance.Group
+            ? instance.MovedBy(moving.Preview.X - moving.Origin.X, moving.Preview.Y - moving.Origin.Y)
+        : _many is { } many && many.Carries(instance) ? instance.MovedBy(many.Dx, many.Dy)
+        : instance;
+
+    /// <summary>
+    /// While a drag lasts the canvas holds the pointer, so the cursor is the
+    /// canvas's: it says what the hand is doing — carrying, or pulling a
+    /// corner — instead of falling back to the arrow.
+    /// </summary>
+    private string CanvasClass =>
+        !_loaded || Unfitted ? "bz-dash-canvas bz-dash-unread"
+        : _drag is { Resizing: true } || _groupDrag is { Resizing: true } ? "bz-dash-canvas bz-dash-resizing"
+        : _drag is not null || _groupDrag is not null || _many is not null ? "bz-dash-canvas bz-dash-dragging"
+        : "bz-dash-canvas";
+
+    /// <summary>Rows down to a few under the lowest object or frame, or the ghost of one being dropped; the columns are the designer's, which the properties window measures too.</summary>
+    private string CanvasStyle
+    {
+        get
+        {
+            var boxes = _document.Layout.Objects.Select(o => Shown(o).Box)
+                .Concat(_document.Layout.Groups.Select(g => ShownFrame(g).Box))
+                .Concat(new[] { _drag?.Preview, _carried?.Ghost }.OfType<ObjectInstance>().Select(o => o.Box));
+            // A framed dashboard: its view's rows, rooms and all, and in design
+            // down to the lowest object where it stands below them. Any other
+            // board: down to its lowest object, and in design a few more.
+            var lowest = boxes.Select(box => box.Y + box.H).DefaultIfEmpty(0).Max();
+            var rows = Framed ? (Designing ? Math.Max(lowest, Extent.Rows) : Extent.Rows)
+                : lowest + (Designing ? RowsBelow : 0);
+            return FormattableString.Invariant($"grid-template-rows: repeat({rows}, var(--bz-dash-cell-y, var(--bz-dash-cell)))");
+        }
+    }
+
+    private static string Area(CellBox box) =>
+        FormattableString.Invariant($"grid-area: {box.Y + 1} / {box.X + 1} / span {box.H} / span {box.W}");
+
+    /// <summary>A framed view shown fluid (<see cref="ViewFit.Fluid"/>): its cells widened to the screen, nothing zoomed.</summary>
+    private bool Fluid => !Designing && Framed && Fitting == ViewFit.Fluid;
+
+    private const string Cell = "var(--bz-dash-fixed-cell)";
+
+    /// <summary>
+    /// Where a card or an object stands: on its cells; in a fluid view, placed
+    /// from the canvas's corner, down in the design's cells and across by its
+    /// anchor within what holds it (<see cref="HorizontalAnchor"/>) — a card, or an object standing alone,
+    /// within the view, widened to the screen; an object in a card within its
+    /// card, wherever the card's own anchor put it.
+    /// </summary>
+    private string Placed(CellBox box, DashboardGroup? card = null, HorizontalAnchor anchor = HorizontalAnchor.Scale)
+    {
+        if (!Fluid)
+        {
+            return Area(box);
+        }
+
+        var within = card is null ? ViewAcross : Across(card.Box, card.Anchor ?? HorizontalAnchor.Scale, ViewAcross);
+        var placed = Across(box, anchor, within);
+
+        // An object in a card keeps clear of the card's line (.bz-dash-member's
+        // margin): on cells the margin shrinks it inside its area; placed here
+        // it would only move it, and its right and bottom edges would cover the
+        // card's line there, so its keep is taken off its box instead.
+        var keep = card is null ? 0 : MemberKeep;
+        return FormattableString.Invariant(
+            $"position: absolute; margin: 0; left: calc({placed.Left} + {keep}px); top: calc({box.Y} * {Cell} + {keep}px); width: calc({placed.Width} - {2 * keep}px); height: calc({box.H} * {Cell} - {2 * keep}px)");
+    }
+
+    /// <summary>How far an object in a card keeps from the card's line, as .bz-dash-member's margin keeps it on cells.</summary>
+    private const int MemberKeep = 2;
+
+    /// <summary>The view across a fluid screen: from the canvas's edge, its columns each a widened cell.</summary>
+    private (string Left, string Width, int X, int W) ViewAcross =>
+        ("0px", FormattableString.Invariant($"calc({Extent.Columns} * var(--bz-dash-cell-x))"), 0, Extent.Columns);
+
+    /// <summary>
+    /// A box across what holds it — the view, or a card — placed by its anchor:
+    /// spread in proportion to the holder's width; kept to its left edge or its
+    /// right one at its own size, the design's cells; or kept to both and
+    /// widened by what the holder gained. Answers the box as a holder too.
+    /// </summary>
+    private static (string Left, string Width, int X, int W) Across(CellBox box, HorizontalAnchor anchor, (string Left, string Width, int X, int W) holder)
+    {
+        var (from, room, x, w) = holder;
+        var (left, width) = anchor switch
+        {
+            HorizontalAnchor.Left => ($"calc({from} + {box.X - x} * {Cell})", $"calc({box.W} * {Cell})"),
+            HorizontalAnchor.Right => ($"calc({from} + {room} - {x + w - box.X} * {Cell})", $"calc({box.W} * {Cell})"),
+            HorizontalAnchor.Both => ($"calc({from} + {box.X - x} * {Cell})", $"calc({box.W} * {Cell} + {room} - {w} * {Cell})"),
+            _ => ($"calc({from} + {box.X - x} * {room} / {w})", $"calc({box.W} * {room} / {w})"),
+        };
+        return (left, width, box.X, box.W);
+    }
+
+    /// <summary>
+    /// Where an object stands, and its colours: its own, or its kind's default (its descriptor's) — and, set to
+    /// Inherited, its group's (the page's, standing alone). An object stands
+    /// over its group's frame, not inside it, so what it inherits is worked
+    /// out here instead of flowing down the page.
+    /// </summary>
+    private string ObjectStyle(ObjectInstance o, ObjectDescriptor kind)
+    {
+        var group = _document.Layout.FindGroup(o.Group);
+        var background = o.Background ?? kind.About.Background;
+        var foreground = o.Foreground ?? kind.About.Foreground;
+        return Placed(o.Box, group, kind.AnchorOf(o))
+            + Colour("background-color", background == ThemeColor.Inherited && group is not null ? GroupBackground(group) : background)
+            + Colour("color", foreground == ThemeColor.Inherited && group is not null ? GroupForeground(group) : foreground)
+            + Margins(o)
+            + PartCss.Style(o);
+    }
+
+    /// <summary>Where a group's frame stands, and the colour its card is filled with; inherited, the page shows through it.</summary>
+    private string FrameStyle(DashboardGroup group) =>
+        Placed(group.Box, anchor: group.Anchor ?? HorizontalAnchor.Scale) + Colour("background-color", GroupBackground(group) is var background && background == ThemeColor.Inherited ? ThemeColor.Transparent : background);
+
+    /// <summary>What keeps what it shows clear of its edges: its margins across and down, none until set.</summary>
+    private static string Margins(ObjectInstance o) =>
+        o.MarginX is null && o.MarginY is null ? "" : FormattableString.Invariant($"; padding: {o.MarginY ?? 0}px {o.MarginX ?? 0}px");
+
+    private static ThemeColor GroupBackground(DashboardGroup group) => group.Background ?? ThemeColors.GroupBackground;
+
+    private static ThemeColor GroupForeground(DashboardGroup group) => group.Foreground ?? ThemeColors.GroupForeground;
+
+    /// <summary>The object's text colour is one the user chose: its own, or, set to Inherited, its card's.</summary>
+    private bool ChosenForeground(ObjectInstance o) =>
+        o.Foreground is { } own && (own != ThemeColor.Inherited || _document.Layout.FindGroup(o.Group) is { Foreground: not null });
+
+    /// <summary>A colour as a declaration of the style; nothing for Inherited, which takes what the page gives.</summary>
+    private static string Colour(string property, ThemeColor color) =>
+        ThemeColors.Css(color) is { } css ? $"; {property}: {css}" : "";
+
+    private string ObjectClass(ObjectInstance shown, ObjectDescriptor kind)
+    {
+        // Standing alone it is a card of its own, drawn as one; in a group,
+        // the group's card is drawn round it.
+        var classes = shown.Group is null ? "bz-dash-object bz-dash-loose" : "bz-dash-object bz-dash-member";
+        // Chosen, or under the rectangle being drawn, which marks what it
+        // touches as it goes.
+        if (Designing && (_document.Chosen.Contains(shown.Id) || (_marquee is { } marquee && Caught(marquee).Contains(shown.Id))))
+        {
+            classes += " bz-dash-selected";
+        }
+
+        if (_many is { } many && many.Carries(shown) && !ManyFits)
+        {
+            classes += " bz-dash-blocked";
+        }
+
+        if (_drag is { Target: { } target } && target.Id == shown.Id)
+        {
+            classes += " bz-dash-target";
+        }
+
+        if (_drag is { Target: null } drag && drag.Origin.Id == shown.Id && !_document.Layout.Fits(shown))
+        {
+            classes += " bz-dash-blocked";
+        }
+
+        classes += kind.HorizontalOf(shown) switch
+        {
+            HorizontalAlign.Left => " bz-dash-align-left",
+            HorizontalAlign.Right => " bz-dash-align-right",
+            _ => "",
+        };
+        classes += kind.VerticalOf(shown) switch
+        {
+            VerticalAlign.Top => " bz-dash-valign-top",
+            VerticalAlign.Bottom => " bz-dash-valign-bottom",
+            _ => "",
+        };
+        // A text colour chosen, its own or its card's through Inherited: the application's quieter texts, which
+        // keep a colour of their own, take it (bz-dash-foreground).
+        if (ChosenForeground(shown))
+        {
+            classes += " bz-dash-foreground";
+        }
+        // Its alarm up: standing alone it is marked itself; in a card the whole card
+        // is, its objects with it, whose grounds would hide the card's.
+        if (shown.Group is { } card ? CardUp(card) : Up(shown))
+        {
+            classes += " bz-dash-alarm";
+        }
+
+        // How far it stands off what is under it: its own, or its
+        // design's — standing alone, drawn as a card, the application's for
+        // its cards; in a card, none — drawn by MudBlazor's shadow of that height.
+        var elevation = shown.Elevation ?? (shown.Group is null ? CardElevation : 0);
+        classes += $" mud-elevation-{Math.Clamp(elevation, 0, DashboardGroup.MaxElevation)}";
+        return classes + ViewState(shown.Group is null ? shown.Id : null) + PartCss.Classes(shown);
+    }
+
+    private string GroupClass(DashboardGroup shown)
+    {
+        var classes = "bz-dash-group";
+        if (Designing && (_document.Chosen.Contains(shown.Id) || (_marquee is { } marquee && Caught(marquee).Contains(shown.Id))))
+        {
+            classes += " bz-dash-selected";
+        }
+
+        if (_many is { } many && many.Ids.Contains(shown.Id) && !ManyFits)
+        {
+            classes += " bz-dash-blocked";
+        }
+
+        if ((_drag is { Joining: { } joining } && joining.Id == shown.Id) || _carried?.Ghost?.Group == shown.Id)
+        {
+            classes += " bz-dash-target";
+        }
+
+        if (_groupDrag is { } drag && drag.Origin.Id == shown.Id
+            && !_document.Layout.FitsGroup(shown, _document.Moved(shown.Id, shown.X - drag.Origin.X, shown.Y - drag.Origin.Y)))
+        {
+            classes += " bz-dash-blocked";
+        }
+
+        if (CardUp(shown.Id))
+        {
+            classes += " bz-dash-alarm";
+        }
+
+        // How far its card stands off the page: its own, or the application's
+        // for its cards, drawn by MudBlazor's shadow of that height.
+        classes += $" mud-elevation-{Math.Clamp(shown.Elevation ?? CardElevation, 0, DashboardGroup.MaxElevation)}";
+        return classes + ViewState(shown.Id);
+    }
+
+    /// <summary>A card one of whose objects has its alarm up.</summary>
+    private bool CardUp(string groupId) => _document.Layout.Members(groupId).Any(Up);
+
+    /// <summary>An object shown whose alarm is up: one of the measures it watches is past its threshold.</summary>
+    private bool Up(ObjectInstance o) => Measures is not null && Catalogue.Find(o.Type) is { } kind && kind.Up(o, Measures);
+
+    /// <summary>
+    /// Out of design, a card's or an object's state: green selected, the primary
+    /// colour under the pointer. <paramref name="unit"/> is the card or the
+    /// object standing alone; null for an object in a card, whose card shows it.
+    /// </summary>
+    private string ViewState(string? unit) =>
+        Designing || unit is null ? ""
+        : _document.Chosen is [var chosen] && chosen == unit ? " bz-dash-picked"
+        : _hovered == unit ? " bz-dash-hovered"
+        : "";
+
+    /// <summary>The objects standing alone and the groups the rectangle touches, even in part: what it chooses, as Windows' own rectangle does.</summary>
+    private IReadOnlyList<string> Caught(Marquee marquee) =>
+    [
+        .. _document.Layout.Objects.Where(o => o.Group is null && marquee.Box.Overlaps(o.Box)).Select(o => o.Id),
+        .. _document.Layout.Groups.Where(g => marquee.Box.Overlaps(g.Box)).Select(g => g.Id),
+    ];
+
+    /// <summary>
+    /// The columns the canvas lays out — in design as many as the window
+    /// holds, out of it the view's own — its cell, the one size every
+    /// dashboard's cells have (<see cref="DashboardLayout.CellSize"/>), and out
+    /// of design the zoom that fits the view to the screen.
+    /// </summary>
+    private string DesignerStyle => Designing || !Framed
+        ? FormattableString.Invariant($"--bz-dash-columns: {_document.Layout.Columns}; --bz-dash-fixed-cell: {DashboardLayout.CellSize}")
+        : FormattableString.Invariant($"--bz-dash-columns: {Math.Max(1, Extent.Columns)}; --bz-dash-fixed-cell: {DashboardLayout.CellSize}; --bz-dash-fit: {_fit}; --bz-dash-cell-x: calc({_across} * var(--bz-dash-fixed-cell)); --bz-dash-cell-y: calc({_down} * var(--bz-dash-fixed-cell))");
+
+    /// <summary>
+    /// In design a framed dashboard's frame is its view's size: its columns
+    /// and rows of cells, no larger than the page; what stands past it scrolls.
+    /// </summary>
+    private string FrameClass =>
+        Designing && Framed ? "bz-dash-canvas-frame bz-dash-framed"
+        : Framed && Fitting is ViewFit.Width or ViewFit.Fluid ? "bz-dash-canvas-frame bz-dash-fit-width"
+        : "bz-dash-canvas-frame";
+
+    private string? CanvasFrameStyle => Designing && Framed
+        ? FormattableString.Invariant($"width: calc({Extent.Columns} * var(--bz-dash-fixed-cell)); height: calc({Extent.Rows} * var(--bz-dash-fixed-cell))")
+        : null;
+
+    /// <summary>
+    /// Once the dashboard is read, its frame's size watched; in design, the
+    /// columns the window holds counted; and the zoom fitted again wherever
+    /// the view, the mode or the frame changed.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_loaded)
+        {
+            return;
+        }
+
+        if (!_watching)
+        {
+            _watching = true;
+            _sizeWatch = await Interop.WatchSizeAsync(_frame, ResizedAsync);
+            _holdWatch = await Interop.WatchHoldAsync(_canvas, HeldAsync);
+        }
+
+        if (Designing && !_counted)
+        {
+            _counted = true;
+            await MeasureCanvasAsync();
+            StateHasChanged();
+        }
+
+        await FitAsync();
+    }
+
+    /// <summary>The frame's size is watched: once asked for, so a render in between does not ask twice.</summary>
+    private bool _watching;
+
+    private IAsyncDisposable? _sizeWatch;
+
+    /// <summary>A finger held still on the canvas's floor is watched, to begin a selection there.</summary>
+    private IAsyncDisposable? _holdWatch;
+
+    /// <summary>The canvas's columns counted for this design, and the size the zoom was fitted for; null for none yet.</summary>
+    private bool _counted;
+
+    private (int Columns, int Rows, bool Designing, ViewFit? Fitting)? _fittedFor;
+
+    /// <summary>The zoom that fits the view to the screen out of design; one in design, where objects are placed cell by cell.</summary>
+    private double _fit = 1;
+
+    /// <summary>How much wider and taller than square a cell is stretched, out of design, where the view is stretched; one otherwise.</summary>
+    private double _across = 1;
+
+    private double _down = 1;
+
+    /// <summary>The frame resized — the window, a phone turned —: its columns counted again in design, and the zoom fitted again.</summary>
+    private Task ResizedAsync() => InvokeAsync(() =>
+    {
+        _counted = false;
+        _fittedFor = null;
+        StateHasChanged();
+    });
+
+    /// <summary>
+    /// A framed dashboard's view, in cells: the size set in design, or while none is, the view's own frame — a
+    /// phone for the portrait one, 16:9 for the landscape one. Its aspect is
+    /// the view's, and it is what the zoom fits to the screen.
+    /// </summary>
+    private (int Columns, int Rows) Extent =>
+        _document.Layout is { CanvasWidth: { } width, CanvasHeight: { } height } ? (width, height) : DashboardView.DefaultCanvas(View);
+
+    /// <summary>
+    /// The view's size typed at the top of the toolbox: columns and rows, applied as they are typed, as every field is;
+    /// a size under one cell, the field emptied on the way to another number,
+    /// is let pass.
+    /// </summary>
+    private RenderFragment CanvasSize => @<div class="bz-dash-props bz-dash-canvas-size-fields">
+        <MudText Typo="Typo.caption" Class="mud-text-secondary bz-dash-prop-wide">Canvas size</MudText>
+        <TextField T="int" Value="Extent.Columns" ValueChanged="@(width => _document.SetCanvasSizeAsync(width, Extent.Rows))" Label="Cols"
+                   Title="The view's columns: what is shown out of design, zoomed to fit the screen" />
+        <TextField T="int" Value="Extent.Rows" ValueChanged="@(height => _document.SetCanvasSizeAsync(Extent.Columns, height))" Label="Rows"
+                   Title="The view's rows: what is shown out of design, zoomed to fit the screen" />
+    </div>;
+
+    /// <summary>
+    /// Out of design, the largest zoom at which the whole view fits the frame,
+    /// its width and its height both, its aspect kept, a cell a whole number
+    /// of pixels so its lines stay sharp; in design,
+    /// none. Worked out again only where the view, the mode or the frame changed.
+    /// </summary>
+    private async Task FitAsync()
+    {
+        var extent = Extent;
+        if (_fittedFor == (extent.Columns, extent.Rows, Designing, Fitting)
+            || (!Designing && Framed && Fitting is null))
+        {
+            // Fitted already, or not yet known how: a framed view out of
+            // design waits, unseen, until the application has read its fitting.
+            return;
+        }
+
+        _fittedFor = (extent.Columns, extent.Rows, Designing, Fitting);
+        var fitted = (Zoom: 1.0, Across: 1.0, Down: 1.0);
+        if (!Designing && Framed && extent is { Columns: > 0, Rows: > 0 })
+        {
+            // The room inside the frame: fitted to the width, the room for a
+            // scrollbar down is kept aside, and left out of it.
+            var frame = await Interop.MeasureInsideAsync(_frame);
+            var cell = (await Interop.MeasureAsync(_baseProbe)).Width;
+            if (cell > 0)
+            {
+                fitted = Fitted(frame.Width / extent.Columns, frame.Height / extent.Rows, cell);
+            }
+        }
+
+        if (fitted != (_fit, _across, _down) || !_shown)
+        {
+            (_fit, _across, _down) = fitted;
+            _shown = true;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// A framed view out of design has been fitted once, as its fitting says,
+    /// and is shown from then on: before, it would be painted at no zoom and
+    /// then again at its own; it is painted once. A
+    /// resize or another fitting later fits it again where it is seen.
+    /// </summary>
+    private bool _shown;
+
+    /// <summary>A framed view out of design not fitted yet: drawn unseen, as the dashboard is while it is read.</summary>
+    private bool Unfitted => !Designing && Framed && !_shown;
+
+    /// <summary>
+    /// The zoom a view takes as <see cref="Fitting"/> says, from the cell the
+    /// screen allows across and the one it allows down and the cell's own size,
+    /// a cell a whole number of pixels: the smaller of the two to
+    /// see it whole, the larger to fill the screen, the one across to fill its
+    /// width, each of them to stretch it
+    /// — the zoom then the smaller, and the cells stretched by how much the
+    /// other is larger, across or down —; fluid, no zoom at all and the cells
+    /// widened to the one across, their rows as they are.
+    /// </summary>
+    private (double Zoom, double Across, double Down) Fitted(double across, double down, double cell)
+    {
+        switch (Fitting)
+        {
+            case ViewFit.Stretch when Math.Floor(across) > 0 && Math.Floor(down) > 0:
+                var (wide, tall) = (Math.Floor(across), Math.Floor(down));
+                var smaller = Math.Min(wide, tall);
+                return (smaller / cell, wide / smaller, tall / smaller);
+            case ViewFit.Fill:
+                return (Math.Ceiling(Math.Max(across, down)) / cell, 1, 1);
+            case ViewFit.Width when Math.Floor(across) > 0:
+                return (Math.Floor(across) / cell, 1, 1);
+            case ViewFit.Fluid when across > 0:
+                return (1, across / cell, 1);
+            default:
+                var whole = Math.Floor(Math.Min(across, down));
+                return (whole > 0 ? whole / cell : 1, 1, 1);
+        }
+    }
+
+    /// <summary>
+    /// The canvas and one of its cells measured, as a drag begins and once the
+    /// dashboard is read: the pointer turns into cells by them, and the cells
+    /// the canvas's width holds are the columns it shows now, which an object
+    /// may be placed in: a wider window, more of them.
+    /// </summary>
+    private async Task MeasureCanvasAsync()
+    {
+        _box = await Interop.MeasureAsync(_canvas);
+        _cell = (await Interop.MeasureAsync(_cellProbe)).Width;
+        if (_cell > 0)
+        {
+            var frame = await Interop.MeasureAsync(_frame);
+            var reach = _document.Layout.Objects.Select(o => o.X + o.W)
+                .Concat(_document.Layout.Groups.Select(g => g.X + g.W))
+                .DefaultIfEmpty(1).Max();
+            _document.ShowColumns(Framed ? Math.Max(reach, Extent.Columns) : Math.Max(reach, (int)Math.Floor(frame.Width / _cell)));
+        }
+    }
+
+    /// <summary>The cell under a point of the screen, from the canvas's box and a cell measured when the drag began; cells are square.</summary>
+    private (int Column, int Row) CellAt(double x, double y)
+    {
+        var box = _box!;
+        return ((int)Math.Floor((x - box.Left) / _cell), (int)Math.Floor((y - box.Top) / _cell));
+    }
+
+    /// <summary>An object at a cell, kept inside the canvas's columns and under its top.</summary>
+    private ObjectInstance Placed(ObjectInstance o, int column, int row) =>
+        o with { X = Math.Clamp(column, 0, Math.Max(0, _document.Layout.Columns - o.W)), Y = Math.Max(0, row) };
+
+    /// <summary>The object standing alone on this cell, other than the one carried; the one a drop there would make a group with.</summary>
+    private ObjectInstance? LooseAt(int column, int row, string carried) =>
+        _document.Layout.Objects.FirstOrDefault(o => o.Id != carried && o.Group is null && o.Box.Contains(new CellBox(column, row, 1, 1)));
+
+    /// <summary>
+    /// A press on the canvas's floor begins a rectangle that chooses what it
+    /// touches; without Ctrl, what was chosen lets go first, so a press that
+    /// does not move leaves nothing chosen.
+    /// </summary>
+    private async Task PressCanvasAsync(PointerEventArgs pointer)
+    {
+        if (!Designing || Deferred(pointer, PressCanvasAsync) || !Pressed(pointer))
+        {
+            return;
+        }
+
+        var adding = pointer.CtrlKey || pointer.MetaKey;
+        if (!adding)
+        {
+            _document.Select(null);
+        }
+
+        await BeginMarqueeAsync(pointer.ClientX, pointer.ClientY, adding, pointer.PointerId);
+    }
+
+    /// <summary>
+    /// A finger's press, kept until the finger says what it is: a swipe
+    /// scrolls the dashboard, and the browser cancels the press; lifted
+    /// without moving, it is a tap, the press played with its release
+    /// (ReleaseAsync); held still half a second (HeldAsync), the press is
+    /// played where it stands and the drag goes on from it — an object moved,
+    /// a card, the rectangle on the floor. What it would press, and how.
+    /// </summary>
+    private (PointerEventArgs Pointer, Func<PointerEventArgs, Task> Press)? _touch;
+
+    /// <summary>A kept press being played: it goes through as a mouse's does.</summary>
+    private bool _playing;
+
+    /// <summary>A finger's press kept for later instead of answered now; false for any other pointer, or for one being played.</summary>
+    private bool Deferred(PointerEventArgs pointer, Func<PointerEventArgs, Task> press)
+    {
+        if (pointer.PointerType != "touch" || _playing || pointer.Button != 0)
+        {
+            return false;
+        }
+
+        _touch = (pointer, press);
+        return true;
+    }
+
+    /// <summary>The finger's kept press played, at <paramref name="at"/>.</summary>
+    private async Task PlayTouchAsync(PointerEventArgs at)
+    {
+        if (_touch is not { } kept)
+        {
+            return;
+        }
+
+        _touch = null;
+        _playing = true;
+        try
+        {
+            await kept.Press(at);
+        }
+        finally
+        {
+            _playing = false;
+        }
+    }
+
+    /// <summary>A finger held still: its press played where it stands, the drag going on from it.</summary>
+    private Task HeldAsync(double x, double y, long pointerId) => InvokeAsync(async () =>
+    {
+        if (!Designing || _touch is not { } kept)
+        {
+            return;
+        }
+
+        await PlayTouchAsync(new PointerEventArgs
+        {
+            ClientX = x,
+            ClientY = y,
+            PointerId = pointerId,
+            PointerType = "touch",
+            IsPrimary = true,
+            Button = 0,
+            Buttons = 1,
+            CtrlKey = kept.Pointer.CtrlKey,
+            MetaKey = kept.Pointer.MetaKey,
+        });
+        StateHasChanged();
+    });
+
+    /// <summary>The rectangle that chooses what it touches, begun at a point, the pointer kept on the canvas while it is drawn.</summary>
+    private async Task BeginMarqueeAsync(double x, double y, bool adding, long pointerId)
+    {
+        await MeasureCanvasAsync();
+        var (column, row) = CellAt(x, y);
+        _marquee = new Marquee(column, row, new CellBox(column, row, 1, 1), adding);
+        await Interop.CaptureAsync(_canvas, pointerId);
+    }
+
+    /// <summary>
+    /// A press on an object. One standing alone is taken. One in a group: while the focus is
+    /// inside the group (one or several of its objects chosen), the object
+    /// pressed is taken, and moves inside the frame, and with Ctrl it is chosen
+    /// with them or taken back; otherwise the press takes the group whole and
+    /// a drag moves it — and once the group is taken, a press let go without moving
+    /// gives the focus to the object it fell on.
+    /// </summary>
+    private Task PressObjectAsync(ObjectInstance instance, PointerEventArgs pointer)
+    {
+        if (!Designing || Deferred(pointer, touch => PressObjectAsync(instance, touch)) || !Pressed(pointer))
+        {
+            return Task.CompletedTask;
+        }
+
+        // Among several, an object standing alone counts for itself and an
+        // object in a group for its whole group — unless the focus is inside
+        // that group, when it counts for itself too, so Ctrl chooses several
+        // of a card's objects.
+        var unit = instance.Group is not { } groupOf || FocusInside(groupOf) ? instance.Id : groupOf;
+        if (ChooseAmongSeveral(unit, pointer) is { } carried)
+        {
+            return carried;
+        }
+
+        if (instance.Group is not { } groupId || FocusInside(groupId)
+            || _document.Layout.FindGroup(groupId) is not { } group)
+        {
+            return BeginObjectAsync(instance, pointer, resizing: false);
+        }
+
+        return BeginGroupAsync(group, pointer, resizing: false, tapped: _document.SelectedGroup == groupId ? instance : null);
+    }
+
+    /// <summary>The focus is inside this group: what is chosen is one or several of its objects, and nothing else.</summary>
+    private bool FocusInside(string groupId) =>
+        _document.Chosen.Count > 0 && _document.Chosen.All(id => _document.Layout.Find(id)?.Group == groupId);
+
+    /// <summary>
+    /// A press on a group's frame: with Ctrl, or on one of several chosen, it
+    /// is one among several; otherwise it takes the group whole.
+    /// </summary>
+    private Task PressFrameAsync(DashboardGroup group, PointerEventArgs pointer) =>
+        Designing && Deferred(pointer, touch => PressFrameAsync(group, touch)) ? Task.CompletedTask
+        : Designing && pointer.Button == 0 && ChooseAmongSeveral(group.Id, pointer) is { } carried ? carried
+        : BeginGroupAsync(group, pointer, resizing: false);
+
+    /// <summary>
+    /// Choosing several, objects standing alone and whole groups alike;
+    /// <paramref name="unit"/> is what the press
+    /// counts for, an object's id or a group's. With Ctrl, one not chosen is
+    /// added at once, so a drag that follows carries it with the rest, and a
+    /// tap on one already chosen takes it back. Without Ctrl, on one of
+    /// several chosen, a drag carries them all and a tap keeps it alone. Null
+    /// when the press is not about several: it is left to take one thing.
+    /// </summary>
+    private Task? ChooseAmongSeveral(string unit, PointerEventArgs pointer)
+    {
+        if (pointer.CtrlKey || pointer.MetaKey)
+        {
+            var chosen = _document.Chosen.Contains(unit);
+            if (!chosen)
+            {
+                _document.Toggle(unit);
+            }
+
+            return BeginManyAsync(pointer, chosen ? ManyTap.TakeBack : ManyTap.None, unit);
+        }
+
+        return _document.Chosen.Count > 1 && _document.Chosen.Contains(unit)
+            ? BeginManyAsync(pointer, ManyTap.KeepOnly, unit)
+            : null;
+    }
+
+    /// <summary>What is chosen taken together, to be carried by one drag; <paramref name="tap"/> is what a press let go without moving does with <paramref name="pressed"/>.</summary>
+    private async Task BeginManyAsync(PointerEventArgs pointer, ManyTap tap, string pressed)
+    {
+        var boxes = _document.ChosenObjects.Select(o => o.Box).Concat(_document.ChosenGroups.Select(g => g.Box)).ToList();
+        if (boxes.Count == 0)
+        {
+            return;
+        }
+
+        await MeasureCanvasAsync();
+        var (column, row) = CellAt(pointer.ClientX, pointer.ClientY);
+        _many = new ManyDrag([.. _document.Chosen], CellBox.Around(boxes), column, row, 0, 0, tap, pressed);
+        await Interop.CaptureAsync(_canvas, pointer.PointerId);
+    }
+
+    /// <summary>A press on an object selects it and takes it; on its handle, takes its size.</summary>
+    private async Task BeginObjectAsync(ObjectInstance instance, PointerEventArgs pointer, bool resizing)
+    {
+        if (!Designing || !Pressed(pointer))
+        {
+            return;
+        }
+
+        var backToGroup = !resizing && instance.Group is not null && _document.Selected == instance.Id;
+        _document.Select(instance.Id);
+        await MeasureCanvasAsync();
+        var (column, row) = CellAt(pointer.ClientX, pointer.ClientY);
+        _drag = new ObjectDrag(resizing, instance, column, row, instance, null, null, backToGroup);
+        await Interop.CaptureAsync(_canvas, pointer.PointerId);
+    }
+
+    /// <summary>
+    /// A press on a group's frame, or on one of its objects while none of them
+    /// has the focus, takes it whole; on its handle, takes its size.
+    /// <paramref name="tapped"/> is the object the press fell on when the group
+    /// was already taken: let go without moving, it gets the focus.
+    /// </summary>
+    private async Task BeginGroupAsync(DashboardGroup group, PointerEventArgs pointer, bool resizing, ObjectInstance? tapped = null)
+    {
+        if (!Designing || !Pressed(pointer))
+        {
+            return;
+        }
+
+        _document.SelectGroup(group.Id);
+        await MeasureCanvasAsync();
+        var (column, row) = CellAt(pointer.ClientX, pointer.ClientY);
+        _groupDrag = new GroupDrag(resizing, group, column, row, group, tapped);
+        await Interop.CaptureAsync(_canvas, pointer.PointerId);
+    }
+
+    /// <summary>
+    /// The pointer moved over the canvas: what is carried, resized or drawn
+    /// follows it, and the canvas is drawn again only where that changed. A
+    /// pointer's events come a few times a cell, and each drew every object
+    /// again — the Charts card carried over a dashboard held the page for
+    /// seconds.
+    /// </summary>
+    private void Follow(PointerEventArgs pointer)
+    {
+        // A pointer moving with no button held has let go where the canvas
+        // did not hear it: a mouse on a phone hovers, and a gesture left open
+        // carried the object under it as the wheel scrolled. What was being carried stays where it was.
+        if ((pointer.Buttons & 1) == 0)
+        {
+            var open = _marquee is not null || _many is not null || _drag is not null || _groupDrag is not null;
+            Abandon();
+            _still = !open;
+            return;
+        }
+
+        var before = (_marquee, _many, _drag, _groupDrag);
+        FollowPointer(pointer);
+        _still = before == (_marquee, _many, _drag, _groupDrag);
+    }
+
+    /// <summary>A press of the primary button that holds it down: not another button, nor a press the browser makes up with none held.</summary>
+    private static bool Pressed(PointerEventArgs pointer) => pointer.Button == 0 && (pointer.Buttons & 1) == 1;
+
+    /// <summary>
+    /// The wheel turned. Android sends a touch where a mouse's pointer stands
+    /// before each turn of its wheel (measured on the emulator: pointerdown of
+    /// a touch, the wheel 70 ms later, the release after 300 ms), which chose
+    /// the object under the pointer (a mouse on a phone). A finger comes with no wheel: a touch kept
+    /// when one turns was the wheel's, and is let go. Otherwise the wheel
+    /// draws nothing.
+    /// </summary>
+    private void Wheeled()
+    {
+        _still = _touch is null;
+        _touch = null;
+    }
+
+    /// <summary>A gesture that ended unheard — the pointer cancelled, or let go out of hearing: nothing it carried is applied.</summary>
+    private void Abandon()
+    {
+        _marquee = null;
+        _many = null;
+        _drag = null;
+        _groupDrag = null;
+        _touch = null;
+    }
+
+    /// <summary>The last pointer move changed nothing drawn: the render its event asks for is skipped.</summary>
+    private bool _still;
+
+    protected override bool ShouldRender()
+    {
+        var changed = !_still;
+        _still = false;
+        return changed;
+    }
+
+    private void FollowPointer(PointerEventArgs pointer)
+    {
+        if (_box is null)
+        {
+            return;
+        }
+
+        var (column, row) = CellAt(pointer.ClientX, pointer.ClientY);
+        var columns = _document.Layout.Columns;
+        if (_marquee is { } marquee)
+        {
+            var left = Math.Clamp(Math.Min(marquee.Column, column), 0, columns - 1);
+            var right = Math.Clamp(Math.Max(marquee.Column, column), 0, columns - 1);
+            var top = Math.Max(0, Math.Min(marquee.Row, row));
+            var bottom = Math.Max(0, Math.Max(marquee.Row, row));
+            _marquee = marquee with { Box = new CellBox(left, top, right - left + 1, bottom - top + 1) };
+            return;
+        }
+
+        if (_many is { } many)
+        {
+            // Carried together, and kept on the canvas together.
+            var bounds = many.Bounds;
+            var dx = Math.Clamp(column - many.Column, -bounds.X, columns - (bounds.X + bounds.W));
+            var dy = Math.Max(row - many.Row, -bounds.Y);
+            _many = many with { Dx = dx, Dy = dy };
+            return;
+        }
+
+        if (_drag is { } drag)
+        {
+            var origin = drag.Origin;
+            if (drag.Resizing)
+            {
+                _drag = drag with { Preview = origin with { W = Math.Clamp(column - origin.X + 1, 1, columns - origin.X), H = Math.Max(1, row - origin.Y + 1) } };
+                return;
+            }
+
+            var moved = Placed(origin, origin.X + column - drag.Column, origin.Y + row - drag.Row);
+
+            // Standing alone and carried wholly into a group's frame, it goes
+            // where the pointer takes it, as one of the group's: marked in the error colour where it would
+            // take another object's cells, and the group marked as the one it
+            // would join. Let go where it fits, it stands there in the group.
+            if (origin.Group is null && _document.Layout.GroupHolding(moved.Box) is { } group && !_document.Closed(group))
+            {
+                _drag = drag with { Preview = moved with { Group = group.Id }, Target = null, Joining = group };
+                return;
+            }
+
+            // Carried over another object standing alone, it shows the place
+            // it would take beside it, the other marked: let go, the two make
+            // a group — the only drop that places it by itself.
+            var target = origin.Group is null ? LooseAt(column, row, origin.Id) : null;
+            if (target is not null && _document.Layout.Beside(target, origin) is { } beside)
+            {
+                _drag = drag with { Preview = beside, Target = target, Joining = null };
+                return;
+            }
+
+            // An object of a group carried wholly out of its frame is shown
+            // standing alone: let go there, it leaves the group. A piece that
+            // lives only in its card stays one of it, and is let go nowhere
+            // outside it.
+            if (origin.Group is { } groupId && !_document.CardOnly(origin) && _document.Layout.FindGroup(groupId) is { } own && !own.Box.Overlaps(moved.Box))
+            {
+                moved = moved with { Group = null };
+            }
+
+            _drag = drag with { Preview = moved, Target = null, Joining = null };
+        }
+        else if (_groupDrag is { } moving)
+        {
+            var origin = moving.Origin;
+            _groupDrag = moving with
+            {
+                Preview = moving.Resizing
+                    ? origin with { W = Math.Clamp(column - origin.X + 1, 1, columns - origin.X), H = Math.Max(1, row - origin.Y + 1) }
+                    : origin with { X = Math.Clamp(origin.X + column - moving.Column, 0, Math.Max(0, columns - origin.W)), Y = Math.Max(0, origin.Y + row - moving.Row) },
+            };
+        }
+    }
+
+    /// <summary>
+    /// What was carried is let go: an object on a group joins it; on another
+    /// standing alone, makes a group with it; otherwise the object, or the
+    /// group, stands where it was taken if it fits there, and where it was if not.
+    /// </summary>
+    private async Task ReleaseAsync()
+    {
+        // A finger lifted before it was held or swiped: a tap, its press
+        // played now, and let go at once below, as a click is.
+        if (_touch is { } lifted)
+        {
+            await PlayTouchAsync(lifted.Pointer);
+        }
+
+        if (_marquee is { } marquee)
+        {
+            // Every object standing alone the rectangle touches, even in part,
+            // is chosen — added to what was, with Ctrl.
+            _marquee = null;
+            var caught = Caught(marquee);
+            _document.Choose(marquee.Adding ? _document.Chosen.Concat(caught) : caught);
+            return;
+        }
+
+        if (_many is { } many)
+        {
+            _many = null;
+            if (many.Dx != 0 || many.Dy != 0)
+            {
+                await _document.MoveAllAsync(many.Dx, many.Dy);
+            }
+            else if (many.Tap == ManyTap.TakeBack)
+            {
+                _document.Toggle(many.Pressed);
+            }
+            else if (many.Tap == ManyTap.KeepOnly)
+            {
+                _document.Select(many.Pressed);
+            }
+
+            return;
+        }
+
+        if (_drag is { } drag)
+        {
+            _drag = null;
+            if (drag.Joining is not null)
+            {
+                await _document.JoinAsync(drag.Preview);
+            }
+            else if (drag.Target is { } target)
+            {
+                await _document.GroupAsync(target, drag.Origin);
+            }
+            else if (drag.Origin.Group is not null && drag.Preview.Group is null)
+            {
+                await _document.LeaveAsync(drag.Preview);
+            }
+            else if (drag.Preview != drag.Origin && _document.Layout.Fits(drag.Preview))
+            {
+                await _document.SetAsync(drag.Preview);
+            }
+            else if (drag is { BackToGroup: true, Origin.Group: { } groupId } && drag.Preview == drag.Origin)
+            {
+                // Pressed again and let go without moving: the object lets go,
+                // and the focus goes back to its group.
+                _document.SelectGroup(groupId);
+            }
+        }
+        else if (_groupDrag is { } moving)
+        {
+            _groupDrag = null;
+            if (moving.Preview != moving.Origin)
+            {
+                await _document.SetGroupAsync(moving.Preview);
+            }
+            else if (moving.Tapped is { } tapped)
+            {
+                // A tap on an object of the taken group: the focus goes to it.
+                _document.Select(tapped.Id);
+            }
+        }
+    }
+
+    private async Task TakeAsync((ToolboxEntry Entry, PointerEventArgs Pointer) taken)
+    {
+        await MeasureCanvasAsync();
+        _carried = new Carried(taken.Entry, taken.Pointer.ClientX, taken.Pointer.ClientY, false, null);
+    }
+
+    /// <summary>The kind carried over the canvas shows the place it would take; off the canvas, none.</summary>
+    private void Carry(PointerEventArgs pointer)
+    {
+        if (_carried is not { } carried || _box is null)
+        {
+            return;
+        }
+
+        var moved = carried.Moved || Math.Abs(pointer.ClientX - carried.X) + Math.Abs(pointer.ClientY - carried.Y) > CarryDistance;
+        ObjectInstance? ghost = null;
+        if (moved && _box.Contains(pointer.ClientX, pointer.ClientY))
+        {
+            var (column, row) = CellAt(pointer.ClientX, pointer.ClientY);
+            ghost = Placed(Ghost(carried.Entry), column, row);
+
+            // Wholly inside a group's frame, an object would stand in that
+            // group, where it is let go, as an object carried there would. A
+            // card is a group itself, and a group does not stand in another;
+            // a card whose pieces live only in it takes no other object.
+            if (carried.Entry.Kind is not null && _document.Layout.GroupHolding(ghost.Box) is { } group && !_document.Closed(group))
+            {
+                ghost = ghost with { Group = group.Id };
+            }
+        }
+
+        // The ghost of an object is a new object each time (its id), so the
+        // one shown is kept while it stands on the same cells: only a ghost
+        // that moved draws the canvas again (Follow).
+        var same = ghost is null ? carried.Ghost is null : carried.Ghost is { } shown && shown.Box == ghost.Box && shown.Group == ghost.Group;
+        _carried = carried with { Moved = moved, Ghost = same ? carried.Ghost : ghost };
+        _still = _carried == carried;
+    }
+
+    /// <summary>What an entry carried takes on the canvas: an object of its kind, or a card's whole footprint.</summary>
+    private ObjectInstance Ghost(ToolboxEntry entry)
+    {
+        if (entry.Kind is { } kind)
+        {
+            return New(kind);
+        }
+
+        var card = entry.Template!.Born(Defaults, View);
+        return new ObjectInstance("", "", 0, 0, card.W, card.H);
+    }
+
+    /// <summary>
+    /// The kind let go: dropped on the canvas where it fits, it stands there,
+    /// selected, so its properties — its source first — show at once. Only a
+    /// drag adds an object; a press that carries it nowhere adds nothing (a
+    /// click would put it on the dashboard by mistake).
+    /// </summary>
+    private async Task DropAsync(PointerEventArgs pointer)
+    {
+        if (_carried is not { } carried)
+        {
+            return;
+        }
+
+        _carried = null;
+        if (carried.Ghost is not { } ghost || !_document.Layout.Fits(ghost))
+        {
+            return;
+        }
+
+        if (carried.Entry.Template is { } template)
+        {
+            await _document.AddCardAsync(template.Born(Defaults, View), ghost.X, ghost.Y);
+        }
+        else
+        {
+            await _document.AddAsync(ghost);
+        }
+    }
+
+    /// <summary>What the toolbox offers: every kind of object and every card made already, in the toolbox's order.</summary>
+    private IReadOnlyList<ToolboxEntry> Entries => _entries ??= ToolboxEntry.Ordered(Catalogue.All, Templates);
+
+    /// <summary>A new object of a kind, born as its default in this view says, or at its descriptor's size; no wider than the canvas.</summary>
+    private ObjectInstance New(ObjectDescriptor kind) => kind.Born(Guid.NewGuid().ToString("N"), Defaults, View, _document.Layout.Columns);
+
+    /// <summary>
+    /// Delete removes what is selected — the objects chosen, or a group with
+    /// every object in it; Ctrl+G makes a group of the objects chosen and
+    /// Ctrl+Shift+G undoes the group taken; Ctrl+Z (Cmd+Z) undoes the last change.
+    /// </summary>
+    private async Task KeyAsync(KeyboardEventArgs key)
+    {
+        if (!Designing)
+        {
+            return;
+        }
+
+        var command = key.CtrlKey || key.MetaKey;
+        if (key.Key == "Delete" && _document.Chosen.Count > 0)
+        {
+            await _document.RemoveChosenAsync();
+        }
+        else if (command && key.Key is "g" or "G")
+        {
+            await (key.ShiftKey ? _document.UngroupAsync() : _document.GroupChosenAsync());
+        }
+        else if (command && key.Key is "z" or "Z")
+        {
+            await _document.UndoAsync();
+        }
+    }
+}

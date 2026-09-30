@@ -1,0 +1,161 @@
+@* Per-image actions: [＋ create] [▶ run] [⋮ more] [remove].
+   Create and run open the launch form with this image in it; the menu lists
+   every other verb. *@
+@inherits EntityActionsBase
+@using WslcAgent.UI.Components.Dialogs
+@using WslcAgent.UI.Components.Launch
+
+@* A card leads with the verbs worth reaching without the menu — view and edit,
+   view files, pull — and keeps the image's own (create, run, the menu, remove)
+   at the far end. The menu then drops what the card already shows: one
+   component, one list, two behaviours. *@
+<div class="@(Shortcuts ? "wslc-row-verbs" : "")">
+@if (Shortcuts || ShortcutsAlone)
+{
+    <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center" Class="wslc-row-shortcuts">
+        <MudIconButton Icon="@Icons.Material.Filled.EditNote" Size="Size.Small" title="View &amp; edit" Disabled="@(Busy || Pulling)" OnClick="InspectAsync" />
+        <MudIconButton Icon="@Icons.Material.Filled.Folder" Size="Size.Small" title="View files" Disabled="@(Busy || Pulling)" OnClick="FilesAsync" />
+        <MudIconButton Icon="@Icons.Material.Filled.Download" Size="Size.Small" title="Pull" Disabled="@(Busy || Pulling)" OnClick="PullAsync" />
+    </MudStack>
+}
+@if (!ShortcutsAlone)
+{
+<MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center">
+    <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" title="@Title("Create a container from this image")" Disabled="Pulling" OnClick="@(() => LaunchAsync(LaunchMode.Create))" />
+    <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" Color="Color.Success" title="@Title("Run a container from this image")" Disabled="Pulling" OnClick="@(() => LaunchAsync(LaunchMode.Run))" />
+    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" title="@Title("More actions")" Disabled="@(Busy || Pulling)" OpenChanged="MenuOpenChanged">
+        @* View & edit leads the menu, then view files. *@
+        @if (!Shortcuts)
+        {
+            <MudMenuItem Icon="@Icons.Material.Filled.EditNote" OnClick="InspectAsync">View &amp; edit</MudMenuItem>
+            <MudMenuItem Icon="@Icons.Material.Filled.Folder" OnClick="FilesAsync">View files</MudMenuItem>
+        }
+        <MudMenuItem Icon="@Icons.Material.Filled.Inventory2" OnClick="UsageAsync">View container usage</MudMenuItem>
+        @if (!Shortcuts)
+        {
+            <MudMenuItem Icon="@Icons.Material.Filled.Download" OnClick="PullAsync">Pull</MudMenuItem>
+        }
+        <MudMenuItem Icon="@Icons.Material.Filled.Upload" OnClick="PushAsync">Push</MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Filled.Save" OnClick="SaveAsync">Save</MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Filled.Sell" OnClick="TagAsync">Tag</MudMenuItem>
+    </MudMenu>
+    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="@Title("Remove")" Disabled="@(Busy || Pulling)" OnClick="RemoveImageAsync" />
+</MudStack>
+}
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ImageSummary Image { get; set; } = default!;
+
+    /// <summary>The card's own group: the verbs worth reaching without the menu.</summary>
+    [Parameter] public bool Shortcuts { get; set; }
+
+    /// <summary>The shortcuts with nothing else: the dashboard's object of them, the resource's own verbs being another.</summary>
+    [Parameter] public bool ShortcutsAlone { get; set; }
+
+    /// <summary>A pull of this image is under way (or just failed): every verb waits for it.</summary>
+    [Parameter] public bool Pulling { get; set; }
+
+    protected override string Key => Image.Reference;
+
+    private string Title(string title) => Pulling ? "Disabled while pulling" : title;
+
+    /// <summary>The same form the Containers page opens, the image already in it.</summary>
+    private async Task LaunchAsync(LaunchMode mode)
+    {
+        var parameters = new DialogParameters<ContainerFormDialog>
+        {
+            { d => d.Mode, mode },
+            { d => d.Form, new LaunchForm { ImageRef = Image.Reference } },
+        };
+        if (await DialogFlow.ShowAsync<ContainerFormDialog>(Dialogs, mode == LaunchMode.Run ? "Run container" : "Create container", parameters, large: true))
+        {
+            await Changed.InvokeAsync();
+        }
+    }
+
+    /// <summary>The image's files in a temporary container of it, removed when the window closes.</summary>
+    private Task FilesAsync() =>
+        ResourceViews.FilesAsync(Dialogs, $"Files — {Image.Reference} (temp)", Image.Reference,
+            () => Api.OpenImageFilesAsync(Image.Reference), session => Api.CloseImageFilesAsync(session.Container));
+
+    private Task InspectAsync() =>
+        ResourceViews.InspectAsync(Dialogs, $"View & edit — {Image.Reference}",
+            async () => (await Api.GetImageInspectAsync(Image.Reference)).Json,
+            item => [
+                new("ID", InspectFact.Text(item, "Id"), Mono: true),
+                new("Created", InspectFact.Text(item, "Created")),
+                new("Size", SizeText(InspectFact.Text(item, "Size"))),
+                new("Platform", string.Join('/', new[] { InspectFact.Text(item, "Os"), InspectFact.Text(item, "Architecture") }.Where(p => p.Length > 0))),
+                new("Exposed ports", InspectFact.Keys(InspectFact.Child(item, "Config"), "ExposedPorts"), Mono: true),
+            ],
+            item => [
+                new("Tag", item.TryGetProperty("RepoTags", out var tags) && tags.ValueKind == System.Text.Json.JsonValueKind.Array && tags.GetArrayLength() > 0 ? tags[0].GetString() ?? Image.Reference : Image.Reference),
+                new("Workdir", InspectFact.Text(InspectFact.Child(item, "Config"), "WorkingDir")),
+                new("Entrypoint", InspectFact.Words(InspectFact.Child(item, "Config"), "Entrypoint")),
+                new("Cmd", InspectFact.Words(InspectFact.Child(item, "Config"), "Cmd")),
+            ]);
+
+    /// <summary>Sizes: GB with two decimals from a gigabyte, MB with one below it.</summary>
+    private static string SizeText(string bytes) =>
+        long.TryParse(bytes, out var size) && size > 0
+            ? size >= 1_000_000_000
+                ? (size / 1e9).ToString("0.00 GB", System.Globalization.CultureInfo.InvariantCulture)
+                : (size / 1e6).ToString("0.0 MB", System.Globalization.CultureInfo.InvariantCulture)
+            : "";
+
+    private Task UsageAsync() =>
+        ResourceViews.ReportAsync(Dialogs, "Container usage", async () =>
+            UsageReports.Image(Image, (await Api.GetContainersAsync(all: true)).Containers));
+
+    private async Task PushAsync()
+    {
+        var pushing = Snackbar.Add("Pushing image...", Severity.Info, o => o.RequireInteraction = true);
+        try
+        {
+            await Api.PushImageAsync(Image.Reference);
+            Snackbar.Add("Image pushed", Severity.Success);
+            await Changed.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add(ex.Message.Length > 0 ? ex.Message : "Failed to push image", Severity.Error);
+        }
+        finally
+        {
+            if (pushing is not null)
+            {
+                Snackbar.Remove(pushing);
+            }
+        }
+    }
+
+    /// <summary>Asks for the archive path, named after the image; the archive is written on the agent's machine.</summary>
+    private async Task SaveAsync()
+    {
+        var suggested = System.Text.RegularExpressions.Regex.Replace(Image.Reference, "[:/]", "-") + ".tar";
+        if (await DialogFlow.PromptAsync(Dialogs, "Save image", "Save path (tar file)", "On the agent's machine; a file name alone goes to its user's Downloads.", "Save", suggested) is not { } output)
+        {
+            return;
+        }
+
+        try
+        {
+            var saved = await Api.SaveImageAsync(Image.Reference, output);
+            Snackbar.Add($"Image saved to {saved.Path}", Severity.Success);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add(ex.Message.Length > 0 ? ex.Message : "Failed to save image", Severity.Error);
+        }
+    }
+
+    private Task PullAsync() =>
+        OpenAsync<PullImageDialog>("Pull image", new DialogParameters<PullImageDialog> { { d => d.Reference, Image.Reference } });
+
+    private Task TagAsync() =>
+        OpenAsync<TagImageDialog>("Tag image", new DialogParameters<TagImageDialog> { { d => d.Source, Image.Reference } });
+
+    private Task RemoveImageAsync() =>
+        RemoveAsync("image", Image.Reference, ct => Api.RemoveImageAsync(Image.Reference, force: false, ct));
+}

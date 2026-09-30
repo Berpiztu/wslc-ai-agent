@@ -1,0 +1,53 @@
+@* A network's create-time settings, the same fields wherever a network is
+   created or edited (Create, View & edit). *@
+
+<MudTextField T="string" @bind-Value="Model.Name" Label="Name" Placeholder="appnet" Immediate="true" Disabled="Disabled"
+              Required="true" RequiredError="A network name is required"
+              Variant="Variant.Filled" Margin="Margin.Dense" />
+<MudTextField T="string" @bind-Value="Model.Driver" Label="Driver" Placeholder="bridge" Disabled="Disabled" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+<MudTextField T="string" @bind-Value="Model.Subnet" Label="Subnet" Placeholder="172.28.0.0/16" Disabled="Disabled" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+<MudTextField T="string" @bind-Value="Model.Gateway" Label="Gateway" Placeholder="172.28.0.1" Disabled="Disabled" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+<MudTextField T="string" @bind-Value="Model.IpRange" Label="IP range" Placeholder="172.28.5.0/24" Disabled="Disabled" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+<SquareCheckBox @bind-Value="Model.Internal" Disabled="Disabled" Label="Internal (no external access)" />
+<MudTextField T="string" @bind-Value="Model.Label" Label="Label" Placeholder="env=prod" Disabled="Disabled" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+<MudTextField T="string" @bind-Value="Model.Option" Label="Driver option" Placeholder="com.example.key=value" Disabled="Disabled" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+
+@code {
+    [Parameter, EditorRequired] public NetworkForm Model { get; set; } = default!;
+
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>What the fields hold while they are edited; <see cref="ToRequest"/> is what the agent gets.</summary>
+    public sealed class NetworkForm
+    {
+        public string Name { get; set; } = "";
+
+        public string Driver { get; set; } = "";
+
+        public string Subnet { get; set; } = "";
+
+        public string Gateway { get; set; } = "";
+
+        public string IpRange { get; set; } = "";
+
+        public bool Internal { get; set; }
+
+        public string Label { get; set; } = "";
+
+        public string Option { get; set; } = "";
+
+        public static NetworkForm From(CreateNetworkRequest request) => new()
+        {
+            Name = request.Name,
+            Driver = request.Driver,
+            Subnet = request.Subnet,
+            Gateway = request.Gateway,
+            IpRange = request.IpRange,
+            Internal = request.Internal,
+            Label = request.Label,
+            Option = request.Option,
+        };
+
+        public CreateNetworkRequest ToRequest() => new(Name, Driver, Subnet, Gateway, IpRange, Internal, Label, Option);
+    }
+}

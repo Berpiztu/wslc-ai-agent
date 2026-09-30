@@ -1,0 +1,94 @@
+@* Live stats: one sample every 1.5 s, the last 120 kept, in a
+   2×2 grid of chart panels — CPU usage, memory usage (its axis grows to the
+   container's limit when it has one), disk read/write, network I/O — each with
+   its latest value in the title and zoom in, zoom out and reset. A failed
+   sample says so above the grid; polling stops when the view goes away. *@
+@implements IDisposable
+@inject WslcAgentApi Api
+
+@if (_status is not null)
+{
+    <MudText Typo="Typo.caption" Class="@($"mb-1 flex-shrink-0 {(_statusError ? "mud-error-text" : "mud-text-secondary")}")" role="status">@_status</MudText>
+}
+<div class="wslc-chart-grid wslc-fill-scroll">
+    <LineChart Title="CPU usage:" Value="@ContainerSeries.CpuText(_latest)" Format="percent" YMax="100" Zoom="true"
+               Series="ContainerSeries.Cpu" Times="@_times" Values="@(new[] { Pick(s => s.CpuPercent) })" />
+    <LineChart Title="Memory usage:" Value="@ContainerSeries.MemoryText(_latest)"
+               Format="bytes" ForceYMax="@(_samples.LastOrDefault(s => s.MemoryLimitBytes > 0)?.MemoryLimitBytes ?? 0)" Zoom="true"
+               Series="ContainerSeries.Memory" Times="@_times" Values="@(new[] { Pick(s => s.MemoryUsedBytes) })" />
+    <LineChart Title="Disk read/write:" Value="@ContainerSeries.DiskText(_latest)" Format="bytes" Zoom="true"
+               Series="ContainerSeries.Disk" Times="@_times"
+               Values="@(new[] { Pick(s => s.DiskReadBytes), Pick(s => s.DiskWriteBytes) })" />
+    <LineChart Title="Network I/O:" Value="@ContainerSeries.NetworkText(_latest)" Format="bytes" Zoom="true"
+               Series="ContainerSeries.Network" Times="@_times"
+               Values="@(new[] { Pick(s => s.NetworkReceivedBytes), Pick(s => s.NetworkSentBytes) })" />
+</div>
+
+@code {
+    private const int MaxPoints = 120;
+    private static readonly TimeSpan Every = TimeSpan.FromMilliseconds(1500);
+
+    private readonly List<ContainerStats> _samples = [];
+    private readonly List<long> _times = [];
+    private readonly CancellationTokenSource _stop = new();
+    private ContainerStats? _latest;
+    private string? _status = "Loading…";
+    private bool _statusError;
+
+    [Parameter, EditorRequired] public string Container { get; set; } = "";
+
+    protected override void OnInitialized() => _ = PollAsync(_stop.Token);
+
+    private async Task PollAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(Every);
+        try
+        {
+            do
+            {
+                await SampleAsync(cancellationToken);
+                await InvokeAsync(StateHasChanged);
+            }
+            while (await timer.WaitForNextTickAsync(cancellationToken));
+        }
+        catch (OperationCanceledException)
+        {
+            // The view went away.
+        }
+    }
+
+    private async Task SampleAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            _latest = await Api.GetContainerStatsAsync(Container, cancellationToken);
+            _status = null;
+        }
+        catch (Exception ex) when ((ex is AgentApiException or HttpRequestException) && !ex.IsSignInRequired())
+        {
+            _status = ex.Message;
+            _statusError = true;
+            return;
+        }
+        catch (Exception ex) when (ex.IsSignInRequired())
+        {
+            return;
+        }
+
+        _samples.Add(_latest);
+        _times.Add(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        if (_samples.Count > MaxPoints)
+        {
+            _samples.RemoveAt(0);
+            _times.RemoveAt(0);
+        }
+    }
+
+    private double[] Pick(Func<ContainerStats, double> value) => _samples.Select(value).ToArray();
+
+    public void Dispose()
+    {
+        _stop.Cancel();
+        _stop.Dispose();
+    }
+}

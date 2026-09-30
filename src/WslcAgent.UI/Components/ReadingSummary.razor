@@ -1,0 +1,38 @@
+@* A reading's three texts, stacked: its label, its value and the hint under
+   it, each line cut at the edge. The dashboard's objects draw it, so they
+   all say a reading alike. *@
+
+<div class="wslc-home-card-head">
+    @if (LabelShown)
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary wslc-reading-label">@Label</MudText>
+    }
+    @if (ValueShown)
+    {
+        <MudText Typo="Typo.h6" Class="wslc-home-card-value">@Value</MudText>
+    }
+    @if (HintShown)
+    {
+        <MudText Typo="Typo.caption" Class="@(Error ? "mud-error-text wslc-reading-hint" : "mud-text-secondary wslc-reading-hint")">@Hint</MudText>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    [Parameter, EditorRequired] public string Value { get; set; } = "";
+
+    [Parameter] public string Hint { get; set; } = "";
+
+    /// <summary>The reading failed: the hint says so in the error colour.</summary>
+    [Parameter] public bool Error { get; set; }
+
+    /// <summary>The label is drawn; a dashboard chart lets the user hide each of its summary's lines.</summary>
+    [Parameter] public bool LabelShown { get; set; } = true;
+
+    /// <summary>The value is drawn.</summary>
+    [Parameter] public bool ValueShown { get; set; } = true;
+
+    /// <summary>The hint is drawn.</summary>
+    [Parameter] public bool HintShown { get; set; } = true;
+}

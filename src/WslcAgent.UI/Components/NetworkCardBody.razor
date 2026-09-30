@@ -1,0 +1,23 @@
+@* What a network's card says about it, as the container card: the readings
+   at the left, the dials at the right — what the containers on the network
+   have received and sent, each as its share of what every container has.
+   One body, drawn by the Networks page's card and by a network's card on the
+   dashboard. *@
+
+<div class="wslc-card-detail">
+    <NetworkCardTexts Network="Network" />
+    <div class="wslc-card-dials">
+        <NetworkDial Network="Network" Total="TotalReceived" />
+        <NetworkDial Network="Network" Sent="true" Total="TotalSent" />
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public NetworkSummary Network { get; set; } = default!;
+
+    /// <summary>What every container has received: what the Received dial is a share of.</summary>
+    [Parameter] public long TotalReceived { get; set; }
+
+    /// <summary>What every container has sent: what the Sent dial is a share of.</summary>
+    [Parameter] public long TotalSent { get; set; }
+}

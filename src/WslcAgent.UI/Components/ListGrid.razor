@@ -1,0 +1,152 @@
+@* The one table shell for list pages (docs/list-pages.md):
+   striped, bordered, fixed header, columns at the widths they declare,
+   the last of them holding the spare width, drag-to-resize and
+   drag-to-reorder, 50 rows per page, the pager as the last line, the loading
+   bar only until the first rows arrive (row work shows per row), and it fills
+   the height left on the page (its body owns the scrollbars).
+   Resize mode is Container: a dragged column grows into the width the last
+   column is holding (and the grid scrolls sideways once there is none left).
+   Column mode would only take width from the next column, which is already at
+   its declared width, so it never moved.
+   Pages provide Columns (identity first, pinned left; the last of them takes
+   the spare width) and Actions (one column, pinned right). A row is ticked
+   by its checkbox and by nothing else: clicking the row is for reading it.
+   A page that has one may give each row a detail (ChildRowContent, opened by
+   its HierarchyColumn) and a class of its own (RowClassFunc).
+   A list too long to page (the log: thousands of rows, read by scrolling)
+   asks for Virtualize — MudBlazor's own virtualisation over Items, its
+   "virtualization" example: the grid draws the rows in view and no more as
+   the reader scrolls, and has no pager. *@
+@typeparam TItem
+@implements IDisposable
+@inject WslcAgent.UI.Components.Styles.UiStyle Style
+
+<div class="wslc-fill wslc-grid">
+    @if (Virtualize)
+    {
+        <MudDataGrid @ref="_grid" T="TItem" Items="Items" Virtualize="true" ItemSize="ItemSize" Loading="@(Loading && !Items.Any())"
+                     Striped="Style.Applied.GridStriped" Bordered="Style.Applied.GridBordered" FixedHeader="Style.Applied.GridFixedHeader"
+                     Dense="Style.Applied.GridDense" Hover="Style.Applied.GridHover"
+                     Outlined="Style.Applied.GridOutlined" Elevation="Style.Applied.GridElevation"
+                     SortMode="SortMode.Single" Filterable="false" Breakpoint="Breakpoint.None"
+                     ColumnResizeMode="ResizeMode.Container" DragDropColumnReordering="true" ShowColumnOptions="false"
+                     MultiSelection="MultiSelection" SelectedItems="SelectedItems" SelectedItemsChanged="SelectedItemsChanged" SelectOnRowClick="false"
+                     SortChanged="OnSortChanged"
+                     ChildRowContent="ChildRowContent" RowClassFunc="RowClassFunc">
+            <Columns>
+                @Columns
+                @Actions
+            </Columns>
+            @* One cell, no colspan: MudBlazor's example spans 1000, and in a fixed
+               layout that is a thousand phantom columns sharing the spare width while
+               the placeholder shows, which collapsed the stretch column. *@
+            <RowLoadingContent>
+                <tr class="mud-table-row">
+                    <td class="mud-table-cell">Loading…</td>
+                </tr>
+            </RowLoadingContent>
+        </MudDataGrid>
+        @if (!Items.Any() && !Loading)
+        {
+            <EmptyState Text="@EmptyText" />
+        }
+    }
+    else
+    {
+        <MudDataGrid @ref="_grid" T="TItem" Items="Items" Loading="@(Loading && !Items.Any())"
+                     Striped="Style.Applied.GridStriped" Bordered="Style.Applied.GridBordered" FixedHeader="Style.Applied.GridFixedHeader"
+                     Dense="Style.Applied.GridDense" Hover="Style.Applied.GridHover"
+                     Outlined="Style.Applied.GridOutlined" Elevation="Style.Applied.GridElevation"
+                     SortMode="SortMode.Single" Filterable="false" Breakpoint="Breakpoint.None"
+                     ColumnResizeMode="ResizeMode.Container" DragDropColumnReordering="true" ShowColumnOptions="false"
+                     MultiSelection="MultiSelection" SelectedItems="SelectedItems" SelectedItemsChanged="SelectedItemsChanged" SelectOnRowClick="false"
+                     SortChanged="OnSortChanged"
+                     CurrentPage="Page" CurrentPageChanged="PageChanged" RowsPerPage="RowsPerPage"
+                     ChildRowContent="ChildRowContent" RowClassFunc="RowClassFunc"
+                     PagerContent="Pager">
+            <Columns>
+                @Columns
+                @Actions
+            </Columns>
+        </MudDataGrid>
+        @if (!Items.Any() && !Loading)
+        {
+            <EmptyState Text="@EmptyText" />
+        }
+    }
+</div>
+
+@code {
+    private static readonly int[] PageSizes = [10, 25, 50, 100];
+
+    private static readonly RenderFragment Pager = @<MudDataGridPager T="TItem" PageSizeOptions="@PageSizes" />;
+
+    /// <summary>
+    /// The look chosen in Settings (Layout) reaches every list through here:
+    /// this is the one component every list page draws its table with, so a
+    /// value applied there is applied to all of them at once, without leaving
+    /// the page it was applied from.
+    /// </summary>
+    protected override void OnInitialized() => Style.Changed += OnStyleChanged;
+
+    private void OnStyleChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Style.Changed -= OnStyleChanged;
+
+    private MudDataGrid<TItem>? _grid;
+
+    /// <summary>
+    /// MudBlazor says the sort changed without saying what it is, so the grid is
+    /// asked: with SortMode.Single there is one definition, and the page needs it
+    /// to put the cards in the same order.
+    /// </summary>
+    private Task OnSortChanged() =>
+        SortChanged.InvokeAsync(_grid?.SortDefinitions.Values.OrderBy(sort => sort.Index).FirstOrDefault());
+
+    [Parameter, EditorRequired] public IEnumerable<TItem> Items { get; set; } = [];
+
+    /// <summary>
+    /// The rows in view drawn and no more, as the reader scrolls (MudBlazor's own
+    /// virtualisation over <see cref="Items"/>): no pager, the whole list at
+    /// hand. Measured against the "server data" kind: that one asks for the rows
+    /// again at every stop of the scroll and rebuilds them all (1802 nodes for
+    /// 34 rows), which showed as the log flickering; this one slices the
+    /// list in memory and rebuilds nothing.
+    /// </summary>
+    [Parameter] public bool Virtualize { get; set; }
+
+    /// <summary>A virtualised row's height in pixels, measured, so the scroll bar is true to the rows.</summary>
+    [Parameter] public float ItemSize { get; set; } = 30f;
+
+    /// <summary>Data columns, in order; the first ones are the pinned identity columns.</summary>
+    [Parameter, EditorRequired] public RenderFragment Columns { get; set; } = default!;
+
+    /// <summary>The actions column, pinned right; rendered after the data columns.</summary>
+    [Parameter] public RenderFragment? Actions { get; set; }
+
+    [Parameter] public bool Loading { get; set; }
+
+    [Parameter] public string EmptyText { get; set; } = "Nothing to show.";
+
+    [Parameter] public int RowsPerPage { get; set; } = 50;
+
+    /// <summary>What a row opens under itself on its HierarchyColumn; the item is <c>context.Item</c>.</summary>
+    [Parameter] public RenderFragment<CellContext<TItem>>? ChildRowContent { get; set; }
+
+    /// <summary>A class for each row, from the item and its index; a log colours its rows by level this way.</summary>
+    [Parameter] public Func<TItem, int, string>? RowClassFunc { get; set; }
+
+    /// <summary>The sort the user set, so the page can show the cards in the same order.</summary>
+    [Parameter] public EventCallback<SortDefinition<TItem>?> SortChanged { get; set; }
+
+    [Parameter] public bool MultiSelection { get; set; }
+
+    [Parameter] public HashSet<TItem> SelectedItems { get; set; } = [];
+
+    [Parameter] public EventCallback<HashSet<TItem>> SelectedItemsChanged { get; set; }
+
+    /// <summary>The page being shown; the page keeps it in the URL so Back returns to it.</summary>
+    [Parameter] public int Page { get; set; }
+
+    [Parameter] public EventCallback<int> PageChanged { get; set; }
+}

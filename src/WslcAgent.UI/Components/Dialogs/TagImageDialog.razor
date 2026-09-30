@@ -1,0 +1,18 @@
+@* Give an image another reference (wslc image tag SOURCE TARGET). *@
+@using WslcAgent.ApiClient
+@inject WslcAgentApi Api
+
+<FormDialog SubmitText="Tag" OnSubmit="TagAsync">
+    <MudTextField T="string" Value="Source" Label="Source" ReadOnly="true" Variant="Variant.Filled" Margin="Margin.Dense" />
+    <MudTextField T="string" @bind-Value="_target" Label="New reference" Placeholder="myapp:1.2" Immediate="true"
+                  Required="true" RequiredError="A target reference is required"
+                  Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+</FormDialog>
+
+@code {
+    private string _target = "";
+
+    [Parameter, EditorRequired] public string Source { get; set; } = "";
+
+    private Task TagAsync() => Api.TagImageAsync(Source, _target);
+}

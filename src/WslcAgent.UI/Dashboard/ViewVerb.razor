@@ -1,0 +1,32 @@
+@* The view a board is designed in, landscape or portrait, and after the
+   arrow the one a tap takes it to: the dashboard's in design and the board
+   of every object's. The view is in the address (?view=portrait), so Back
+   goes from one to the other. Its icon is the view it is in, a screen lying
+   down or standing up, as the title's is. *@
+@namespace WslcAgent.UI.Dashboard
+@using BoardView = Berpiztu.Dashboard.Model.DashboardView
+@inject NavigationManager Navigation
+
+<VerbFab StartIcon="@Icon(Portrait)"
+         Label="@(Portrait ? "View: portrait → landscape" : "View: landscape → portrait")" OnClick="Switch"
+         Title="@(Portrait ? "Design the view of a screen wider than it is tall" : "Design the view of a screen taller than it is wide, a phone standing up")" />
+
+@code {
+    /// <summary>The query parameter that names the view designed; absent for the landscape one.</summary>
+    public const string Query = "view";
+
+    /// <summary>The portrait view is the one on screen.</summary>
+    [Parameter, EditorRequired] public bool Portrait { get; set; }
+
+    /// <summary>The view the address's value of <see cref="Query"/> names.</summary>
+    public static string Of(string? value) => value == BoardView.Portrait ? BoardView.Portrait : BoardView.Landscape;
+
+    /// <summary>A view's glyph, the title's and the verb's: a screen lying down or standing up.</summary>
+    public static string Icon(bool portrait) =>
+        portrait ? Icons.Material.Filled.StayPrimaryPortrait : Icons.Material.Filled.StayPrimaryLandscape;
+
+    /// <summary>A view's name, as the title and the place's verb say it.</summary>
+    public static string Name(bool portrait) => portrait ? "portrait" : "landscape";
+
+    private void Switch() => Navigation.NavigateTo(Navigation.GetUriWithQueryParameter(Query, Portrait ? null : BoardView.Portrait));
+}

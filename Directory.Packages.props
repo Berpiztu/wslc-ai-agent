@@ -1,0 +1,58 @@
+<Project>
+
+  <!-- Central package versions. Projects reference packages without a
+       Version attribute; bump versions here, on purpose, one at a time. -->
+  <ItemGroup>
+    <!-- ASP.NET Core / Blazor -->
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
+
+    <PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="10.0.12" />
+
+    <!-- UI -->
+    <PackageVersion Include="MudBlazor" Version="9.10.0" />
+
+    <!-- MAUI (keep in step with the installed maui-windows/android workload version) -->
+    <PackageVersion Include="Microsoft.Maui.Controls" Version="10.0.20" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.20" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="10.0.12" />
+
+    <!-- The Android client's pushed notifications (Firebase Cloud Messaging) -->
+    <PackageVersion Include="Xamarin.Firebase.Messaging" Version="125.1.3" />
+    <!-- Firebase lifts these AndroidX libraries past what MAUI's Kotlin
+         extension packages accept (NU1608), and from Fragment 1.9 on the
+         extensions live in Fragment itself: with Fragment.Ktx 1.8 beside it,
+         FragmentKt is defined twice and the Android build fails (27 September
+         2026). The extension packages are pinned to the versions Firebase's
+         libraries take; the Android app references them, nothing else. -->
+    <PackageVersion Include="Xamarin.AndroidX.Fragment.Ktx" Version="1.9.0" />
+    <PackageVersion Include="Xamarin.AndroidX.Collection.Ktx" Version="1.6.0.1" />
+    <PackageVersion Include="Xamarin.AndroidX.Lifecycle.LiveData" Version="2.11.0.1" />
+    <PackageVersion Include="Xamarin.AndroidX.Lifecycle.LiveData.Core.Ktx" Version="2.11.0.1" />
+    <PackageVersion Include="Xamarin.AndroidX.Lifecycle.Process" Version="2.11.0.1" />
+
+    <!-- MCP (official C# SDK) -->
+    <PackageVersion Include="ModelContextProtocol" Version="2.2.0" />
+    <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="2.2.0" />
+
+    <!-- Host browser (Open with browser from a remote client): drives the host's Edge -->
+    <PackageVersion Include="Microsoft.Playwright" Version="1.62.0" />
+
+    <!-- The agent's tray window (WslcAgent.Tray): the same WebView2 the MAUI client runs on Windows -->
+    <PackageVersion Include="Microsoft.Web.WebView2" Version="1.0.3179.45" />
+
+    <!-- Installers (WiX 5, built as MSBuild projects under packaging/) -->
+    <PackageVersion Include="WixToolset.UI.wixext" Version="5.0.2" />
+    <PackageVersion Include="WixToolset.Util.wixext" Version="5.0.2" />
+
+    <!-- Tests -->
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+  </ItemGroup>
+
+</Project>

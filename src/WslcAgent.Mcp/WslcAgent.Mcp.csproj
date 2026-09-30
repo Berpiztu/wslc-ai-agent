@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>WslcAgent.Mcp</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Tools return the same records the HTTP API does. -->
+    <ProjectReference Include="..\WslcAgent.ApiClient\WslcAgent.ApiClient.csproj" />
+  </ItemGroup>
+
+</Project>

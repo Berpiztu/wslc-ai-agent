@@ -1,0 +1,51 @@
+@* What the user sees when a screen throws where nothing caught it. The
+   built-in answer is a bar at the foot of the window reading "An unhandled
+   error has occurred", which says nothing and leaves the app dead until it is
+   reloaded — and on a phone that is a dead end. This says what happened and
+   offers the way out, and it is the only place a release build ever tells us:
+   there is no console on a phone. *@
+
+<div class="wslc-error-panel">
+    <MudPaper Outlined="true" Class="pa-4">
+        <MudText Typo="Typo.h6" Class="mb-1">Something went wrong on this screen</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+            The rest of the app still works. Try again, or go back to the start; if it keeps happening, this is the message to report.
+        </MudText>
+        <MudAlert Severity="Severity.Error" Class="mb-3" role="alert">
+            <div class="wslc-mono">@Error.GetType().Name</div>
+            <div>@Error.Message</div>
+        </MudAlert>
+        <MudStack Row="true" Spacing="1">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="OnRetry">Try again</MudButton>
+            <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Home" OnClick="@(() => Navigation.NavigateTo("", forceLoad: true))">Start again</MudButton>
+            <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ContentCopy" OnClick="CopyAsync">Copy the detail</MudButton>
+        </MudStack>
+    </MudPaper>
+</div>
+
+@code {
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    [Inject] private IJSRuntime Js { get; set; } = default!;
+
+    [Inject] private ISnackbar Snackbar { get; set; } = default!;
+
+    [Parameter, EditorRequired] public Exception Error { get; set; } = default!;
+
+    /// <summary>Clears the boundary so the screen is drawn again.</summary>
+    [Parameter] public EventCallback OnRetry { get; set; }
+
+    /// <summary>The type, the message and the stack: what a report needs, and what a phone cannot show otherwise.</summary>
+    private async Task CopyAsync()
+    {
+        try
+        {
+            await Js.InvokeVoidAsync("navigator.clipboard.writeText", $"{Error.GetType().FullName}: {Error.Message}\n{Error.StackTrace}");
+            Snackbar.Add("The detail is on the clipboard", Severity.Success);
+        }
+        catch (Exception ex) when (ex is JSException or InvalidOperationException)
+        {
+            Snackbar.Add("This device does not let the page write to the clipboard.", Severity.Error);
+        }
+    }
+}

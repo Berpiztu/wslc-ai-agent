@@ -1,0 +1,31 @@
+@* The field a choice is drawn with:
+   what is chosen, read only, and a green arrow down at its end, as a select
+   has. Both kinds of choice draw this one field — ChoiceField's fixed values
+   and ListField's values read from a list — so they look and sit alike. The
+   arrow runs OnPick: MudBlazor's button keeps its press to itself, so the
+   field always says what its arrow does. *@
+
+<MudTextField T="string" Value="@Text" Label="@Label" ReadOnly="true"
+              Margin="Margin.Dense" Variant="@(Bare ? Variant.Text : Variant.Outlined)" Underline="!Bare" HelperTextOnFocus="false"
+              Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.ArrowDropDown" AdornmentColor="Color.Success"
+              OnAdornmentClick="@(() => OnPick.InvokeAsync())"
+              AdornmentAriaLabel="@Label" title="@Title" Class="@Class" />
+
+@code {
+    /// <summary>What is chosen, as it reads.</summary>
+    [Parameter] public string Text { get; set; } = "";
+
+    /// <summary>The field's word, inside its border.</summary>
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    /// <summary>The tooltip: what the field chooses.</summary>
+    [Parameter] public string Title { get; set; } = "";
+
+    [Parameter] public string? Class { get; set; }
+
+    /// <summary>No outline and no line under it, only what is chosen and its arrow: a choice standing on a dashboard, not in a form.</summary>
+    [Parameter] public bool Bare { get; set; }
+
+    /// <summary>What the arrow does: opens the picker, or the menu of values.</summary>
+    [Parameter, EditorRequired] public EventCallback OnPick { get; set; }
+}

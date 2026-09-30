@@ -1,0 +1,103 @@
+@page "/volumes"
+@inherits ListPageBase<VolumeSummary>
+
+<PageShell Title="Volumes" RequiresSession="true">
+    <TopbarSearch>
+        <SearchBox @bind-Value="Search" Placeholder="Search volumes" />
+    </TopbarSearch>
+    <TopbarNav>
+        <BulkBar Count="Selected.Count">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" OnClick="@(() => BulkRemoveAsync("volume", (v, ct) => Api.RemoveVolumeAsync(v.Name, ct)))">Remove</MudButton>
+        </BulkBar>
+    </TopbarNav>
+    <Verbs>
+        <VolumesVerbs Changed="RefreshAsync" />
+    </Verbs>
+    <ChildContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap" Spacing="2" Class="wslc-toolbar mb-1 flex-shrink-0"
+                  title="Managed WSLC volumes only. Bind mounts of host folders (configured from Images) are not volumes and do not appear here.">
+            <PageStats>
+                <PageStat Value="@($"{Items.Count} volumes")" />
+            </PageStats>
+            <ViewModeToggle @bind-Value="View" />
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RefreshAsync" Disabled="Loading" title="Refresh" />
+        </MudStack>
+
+        @if (Error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-2 flex-shrink-0">@Error</MudAlert>
+        }
+
+        @if (View == ViewMode.Table)
+        {
+            <ListGrid TItem="ListRow<VolumeSummary>" Items="Rows" Loading="Loading" Page="Page" PageChanged="p => Page = p" SortChanged="SortChanged" EmptyText="No volumes."
+                      MultiSelection="true" @bind-SelectedItems="Selected">
+                <Columns>
+                    <SelectColumn T="ListRow<VolumeSummary>" Size="Size.Small" StickyLeft="true" HeaderClass="@GridColumn.Select" CellClass="@GridColumn.Select" />
+                    @* The dot sorts the list by state: in use first, then the rest. *@
+                    <TemplateColumn T="ListRow<VolumeSummary>" Title="" Sortable="true" SortBy="@(r => r.Value.InUse ? 0 : 1)"
+                                    Resizable="false" StickyLeft="true" HeaderClass="@GridColumn.Bullet" CellClass="@GridColumn.Bullet">
+                        <CellTemplate>
+                            <StateDot Active="context.Item.Value.InUse" Key="@context.Item.Value.Name" />
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <PropertyColumn T="ListRow<VolumeSummary>" TProperty="string" Property="v => v.Value.Name" Title="Name" StickyLeft="true" HeaderClass="@GridColumn.Width(29)" CellClass="@GridColumn.Width(29)" />
+                    <PropertyColumn T="ListRow<VolumeSummary>" TProperty="string" Property="v => v.Value.Driver" Title="Driver" StickyLeft="true" HeaderClass="@GridColumn.Width(4)" CellClass="@GridColumn.Width(4)" />
+                    <PropertyColumn T="ListRow<VolumeSummary>" TProperty="string" Property="v => v.Value.Mountpoint" Title="Mountpoint" HeaderClass="@GridColumn.Stretch(108)" CellClass="@GridColumn.Stretch(108)">
+                        <CellTemplate>
+                            <span title="@(context.Item.Value.MountpointIsInsideVm ? "Inside the utility VM, not on this host" : null)">@Dash(context.Item.Value.Mountpoint)</span>
+                        </CellTemplate>
+                    </PropertyColumn>
+                </Columns>
+                <Actions>
+                    <TemplateColumn T="ListRow<VolumeSummary>" Title="Actions" Sortable="false" Resizable="false" DragAndDropEnabled="false" StickyRight="true" HeaderClass="@GridColumn.Actions" CellClass="@GridColumn.Actions">
+                        <CellTemplate>
+                            <VolumeActions Volume="context.Item.Value" Changed="RefreshAsync" />
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Actions>
+            </ListGrid>
+        }
+        else
+        {
+            <CardsGrid TItem="VolumeSummary" Items="Visible" Loading="Loading" EmptyText="No volumes.">
+                <ItemTemplate Context="v">
+                    <EntityCard Title="@v.Name" Subtitle="@v.Driver" AvatarColor="@(v.InUse ? Color.Success : Color.Default)" Key="@v.Name">
+                        <HeaderActions>
+                            @if (v.InUse)
+                            {
+                                <StateChip State="in use" />
+                            }
+                        </HeaderActions>
+                        <ChildContent>
+                            <VolumeCardBody Volume="v" TotalRead="_read" TotalWritten="_written" />
+                        </ChildContent>
+                        <Actions>
+                            <VolumeActions Volume="v" Changed="RefreshAsync" Shortcuts="true" />
+                        </Actions>
+                    </EntityCard>
+                </ItemTemplate>
+            </CardsGrid>
+        }
+    </ChildContent>
+</PageShell>
+
+@code {
+    /// <summary>What every container has read and written: what a volume's dials are a share of.</summary>
+    private long _read;
+    private long _written;
+
+    protected override async Task<IReadOnlyList<VolumeSummary>> LoadAsync()
+    {
+        var list = await Api.GetVolumesAsync();
+        _read = list.DiskReadBytes;
+        _written = list.DiskWriteBytes;
+        return list.Volumes;
+    }
+
+    protected override bool Matches(VolumeSummary v, string search) => Has(v.Name, search) || Has(v.Driver, search) || Has(v.Mountpoint, search);
+
+    protected override string KeyOf(VolumeSummary v) => v.Name;
+
+    protected override string NameOf(VolumeSummary v) => v.Name;
+}

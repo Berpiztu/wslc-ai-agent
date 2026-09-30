@@ -1,0 +1,55 @@
+@* A launch field holding several CLI values (Publish, Env): the values on one
+   line, and beside it the button that opens the list editor with one row per
+   value. The list is what the form keeps and posts, so several ports or
+   variables survive View & edit; typing in the line is read back through the
+   field's own split rule. *@
+@inject IDialogService Dialogs
+
+@* The button that opens the list sits inside the field, at its end: the same
+   green disc the Files rows carry their verbs behind, at the same size. It is
+   placed by this component's own rule rather than by MudBlazor, whose adornment
+   takes an icon and not a component; the rule lives with the component it
+   serves, and the field keeps room at its end so a long list of ports or
+   variables never runs under the button. *@
+<div class="wslc-field-pick has-note">
+    <MudTextField Margin="Margin.Dense" T="string" Value="@ValueList.Join(Values)" ValueChanged="Typed" Label="@Label" Immediate="true" HelperTextOnFocus="true"
+                  Variant="Variant.Filled" HelperText="@HelperText" Error="@(Error is not null)" ErrorText="@Error" />
+    <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small"
+            title="@($"Edit {Label} values")" OnClick="EditAsync" />
+</div>
+
+@code {
+    /// <summary>The form's own list: edited in place, like the Volumes and Networks rows.</summary>
+    [Parameter, EditorRequired] public List<string> Values { get; set; } = [];
+
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    [Parameter] public string HelperText { get; set; } = "";
+
+    [Parameter] public string Placeholder { get; set; } = "";
+
+    /// <summary>The editor's foot note, the field's rule in words.</summary>
+    [Parameter] public string Hint { get; set; } = "";
+
+    /// <summary>What the check or a failed launch said about these values: shown in the field, in place of its example.</summary>
+    [Parameter] public string? Error { get; set; }
+
+    /// <summary>How a hand-typed line becomes values: <see cref="ValueList.Split"/> or <see cref="ValueList.SplitPairs"/>.</summary>
+    [Parameter, EditorRequired] public Func<string, List<string>> Split { get; set; } = ValueList.Split;
+
+    private void Typed(string text) => Replace(Split(text));
+
+    private async Task EditAsync()
+    {
+        if (await DialogFlow.EditValuesAsync(Dialogs, $"Edit {Label}", Label, Values, Placeholder, Hint) is { } edited)
+        {
+            Replace(edited);
+        }
+    }
+
+    private void Replace(IReadOnlyList<string> values)
+    {
+        Values.Clear();
+        Values.AddRange(values);
+    }
+}

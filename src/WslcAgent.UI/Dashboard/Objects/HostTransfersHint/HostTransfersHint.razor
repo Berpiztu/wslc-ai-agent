@@ -1,0 +1,21 @@
+@* The third line of the File transfers card's header (TransfersCardObject;
+   each of the header's three lines an object of its own): the container
+   the filter names, or how many containers the files are spread over. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits TransfersCardObject
+@attribute [DashboardObject("wslc.host-transfers-hint", "File transfers hint", Group = "System", Subgroup = "System", Icon = Icons.Material.Filled.Notes, Columns = 9, Rows = 1, Horizontal = HorizontalAlign.Left, CardOnly = true)]
+@* Its one line a part, so its colour and weight are its own to change. *@
+@attribute [DashboardObjectPart("hint", "Hint")]
+
+<div class="@ReadingClass">
+    <ReadingSummary Label="" Value="" Hint="@Hint" LabelShown="false" ValueShown="false" />
+</div>
+
+@code {
+    private string Hint =>
+        Filter.Length > 0 ? $"in and out of {NameOf(Filter)}"
+        : Shown.Count == 0 ? "nothing on the move"
+        : $"across {Named.Count} container{(Named.Count == 1 ? "" : "s")}";
+}

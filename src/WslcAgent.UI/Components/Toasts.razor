@@ -1,0 +1,27 @@
+@* MudBlazor's toast provider, plus the one thing the device decides: held in
+   the hand the toasts come down under the title bar, across the top (the bottom edge is the status bar, and a toast would cover
+   its alarms); driven with a mouse they stay over the bar at the right. Same toast either way — the height, the type and the
+   timing do not change with the device.
+
+   Both layouts render this instead of MudSnackbarProvider, so the rule lives in
+   one place: the sign-in screen and the detached terminal answer like the rest. *@
+@inject HostDevice Device
+@inject ISnackbar Snackbars
+
+<MudSnackbarProvider />
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // The browser is the one that knows (wslcAgent.isHandheld), so this can
+        // only be asked once there is a page: the provider is already up, and
+        // moving its container is a re-render, not a restart.
+        if (!firstRender || !await Device.IsHandheldAsync())
+        {
+            return;
+        }
+
+        Snackbars.Configuration.PositionClass = Defaults.Classes.Position.TopCenter;
+        StateHasChanged();
+    }
+}

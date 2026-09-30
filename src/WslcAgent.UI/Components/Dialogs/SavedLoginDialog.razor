@@ -1,0 +1,40 @@
+@* Adds a saved login, or changes one (Settings → Saved logins): the title the
+   browser pane picks it by, and the three things a sign-in page asks for — the
+   email, the user and the password. A page wants one or the other, so both are
+   kept and the pane offers both. *@
+@inject WslcAgentApi Api
+
+<FormDialog SubmitText="@(Existing is null ? "Add" : "Save")" OnSubmit="SaveAsync">
+    <MudTextField T="string" @bind-Value="_title" Label="Title" Immediate="true" Required="true" RequiredError="A title is required"
+                  HelperTextOnFocus="true" HelperText="Example: Open WebUI admin" Variant="Variant.Filled" Margin="Margin.Dense" autocomplete="off" />
+    <MudTextField T="string" @bind-Value="_email" Label="Email" Immediate="true" HelperTextOnFocus="true" HelperText="Example: admin@example.com"
+                  Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" autocomplete="off" spellcheck="false" InputType="InputType.Email" />
+    <MudTextField T="string" @bind-Value="_user" Label="User" Immediate="true" HelperTextOnFocus="true" HelperText="Example: admin"
+                  Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" autocomplete="off" spellcheck="false" />
+    <MudTextField T="string" @bind-Value="_password" Label="Password" Immediate="true" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2"
+                  autocomplete="off" spellcheck="false" />
+</FormDialog>
+
+@code {
+    private string _title = "";
+    private string _email = "";
+    private string _user = "";
+    private string _password = "";
+
+    /// <summary>The login being changed; none to add one.</summary>
+    [Parameter] public SavedLogin? Existing { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (Existing is not null)
+        {
+            (_title, _email, _user, _password) = (Existing.Title, Existing.Email, Existing.User, Existing.Password);
+        }
+    }
+
+    private Task SaveAsync()
+    {
+        var input = new SavedLoginInput(_title.Trim(), _email.Trim(), _user, _password);
+        return Existing is null ? Api.CreateSavedLoginAsync(input) : Api.UpdateSavedLoginAsync(Existing.Id, input);
+    }
+}

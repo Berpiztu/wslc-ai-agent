@@ -1,0 +1,23 @@
+@* The name of what the charts beside it show (the first line of the
+   Charts card), as the subject's picker names
+   it: Host, or the container's own name. Its subject is its property, chosen
+   once on the card with the charts' (ChartObject); it opens nothing. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits ChartObject
+@attribute [DashboardObject("wslc.chart-subject", "Chart subject", Group = "Charts", Icon = Icons.Material.Filled.Label, Source = SubjectSourceFamily.FamilyKey, DefaultSource = SubjectSourceFamily.Host, Columns = 12, Rows = 2, Horizontal = HorizontalAlign.Left, CardOnly = true)]
+@attribute [DashboardObjectPart("value", "Name", Bold = true)]
+
+<div class="@ReadingClass">
+    <ReadingSummary Label="" Value="@Name" LabelShown="false" HintShown="false" />
+</div>
+
+@code {
+    protected override string Chart => HostCharts.Cpu;
+
+    public override bool Opens => false;
+
+    /// <summary>Host, the container's name, or a dash while its container is not known yet.</summary>
+    private string Name => Source == SubjectSourceFamily.Host ? "Host" : Container?.Name ?? "—";
+}

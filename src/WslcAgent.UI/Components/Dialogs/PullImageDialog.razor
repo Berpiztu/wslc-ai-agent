@@ -1,0 +1,40 @@
+@* Pull an image by reference: from the header row (empty) or a row's menu
+   (prefilled). The agent runs the pull; the dialog closes at once and the
+   Images table shows its progress, its console and a way to stop it. *@
+@using WslcAgent.ApiClient
+@inject WslcAgentApi Api
+
+<FormDialog SubmitText="Pull" BusyText="Starting…" OnSubmit="PullAsync">
+    @* In lower case as it is typed: an image name is lower case by rule, and a
+       phone's keyboard capitalises the first letter. *@
+    <MudTextField T="string" Value="_reference" ValueChanged="Typed" Label="Image" Placeholder="alpine" Immediate="true"
+                  Required="true" RequiredError="An image reference is required"
+                  Variant="Variant.Filled" Margin="Margin.Dense" />
+    @* The tag nearly every pull wants, so the name alone is typed; a tag typed
+       in the name is the one wanted, and clears it. It took the place of All
+       tags, every tag of the repository, which nobody pulls. *@
+    <SquareCheckBox Value="_latest" ValueChanged="@(on => _latest = on)" Label="Latest"
+                    title="Pull the latest tag of the image named; clear it to pull the tag typed after the name" />
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">The pull runs on the agent: follow it, open its output or stop it from the Images table.</MudText>
+</FormDialog>
+
+@code {
+    private string _reference = "";
+    private bool _latest = true;
+
+    [Parameter] public string Reference { get; set; } = "";
+
+    protected override void OnInitialized() => Typed(Reference);
+
+    private void Typed(string text)
+    {
+        _reference = ImageReference.Normalize(text ?? "");
+        if (ImageReference.HasTag(_reference))
+        {
+            _latest = false;
+        }
+    }
+
+    private Task PullAsync() =>
+        Api.StartImagePullAsync(_latest ? $"{ImageReference.RepositoryOf(_reference)}:{ImageReference.Latest}" : _reference, allTags: false);
+}

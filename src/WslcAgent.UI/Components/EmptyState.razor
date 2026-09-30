@@ -1,0 +1,8 @@
+@* The list's "nothing here" line, centred in the area the rows would fill. *@
+<div class="wslc-empty">
+    <MudText Typo="Typo.body1" Class="mud-text-secondary">@Text</MudText>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Text { get; set; } = "";
+}

@@ -1,0 +1,25 @@
+@* The drive the sessions' VHDX files are on: what is used of it, of
+   how much, and its share. It reads the drive the host's disk
+   objects share (HostDiskRead). *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@inherits WslcObject
+@attribute [DashboardObject("wslc.host-disk", "Disk space reading", Group = "Host readings", Subgroup = "System", Icon = Icons.Material.Filled.SdStorage, Columns = 8, Rows = 4)]
+@attribute [DashboardObjectAlarm(DashboardMeasures.Disk, "Disk", On = true)]
+@attribute [DashboardObjectPart("label", "Label")]
+@attribute [DashboardObjectPart("value", "Value", Bold = true)]
+@attribute [DashboardObjectPart("hint", "Hint")]
+@inject HostDiskRead Disk
+
+<div class="@ReadingClass">
+    <ReadingSummary Label="Disk space" Value="@(Disk.Value is { Error: false } d ? $"{Bytes.Humanize(d.UsedBytes)} / {Bytes.Humanize(d.TotalBytes)}" : "—")"
+                    Hint="@Meaning" Error="@(Disk.Value?.Error == true)" />
+</div>
+
+@code {
+    private string Meaning => Disk.Value is not { } disk ? "Loading…"
+        : HostUsage.DiskPercent(disk) is { } used ? $"{used:0}% of {disk.Drive} used"
+        : "Unavailable";
+
+    protected override void OnInitialized() => Follow(Disk);
+}

@@ -1,0 +1,29 @@
+@* The native client, as the System card offers it: in the client itself its
+   update, amber when there is one to install; in a browser the download of
+   the client for this device. The System card and the dashboard's object of
+   it draw this one. *@
+@implements IDisposable
+@using WslcAgent.UI.Updates
+@inject IClientUpdates Client
+@inject ClientUpdateChecker Checker
+@inject ISnackbar Snackbar
+
+<VerbTaps>
+    @if (Client.Supported)
+    {
+        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="@(Checker.IsCurrent == false ? Color.Warning : Color.Default)"
+                   StartIcon="@Icons.Material.Filled.SystemUpdate" OnClick="@(() => UpdateFlow.CheckOrInstallAsync(Snackbar, Checker))"
+                   title="@(Checker.IsCurrent == false ? "Install the new version" : "Ask the agent for a newer client")">
+            @(Checker.IsCurrent == false ? "Install update" : "Check for update")
+        </MudButton>
+    }
+    <ClientDownloadButton />
+</VerbTaps>
+
+@code {
+    protected override void OnInitialized() => Checker.Changed += OnChanged;
+
+    public void Dispose() => Checker.Changed -= OnChanged;
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+}

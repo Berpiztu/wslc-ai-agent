@@ -1,0 +1,25 @@
+@* One reading of Settings › Notifications: ticked,
+   it notifies past its percent once it has stayed there its minutes. The two
+   numbers under the box, side by side, at every width. *@
+
+<SquareCheckBox Value="Value.On" ValueChanged="@(on => ValueChanged.InvokeAsync(Value with { On = on }))" Label="@Label" title="@Hint" />
+<MudStack Row="true" Spacing="2" Class="mb-2">
+    <MudTextField T="int" Value="Value.Percent" ValueChanged="@(percent => ValueChanged.InvokeAsync(Value with { Percent = Math.Clamp(percent, 1, 100) }))"
+                  Label="Past (%)" Immediate="true" Variant="Variant.Filled" Margin="Margin.Dense" Disabled="!Value.On"
+                  HelperTextOnFocus="true" HelperText="Example: 90 — above this percent it counts" />
+    <MudTextField T="int" Value="Value.Minutes" ValueChanged="@(minutes => ValueChanged.InvokeAsync(Value with { Minutes = Math.Max(minutes, 0) }))"
+                  Label="For (minutes)" Immediate="true" Variant="Variant.Filled" Margin="Margin.Dense" Disabled="!Value.On"
+                  HelperTextOnFocus="true" HelperText="Example: 5 — how long it has to stay there; 0 notifies at once" />
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public NotificationThreshold Value { get; set; } = default!;
+
+    [Parameter] public EventCallback<NotificationThreshold> ValueChanged { get; set; }
+
+    /// <summary>The reading, as the box names it: Host disk.</summary>
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    /// <summary>What it reads, as the tooltip says it.</summary>
+    [Parameter] public string Hint { get; set; } = "";
+}

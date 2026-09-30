@@ -1,0 +1,13 @@
+@* The one place a network is created (Networks page now, network pickers later). *@
+@using WslcAgent.ApiClient
+@inject WslcAgentApi Api
+
+<FormDialog SubmitText="Create" OnSubmit="CreateAsync">
+    <NetworkFields Model="_form" />
+</FormDialog>
+
+@code {
+    private readonly NetworkFields.NetworkForm _form = new();
+
+    private Task CreateAsync() => Api.CreateNetworkAsync(_form.ToRequest());
+}

@@ -1,0 +1,13 @@
+@* The session every command targets, with its selector, refresh and power
+   button: the System card's Session reading, the title bar's own line
+   (SessionPanel), standing alone. Its taps are its own. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits WslcObject
+@attribute [DashboardObject("wslc.system-session", "Session", Group = "System", Subgroup = "System", Icon = Icons.Material.Filled.PowerSettingsNew, Columns = 10, Rows = 4, Background = ThemeColor.BackgroundGray)]
+@attribute [DashboardObjectPart("label", "Label")]
+
+<div class="@SummaryClass">
+    <SummaryReading Label="Session" Class="wslc-system-session"><VerbTaps><SessionPanel /></VerbTaps></SummaryReading>
+</div>

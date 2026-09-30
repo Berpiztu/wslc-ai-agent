@@ -1,0 +1,18 @@
+@* A chart as an object draws it, the host's or a container's: the
+   sparkline (LineChart, compact) filling the object's
+   cells, over the history its read keeps (SampledRead). Its value is the
+   summary's to say, its lines the legend's, the other two pieces of its
+   card. The full chart is what it opens (ChartObject), a second tap once it
+   is selected or the page's Open. *@
+@namespace WslcAgent.UI.Dashboard
+
+<div class="@($"wslc-dash-chart {Class}")">
+    <LineChart Compact="true" Title="@Data.Title" Format="@Data.Format" YMax="Data.YMax" ForceYMax="Data.ForceYMax" Series="Data.Series" Times="Data.Times" Values="Data.Values" />
+</div>
+
+@code {
+    [Parameter, EditorRequired] public HostChartData Data { get; set; } = default!;
+
+    /// <summary>The object's type size classes, which step the axis labels.</summary>
+    [Parameter] public string Class { get; set; } = "";
+}

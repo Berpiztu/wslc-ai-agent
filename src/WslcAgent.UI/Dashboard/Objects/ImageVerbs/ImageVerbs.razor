@@ -1,0 +1,23 @@
+@* An image's own verbs: create, run, the menu and remove, the group the
+   Images list's card keeps at the right end of its actions row, standing
+   alone. Its menu is the whole list, as a table row's is, since the
+   shortcuts may not be on the dashboard. It stands at the right until
+   another alignment is chosen. In design the canvas makes it inert. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits ImageObject
+@attribute [DashboardObject("wslc.image-verbs", "Image verbs", Group = "Image", Subgroup = "User", Icon = Icons.Material.Filled.SmartButton, Source = ImageSourceFamily.FamilyKey, Columns = 8, Rows = 2, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Right, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both)]
+
+@if (Image is { } r)
+{
+    <div class="@SectionClass()">
+        <EntityCardPart>
+            <MudCardActions Class="py-1">
+                <VerbTaps>
+                    <ImageActions Image="r" Changed="@(() => Images.RefreshAsync())" />
+                </VerbTaps>
+            </MudCardActions>
+        </EntityCardPart>
+    </div>
+}

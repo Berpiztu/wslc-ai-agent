@@ -1,0 +1,18 @@
+@* the kernel's version: the System card's Kernel reading, standing alone. It reads the
+   System page's own reading, which opens no session (SystemInfoRead). *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits WslcObject
+@attribute [DashboardObject("wslc.system-kernel", "Kernel", Group = "System", Subgroup = "System", Icon = Icons.Material.Filled.Code, Columns = 6, Rows = 4, Background = ThemeColor.BackgroundGray)]
+@attribute [DashboardObjectPart("label", "Label")]
+@attribute [DashboardObjectPart("value", "Value")]
+@inject SystemInfoRead Info
+
+<div class="@SummaryClass">
+    <SummaryReading Label="Kernel" Value="@(Info.Value is { } system ? Readings.Dash(system.Info.Kernel) : "…")" />
+</div>
+
+@code {
+    protected override void OnInitialized() => Follow(Info);
+}

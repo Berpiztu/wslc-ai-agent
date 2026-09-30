@@ -1,0 +1,165 @@
+@* The backup window: the job's three steps with their marks, the
+   archive size while it is written, "Save as…" once it is ready, and a
+   Cancel that asks the right question for the state (cancel the export,
+   discard the archive, or confirm the download finished). The dialog is
+   persistent: no close button, no backdrop or Escape, so the archive on the
+   agent is never forgotten. *@
+@implements IDisposable
+@inject WslcAgentApi Api
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" Href="@(_job is null ? null : Api.BackupDownloadUrl(_job.Id).ToString())"
+                       Target="_blank" download="@_job?.Filename" Disabled="@(_job?.State is not (BackupState.Ready or BackupState.Saving))" OnClick="OnSaveAs">Save as…</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="@(_saving ? Color.Default : Color.Error)" Disabled="_closing" OnClick="CancelAsync">@(_saving ? "Done" : "Cancel")</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <MudList T="string" Dense="true" ReadOnly="true">
+            @foreach (var (key, label) in BackupStep.All)
+            {
+                <MudListItem T="string"><span class="wslc-mono">@Mark(key)</span> @label</MudListItem>
+            }
+        </MudList>
+        <MudText Typo="Typo.body2" Class="@(_job?.State == BackupState.Error ? "mud-error-text" : "mud-text-secondary")">@Status</MudText>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private static readonly TimeSpan PollEvery = TimeSpan.FromMilliseconds(700);
+    private BackupJob? _job;
+    private bool _saving;
+    private bool _closing;
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _stop;
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public string Container { get; set; } = "";
+
+    private string Status => _job switch
+    {
+        null => "Starting…",
+        { State: BackupState.Error } => _job.Error,
+        { State: BackupState.Running } => $"Writing archive… {Bytes.Humanize(_job.Bytes)}",
+        { State: BackupState.Saving } => "Saving… keep this open until the download finishes. If it is interrupted, press Save as again.",
+        { State: BackupState.Ready } => $"{_job.Filename} — {Bytes.Humanize(_job.Bytes)}",
+        _ => _job.State,
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _job = await Api.StartBackupAsync(Container);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _job = new BackupJob("", Container, BackupState.Error, BackupStep.Check, "", 0, ex.Message);
+            Dialog.StateHasChanged();
+            return;
+        }
+
+        Dialog.StateHasChanged();
+        _stop = new CancellationTokenSource();
+        _timer = new PeriodicTimer(PollEvery);
+        _ = PollAsync(_stop.Token);
+    }
+
+    private async Task PollAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (_job is { State: BackupState.Running } && await _timer!.WaitForNextTickAsync(cancellationToken))
+            {
+                _job = await Api.GetBackupAsync(_job.Id, cancellationToken);
+                await InvokeAsync(Repaint);
+            }
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _job = _job! with { State = BackupState.Error, Error = ex.Message };
+            await InvokeAsync(Repaint);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    /// <summary>The action buttons live in the dialog's own tree: it must be told to repaint too.</summary>
+    private void Repaint()
+    {
+        StateHasChanged();
+        Dialog.StateHasChanged();
+    }
+
+    /// <summary>The step marks: pending, in progress, done, failed, skipped.</summary>
+    private string Mark(string step)
+    {
+        if (_job is null)
+        {
+            return "○";
+        }
+
+        var index = BackupStep.All.ToList().FindIndex(s => s.Key == step);
+        var current = BackupStep.All.ToList().FindIndex(s => s.Key == _job.Step);
+        return _job.State switch
+        {
+            BackupState.Error when index == current => "✗",
+            BackupState.Error when index > current => "–",
+            BackupState.Running when index == current => "◐",
+            BackupState.Running when index > current => "○",
+            _ => "✓",
+        };
+    }
+
+    private void OnSaveAs()
+    {
+        _saving = true;
+        if (_job is not null)
+        {
+            _job = _job with { State = BackupState.Saving };
+        }
+
+        Dialog.StateHasChanged();
+    }
+
+    private async Task CancelAsync()
+    {
+        var (title, question) = _job?.State switch
+        {
+            BackupState.Saving => ("Finish backup", "Finished saving? The archive is deleted from the agent. Only confirm once your download has completed — closing now leaves you with a partial file."),
+            BackupState.Ready => ("Discard backup", "Discard this backup? The archive will be deleted without saving it."),
+            BackupState.Running => ("Cancel backup", "Cancel this backup? The archive being created will be discarded."),
+            _ => ("", ""),
+        };
+        if (title.Length > 0 && !await DialogFlow.ConfirmAsync(Dialogs, title, question, "Yes", destructive: !_saving))
+        {
+            return;
+        }
+
+        _closing = true;
+        if (_job is { Id.Length: > 0 })
+        {
+            try
+            {
+                await Api.CancelBackupAsync(_job.Id);
+            }
+            catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+
+        Dialog.Close(DialogResult.Ok(_saving));
+    }
+
+    public void Dispose()
+    {
+        _stop?.Cancel();
+        _timer?.Dispose();
+    }
+}

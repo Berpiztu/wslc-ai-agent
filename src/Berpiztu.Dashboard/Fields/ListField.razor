@@ -1,0 +1,46 @@
+@* A choice whose values are read from a list or a table — the containers, the
+   volumes, whatever the application hands it.
+   The other kind of choice, beside ChoiceField's fixed values, and drawn by
+   it: this one only reads the values, when it appears (so the chosen one
+   reads by its name) and again each time its list opens (so what was added
+   since is there), and hands them to it. *@
+@typeparam T
+
+<ChoiceField T="T" Value="Value" ValueChanged="ValueChanged" Options="_options" Label="@Label" Title="@Title" Class="@Class"
+             EmptyText="@(_loading ? "Loading…" : EmptyText)" OnOpen="LoadAsync" />
+
+@code {
+    private IReadOnlyList<FieldOption<T>> _options = [];
+    private bool _loading;
+
+    /// <summary>Reads the values, in the order the list shows them.</summary>
+    [Parameter, EditorRequired] public Func<Task<IReadOnlyList<FieldOption<T>>>> Load { get; set; } = default!;
+
+    [Parameter] public T Value { get; set; } = default!;
+
+    [Parameter] public EventCallback<T> ValueChanged { get; set; }
+
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    [Parameter] public string Title { get; set; } = "";
+
+    [Parameter] public string? Class { get; set; }
+
+    /// <summary>What the list says when the read found nothing.</summary>
+    [Parameter] public string EmptyText { get; set; } = "Nothing to choose";
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            _options = await Load();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

@@ -1,0 +1,151 @@
+@* The host folder picker: a compact dialog whose title row holds
+   ＋ New, Use and Close; under it ↑ Up, ⌂ Home and the current path; a boxed
+   list of one fixed height whose first row ".." goes up, a click selects a
+   folder (green) and a double-click opens it; the help line at the foot.
+   Use returns the selected folder, or the current one when none is selected. *@
+@using WslcAgent.ApiClient
+@inject WslcAgentApi Api
+@inject IDialogService Dialogs
+
+<MudDialog>
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Disabled="@(_listing is null || _listing.Path.Length == 0)" OnClick="NewFolderAsync">New</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success" Disabled="@(Chosen.Length == 0)" OnClick="@(() => Dialog.Close(DialogResult.Ok(Chosen)))">Use</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small" title="Up" Disabled="@(_listing is null || _listing.Path.Length == 0)" OnClick="@(() => OpenAsync(_listing!.Parent))" />
+            <MudIconButton Icon="@Icons.Material.Filled.Home" Size="Size.Small" title="Drives" OnClick="@(() => OpenAsync(""))" />
+            <MudText Typo="Typo.body2" Class="wslc-mono wslc-title mud-text-secondary">@(_listing?.Path.Length > 0 ? _listing.Path : "Drives")</MudText>
+        </MudStack>
+        <MudPaper Outlined="true" Class="mt-2">
+            <MudList T="string" @bind-SelectedValue="_selected" Dense="true" Class="wslc-picker-list">
+                @if (_listing is { Path.Length: > 0 })
+                {
+                    <MudListItem T="string" Value="@("..")" Icon="@WslcIcons.Files" Text=".." OnClick="@(() => OpenAsync(_listing.Parent))" />
+                }
+                @if (_listing is not null)
+                {
+                    @foreach (var folder in _listing.Folders)
+                    {
+                        <MudListItem T="string" Value="@folder" Icon="@(_listing.Path.Length == 0 ? WslcIcons.Drive : WslcIcons.Files)" Text="@folder"
+                                     OnClick="@(() => Select(folder))" @ondblclick="@(() => OpenAsync(Combine(folder)))" />
+                    }
+                }
+            </MudList>
+        </MudPaper>
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-2">@_error</MudAlert>
+        }
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">Folders on the WSLC host (not this device). Double-click a folder to open it. First row .. goes up.</MudText>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private HostFolderListing? _listing;
+    private string? _selected;
+    private string? _error;
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    /// <summary>The field's current folder: the picker opens on its parent with it selected; empty or unknown starts at the drives.</summary>
+    [Parameter] public string Path { get; set; } = "";
+
+    /// <summary>The selected folder inside the current one, else the current folder; empty at the drives.</summary>
+    private string Chosen => _listing is null ? ""
+        : _selected is { Length: > 0 } and not ".." ? Combine(_selected)
+        : _listing.Path;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var current = Path.Trim().TrimEnd('\\', '/');
+        var cut = current.LastIndexOfAny(['\\', '/']);
+        var parent = cut > 0 ? current[..cut] : "";
+        var leaf = cut >= 0 ? current[(cut + 1)..] : current;
+        if (parent.Length > 0 && parent.EndsWith(':'))
+        {
+            parent += '\\';
+        }
+
+        if (current.Length == 0 || !await OpenAsync(parent))
+        {
+            await OpenAsync("");
+            return;
+        }
+
+        if (_listing!.Folders.FirstOrDefault(f => string.Equals(f.TrimEnd('\\', '/'), leaf, StringComparison.OrdinalIgnoreCase)) is { } folder)
+        {
+            Select(folder);
+        }
+    }
+
+    /// <summary>Lists <paramref name="path"/>; false when the agent could not (the error stays shown).</summary>
+    private async Task<bool> OpenAsync(string path)
+    {
+        try
+        {
+            _listing = await Api.GetHostFoldersAsync(path);
+            _selected = null;
+            _error = null;
+            return true;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _error = ex.Message;
+            return false;
+        }
+        finally
+        {
+            // The title-row buttons live in the dialog's own tree: it must be told to repaint.
+            Dialog.StateHasChanged();
+        }
+    }
+
+    private void Select(string folder)
+    {
+        _selected = folder;
+        Dialog.StateHasChanged();
+    }
+
+    /// <summary>＋ New asks for the name, creates the folder here and selects it.</summary>
+    private async Task NewFolderAsync()
+    {
+        var name = await DialogFlow.PromptAsync(Dialogs, "New folder", "Name", "Example: data", "Create");
+        if (name is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _listing = await Api.CreateHostFolderAsync(_listing!.Path, name);
+            _error = null;
+            Select(_listing.Folders.FirstOrDefault(f => string.Equals(f, name, StringComparison.OrdinalIgnoreCase)) ?? "");
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _error = ex.Message;
+            Dialog.StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Joins with the host's own separator. Path.Combine would use the
+    /// browser runtime's (a slash), which is not the Windows agent's.
+    /// </summary>
+    private string Combine(string folder)
+    {
+        var path = _listing!.Path;
+        if (path.Length == 0)
+        {
+            return folder;
+        }
+
+        var separator = path.Contains('\\') ? '\\' : '/';
+        return path.TrimEnd('\\', '/') + separator + folder;
+    }
+}

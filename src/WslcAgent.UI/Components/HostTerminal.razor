@@ -1,0 +1,258 @@
+@* The host terminal: the agent machine's own
+   shell, drawn as the exec window — the pane and nothing else, with every verb
+   in the rail at its right and the session state on the buttons that act on it.
+   Its own two verbs live there as well: a tab for itself and a terminal window
+   on the agent's desktop. With a Job (System → Compact VHDX) the agent's command
+   line for it is typed into the shell on every connect, and the rail keeps only
+   what a job can use: Reconnect is how the job runs again. The session belongs
+   to the tab, not to this component: leaving the page keeps the shell and what
+   it printed, coming back takes it over again, and only Close (or Log out)
+   ends it. *@
+@implements IAsyncDisposable
+@inject WslcAgentApi Api
+@inject IJSRuntime Js
+@inject ISnackbar Snackbar
+
+<div class="wslc-action-body">
+    <div class="wslc-action-main wslc-terminal">
+        <div class="wslc-terminal-pane" @ref="_pane"></div>
+    </div>
+    @* The exec window's rail, verb for verb, plus the two this shell has of its
+       own: a tab for itself and a terminal window on the agent's desktop. A job
+       (Compact VHDX) keeps only what makes sense for it — Reconnect runs it
+       again — so nothing in the rail acts on a shell the job is driving. *@
+    <div class="wslc-action-rail" role="toolbar">
+        @if (Job.Length == 0)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Color="Color.Success" Size="Size.Small" Variant="Variant.Filled"
+                           title="@ConnectTitle" OnClick="ConnectAsync" Disabled="@(_busy || _live)" />
+        }
+        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Primary" Size="Size.Small" Variant="Variant.Filled"
+                       title="@ReconnectTitle" OnClick="ConnectAsync" Disabled="_busy" />
+        <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Info" Size="Size.Small" Variant="Variant.Filled"
+                       title="Copy the selection (Ctrl+Shift+C)" OnClick="CopyAsync" Disabled="@(!_started)" />
+        <MudIconButton Icon="@Icons.Material.Filled.PowerSettingsNew" Color="Color.Warning" Size="Size.Small" Variant="Variant.Filled"
+                       title="Close the session: the shell ends and nothing of it is kept" OnClick="CloseAsync" Disabled="@(_busy || !_started)" />
+        @if (Job.Length == 0)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.ClearAll" Color="Color.Error" Size="Size.Small" Variant="Variant.Filled"
+                           title="Clear terminal" OnClick="ClearAsync" Disabled="@(!_started)" />
+            @if (!Detached)
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Color="Color.Default" Size="Size.Small" Variant="Variant.Filled"
+                               Href="terminal/detached" Target="_blank" title="Open this terminal in a tab of its own" />
+            }
+            @if (_serverLocal)
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Terminal" Color="Color.Default" Size="Size.Small" Variant="Variant.Filled"
+                               OnClick="OpenNativeAsync" Disabled="_opening" title="Open Windows Terminal on this machine's desktop" />
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private readonly DotNetObjectReference<HostTerminal> _self;
+    private ElementReference _pane;
+    private IJSObjectReference? _module;
+    private IJSObjectReference? _session;
+    private string _status = "Idle";
+    private bool _started;
+    private bool _live;
+    private bool _busy;
+    private bool _serverLocal;
+    private bool _opening;
+
+    public HostTerminal() => _self = DotNetObjectReference.Create(this);
+
+    /// <summary>A terminal job to run once the shell is up (<c>compact-vhdx</c>); empty for a plain shell.</summary>
+    [Parameter] public string Job { get; set; } = "";
+
+    /// <summary>The page is the terminal's own tab: no second "open in a new tab".</summary>
+    [Parameter] public bool Detached { get; set; }
+
+    private bool IsCompactJob => Job == "compact-vhdx";
+
+    /// <summary>What the tab's session registry files this shell under: a job is never the plain shell's session.</summary>
+    private string Key => IsCompactJob ? "job:compact-vhdx" : "host";
+
+    private string Target => IsCompactJob ? "Compact VHDX" : "Local host shell";
+
+    private string Banner => IsCompactJob ? "$ compact VHDX (System → Compact VHDX)" : "$ local host shell";
+
+    /// <summary>The session state, on the buttons that act on it.</summary>
+    private string ConnectTitle => _live ? _status : $"Connect to {Target} — {_status}";
+
+    private string ReconnectTitle => IsCompactJob ? $"Run the job again — {_status}" : $"Reconnect — {_status}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _serverLocal = (await Api.GetTerminalStatusAsync()).ServerLocal;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _serverLocal = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await ConnectAsync();
+        }
+    }
+
+    /// <summary>Called from the terminal module on every state change; <paramref name="resumed"/> is a session taken back, whose job already ran.</summary>
+    [JSInvokable]
+    public async Task OnState(string state, string text, bool resumed)
+    {
+        var connectedNow = state == "connected" && !_live && !resumed;
+        _status = text.Length > 0 ? text : state;
+        _busy = state == "connecting";
+        _live = state == "connected";
+        await InvokeAsync(StateHasChanged);
+        if (connectedNow && Job.Length > 0)
+        {
+            await RunJobAsync();
+        }
+    }
+
+    /// <summary>What the terminal wants the user told: a copy, a warning, a failure.</summary>
+    [JSInvokable]
+    public void OnToast(string message, string severity) =>
+        Snackbar.Add(message, severity switch
+        {
+            "error" => Severity.Error,
+            "success" => Severity.Success,
+            _ => Severity.Info,
+        });
+
+    private async Task ConnectAsync()
+    {
+        _busy = true;
+        try
+        {
+            _module ??= await Js.InvokeAsync<IJSObjectReference>("import", "./_content/WslcAgent.UI/wslc-terminal.js");
+            if (_session is null)
+            {
+                _session = await _module.InvokeAsync<IJSObjectReference>("open", _pane, Key, Api.HostTerminalStreamUrl().ToString(), "", Banner, _self);
+            }
+            else
+            {
+                await _session.InvokeVoidAsync("connect", "", Banner);
+            }
+
+            _started = true;
+        }
+        catch (JSException ex)
+        {
+            await OnState("error", ex.Message, false);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <summary>Ends the shell and forgets the session: the next Connect starts from nothing.</summary>
+    private async Task CloseAsync()
+    {
+        if (_session is null)
+        {
+            return;
+        }
+
+        await _session.InvokeVoidAsync("dispose");
+        await _session.DisposeAsync();
+        _session = null;
+        _started = false;
+        _live = false;
+        _status = "Closed";
+    }
+
+    /// <summary>Asks the agent for the job's command line and types it into the shell.</summary>
+    private async Task RunJobAsync()
+    {
+        try
+        {
+            var job = await Api.PrepareTerminalJobAsync(Job);
+            if (_session is null || !_live || !await _session.InvokeAsync<bool>("type", job.Command + "\r"))
+            {
+                Snackbar.Add("Failed to send the job command to the terminal", Severity.Error);
+                return;
+            }
+
+            await _session.InvokeVoidAsync("focus");
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add(ex.Message.Length > 0 ? ex.Message : "Failed to prepare the terminal job", Severity.Error);
+        }
+    }
+
+    private async Task OpenNativeAsync()
+    {
+        _opening = true;
+        try
+        {
+            var opened = await Api.OpenNativeHostTerminalAsync();
+            Snackbar.Add($"Native terminal opened via {opened.Window}", Severity.Success);
+            if (_session is not null)
+            {
+                await _session.InvokeVoidAsync("focus");
+            }
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _opening = false;
+        }
+    }
+
+    /// <summary>The same copy Ctrl+Shift+C does, for a touch screen with no keyboard.</summary>
+    private async Task CopyAsync()
+    {
+        if (_session is not null)
+        {
+            await _session.InvokeVoidAsync("copySelection");
+        }
+    }
+
+    private async Task ClearAsync()
+    {
+        if (_session is not null)
+        {
+            await _session.InvokeVoidAsync("clear");
+            await _session.InvokeVoidAsync("focus");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_session is not null)
+            {
+                await _session.InvokeVoidAsync("detach");
+                await _session.DisposeAsync();
+            }
+
+            if (_module is not null)
+            {
+                await _module.DisposeAsync();
+            }
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException or OperationCanceledException)
+        {
+            // The page is going away: a live session stays in the tab's registry, a dead one goes with the page.
+        }
+
+        _self.Dispose();
+    }
+}

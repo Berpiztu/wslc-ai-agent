@@ -1,0 +1,91 @@
+@* View & edit of an image or a volume: the facts that do not change on top,
+   the fields a user would edit below them (read-only here: nothing saves them),
+   and the raw inspect JSON folded
+   under both. Close, in the title row, is the only way out. *@
+@using System.Text.Json
+
+<MudDialog ContentClass="wslc-dialog-action">
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <div class="wslc-action-body">
+            <div class="wslc-action-main wslc-fill-scroll">
+                @if (_error is not null)
+                {
+                    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+                }
+                else if (_json is null)
+                {
+                    <MudProgressLinear Indeterminate="true" />
+                }
+                else
+                {
+                    @if (_facts.Count > 0)
+                    {
+                        <div class="wslc-summary mb-2">
+                            @foreach (var fact in _facts)
+                            {
+                                <div><span class="wslc-summary-label">@fact.Label</span><span class="@($"wslc-summary-value{(fact.Mono ? " wslc-mono" : "")}")" title="@fact.Value">@fact.Value</span></div>
+                            }
+                        </div>
+                    }
+                    @foreach (var field in _fields)
+                    {
+                        <MudTextField T="string" Value="@field.Value" Label="@field.Label" ReadOnly="true" Variant="Variant.Filled" Margin="Margin.Dense"
+                                      Lines="@(field.Mono ? 3 : 1)" />
+                    }
+                    <MudExpansionPanels Class="mt-2">
+                        <MudExpansionPanel Text="Raw inspect JSON">
+                            <pre class="wslc-logs-output wslc-logs-wrap wslc-logs-pre">@_json</pre>
+                        </MudExpansionPanel>
+                    </MudExpansionPanels>
+                }
+            </div>
+        </div>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private string? _json;
+    private string? _error;
+    private IReadOnlyList<InspectFact> _facts = [];
+    private IReadOnlyList<InspectFact> _fields = [];
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    /// <summary>The inspect JSON (an object or a one-item list).</summary>
+    [Parameter, EditorRequired] public Func<Task<string>> Load { get; set; } = default!;
+
+    /// <summary>The summary on top; empty values are left out.</summary>
+    [Parameter, EditorRequired] public Func<JsonElement, IReadOnlyList<InspectFact>> Facts { get; set; } = default!;
+
+    /// <summary>The fields under it; <see cref="InspectFact.Mono"/> marks a multi-line one.</summary>
+    [Parameter, EditorRequired] public Func<JsonElement, IReadOnlyList<InspectFact>> Fields { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _json = await Load();
+            using var document = JsonDocument.Parse(_json);
+            var root = document.RootElement;
+            var item = root.ValueKind == JsonValueKind.Array && root.GetArrayLength() > 0 ? root[0] : root;
+            if (item.ValueKind == JsonValueKind.Object)
+            {
+                _facts = Facts(item).Where(f => f.Value.Length > 0).ToList();
+                _fields = Fields(item);
+            }
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _error = ex.Message;
+        }
+        catch (JsonException)
+        {
+            // Not JSON: the raw text is still shown.
+        }
+    }
+}

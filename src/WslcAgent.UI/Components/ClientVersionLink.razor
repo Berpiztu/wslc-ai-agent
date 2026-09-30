@@ -1,0 +1,81 @@
+@* The System card's client version: the
+   version itself, and a tap on it downloads — never a check, since its colour
+   already says whether it is current. In the native client, the installed
+   version, green while it is the agent's, amber when the agent has a newer
+   one, and the tap downloads and installs the agent's (UpdateFlow). In a
+   browser, the version the agent offers for this device, and the tap
+   downloads it: the APK on Android, the installer on Windows
+   (ClientDownloads); a device with no client says "browser". *@
+@using WslcAgent.UI.Updates
+@implements IDisposable
+@inject IClientUpdates Client
+@inject ClientUpdateChecker Checker
+@inject IJSRuntime Js
+@inject WslcAgentApi Api
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+@if (Client.Supported && Client.InstalledVersion.Length > 0)
+{
+    <span class="@($"wslc-summary-value {Tone(Checker.IsCurrent)}")" style="cursor: pointer; text-decoration: underline;"
+          title="@NativeTitle" @onclick="@(() => UpdateFlow.DownloadAndInstallAsync(Snackbar, Checker))">@Client.InstalledVersion</span>
+}
+else if (ClientDownloads.Offered(_platform))
+{
+    <span class="wslc-summary-value mud-success-text" style="cursor: pointer; text-decoration: underline;"
+          title="@($"Download the {ClientDownloads.Name(_platform)}")" @onclick="DownloadAsync">@BrowserText</span>
+}
+else
+{
+    <span class="wslc-summary-value">browser</span>
+}
+
+@code {
+    private string _platform = "";
+    private ClientPackageInfo? _package;
+
+    /// <summary>
+    /// The agent's version for this device, and nothing else (which client
+    /// it is goes in the tooltip); the
+    /// client's name until the agent says.
+    /// </summary>
+    private string BrowserText =>
+        _package is { Available: true, Version.Length: > 0 } package ? package.Version : ClientDownloads.Name(_platform);
+
+    private string NativeTitle => Checker.IsCurrent switch
+    {
+        false when Checker.Package is not null => $"A newer version is available ({Checker.Package.Version}). Click to download and install it.",
+        true => "The agent's own version. Click to download and install it again.",
+        _ => "Click to download and install the agent's version.",
+    };
+
+    /// <summary>Green current, amber stale, the text's own until the agent has answered.</summary>
+    private static string Tone(bool? current) => current switch
+    {
+        true => "mud-success-text",
+        false => "mud-warning-text",
+        null => "",
+    };
+
+    protected override void OnInitialized() => Checker.Changed += OnChanged;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !Client.Supported)
+        {
+            _platform = await ClientDownloads.PlatformAsync(Js);
+            if (ClientDownloads.Offered(_platform))
+            {
+                _package = await ClientDownloads.PackageAsync(Api, _platform);
+            }
+
+            StateHasChanged();
+        }
+    }
+
+    private Task DownloadAsync() => ClientDownloads.DownloadAsync(Api, Navigation, Snackbar, _platform);
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Checker.Changed -= OnChanged;
+}

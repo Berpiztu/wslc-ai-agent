@@ -1,0 +1,22 @@
+// OpenClaw — native MCP client, nothing to install: the WSLC AI Agent serves
+// MCP itself at <agent>/api/v1/mcp (Streamable HTTP, with sessions). Merge under
+// `mcp.servers` in OpenClaw's config (config.json / config.json5), or run:
+//   openclaw mcp add wslc --url http://127.0.0.1:8069/api/v1/mcp
+//   openclaw mcp doctor wslc --probe
+// Copy mcp-skill/skills/wslc/SKILL.md into OpenClaw's skills folder so it loads.
+// On the agent host (8069 installed, 8070 development) or the far end of an SSH
+// tunnel to that port, the loopback URL needs no credentials. Through the public
+// https:// name add the agent's API token as a Bearer header (client secret
+// mechanism, never this file).
+{
+  mcp: {
+    servers: {
+      wslc: {
+        url: "http://127.0.0.1:8069/api/v1/mcp",
+        transport: "streamable-http",
+        enabled: true,
+        // headers: { Authorization: "Bearer ***" },
+      },
+    },
+  },
+}

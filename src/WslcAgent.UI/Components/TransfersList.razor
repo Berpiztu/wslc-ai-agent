@@ -1,0 +1,158 @@
+@* Files on the move, one line each: which way it is going, its name, what it
+   is doing, the bar under it, and the cross that stops it. It is what the
+   ring's magnifier opens and what the dashboard's card shows, so a transfer
+   reads the same in both.
+
+   The ones waiting their turn are lines like the rest — the queue is the
+   agent's, so every client sees them — with their
+   place in the queue instead of a percentage and no bar, because nothing of
+   them has travelled. Their cross takes them out of the queue rather than
+   stopping them.
+
+   A container's screens carry a cross only on this client's own files,
+   whether they are waiting or already travelling: a file is another client's
+   to stop, not ours. The dashboard's card is the administrator's view and
+   carries it on every one. *@
+@inject FileTransfers Mine
+
+@* Drawn as the other lists are: a header strip
+   in the chrome tone, like a table's header row, over the lines in the tone of
+   the fields, so the title above and the files below no longer read as one
+   surface. The dashboard's card draws the two apart (Head, Lines). *@
+<div class="wslc-transfers-box">
+@if (Head)
+{
+<div class="wslc-transfers-head">
+    <span>File</span>
+    <span>@(Where ? "Container · progress" : "Progress")</span>
+</div>
+}
+@if (Lines)
+{
+<div class="wslc-transfers">
+    @if (Transfers.Count == 0)
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">@EmptyText</MudText>
+    }
+    @foreach (var (transfer, joined) in Batched)
+    {
+        @* One announcement from the next: a client's eight files stand
+           together, and the batch that came after them starts on its own side
+           of a line. Without it a list of thirty is one wall. *@
+        @if (!joined)
+        {
+            <MudDivider Class="wslc-transfer-batch" />
+        }
+        <div class="wslc-transfer" title="@TransferFlow.Status([transfer])">
+            <div class="wslc-transfer-line">
+                <span class="wslc-transfer-way">@(transfer.IsUpload ? "↑" : "↓")</span>
+                <span class="wslc-transfer-name">@transfer.Name</span>
+                @if (Where)
+                {
+                    <span class="wslc-transfer-where mud-text-secondary">@Called(transfer.Container)</span>
+                }
+                <MudText Typo="Typo.caption" Class="mud-text-secondary wslc-transfer-pct">@Says(transfer)</MudText>
+                @if (Ours(transfer))
+                {
+                    @if (transfer.IsWaiting)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error"
+                                       title="Take out of the queue" aria-label="Take out of the queue"
+                                       OnClick="@(() => Drop.InvokeAsync(transfer))" />
+                    }
+                    else
+                    {
+                        <MudIconButton Icon="@(transfer.Active ? Icons.Material.Filled.Close : Icons.Material.Filled.Clear)" Size="Size.Small" Color="Color.Error"
+                                       title="@(transfer.Active ? "Cancel this transfer" : "Dismiss")" aria-label="@(transfer.Active ? "Cancel this transfer" : "Dismiss")"
+                                       OnClick="@(() => (transfer.Active ? Cancel : Dismiss).InvokeAsync(transfer))" />
+                    }
+                }
+            </div>
+            @if (!transfer.IsWaiting)
+            {
+                <MudProgressLinear Value="@(transfer.Active ? Math.Max(transfer.Pct, 2) : 100)" Size="Size.Small"
+                                   Color="@(transfer.Active ? Color.Info : Color.Error)" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary wslc-transfer-status">@(transfer.Error.Length > 0 ? transfer.Error : transfer.Status)</MudText>
+            }
+        </div>
+    }
+</div>
+}
+</div>
+
+@code {
+    /// <summary>What the agent has: the files moving, the ones waiting their turn, and the ones that ended badly and have not been dismissed.</summary>
+    [Parameter] public IReadOnlyList<ContainerTransfer> Transfers { get; set; } = [];
+
+    /// <summary>
+    /// The header strip is drawn; and the lines are. Both, but for the
+    /// dashboard's File transfers card, whose header of the lines and lines
+    /// are pieces of their own, each with its own properties.
+    /// </summary>
+    [Parameter] public bool Head { get; set; } = true;
+
+    [Parameter] public bool Lines { get; set; } = true;
+
+    /// <summary>Whether each line says which container it is about: the dashboard's card shows every container, a container's own list does not.</summary>
+    [Parameter] public bool Where { get; set; }
+
+    /// <summary>
+    /// The administrator's view: the cross on a waiting file is shown whoever
+    /// announced it. A container's own screens leave it off the neighbour's.
+    /// </summary>
+    [Parameter] public bool Everyone { get; set; }
+
+    [Parameter] public string EmptyText { get; set; } = "Nothing is moving.";
+
+    [Parameter] public EventCallback<ContainerTransfer> Cancel { get; set; }
+
+    [Parameter] public EventCallback<ContainerTransfer> Dismiss { get; set; }
+
+    /// <summary>A file let out of the queue before its turn: it never started, so nothing is stopped.</summary>
+    [Parameter] public EventCallback<ContainerTransfer> Drop { get; set; }
+
+    /// <summary>
+    /// What to call a container on the line: its name, which is what the user
+    /// knows it by. A transfer carries the container as the client that
+    /// started it named it, and that is its id as often as not — a number
+    /// nobody remembers. Without this the id is shown, which is at least true.
+    /// </summary>
+    [Parameter] public Func<string, string>? Names { get; set; }
+
+    private string Called(string container) => Names?.Invoke(container) ?? container;
+
+    /// <summary>
+    /// Each line with whether it carries on the batch above it, so one
+    /// announcement is drawn apart from the next. A file nobody announced is a
+    /// batch of its own, which is what it is.
+    /// </summary>
+    private IEnumerable<(ContainerTransfer Transfer, bool Joined)> Batched
+    {
+        get
+        {
+            var previous = "";
+            for (var index = 0; index < Transfers.Count; index++)
+            {
+                var transfer = Transfers[index];
+                var batch = transfer.Batch.Length > 0 ? transfer.Batch : transfer.Id;
+                yield return (transfer, index == 0 || batch == previous);
+                previous = batch;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Whether this line carries a cross at all. A container's screens answer
+    /// for this client's own files and no others — waiting or travelling, the
+    /// rule is the same, and one that held for the queue but not for what had
+    /// already started let a client stop its neighbour's upload. The
+    /// dashboard's card answers for everyone.
+    /// </summary>
+    private bool Ours(ContainerTransfer transfer) => Everyone || Mine.IsMine(transfer.Id);
+
+    /// <summary>What the line says where a percentage would go: how many are ahead of it, or how far it has got.</summary>
+    private static string Says(ContainerTransfer transfer) =>
+        !transfer.IsWaiting ? (transfer.Active ? $"{transfer.Pct}%" : "")
+        : transfer.Position == 0 ? "next"
+        : $"{transfer.Position} ahead";
+}

@@ -1,0 +1,63 @@
+@* The popup a tap on a container's ports opens, always, one port or several:
+   every port, web ports first, and under
+   each its ways in. Local is Open with browser — a tab at
+   the agent's machine, the host browser pane from anywhere else. Remote is
+   the port's public name, written in full, which opens from anywhere; a
+   port with no name has no Remote row. Choosing answers "local:PORT" or
+   "remote:PORT" and the caller opens it. *@
+
+<MudDialog>
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Choose the port and the way in:</MudText>
+        <MudPaper Outlined="true">
+            <MudList T="string" Dense="true" Class="wslc-picker-list">
+                @foreach (var port in Ports)
+                {
+                    var hostPort = port.HostPort.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var publicUrl = PublishedPorts.PublicUrl(port, Publications);
+                    <MudListSubheader Class="wslc-mono">@port.Label</MudListSubheader>
+                    <MudListItem T="string" Icon="@Icons.Material.Filled.Language" IconColor="Color.Success" title="@LocalTitle(port)"
+                                 OnClick="@(() => Dialog.Close(DialogResult.Ok(Local + hostPort)))">
+                        <span>Local</span>
+                        <span class="wslc-mono mud-text-secondary ml-2">@LocalTitle(port)</span>
+                    </MudListItem>
+                    @if (publicUrl is not null)
+                    {
+                        <MudListItem T="string" Icon="@Icons.Material.Filled.Public" IconColor="Color.Info" title="@publicUrl"
+                                     OnClick="@(() => Dialog.Close(DialogResult.Ok(Remote + hostPort)))">
+                            <span>Remote</span>
+                            <span class="wslc-mono mud-text-secondary ml-2">@publicUrl</span>
+                        </MudListItem>
+                    }
+                }
+            </MudList>
+        </MudPaper>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    /// <summary>The answer's prefixes: the way in, then the host port.</summary>
+    public const string Local = "local:";
+    public const string Remote = "remote:";
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public IReadOnlyList<PublishedPorts.Published> Ports { get; set; } = [];
+
+    /// <summary>The agent's host, for the address the Local row shows.</summary>
+    [Parameter] public string Host { get; set; } = "localhost";
+
+    /// <summary>The container's public names: a published port gets its Remote row.</summary>
+    [Parameter] public IReadOnlyList<Publication> Publications { get; set; } = [];
+
+    /// <summary>This client is not at the agent's machine: Local is the host browser pane, not a tab at 127.0.0.1.</summary>
+    [Parameter] public bool AwayFromAgent { get; set; }
+
+    private string LocalTitle(PublishedPorts.Published port) =>
+        AwayFromAgent ? $"host browser pane, port {port.HostPort}" : port.Url(Host);
+}

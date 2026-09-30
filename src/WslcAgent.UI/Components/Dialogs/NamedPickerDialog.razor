@@ -1,0 +1,118 @@
+@* The one picker of names (images, volumes, networks): a compact dialog whose title row holds Use, Create (the
+   resource's own create dialog, then the new item is selected) and Close;
+   the search box; a boxed list of one fixed height with the selected item
+   in green; the hint at the foot. Returns the chosen name. *@
+@inject IDialogService Dialogs
+
+<MudDialog>
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            @if (CreateDialog is not null)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" OnClick="CreateAsync" Disabled="_busy">Create</MudButton>
+            }
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success" OnClick="Use" Disabled="@(_busy || _selected is null)">Use</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())" Disabled="_busy">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <SearchBox @bind-Value="_filter" />
+        <MudPaper Outlined="true" Class="mt-2">
+            <MudList T="string" @bind-SelectedValue="_selected" Dense="true" Class="wslc-picker-list">
+                @foreach (var item in Visible)
+                {
+                    <MudListItem T="string" Value="@item" Text="@item" OnClick="@(() => Select(item))" @ondblclick="Use" />
+                }
+            </MudList>
+        </MudPaper>
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-2">@_error</MudAlert>
+        }
+        @if (Hint.Length > 0)
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">@Hint</MudText>
+        }
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private IReadOnlyList<string> _items = [];
+    private string? _selected;
+    private string _filter = "";
+    private string? _error;
+    private bool _busy;
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    /// <summary>The names to choose from, loaded when the picker opens and after a create.</summary>
+    [Parameter, EditorRequired] public Func<Task<IReadOnlyList<string>>> Load { get; set; } = default!;
+
+    [Parameter] public string Hint { get; set; } = "";
+
+    /// <summary>The resource's own create dialog; the item that appears after it is selected.</summary>
+    [Parameter] public Type? CreateDialog { get; set; }
+
+    [Parameter] public string CreateTitle { get; set; } = "Create";
+
+    /// <summary>The field's current value: selected on open when it is in the list.</summary>
+    [Parameter] public string Selected { get; set; } = "";
+
+    private IEnumerable<string> Visible => _items.Where(i => _filter.Length == 0 || i.Contains(_filter, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+        if (_items.FirstOrDefault(i => string.Equals(i, Selected.Trim(), StringComparison.OrdinalIgnoreCase)) is { } current)
+        {
+            Select(current);
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        _busy = true;
+        try
+        {
+            _items = await Load();
+            _error = null;
+        }
+        catch (Exception ex) when (ex is ApiClient.AgentApiException or HttpRequestException)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+            // The title-row buttons live in the dialog's own tree: it must be told to repaint.
+            Dialog.StateHasChanged();
+        }
+    }
+
+    private void Select(string item)
+    {
+        _selected = item;
+        Dialog.StateHasChanged();
+    }
+
+    private async Task CreateAsync()
+    {
+        var before = _items.ToHashSet();
+        if (await DialogFlow.ShowAsync(Dialogs, CreateDialog!, CreateTitle))
+        {
+            await ReloadAsync();
+            if (_items.FirstOrDefault(i => !before.Contains(i)) is { } created)
+            {
+                Select(created);
+            }
+        }
+    }
+
+    private void Use()
+    {
+        if (_selected is not null)
+        {
+            Dialog.Close(DialogResult.Ok(_selected));
+        }
+    }
+}

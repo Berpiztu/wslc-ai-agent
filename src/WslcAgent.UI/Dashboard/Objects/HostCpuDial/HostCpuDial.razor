@@ -1,0 +1,23 @@
+@* The host's CPU as a dial: what the containers use of all there is, in
+   percent, as the System card's ring and the CPU alarm show it. It reads the
+   runtime the host's CPU and memory objects share (HostRuntimeRead). *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@inherits WslcObject
+@attribute [DashboardObject("wslc.host-cpu-dial", "CPU dial", Group = "Host dials", Subgroup = "System", Icon = Icons.Material.Filled.Speed, Columns = 6, Rows = 6)]
+@attribute [DashboardObjectAlarm(DashboardMeasures.Cpu, "CPU", On = true)]
+@attribute [DashboardObjectPart("ring", "Ring", Text = false, Line = true)]
+@attribute [DashboardObjectPart("figure", "Figure")]
+@attribute [DashboardObjectPart("label", "Label")]
+@inject HostRuntimeRead Runtime
+
+<div class="@TypeClass">
+    <UsageDial Label="CPU" Reading="@(Used is { } v ? Percents.Text(v) : "")" Live="@(Used is not null)"
+               Title="@($"CPU {(Used is { } shown ? Percents.Text(shown) : "not known yet")}")" />
+</div>
+
+@code {
+    private double? Used => HostUsage.CpuPercent(Runtime.Value);
+
+    protected override void OnInitialized() => Follow(Runtime);
+}

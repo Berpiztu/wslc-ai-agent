@@ -1,0 +1,93 @@
+@* Mounted once by the layout: checks the agent's client package on start-up,
+   on every navigation and whenever the link to the agent comes back (the
+   checker keeps the cooldown), offers a newer one with its toast
+   and runs the install the user accepts. The link matters: a native client
+   opens before its agent answers, and a check that failed then was not
+   repeated until the user happened to change page — on a phone that stays on
+   Home, never. Renders nothing. *@
+@using WslcAgent.ApiClient
+@using WslcAgent.ApiClient.Contracts
+@implements IDisposable
+@inject ClientUpdateChecker Checker
+@inject IClientUpdates Client
+@inject NavigationManager Navigation
+@inject AgentLink Link
+@inject ISnackbar Snackbar
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Client.Supported)
+        {
+            return;
+        }
+
+        Navigation.LocationChanged += OnLocationChanged;
+        Link.Changed += OnLinkChanged;
+        await CheckAsync();
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e) =>
+        _ = InvokeAsync(CheckAsync);
+
+    /// <summary>The agent answers again: the check that failed while it did not is repeated.</summary>
+    private void OnLinkChanged()
+    {
+        if (Link.Online)
+        {
+            _ = InvokeAsync(CheckAsync);
+        }
+    }
+
+    private async Task CheckAsync()
+    {
+        var package = await Checker.CheckAsync();
+        if (package is not null)
+        {
+            Offer(package);
+        }
+    }
+
+    /// <summary>The green toast stays until one of its three buttons is pressed.</summary>
+    private void Offer(ClientPackageInfo package)
+    {
+        Snackbar? toast = null;
+        var parameters = new Dictionary<string, object>
+        {
+            [nameof(ClientUpdateToast.Package)] = package,
+            [nameof(ClientUpdateToast.OnAnswer)] = EventCallback.Factory.Create<ClientUpdateAnswer?>(this, answer => AnswerAsync(toast, package, answer)),
+        };
+        toast = Snackbar.Add<ClientUpdateToast>(parameters, Severity.Success, options =>
+        {
+            options.RequireInteraction = true;
+            options.ShowCloseIcon = false;
+            options.CloseAfterNavigation = false;
+        });
+    }
+
+    private async Task AnswerAsync(Snackbar? toast, ClientPackageInfo package, ClientUpdateAnswer? answer)
+    {
+        if (toast is not null)
+        {
+            Snackbar.Remove(toast);
+        }
+
+        switch (answer)
+        {
+            case ClientUpdateAnswer.Forget:
+                Checker.Forget(package);
+                break;
+            case ClientUpdateAnswer.Install:
+                await InstallAsync(package);
+                break;
+        }
+    }
+
+    private Task InstallAsync(ClientPackageInfo package) => UpdateFlow.InstallAsync(Snackbar, Checker, package);
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        Link.Changed -= OnLinkChanged;
+    }
+}

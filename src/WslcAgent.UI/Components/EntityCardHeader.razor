@@ -1,0 +1,76 @@
+@* The header of the one card for list pages (EntityCard): the avatar, the
+   title and the subtitle, and a badge on the right. Its own component so the
+   card of a resource on the dashboard wears the same header as the list's card,
+   drawn once. While a verb runs on the row
+   (BusyRows, by Key), or while it is on its way (the Avatar a page hands
+   over), the avatar is a ring: everything under way is a ring, and the
+   avatar's own place costs the card no height. *@
+@implements IDisposable
+@inject BusyRows Rows
+
+<MudCardHeader>
+    <CardHeaderAvatar>
+        @* A row on its way puts its progress where the avatar is: the card says
+           at a glance what it is doing, in the place the eye already goes to.
+           Busy first: a page hands its Avatar fragment for every row (a pull or a
+           run on its way draws its ring there, the rest their letter), so a verb
+           running on the row has to win over it or it would never show. *@
+        @if (Rows.IsBusy(Key))
+        {
+            @* A verb running on this row (start, stop, restart, remove): the
+               ring turns where the avatar is, as a pull's does. There is no
+               percentage to tell — wslc reports none — so it just turns. *@
+            <div class="wslc-progress-ring" title="Working…">
+                <MudProgressCircular Class="wslc-progress-ring-dial" Color="Color.Primary" Indeterminate="true" />
+            </div>
+        }
+        else if (Avatar is not null)
+        {
+            @Avatar
+        }
+        else
+        {
+            <MudAvatar Color="AvatarColor" Variant="Variant.Filled">@Initial</MudAvatar>
+        }
+    </CardHeaderAvatar>
+    <CardHeaderContent>
+        @* Titles are names the user chose — a volume's, an image's — and they
+           can be longer than the card. They are cut here, with the whole of
+           them in the tooltip, because a name that runs past the card's edge
+           lands on the card beside it. *@
+        <MudText Typo="Typo.subtitle1" Class="wslc-card-line" title="@Title">@Title</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary wslc-card-line" title="@Subtitle">@Subtitle</MudText>
+    </CardHeaderContent>
+    <CardHeaderActions>
+        @HeaderActions
+    </CardHeaderActions>
+</MudCardHeader>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    [Parameter] public string Subtitle { get; set; } = "";
+
+    /// <summary>Avatar letter; defaults to the first character of the title.</summary>
+    [Parameter] public string? AvatarText { get; set; }
+
+    [Parameter] public Color AvatarColor { get; set; } = Color.Primary;
+
+    /// <summary>Drawn instead of the avatar: a row on its way shows its progress there.</summary>
+    [Parameter] public RenderFragment? Avatar { get; set; }
+
+    /// <summary>The row's key, the one its actions component reports busy with.</summary>
+    [Parameter] public string? Key { get; set; }
+
+    [Parameter] public RenderFragment? HeaderActions { get; set; }
+
+    private string Initial => string.IsNullOrEmpty(AvatarText)
+        ? (Title.Length > 0 ? Title[..1].ToUpperInvariant() : "?")
+        : AvatarText;
+
+    protected override void OnInitialized() => Rows.Changed += OnChanged;
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Rows.Changed -= OnChanged;
+}

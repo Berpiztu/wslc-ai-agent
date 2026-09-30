@@ -1,0 +1,14 @@
+@* One section of the list's card (EntityCard) standing alone as a part of a
+   dashboard card: the header, the body or the
+   actions row, inside the card's own class so each keeps the look it has in
+   the list — the header and actions rows in the tinted tone, the actions'
+   tight buttons and the line above them — and fills its cells. *@
+
+<div class="wslc-card wslc-card-section">
+    @ChildContent
+</div>
+
+@code {
+    /// <summary>An EntityCardHeader, a MudCardContent or a MudCardActions, as EntityCard draws them.</summary>
+    [Parameter, EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
+}

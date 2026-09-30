@@ -1,0 +1,143 @@
+@* Mounted once by the layout, on a native client:
+   opens the page of a notification the user tapped, and brings the agent's
+   notifications to the client one of two ways. On a client the agent pushes
+   to (Android) it registers the device with the agent: on start-up, and again
+   on every navigation and whenever the link to the agent comes back, until
+   the agent took it — a client opens before its agent answers, and before its
+   user signs in — and again whenever Firebase renews the token; a user who
+   said no to notifications is not asked again in this run. On a client that
+   shows the agent's feed itself (Windows, its agent on another machine) it
+   follows the feed while the client runs. Renders nothing. *@
+@namespace WslcAgent.UI.Notifications
+@using WslcAgent.ApiClient
+@using WslcAgent.ApiClient.Contracts
+@implements IDisposable
+@inject IClientNotifications Client
+@inject WslcAgentApi Api
+@inject AgentChanges Changes
+@inject NavigationManager Navigation
+@inject AgentLink Link
+
+@code {
+    /// <summary>The token the agent took in this run; null until it did.</summary>
+    private string? _registered;
+
+    /// <summary>The agent's notifications as they arrive, on a client that shows them itself.</summary>
+    private NotificationFeed? _feed;
+
+    /// <summary>The user said no, or the phone cannot receive them: nothing to register.</summary>
+    private bool _refused;
+
+    private bool _registering;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Client.Supported)
+        {
+            return;
+        }
+
+        Client.Opened += OnOpened;
+        Open();
+        if (Client.ShowsFeed)
+        {
+            _feed = new NotificationFeed(Api, Changes, () => Client.LastShown, id => Client.LastShown = id, Client.Show);
+            Client.Pressed += OnPressed;
+            return;
+        }
+
+        Client.TokenChanged += OnTokenChanged;
+        Navigation.LocationChanged += OnLocationChanged;
+        Link.Changed += OnLinkChanged;
+        await RegisterAsync();
+    }
+
+    private void OnOpened() => _ = InvokeAsync(Open);
+
+    /// <summary>The page of the notification tapped, when there is one waiting: the app may have been started by the tap.</summary>
+    private void Open()
+    {
+        if (Client.TakeOpened() is { Length: > 0 } link)
+        {
+            Navigation.NavigateTo(link);
+        }
+    }
+
+    private void OnPressed(string action) => _ = InvokeAsync(() => PressAsync(action));
+
+    /// <summary>A notification's button: the update cancelled; the agent then tells every device, this one too.</summary>
+    private async Task PressAsync(string action)
+    {
+        if (action != NotificationAction.CancelUpdate)
+        {
+            return;
+        }
+
+        try
+        {
+            await Api.CancelAgentUpdateAsync();
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException or TaskCanceledException)
+        {
+            // The agent is away: the update it announced cannot start without it either.
+        }
+    }
+
+    private void OnTokenChanged(string token) => _ = InvokeAsync(() => RegisterAsync(token));
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e) =>
+        _ = InvokeAsync(() => RegisterAsync());
+
+    private void OnLinkChanged()
+    {
+        if (Link.Online)
+        {
+            _ = InvokeAsync(() => RegisterAsync());
+        }
+    }
+
+    /// <summary>The device and its token given to the agent, once per token; a failure is tried again at the next chance.</summary>
+    private async Task RegisterAsync(string? renewed = null)
+    {
+        if (_refused || _registering || (renewed is null && _registered is not null))
+        {
+            return;
+        }
+
+        _registering = true;
+        try
+        {
+            var token = renewed ?? await Client.TokenAsync();
+            if (token is null)
+            {
+                _refused = true;
+                return;
+            }
+
+            if (token != _registered)
+            {
+                await Api.RegisterNotificationDeviceAsync(new RegisterDeviceRequest(Client.DeviceName, Client.Platform, token));
+                _registered = token;
+            }
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException or TaskCanceledException)
+        {
+            // The agent is away, or the user not signed in yet: the next
+            // navigation, or the link coming back, tries again.
+        }
+        finally
+        {
+            _registering = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _feed?.Dispose();
+        Client.Opened -= OnOpened;
+        Client.Pressed -= OnPressed;
+        Client.TokenChanged -= OnTokenChanged;
+        Navigation.LocationChanged -= OnLocationChanged;
+        Link.Changed -= OnLinkChanged;
+    }
+}

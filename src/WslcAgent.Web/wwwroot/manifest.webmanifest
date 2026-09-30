@@ -1,0 +1,23 @@
+{
+  "name": "WSLC AI Agent",
+  "short_name": "WSLC AI",
+  "description": "Dashboard for WSLC containers, served by the local WSLC AI Agent.",
+  "id": "./",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#1e293b",
+  "theme_color": "#1e293b",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    },
+    {
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    }
+  ]
+}

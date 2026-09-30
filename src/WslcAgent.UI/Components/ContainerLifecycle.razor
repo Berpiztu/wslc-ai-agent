@@ -1,0 +1,53 @@
+@* The details header's state and its one verb, read like a traffic light. A ring
+   with a dot inside it, one piece: green and still while the container runs, red
+   and still while it is stopped. Pressing the verb beside it — Stop or Start —
+   sets the ring turning in the colour it is heading for and the dot amber, the
+   light between; once the header has re-read the container both settle in the
+   new colour. One ring in one size throughout, never a dot swapped for a
+   spinner: that swap changed the width and pushed the button sideways. The dot
+   is MudProgressCircular's own content, which it centres itself. Restart is a
+   stop and a start, and removing a container stays on the list, whose ⋮ menu
+   and bulk remove carry it. *@
+@inherits EntityActionsBase
+
+<MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+    @* StrokeWidth 10 closes the ring's hole to 14.4px round the dot, so ring and
+       dot read as one piece with no hairline of white between them. The dot's
+       box is 18px but Material's circle is drawn at radius 10 of 24, so what
+       shows is 15px: a hole sized to the box left 1.37px of white each side. *@
+    <MudProgressCircular Size="Size.Small" StrokeWidth="10" Rounded="true" Color="RingColor" Class="wslc-state-ring"
+                         Indeterminate="Busy" Value="100" title="@(Busy ? "working…" : Container.State)">
+        <MudIcon Icon="@Icons.Material.Filled.Circle" Size="Size.Small" Color="DotColor" />
+    </MudProgressCircular>
+    <MudButton Size="Size.Small" Variant="Variant.Filled" Disabled="Busy" OnClick="ToggleAsync"
+               Color="@(Container.IsRunning ? Color.Warning : Color.Success)">
+        @(Container.IsRunning ? "Stop" : "Start")
+    </MudButton>
+</MudStack>
+
+@code {
+    /// <summary>
+    /// Starting a container returns as soon as it has been launched, so the ring
+    /// turned for an instant and was gone before the press could be seen to do
+    /// anything. It turns for at least this long; stopping waits for the
+    /// container to go down and is usually longer on its own.
+    /// </summary>
+    private static readonly TimeSpan MinimumSpin = TimeSpan.FromSeconds(2);
+
+    [Parameter, EditorRequired] public ContainerSummary Container { get; set; } = default!;
+
+    protected override string Key => Container.Id;
+
+    /// <summary>At rest the state's colour; while the verb runs, the colour it is heading for.</summary>
+    private Color RingColor => Container.IsRunning != Busy ? Color.Success : Color.Error;
+
+    /// <summary>At rest the state's colour; amber while the container is between states.</summary>
+    private Color DotColor => Busy ? Color.Warning : Container.IsRunning ? Color.Success : Color.Error;
+
+    private Task ToggleAsync() => Container.IsRunning
+        ? RunAsync(Container.Name, "stop", ct => AtLeastMinimumSpin(Api.StopContainerAsync(Container.Id, ct), ct))
+        : RunAsync(Container.Name, "start", ct => AtLeastMinimumSpin(Api.StartContainerAsync(Container.Id, ct), ct));
+
+    private static Task AtLeastMinimumSpin(Task work, CancellationToken cancellationToken) =>
+        Task.WhenAll(work, Task.Delay(MinimumSpin, cancellationToken));
+}

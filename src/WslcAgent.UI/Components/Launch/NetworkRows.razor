@@ -1,0 +1,43 @@
+@* The Networks rows of the launch form: the first row is the primary network
+   (--network, --ip, --network-alias), the rest attach after the container
+   exists (network connect). A static IP only on user-defined networks. *@
+@inject IDialogService Dialogs
+@inject WslcAgentApi Api
+
+<RowsHeader Label="Networks" OnAdd="@(() => Rows.Add(new NetworkRow()))" />
+@if (Error is not null)
+{
+    <MudText Typo="Typo.caption" Class="mud-error-text d-block mb-1">@Error</MudText>
+}
+@foreach (var (row, index) in Rows.Select((r, i) => (r, i)))
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-1">
+        <div class="wslc-field-pick">
+            <MudTextField T="string" @bind-Value="row.Name" Placeholder="@(index == 0 ? "network (empty: default bridge)" : "network")" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" Margin="Margin.Dense" />
+            <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick a network" OnClick="@(() => PickAsync(row))" />
+        </div>
+        <MudTextField T="string" @bind-Value="row.Ip" Placeholder="ip (optional)" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" Margin="Margin.Dense" Disabled="@(!row.AllowsStaticIp)" />
+        @if (index == 0)
+        {
+            <MudTextField T="string" @bind-Value="row.Aliases" Placeholder="aliases (comma or space)" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" Margin="Margin.Dense" />
+        }
+        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error" Class="wslc-row-remove" title="Remove row" OnClick="@(() => Rows.Remove(row))" />
+    </MudStack>
+}
+<MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-2">Empty uses the default bridge. Extra rows attach after the container exists. A static IP is only for user-defined networks (not bridge / host / none); clear it to let WSLC assign.</MudText>
+
+@code {
+    [Parameter, EditorRequired] public List<NetworkRow> Rows { get; set; } = [];
+
+    /// <summary>What the check or a failed launch said about the networks: shown under the header, in the error colour.</summary>
+    [Parameter] public string? Error { get; set; }
+
+    private async Task PickAsync(NetworkRow row)
+    {
+        var picked = await Pickers.NetworkAsync(Dialogs, Api, row.Name);
+        if (picked is not null)
+        {
+            row.Name = picked;
+        }
+    }
+}

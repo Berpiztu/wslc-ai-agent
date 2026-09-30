@@ -1,0 +1,71 @@
+@* The one shell for form dialogs: the fields as content, Cancel and one
+   filled submit button, the failure shown inside the dialog, and the dialog
+   closes as submitted only when the action succeeds. *@
+@using WslcAgent.ApiClient
+
+<MudDialog>
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="Cancel" Disabled="_busy">Cancel</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="SubmitAsync" Disabled="_busy">@(_busy ? BusyText : SubmitText)</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form">
+            @ChildContent
+        </MudForm>
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-2">@_error</MudAlert>
+        }
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private MudForm _form = default!;
+    private bool _busy;
+    private string? _error;
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
+
+    /// <summary>The verb on the submit button.</summary>
+    [Parameter, EditorRequired] public string SubmitText { get; set; } = "";
+
+    /// <summary>Shown on the button while the action runs.</summary>
+    [Parameter] public string BusyText { get; set; } = "Working…";
+
+    /// <summary>The action; an <see cref="AgentApiException"/> or <see cref="HttpRequestException"/> keeps the dialog open with the message.</summary>
+    [Parameter, EditorRequired] public Func<Task> OnSubmit { get; set; } = default!;
+
+    private void Cancel() => Dialog.Cancel();
+
+    private async Task SubmitAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+        // The action buttons live in the dialog's own tree: it must be told to repaint.
+        Dialog.StateHasChanged();
+        try
+        {
+            await OnSubmit();
+            Dialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+            Dialog.StateHasChanged();
+        }
+    }
+}

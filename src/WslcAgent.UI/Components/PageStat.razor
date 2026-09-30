@@ -1,0 +1,23 @@
+@* One "label value" pair of a page header row (CPU usage, memory usage,
+   image count…). The row never wraps: when room runs out the stats step their
+   text down (container queries in wslc-agent-ui.css) instead of hiding. *@
+<div class="@(Large ? "wslc-stat wslc-stat-large" : "wslc-stat")">
+    @if (Label.Length > 0)
+    {
+        <span class="wslc-stat-label mud-text-secondary">@Label</span>
+    }
+    <span class="wslc-stat-value">@Value</span>
+</div>
+
+@code {
+    /// <summary>Empty when the value names itself ("6 volumes").</summary>
+    [Parameter] public string Label { get; set; } = "";
+
+    [Parameter, EditorRequired] public string Value { get; set; } = "";
+
+    /// <summary>
+    /// Label and value in body1, the size of the row's buttons, instead of the
+    /// caption and body2 every other stat wears: the Activity header's — a theme size, so the type rule holds.
+    /// </summary>
+    [Parameter] public bool Large { get; set; }
+}

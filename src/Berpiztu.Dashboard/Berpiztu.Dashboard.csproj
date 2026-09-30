@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <!-- Berpiztu's dashboard: objects laid out on a canvas, designed with a
+       toolbox and a properties window. It knows
+       nothing of the application that uses it: the objects, where their
+       sources come from and where the dashboard is kept are the
+       application's. It depends on MudBlazor only, and refers to nothing of
+       WSLC's, so it can leave this repository by moving its folder. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Berpiztu.Dashboard</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+    <PackageReference Include="MudBlazor" />
+  </ItemGroup>
+
+</Project>

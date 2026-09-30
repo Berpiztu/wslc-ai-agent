@@ -1,0 +1,175 @@
+@* The dashboard's status bar: the alarms ticked in its Status alarms, on
+   every screen, shared out on the two sides of the round button — the ring the
+   containers' cards wear at its small size, its percent inside, the measure
+   and the container's name or Host under it — red and blinking past its
+   threshold. They are every page's, in the view the window's orientation asks
+   for — in design, the view designed — from where this device keeps the dashboard, read again on the
+   five-second beat so a tick made in design reaches it; what they watch is
+   kept read while they are shown (DashboardMeasures). A tap opens the
+   dashboard. *@
+@implements IAsyncDisposable
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Designer
+@using Berpiztu.Dashboard.Model
+@using Berpiztu.Dashboard.Storage
+@using WslcAgent.UI.Dashboard
+@using BoardView = Berpiztu.Dashboard.Model.DashboardView
+@using BoardLayout = Berpiztu.Dashboard.Model.DashboardLayout
+@using BoardStatus = Berpiztu.Dashboard.Model.StatusAlarm
+@inject DashboardPlace Place
+@inject ObjectCatalogue Catalogue
+@inject DashboardMeasures Measures
+@inject ContainerRows Containers
+@inject DashboardInterop Interop
+@inject NavigationManager Navigation
+
+<div class="wslc-status-probe" @ref="_probe"></div>
+@if (_shown.Count > 0)
+{
+    var half = (_shown.Count + 1) / 2;
+    <div class="wslc-status-side wslc-status-side-start">
+        @foreach (var item in _shown.Take(half))
+        {
+            @Ring(item)
+        }
+    </div>
+    <div class="wslc-status-side wslc-status-side-end">
+        @foreach (var item in _shown.Skip(half))
+        {
+            @Ring(item)
+        }
+    </div>
+}
+
+@code {
+    /// <summary>The five-second beat the dashboard's reads are sampled on.</summary>
+    private static readonly TimeSpan Every = TimeSpan.FromSeconds(5);
+
+    private readonly CancellationTokenSource _stop = new();
+
+    /// <summary>The window, measured: the view its orientation asks for.</summary>
+    private ElementReference _probe;
+
+    /// <summary>One alarm of the bar: its object, the measure and the alarm as set.</summary>
+    private sealed record Item(ObjectInstance Object, DashboardObjectAlarmAttribute Measure, ObjectAlarm Alarm);
+
+    private IReadOnlyList<Item> _shown = [];
+
+    /// <summary>The reads the alarms shown need, kept read while they are shown.</summary>
+    private IDisposable? _following;
+
+    protected override void OnInitialized()
+    {
+        Measures.Changed += OnChanged;
+        Place.DesignedChanged += OnDesigned;
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _ = WatchAsync(_stop.Token);
+        }
+    }
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    /// <summary>The view designed changed, or design ended: its alarms shown at once, not at the next beat.</summary>
+    private void OnDesigned() => _ = InvokeAsync(ReadQuietlyAsync);
+
+    /// <summary>The alarms read again, and what they watch kept read, on the beat, whatever the screen.</summary>
+    private async Task WatchAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(Every);
+        try
+        {
+            do
+            {
+                await ReadQuietlyAsync();
+            }
+            while (await timer.WaitForNextTickAsync(cancellationToken));
+        }
+        catch (OperationCanceledException)
+        {
+            // The layout went away.
+        }
+    }
+
+    /// <summary>The alarms read, a read that fails leaving the last ones standing.</summary>
+    private async Task ReadQuietlyAsync()
+    {
+        try
+        {
+            await ReadAsync();
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException or JSException)
+        {
+            // The last alarms stand; the sign-in screen, when that is the cause, takes over.
+        }
+    }
+
+    /// <summary>The ticked alarms of the view on screen — the one designed, in design — as they are set now, and their reads followed.</summary>
+    private async Task ReadAsync()
+    {
+        await Place.LoadAsync();
+        var view = Place.Designed ?? await WindowViewAsync();
+        var whole = await Place.Store.LoadAsync();
+        _shown = [.. new string?[] { null }.Concat(DashboardPages.Named(whole))
+            .Select(page => BoardLayout.Read(DashboardViews.Read(DashboardPages.Read(whole, page), view)))
+            .SelectMany(layout => layout.Status.Select(status => Shown(layout, status)))
+            .OfType<Item>()];
+        var was = _following;
+        _following = Measures.Follow(_shown.Select(item => (item.Object, item.Measure.Measure)));
+        was?.Dispose();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>The view the window's orientation asks for: portrait where it is taller than it is wide.</summary>
+    private async Task<string> WindowViewAsync()
+    {
+        var window = await Interop.MeasureAsync(_probe);
+        return window.Height > window.Width ? BoardView.Portrait : BoardView.Landscape;
+    }
+
+    /// <summary>A ticked alarm as the bar shows it; null where its object left, is hidden, or has it off.</summary>
+    private Item? Shown(BoardLayout layout, BoardStatus status)
+    {
+        if (layout.Find(status.Object) is not { Hidden: not true } o || Catalogue.Find(o.Type) is not { } kind)
+        {
+            return null;
+        }
+
+        return kind.AlarmsOn(o).FirstOrDefault(on => on.Measure.Measure == status.Measure) is { Measure: not null } on
+            ? new Item(o, on.Measure, on.Alarm)
+            : null;
+    }
+
+    /// <summary>What the ring is under: the container's name for a container's, Host for the host's.</summary>
+    private string Name(Item item) =>
+        RegistrySource.Uid(item.Object.Source) is { } uid && Containers.Find(uid) is { } container ? container.Name : "Host";
+
+    private RenderFragment Ring(Item item)
+    {
+        var value = Measures.Of(item.Object, item.Measure.Measure);
+        var reading = value is { } v ? WslcAgent.ApiClient.Percents.Text(v) : "";
+        var up = value is { } now && now > item.Alarm.Threshold;
+        var title = $"{Name(item)} · {item.Measure.Label} {(reading.Length > 0 ? reading : "not known yet")}; the alarm is past {item.Alarm.Threshold}% · tap for the dashboard";
+        return @<div class="@(up ? "wslc-status-alarm wslc-status-alarm-up" : "wslc-status-alarm")"
+                     role="button" title="@title" aria-label="@title" @onclick="@(() => Navigation.NavigateTo(""))">
+            <UsageDial Label="" Reading="@reading" Live="@(value is not null)" Title="@title" />
+            <span class="wslc-status-line">@DashboardMeasures.Short(item.Measure.Measure)</span>
+            <span class="wslc-status-line">@Name(item)</span>
+        </div>;
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        Measures.Changed -= OnChanged;
+        Place.DesignedChanged -= OnDesigned;
+        _following?.Dispose();
+        // Cancelled, not disposed: a beat still under way asks
+        // for the token after the layout has gone.
+        _stop.Cancel();
+        return ValueTask.CompletedTask;
+    }
+}

@@ -1,0 +1,14 @@
+@* "N selected" plus the bulk verbs, when the page has them there, in the top bar's nav slot. Stays in the
+   layout (invisible) while nothing is selected so the bar keeps its width;
+   on phones an empty one is removed (wslc-agent-ui.css). *@
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="wslc-bulk" data-empty="@(Count == 0 ? "true" : "false")" Style="@(Count == 0 ? "visibility: hidden" : null)">
+    <MudText Typo="Typo.body2">@Count selected</MudText>
+    @ChildContent
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public int Count { get; set; }
+
+    /// <summary>The bulk verbs; none where the page keeps them beside its grid (the Logs page's Delete).</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

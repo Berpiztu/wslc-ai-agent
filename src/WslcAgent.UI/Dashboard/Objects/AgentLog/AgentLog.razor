@@ -1,0 +1,26 @@
+@* The agent's log as an object: the Logs page
+   whole — the entries with their level and type filters, copy and delete,
+   and the Activity of wslc's commands under them — filling its cells, as
+   the agent's own page shows it under the System card. Its title-bar count
+   and Delete all stay with the Logs page, which it opens. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using WslcAgent.UI.Pages
+@inherits WslcObject
+@inject NavigationManager Navigation
+@attribute [DashboardObject("wslc.agent-log", "Agent log", Group = "System", Subgroup = "System", Icon = Icons.Material.Filled.Subject, Columns = 32, Rows = 20, Fills = true)]
+
+<div class="@($"{TypeClass} wslc-dash-log")">
+    <AgentLogsPage Embedded="true" />
+</div>
+
+@code {
+    /// <summary>It opens the Logs page, as a count opens its list's.</summary>
+    public override bool Opens => true;
+
+    public override Task OpenAsync()
+    {
+        Navigation.NavigateTo("logs");
+        return Task.CompletedTask;
+    }
+}

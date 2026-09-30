@@ -1,0 +1,21 @@
+@* Every dialog's title row: the title at the left, anything that says where it
+   stands next to it, and the dialog's verbs at the right — Close, Cancel, the
+   submit. A dialog has no row of buttons at its foot and no cross in the corner:
+   its verbs are here, where they are read first. *@
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="wslc-dialog-head">
+    <MudText Typo="Typo.h6" Class="wslc-dialog-title">@Title</MudText>
+    @Info
+    <MudSpacer />
+    @ChildContent
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    /// <summary>Shown next to the title: the image a pull is fetching, a state.</summary>
+    [Parameter] public RenderFragment? Info { get; set; }
+
+    /// <summary>The dialog's verbs, at the right of the row.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

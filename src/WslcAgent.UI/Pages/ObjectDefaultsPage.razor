@@ -1,0 +1,197 @@
+@page "/dashboard/objects"
+@* How each kind of dashboard object is born: every object drawn on one board as it is born, the landscape view or the
+   portrait one, the objects of every card made already in their card, and each
+   change made to one kept as
+   its kind's default in that view (ObjectDefaultsBoard). A board for designing the objects, not a
+   dashboard: nothing is dropped on it and nothing of it is kept but the
+   defaults. Only a development agent writes them, so only there is it
+   offered. It is always designed (it exists to give the objects their
+   defaults, and is never only looked at); the view is in the address, so
+   Back goes from one to the other. Nothing is written without Save, as in
+   the dashboard's views: each change is kept in a draft on this device, one per view, which
+   Discard lets go, and leaving the board with one asks first. *@
+@implements IDisposable
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Designer
+@using Berpiztu.Dashboard.Storage
+@* The SDK's view and layout, under names of their own. *@
+@using BoardView = Berpiztu.Dashboard.Model.DashboardView
+@using BoardLayout = Berpiztu.Dashboard.Model.DashboardLayout
+@using Berpiztu.Dashboard.Sources
+@using WslcAgent.UI.Dashboard
+@inject NavigationManager Navigation
+@inject AgentObjectDefaults Defaults
+@inject AgentDashboardStore Dashboard
+@inject ObjectCatalogue Catalogue
+@inject SourceFamilies Families
+@inject IEnumerable<IDashboardTemplate> Templates
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+@inject DeviceDashboardDrafts Drafts
+
+<PageShell Title="@($"Objects' defaults: {ViewVerb.Name(Portrait)}")">
+    <Verbs>
+        @* Back to the dashboard it was opened from, in design, where Objects is
+           offered: the board is a step aside from it, not a place of its own. *@
+        <VerbFab StartIcon="@Icons.Material.Filled.Dashboard" Label="Dashboard"
+                 OnClick="@(() => Navigation.NavigateTo($"?{DesignVerb.Query}=1"))"
+                 Title="Back to the dashboard, in design" />
+        <ViewVerb Portrait="Portrait" />
+        @* Nothing is written without Save: until then what is designed is a
+           draft on this device, which Discard lets go. *@
+        <VerbFab StartIcon="@Icons.Material.Filled.Save" Label="Save" Disabled="@(_designer?.Unsaved != true)" OnClick="SaveAsync"
+                 Title="@($"Save how the objects are born in the {View} view; until then it is kept on this device only")" />
+        <VerbFab StartIcon="@Icons.Material.Filled.RestorePage" Label="Discard" Disabled="@(_designer?.Unsaved != true)" OnClick="DiscardAsync"
+                 Title="Discard what is not saved: the board back as it is saved" />
+        @* What was designed for one view given to the other at once, to
+           start the other from it. *@
+        <VerbFab StartIcon="@Icons.Material.Filled.ContentCopy" Label="@($"Copy {View} → {Other}")" OnClick="CopyAsync"
+                 Disabled="@(Defaults.Count(View) == 0)"
+                 Title="@($"Give every object the {Other} view the defaults designed here for the {View}")" />
+    </Verbs>
+    <ChildContent>
+        @if (_board is null)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (!Defaults.Writable)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="ma-2">
+                How each object is born is designed on a development agent, which ships it; this agent only reads it.
+            </MudAlert>
+        }
+        else
+        {
+            <div class="@(Portrait ? "wslc-dash-phone" : "wslc-dash-board")">
+                <DashboardDesigner @key="View" @ref="_designer" Store="_board" Draft="_draft" DraftChanged="@(() => StateHasChanged())"
+                                   Designing="true" Toolbox="false" View="@View" />
+            </div>
+        }
+    </ChildContent>
+</PageShell>
+
+@code {
+    private ObjectDefaultsBoard? _board;
+    private string? _boardView;
+    private DashboardDesigner? _designer;
+
+    /// <summary>Where this device keeps what is designed of the board in this view until Save.</summary>
+    private IDashboardStore? _draft;
+
+    private IDisposable? _guard;
+
+    /// <summary>The name the board's drafts are kept under, apart from every dashboard's (DeviceDashboardDrafts).</summary>
+    private const string DraftPlace = "objects";
+
+    [SupplyParameterFromQuery(Name = ViewVerb.Query)] public string? ViewQuery { get; set; }
+
+    private string View => ViewVerb.Of(ViewQuery);
+
+    private bool Portrait => View == BoardView.Portrait;
+
+    protected override void OnInitialized() => _guard = Navigation.RegisterLocationChangingHandler(LeavingAsync);
+
+    /// <summary>
+    /// The board of the view asked for, its cells the size of the user's
+    /// dashboard's, so an object is seen at the size it will stand at: the
+    /// landscape one as wide as that dashboard, the portrait one as many as a phone
+    /// holds.
+    /// </summary>
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_boardView == View)
+        {
+            return;
+        }
+
+        _boardView = View;
+        _board = null;
+        await Defaults.LoadAsync();
+        var dashboard = BoardLayout.Read(await Dashboard.LoadAsync());
+        var columns = Portrait
+            ? BoardView.PhoneColumns
+            : dashboard.Columns;
+        _draft = Drafts.For(DraftPlace, "defaults", View);
+        _board = new ObjectDefaultsBoard(View, Catalogue, Templates, Families, Defaults, columns);
+    }
+
+    /// <summary>The view the verb of the arrow takes the board to.</summary>
+    private string Other => Portrait ? BoardView.Landscape : BoardView.Portrait;
+
+    /// <summary>
+    /// Every object's default in this view written as its default in the
+    /// other, after asking where the other has defaults of its own, which it
+    /// would lose.
+    /// </summary>
+    private async Task CopyAsync()
+    {
+        if (_designer?.Unsaved == true)
+        {
+            // Copy gives the other view what is saved: changes not saved would be left out without a word.
+            Snackbar.Add("The board has changes that are not saved: Save or Discard them first.", Severity.Info);
+            return;
+        }
+
+        if (Defaults.Count(Other) > 0
+            && !await DialogFlow.ConfirmAsync(Dialogs, $"Copy {View} → {Other}",
+                $"Write the {View} defaults of {Defaults.Count(View)} objects and cards over the {Other} ones? The {Other} defaults they replace cannot be brought back.",
+                "Copy", destructive: true))
+        {
+            return;
+        }
+
+        var copied = await Defaults.CopyAsync(View, Other);
+        if (copied is { } count)
+        {
+            Snackbar.Add($"{count} defaults copied to the {Other} view.", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add("The agent stopped keeping them part of the way: only a development build writes how objects are born.", Severity.Error);
+        }
+    }
+
+    /// <summary>Save: every object and card changed written as its kind's default in this view; a failure is the designer's to say, the draft kept.</summary>
+    private async Task SaveAsync()
+    {
+        if (_designer is not null)
+        {
+            await _designer.SaveAsync();
+        }
+    }
+
+    /// <summary>Discard, once confirmed: the board back as it is saved.</summary>
+    private async Task DiscardAsync()
+    {
+        if (_designer is { Unsaved: true } designer
+            && await DialogFlow.ConfirmAsync(Dialogs, "Discard changes?", "The board has changes that are not saved. Discard them?", "Discard", destructive: true))
+        {
+            await designer.DiscardAsync();
+        }
+    }
+
+    /// <summary>
+    /// Leaving the board with changes not saved — Dashboard, Back, a link —
+    /// asks first, as every screen with unsaved work does; the answer to leave
+    /// lets them go, as Discard does. The other view stays on the board and
+    /// asks nothing: each view keeps its own draft.
+    /// </summary>
+    private async ValueTask LeavingAsync(LocationChangingContext context)
+    {
+        if (_designer is not { Unsaved: true } designer
+            || Navigation.ToAbsoluteUri(context.TargetLocation).AbsolutePath == Navigation.ToAbsoluteUri(Navigation.Uri).AbsolutePath)
+        {
+            return;
+        }
+
+        if (await DialogFlow.ConfirmAsync(Dialogs, "Discard changes?", "The board has changes that are not saved. Leave it and discard them?", "Discard", destructive: true))
+        {
+            await designer.DiscardAsync();
+            return;
+        }
+
+        context.PreventNavigation();
+    }
+
+    public void Dispose() => _guard?.Dispose();
+}

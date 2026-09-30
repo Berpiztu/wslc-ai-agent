@@ -1,0 +1,9 @@
+@* The left half of a page header row: the PageStat pairs. Takes the spare
+   width and truncates, so the tools on the right never move. *@
+<div class="wslc-stats">
+    @ChildContent
+</div>
+
+@code {
+    [Parameter, EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
+}

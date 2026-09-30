@@ -1,0 +1,27 @@
+@* One thing to read and one button: an error with its explanation, shown
+   before a verb runs when the form already knows it would be refused. *@
+
+<MudDialog>
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <MudAlert Severity="Severity.Error">@Message</MudAlert>
+        @if (Explanation.Length > 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">@Explanation</MudText>
+        }
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    /// <summary>What is wrong, in one sentence.</summary>
+    [Parameter, EditorRequired] public string Message { get; set; } = "";
+
+    /// <summary>Why, and what to do about it.</summary>
+    [Parameter] public string Explanation { get; set; } = "";
+}

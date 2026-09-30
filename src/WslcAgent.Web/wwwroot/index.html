@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WSLC AI Agent</title>
+    <base href="/" />
+    <!-- MudBlazor ships its own stylesheet and script; no fonts are loaded
+         from the internet so the agent works on an offline LAN. -->
+    <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
+    <link href="_content/WslcAgent.UI/wslc-agent-ui.css" rel="stylesheet" />
+    <link href="_content/Berpiztu.Dashboard/berpiztu-dashboard.css" rel="stylesheet" />
+    <link rel="stylesheet" href="css/app.css" />
+    <link rel="icon" type="image/png" href="icon-192.png" />
+    <link href="manifest.webmanifest" rel="manifest" />
+    <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png" />
+    <meta name="theme-color" content="#1e293b" />
+</head>
+
+<body>
+    <div id="app">
+        <!-- Boot splash: the app's splash glyph over the theme background, with
+             the download progress as a bar under it (see css/app.css). -->
+        <div class="wslc-splash">
+            <svg class="wslc-splash-glyph" viewBox="0 0 456 456" aria-hidden="true">
+                <g fill="none" stroke="#e2e8f0" stroke-width="22" stroke-linejoin="round" stroke-linecap="round">
+                    <path d="M228 78 L352 150 V306 L228 378 L104 306 V150 Z" />
+                    <path d="M104 150 L228 222 L352 150" />
+                    <path d="M228 222 V378" />
+                </g>
+                <g fill="none" stroke="#818cf8" stroke-width="22" stroke-linejoin="round" stroke-linecap="round">
+                    <path d="M140 262 L172 286 L140 310" />
+                    <path d="M186 322 H226" />
+                </g>
+            </svg>
+            <div class="wslc-splash-title">WSLC AI Agent</div>
+            <div class="wslc-splash-bar"><div class="wslc-splash-fill"></div></div>
+            <div class="wslc-splash-text"></div>
+        </div>
+    </div>
+
+    <!-- No #blazor-error-ui: an error nothing caught goes to a toast (UnhandledErrors), not to Blazor's yellow bar. -->
+    <script src="_framework/blazor.webassembly.js"></script>
+    <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+    <script src="_content/WslcAgent.UI/wslc-agent-ui.js"></script>
+    <script>
+        // No offline cache, in development or once installed: the agent is on this
+        // machine or on the LAN, and a cached copy only ever meant running
+        // yesterday's build after an update — several refreshes before the new one
+        // appeared, or a start that stopped at 99 %. The files the app is made of
+        // carry a hash of their content in their name, so the browser's own cache
+        // never returns the wrong one. A client that installed a worker before
+        // drops it here, and its cache with it, the first time it opens this page.
+        if (navigator.serviceWorker) {
+            navigator.serviceWorker.getRegistrations()
+                .then(registrations => Promise.all(registrations.map(registration => registration.unregister())))
+                .then(() => caches.keys())
+                .then(keys => Promise.all(keys.map(key => caches.delete(key))))
+                .catch(() => {
+                    // A browser that refuses either (a private window) simply has nothing to drop.
+                });
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,21 @@
+@* The containers' aggregate CPU: what
+   they use of all there is, and how many CPUs there are. It reads the
+   runtime the host's CPU and memory objects share (HostRuntimeRead). *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@inherits WslcObject
+@attribute [DashboardObject("wslc.host-cpu", "CPU reading", Group = "Host readings", Subgroup = "System", Icon = Icons.Material.Filled.DeveloperBoard, Columns = 8, Rows = 4)]
+@attribute [DashboardObjectAlarm(DashboardMeasures.Cpu, "CPU", On = true)]
+@attribute [DashboardObjectPart("label", "Label")]
+@attribute [DashboardObjectPart("value", "Value", Bold = true)]
+@attribute [DashboardObjectPart("hint", "Hint")]
+@inject HostRuntimeRead Runtime
+
+<div class="@ReadingClass">
+    <ReadingSummary Label="Aggregate CPU" Value="@(Runtime.Value is { } r ? Readings.Cpu(r) : "—")"
+                    Hint="@ReadingHint(Runtime.Value is not null, Runtime.Value?.Error == true, $"{Runtime.Value?.CpuCount} CPUs available")" Error="@(Runtime.Value?.Error == true)" />
+</div>
+
+@code {
+    protected override void OnInitialized() => Follow(Runtime);
+}

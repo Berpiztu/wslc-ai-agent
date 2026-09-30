@@ -1,0 +1,67 @@
+@* The launch form as a dialog: Run and Create from the Containers page, View & edit
+   from a row. The content is a fixed-height column: the fields scroll, the
+   rail at the right stays where it is. The title carries the image as a badge,
+   on Run the magnifier that opens that image's pull
+   console, and Close, which leaves the window, asking first when something was
+   typed. The rail's Cancel is the other thing: it puts the edits back and stays
+   here. *@
+@using WslcAgent.UI.Components.Launch
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+<MudDialog ContentClass="wslc-dialog-action">
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <Info>
+                @if (Form.Image.Length > 0)
+                {
+                    <MudChip T="string" Size="Size.Small" Class="my-0">@Form.Image</MudChip>
+                }
+            </Info>
+            <ChildContent>
+                @if (Mode == LaunchMode.Run)
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.Subject" Size="Size.Small" title="View the pull output for this image" OnClick="ViewPullAsync" />
+                }
+                <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="CloseAsync">Close</MudButton>
+            </ChildContent>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <ContainerForm @ref="_form" Mode="Mode" Form="Form" SourceId="@SourceId" MainClass="wslc-fill-scroll" OnImageChanged="@(() => Dialog.StateHasChanged())"
+                       OnDone="@(id => Dialog.Close(DialogResult.Ok(id)))" />
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private ContainerForm _form = default!;
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public LaunchMode Mode { get; set; }
+
+    [Parameter] public LaunchForm Form { get; set; } = new();
+
+    [Parameter] public string SourceId { get; set; } = "";
+
+    /// <summary>Close leaves the window; what was typed and not saved is asked about first.</summary>
+    private async Task CloseAsync()
+    {
+        if (await _form.ConfirmLeaveAsync())
+        {
+            Dialog.Cancel();
+        }
+    }
+
+    /// <summary>The console of the image typed or picked.</summary>
+    private Task ViewPullAsync()
+    {
+        if (Form.Image.Length == 0)
+        {
+            Snackbar.Add("Type or pick an image first", Severity.Error);
+            return Task.CompletedTask;
+        }
+
+        return PullFlow.ShowLogAsync(Dialogs, Form.Image);
+    }
+}

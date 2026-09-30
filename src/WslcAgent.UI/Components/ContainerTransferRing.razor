@@ -1,0 +1,23 @@
+@* The ring a container wears where its avatar goes while files travel in or
+   out of it: the same ring, tooltip and verbs as its row in the Containers
+   list, so wherever it is shown it says what the list says. *@
+@inject IDialogService Dialogs
+@inject WslcAgentApi Api
+@inject ISnackbar Snackbar
+@inject FileTransfers Transfers
+
+<ProgressRing Pct="@TransferFlow.Pct(Moving)" Status="@TransferFlow.Status(Moving)" Failed="@TransferFlow.Failed(Moving)"
+              LogTitle="View the transfers" CancelTitle="@(TransferFlow.Active(Moving) is { Count: > 1 } several ? $"Cancel {several.Count} transfers" : "Cancel transfer")"
+              DismissTitle="Dismiss"
+              OnLog="@(() => TransferFlow.ShowAsync(Dialogs, Id, Name))"
+              OnCancel="@(() => TransferFlow.StopAsync(Dialogs, Api, Snackbar, Transfers, Moving))"
+              OnDismiss="@(() => TransferFlow.DismissAsync(Api, Snackbar, Transfers, Moving))" />
+
+@code {
+    /// <summary>The container's transfers a row shows (<see cref="TransferFlow.Showing"/>); at least one.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<ContainerTransfer> Moving { get; set; } = [];
+
+    [Parameter, EditorRequired] public string Id { get; set; } = "";
+
+    [Parameter, EditorRequired] public string Name { get; set; } = "";
+}

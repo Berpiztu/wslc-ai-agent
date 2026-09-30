@@ -1,0 +1,85 @@
+@* Status alarms: every alarm the view designed has switched on, one line each — the
+   object's kind, what it reads where it reads one, and the measure — ticked
+   while the status bar shows it too, on every screen. A tick applies at
+   once, as every property does. The properties window shows it with nothing
+   selected, and the round button's Status alarms in a dialog of its own. *@
+@implements IDisposable
+@inject ObjectCatalogue Catalogue
+@inject SourceFamilies Families
+
+<div class="bz-dash-status-list">
+    @foreach (var (o, kind, measure) in Watched)
+    {
+        var status = new StatusAlarm(o.Id, measure.Measure);
+        <CheckRow Value="@Document.Layout.Status.Contains(status)" ValueChanged="@(on => TickAsync(status, on))"
+                  Label="@AlarmName(o, kind, measure)" Title="Shown in the status bar, on every screen" />
+    }
+    @if (!Watched.Any())
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">No object of this view has an alarm switched on; switch one on in its properties.</MudText>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public DashboardDocument Document { get; set; } = default!;
+
+    /// <summary>The dashboard changed — a tick, an alarm switched — drawn again, in a dialog as in the window.</summary>
+    protected override void OnInitialized() => Document.Changed += OnChanged;
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Document.Changed -= OnChanged;
+
+    /// <summary>Every alarm this view has on: each object shown, and each measure of it whose alarm is on, in the dashboard's order.</summary>
+    private IEnumerable<(ObjectInstance Object, ObjectDescriptor Kind, DashboardObjectAlarmAttribute Measure)> Watched =>
+        Document.Layout.Objects
+            .Where(o => o.Hidden != true)
+            .Select(o => (Object: o, Kind: Catalogue.Find(o.Type)))
+            .Where(pair => pair.Kind is not null)
+            .SelectMany(pair => pair.Kind!.AlarmsOn(pair.Object).Select(on => (pair.Object, pair.Kind!, on.Measure)));
+
+    /// <summary>What reads names the families' values: a container's name for its uid, read when the list of alarms is shown.</summary>
+    private readonly Dictionary<string, string> _names = [];
+
+    /// <summary>The families whose names were read.</summary>
+    private readonly HashSet<string> _named = [];
+
+    /// <summary>An alarm as the list names it: the object's kind, what it reads where it reads one, and the measure.</summary>
+    private string AlarmName(ObjectInstance o, ObjectDescriptor kind, DashboardObjectAlarmAttribute measure) =>
+        kind.HasSource && kind.SourceOf(o) is { } source && _names.GetValueOrDefault($"{kind.About.Source}|{source}") is { } name
+            ? $"{kind.Label} ({name}) · {measure.Label}"
+            : $"{kind.Label} · {measure.Label}";
+
+    /// <summary>The names of what the alarms read, read once a family.</summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var families = Watched.Where(w => w.Kind.HasSource).Select(w => w.Kind.About.Source).Distinct().Where(_named.Add).ToList();
+        foreach (var key in families)
+        {
+            if (Families.Find(key) is { } family)
+            {
+                foreach (var option in await family.ListAsync())
+                {
+                    _names[$"{key}|{option.Value}"] = option.Text;
+                }
+            }
+        }
+
+        if (families.Count > 0)
+        {
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>An alarm put in the status bar, or taken out of it.</summary>
+    private Task TickAsync(StatusAlarm status, bool on)
+    {
+        var others = Document.Layout.Status.Where(s => s != status).ToList();
+        if (on)
+        {
+            others.Add(status);
+        }
+
+        return Document.SetStatusAsync(others);
+    }
+}

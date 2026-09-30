@@ -1,0 +1,20 @@
+@* A network's details: what the Networks list's card says about it in words
+   — Id, Subnet, Gateway, Scope — as one object;
+   its Received and Sent dials are objects of their own. It fills its cells as
+   the card's body does, and its type size scales it. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits NetworkObject
+@attribute [DashboardObject("wslc.network-details", "Network details", Group = "Network", Subgroup = "User", Icon = Icons.Material.Filled.Article, Source = NetworkSourceFamily.FamilyKey, Columns = 12, Rows = 6, Fills = true, Horizontal = HorizontalAlign.Left, Vertical = VerticalAlign.Top, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both)]
+
+@if (Network is { } n)
+{
+    <div class="@SectionClass("wslc-card-part-details")">
+        <EntityCardPart>
+            <MudCardContent>
+                <NetworkCardTexts Network="n" />
+            </MudCardContent>
+        </EntityCardPart>
+    </div>
+}

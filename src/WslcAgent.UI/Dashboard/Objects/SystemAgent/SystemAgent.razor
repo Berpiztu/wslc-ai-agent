@@ -1,0 +1,18 @@
+@* The agent's version and whether it is a development one: the System card's
+   Agent reading, standing alone. It reads the agent's health (AgentHealthRead). *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits WslcObject
+@attribute [DashboardObject("wslc.system-agent", "Agent version", Group = "System", Subgroup = "System", Icon = Icons.Material.Filled.Dns, Columns = 6, Rows = 4, Background = ThemeColor.BackgroundGray)]
+@attribute [DashboardObjectPart("label", "Label")]
+@attribute [DashboardObjectPart("value", "Value")]
+@inject AgentHealthRead Health
+
+<div class="@SummaryClass">
+    <SummaryReading Label="Agent" Value="@(Health.Value is { } agent ? $"{agent.Version} · {(agent.Development ? "dev" : "prod")}" : "…")" />
+</div>
+
+@code {
+    protected override void OnInitialized() => Follow(Health);
+}

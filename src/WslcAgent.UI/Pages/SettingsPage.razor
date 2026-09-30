@@ -1,0 +1,1197 @@
+@page "/settings"
+@inject WslcAgentApi Api
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+@using Microsoft.JSInterop
+@inject IJSRuntime Js
+@inject SimulatedRemote Simulated
+@inject NavigationManager Navigation
+@inject WslcAgent.UI.Components.Styles.UiStyle Style
+@inject WslcAgent.UI.Files.IClientFiles Files
+@inject AgentChanges Changes
+@implements IDisposable
+@using WslcAgent.UI.Components.Styles
+
+@* Settings, beginning with the Internet login card: the username and
+   password asked by the sign-in screen of anyone outside the agent's machine
+   (the native clients sign in with the same pair), and the API token for
+   scripts and AI agents. A native client also finds its "This client" card here, the
+   agents it can talk to. Saved logins keeps the logins the host browser pane offers, and Testing can
+   make this client behave as a remote one. *@
+<PageShell Title="Settings">
+    @* Six subjects, six tabs: who may reach the agent
+       (Security), a container port on a public name (Publish), the MCP server and
+       its skill (MCP), the agent updating itself (Update), what the person's own devices keep — the agents a client
+       knows, the saved logins, the testing switch (User) — and what the
+       application looks like (Layout). What is chosen in Layout is not a
+       sample, it is the application; Apply puts it on every screen without writing it down, so the
+       person can walk through the app, see it in place and come back here to
+       carry on; Save is what makes this device open that way tomorrow. The tab
+       is in the address, so Back returns to the one left. *@
+    <MudTabs Elevation="Style.Applied.TabsElevation" Rounded="Style.Applied.TabsRounded" Border="Style.Applied.TabsBorder"
+             Centered="Style.Applied.TabsCentered" Color="Style.Applied.TabsColor"
+             MinimumTabWidth="@($"{Style.Applied.TabsMinWidth}px")"
+             TabPanelsClass="wslc-tab-panels" Class="wslc-fill" ActivePanelIndex="_tab" ActivePanelIndexChanged="OnTabChanged">
+        <MudTabPanel Text="Security">
+            <div class="wslc-fill-scroll">
+        @if (_status is null)
+        {
+            <MudProgressLinear Indeterminate="true" />
+        }
+        else if (!_status.Configured)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mb-3">
+                <b>Internet login not set.</b> The public address will not sign in until this agent has a username and password.
+                On the agent's machine this page opens without a login.
+            </MudAlert>
+        }
+        @* Every card is a subject of its own, so they stand side by side while the
+           window has room for them — the login beside its token, saved logins
+           beside testing, the MCP server beside its skill — and fall into one
+           column on a phone. The pairs are the order they are written in. *@
+        <div class="wslc-settings-grid">
+            @if (_status is not null)
+            {
+            <MudPaper Outlined="true" Class="pa-4">
+                <MudText Typo="Typo.h6">Internet login</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+                    Username and password asked by the sign-in screen when the agent is opened from anywhere but its own machine,
+                    through the public address or the LAN. The native clients sign in with the same pair. Saved in the agent's data
+                    folder (the password only as a hash) and active immediately; changing the password signs everyone out.
+                </MudText>
+                <MudText Typo="Typo.body2" Class="mb-2">Now: <b>@(_status.Configured ? $"{_status.Username} (configured)" : "not set")</b></MudText>
+                <MudTextField T="string" @bind-Value="_username" Label="Username" Variant="Variant.Filled" Margin="Margin.Dense" Immediate="true"
+                              HelperTextOnFocus="true" HelperText="Example: admin" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
+                <PasswordField @bind-Value="_password" Autocomplete="new-password" Class="mt-2" />
+                <PasswordField @bind-Value="_confirm" Label="Confirm password" Autocomplete="new-password" Class="mt-2" Error="@Mismatch" ErrorText="The passwords do not match" />
+                <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Save" Class="mt-3"
+                           Disabled="@(_busy || _username.Trim().Length == 0 || _password.Length == 0 || Mismatch)" OnClick="SaveLoginAsync">Save login</MudButton>
+            </MudPaper>
+            <MudPaper Outlined="true" Class="pa-4">
+                <MudText Typo="Typo.h6">API token</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+                    For scripts and AI agents that reach the API or the MCP endpoint from another machine: send it as
+                    <span class="wslc-mono">Authorization: Bearer &lt;token&gt;</span>. It is shown once; a new one replaces the old.
+                </MudText>
+                <MudText Typo="Typo.body2" Class="mb-2">Now: <b>@(_status.ApiToken ? "configured" : "not set — only this machine and signed-in clients can connect")</b></MudText>
+                @if (_newToken is not null)
+                {
+                    <div class="wslc-field-pick">
+                        <MudTextField T="string" Value="_newToken" Label="New API token" ReadOnly="true" Variant="Variant.Filled" Margin="Margin.Dense" Class="wslc-mono" />
+                        <MudFab Color="Color.Info" StartIcon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" title="Copy the token" OnClick="CopyTokenAsync" />
+                    </div>
+                }
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Key" Class="mt-3" Disabled="_busy" OnClick="RenewTokenAsync">
+                    @(_status.ApiToken ? "Replace token" : "Create token")
+                </MudButton>
+            </MudPaper>
+            }
+        </div>
+            </div>
+        </MudTabPanel>
+        <MudTabPanel Text="Publish">
+            <div class="wslc-fill-scroll">
+        <div class="wslc-settings-grid">
+            <PublishingCard />
+        </div>
+            </div>
+        </MudTabPanel>
+        <MudTabPanel Text="MCP">
+            <div class="wslc-fill-scroll">
+        <div class="wslc-settings-grid">
+        @* MCP server: the URL a client
+           registers, what it would find there, and the two switches the operator
+           has. Both are saved on the agent and in force on the next call — no
+           restart; a client that caches its tool list sees the change on its
+           next session. *@
+        <MudPaper Outlined="true" Class="pa-4">
+            <MudText Typo="Typo.h6">MCP server</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+                The agent serves MCP itself for AI clients (Claude Code, Hermes, OpenClaw): they register the URL below and
+                copy the skill, nothing else is installed. On this machine the URL needs no credentials; from anywhere else a
+                client sends <span class="wslc-mono">Authorization: Bearer &lt;token&gt;</span>, the API token above.
+                Skill and client setup: <span class="wslc-mono">mcp-skill/skills/wslc/INSTALL.md</span>.
+            </MudText>
+            @if (_mcp is null)
+            {
+                <MudProgressLinear Indeterminate="true" />
+            }
+            else
+            {
+                <div class="wslc-field-pick mb-2">
+                    <MudTextField T="string" Value="_mcp.LocalUrl" Label="Local URL" ReadOnly="true" Variant="Variant.Filled" Margin="Margin.Dense" Class="wslc-mono" />
+                    <MudFab Color="Color.Info" StartIcon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" title="Copy the URL" OnClick="CopyMcpUrlAsync" />
+                </div>
+                <MudText Typo="Typo.body2" Class="mb-2">
+                    Now: <b>@McpStateText</b>
+                </MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Off, the endpoint answers every client that it is switched off and offers no tool at all.
+                </MudText>
+                <MudSwitch T="bool" Value="_mcp.Settings.Enabled" ValueChanged="@(on => SaveMcpAsync(_mcp.Settings with { Enabled = on }))"
+                           Label="Serve MCP" LabelPlacement="Placement.Start" Color="Color.Primary" Disabled="_mcpBusy" />
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
+                    <b>remove_container</b>, <b>kill_container</b>, <b>exec_in_container</b>, <b>stop_session</b>, the remove and prune tools and <b>publish_container_port</b>
+                    (@_mcp.DestructiveTools of the @(_mcp.Tools + (_mcp.Settings is { Enabled: true, AllowDestructiveTools: false } ? _mcp.DestructiveTools : 0)) tools).
+                    Off, they are not even listed, so no assistant can offer them. On, each one still needs your approval twice:
+                    the first call only describes what it would do and the assistant has to ask you before calling again.
+                </MudText>
+                <MudSwitch T="bool" Value="_mcp.Settings.AllowDestructiveTools" ValueChanged="@(on => SaveMcpAsync(_mcp.Settings with { AllowDestructiveTools = on }))"
+                           Label="Offer the destructive tools" LabelPlacement="Placement.Start" Color="Color.Warning" Disabled="@(_mcpBusy || !_mcp.Settings.Enabled)" />
+            }
+        </MudPaper>
+        @* The skill: the file a client has to hold to know how to use these tools.
+           It travels inside the agent, so what this card installs always matches
+           the tools this agent serves — and it installs it by running that
+           client's own command, here or where the client is. *@
+        <MudPaper Outlined="true" Class="pa-4">
+            <MudText Typo="Typo.h6">Skill</MudText>
+            @if (_mcp is null)
+            {
+                <MudProgressLinear Indeterminate="true" />
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+                    An AI client needs this file (<span class="wslc-mono">SKILL.md</span>) to know which tool to use for what, how to
+                    resolve names, and that a destructive action is never taken without asking you. The agent carries its own copy, so
+                    what you install here always matches the tools this agent serves. Use the client's own installer where there is
+                    one — it scans and records the skill the way that client expects.
+                </MudText>
+                @if (_mcp.SkillCommands.FirstOrDefault(c => c.Client == _skillClient) is { } command)
+                {
+                    <div class="wslc-field-pick">
+                        <MudTextField T="string" Value="@ProfileCommand(command.Command)" Label="@($"Run on the machine where {_skillClient} is")" ReadOnly="true"
+                                      Variant="Variant.Filled" Margin="Margin.Dense" Class="wslc-mono" />
+                        <MudFab Color="Color.Info" StartIcon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" title="Copy the command"
+                                OnClick="@(() => CopyAsync(ProfileCommand(command.Command), "Install command copied"))" />
+                    </div>
+                }
+@* One line: which client, which of its profiles, and the address that machine
+                   reaches this agent by — the same client can be here and on the VPS, and
+                   there this agent is not 127.0.0.1. *@
+                <div class="wslc-skill-row mt-2">
+                    <MudSelect T="bool" Value="_skillRemote" ValueChanged="MachineChangedAsync" Label="Machine"
+                               Variant="Variant.Filled" Margin="Margin.Dense" Dense="true" Class="wslc-skill-pick">
+                        <MudSelectItem T="bool" Value="false">This one</MudSelectItem>
+                        <MudSelectItem T="bool" Value="true">Another, over SSH</MudSelectItem>
+                    </MudSelect>
+                    @if (_skillRemote)
+                    {
+                        @* Filled with a machine this one already knows how to reach —
+                           its SSH config has the user, the port and any jump — and the
+                           menu holds the rest. Typed only when it is somewhere new. *@
+                        <div class="wslc-field-pick wslc-skill-wide">
+                            <MudTextField T="string" Value="@_skillSsh" ValueChanged="SshChangedAsync" Label="SSH destination"
+                                          Variant="Variant.Filled" Margin="Margin.Dense" Class="wslc-mono"
+                                          HelperTextOnFocus="true" HelperText="A host of this machine's SSH config, or user@host"
+                                          autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
+                            <MudMenu Icon="@Icons.Material.Filled.Dns" Size="Size.Small" Dense="true" title="Machines this one can reach"
+                                     Color="Color.Info" Variant="Variant.Filled" Disabled="@(_mcp.SshHosts.Count == 0)">
+                                @foreach (var host in _mcp.SshHosts)
+                                {
+                                    <MudMenuItem OnClick="@(() => SshChangedAsync(host))">@host</MudMenuItem>
+                                }
+                            </MudMenu>
+                        </div>
+                    }
+                    <MudTextField T="string" Value="@_mcp.SkillAddress" ValueChanged="AddressChangedAsync" Label="Agent address from there"
+                                  Variant="Variant.Filled" Margin="Margin.Dense" Class="wslc-mono wslc-skill-wide"
+                                  HelperTextOnFocus="true" HelperText="As that machine reaches it"
+                                  autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
+                </div>
+                @* Which client, and which of its profiles: what that machine
+                   answered it has, not what this one holds. *@
+                <div class="wslc-skill-row mt-2">
+                    <MudSelect T="string" Value="_skillClient" ValueChanged="@(client => _skillClient = client)" Label="Client"
+                               Variant="Variant.Filled" Margin="Margin.Dense" Dense="true" Class="wslc-skill-pick">
+                        @foreach (var client in _mcp.SkillCommands)
+                        {
+                            <MudSelectItem T="string" Value="@client.Client">@(client.Client + Found(client.Client))</MudSelectItem>
+                        }
+                    </MudSelect>
+                    @if (Profiles is { Count: > 0 } profiles)
+                    {
+                        <MudSelect T="string" Value="_hermesProfile" ValueChanged="@(profile => _hermesProfile = profile)" Label="Profile"
+                                   Variant="Variant.Filled" Margin="Margin.Dense" Dense="true" Class="wslc-skill-pick">
+                            <MudSelectItem T="string" Value="@("")">default</MudSelectItem>
+                            @foreach (var profile in profiles)
+                            {
+                                <MudSelectItem T="string" Value="@profile">@profile</MudSelectItem>
+                            }
+                        </MudSelect>
+                    }
+                    else if (_skillClient == "Hermes")
+                    {
+                        <MudTextField @bind-Value="_hermesProfile" Label="Profile" Variant="Variant.Filled" Margin="Margin.Dense" Immediate="true"
+                                      Class="wslc-skill-word" HelperTextOnFocus="true" HelperText="Its own command"
+                                      autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
+                    }
+                </div>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
+                    @(_mcp.SkillCommands.FirstOrDefault(c => c.Client == _skillClient)?.Note)
+                </MudText>
+                @* The same client can be here and elsewhere: Hermes runs on this
+                   machine and on the VPS. Either way the agent runs that client's
+                   own installer — on this machine through its shell, on another
+                   over ssh with the keys of the account the agent runs as. *@
+
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mt-3">
+                    <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Terminal"
+                               Disabled="@(_mcpBusy || (_skillRemote && _skillSsh.Trim().Length == 0))" OnClick="InstallSkillAsync">Run the install</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download" OnClick="DownloadSkill">Download SKILL.md</MudButton>
+                </MudStack>
+                @if (_skillRun is { } run)
+                {
+                    <MudAlert Severity="@(run.Ok ? Severity.Success : Severity.Error)" Class="mt-3" Dense="true">
+                        <div class="wslc-mono">@run.Command</div>
+                        <div class="wslc-mono">@run.Output</div>
+                    </MudAlert>
+                }
+            }
+        </MudPaper>
+        </div>
+            </div>
+        </MudTabPanel>
+        <MudTabPanel Text="Update">
+            <div class="wslc-fill-scroll">
+        <div class="wslc-settings-grid">
+            @* The agent updating itself: the switch
+               and the button live here, and the countdown an automatic update
+               announces is on every client (AgentUpdateWatcher). *@
+            <MudPaper Outlined="true" Class="pa-4">
+                <MudText Typo="Typo.h6">Agent update</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+                    The agent updates itself from its installer, <span class="wslc-mono">wslc-ai-agent.msi</span>, in the folder the
+                    clients' installers are served from: copying a newer one there is the whole deployment. It waits for file transfers
+                    and backups to finish, since it would cut them, and stops for a moment while the installer runs. With Auto update on,
+                    every client is told a minute before — and every device that gets notifications, with Cancel update on the
+                    notification itself — and any of them can cancel it.
+                </MudText>
+                @if (_update is null)
+                {
+                    <MudProgressLinear Indeterminate="true" />
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mb-2">Now: <b>@UpdateStateText</b></MudText>
+                    <MudSwitch T="bool" Value="_update.Settings.AutoUpdate" ValueChanged="SaveUpdateAsync"
+                               Label="Auto update" LabelPlacement="Placement.Start" Color="Color.Primary" Disabled="_updateBusy" />
+                    @* Empty is the folder the agent was installed with, shown as the placeholder. *@
+                    <div class="wslc-field-pick has-note mt-3">
+                        <MudTextField T="string" @bind-Value="_packageFolder" Label="Package folder" Placeholder="@_update.AutomaticPackageFolder"
+                                      Immediate="true" Variant="Variant.Filled" Margin="Margin.Dense" Class="wslc-mono" Disabled="_updateBusy"
+                                      HelperTextOnFocus="true" HelperText="Where newer installers of the agent and its clients are put; empty for the folder it was installed with. Created if missing."
+                                      autocapitalize="none" autocorrect="off" spellcheck="false" />
+                        <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick a folder" OnClick="PickPackageFolderAsync" Disabled="_updateBusy" />
+                    </div>
+                    <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Save" Class="mt-2"
+                               Disabled="@(_updateBusy || !PackageFolderChanged)" OnClick="SavePackageFolderAsync">Save folder</MudButton>
+                    <MudStack Row="true" Spacing="2" Class="mt-3">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.SystemUpdateAlt"
+                                   Disabled="@(_updateBusy || !_update.Installed || !_update.Newer || _update.State == AgentUpdateState.Installing)"
+                                   OnClick="UpdateNowAsync">Update now</MudButton>
+                        @if (_update.State is AgentUpdateState.Announced or AgentUpdateState.Waiting)
+                        {
+                            <MudButton Variant="Variant.Filled" Color="Color.Error" Disabled="_updateBusy" OnClick="CancelUpdateAsync">Cancel</MudButton>
+                        }
+                    </MudStack>
+                    @if (_update.LastResult.Length > 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">Last update: @_update.LastResult</MudText>
+                    }
+                }
+            </MudPaper>
+        </div>
+            </div>
+        </MudTabPanel>
+        <MudTabPanel Text="Notifications">
+            <div class="wslc-fill-scroll">
+        <div class="wslc-settings-grid">
+            <NotificationsCard />
+        </div>
+            </div>
+        </MudTabPanel>
+        <MudTabPanel Text="User">
+            <div class="wslc-fill-scroll">
+        <div class="wslc-settings-grid">
+            <ClientServersCard />
+            <SavedLoginsCard />
+            <MudPaper Outlined="true" Class="pa-4">
+                <MudText Typo="Typo.h6">Testing</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+                    Try what a client on another machine gets without leaving this one: Open with browser opens the host browser
+                    window (with its bar and the saved logins) instead of a new tab. Kept on the agent: it stays on until you
+                    switch it off.
+                </MudText>
+                <MudSwitch T="bool" Value="Simulated.Enabled" ValueChanged="SimulateRemoteAsync" Label="Simulate remote access" LabelPlacement="Placement.Start" Color="Color.Warning" />
+            </MudPaper>
+        </div>
+            </div>
+        </MudTabPanel>
+        <MudTabPanel Text="Layout">
+            <div class="wslc-fill-scroll pa-2">
+                <MudAlert Severity="@(Style.HasUnsaved ? Severity.Warning : Severity.Normal)" Dense="true" Class="mb-2">
+                    @StyleState
+                </MudAlert>
+
+<LayoutRow Title="Text" Fixed="The four the application uses: titles, default, secondary and overline (docs/RULES.md)" Changed="StateHasChanged" Reset="ResetText">
+                    <Properties>
+                        <PropSelect T="Typo" Label="Titles (h6)" @bind-Value="Style.Draft.TitleTypo" />
+                        <PropSelect T="Typo" Label="Default text (body1)" @bind-Value="Style.Draft.DefaultTypo" />
+                        <PropSelect T="Typo" Label="Table rows (body2)" @bind-Value="Style.Draft.TableTypo" />
+                        <PropSelect T="Typo" Label="Secondary (caption, subtitle2)" @bind-Value="Style.Draft.SecondaryTypo" />
+                        <PropSelect T="Typo" Label="Overline" @bind-Value="Style.Draft.OverlineTypo" />
+                    </Properties>
+                    <Control>
+                        @* Each line is the role itself, drawn with the standard it has
+                           been given: the size, the weight, the line and the letter
+                           spacing travel together. *@
+                        <div style="@DraftVars">
+                            <MudText Typo="Typo.h6">A page title</MudText>
+                            <MudText Typo="Typo.body1">The default text a screen is written in</MudText>
+                            <MudText Typo="Typo.body2">A table row: web · nginx:1.27 · running</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Secondary text, under a value</MudText>
+                            <MudText Typo="Typo.overline">OVERLINE</MudText>
+                        </div>
+                    </Control>
+                </LayoutRow>
+
+                <LayoutRow Title="Table rows" Fixed="Every list page at once: containers, images, volumes, networks" Changed="StateHasChanged" Reset="ResetRows">
+                    <Properties>
+                        <PropToggle Label="Dense" @bind-Value="Style.Draft.GridDense" />
+                        <PropToggle Label="Striped" @bind-Value="Style.Draft.GridStriped" />
+                        <PropToggle Label="Bordered" @bind-Value="Style.Draft.GridBordered" />
+                        <PropToggle Label="Hover" @bind-Value="Style.Draft.GridHover" />
+                        <PropToggle Label="Outlined" @bind-Value="Style.Draft.GridOutlined" />
+                        <PropToggle Label="Fixed header" @bind-Value="Style.Draft.GridFixedHeader" />
+                        <PropNumber Label="Elevation" Min="0" Max="24" @bind-Value="Style.Draft.GridElevation" />
+                        <PropNumber Label="Left of a cell (px)" Min="0" Max="40" @bind-Value="Style.Draft.RowPadStart" />
+                        <PropNumber Label="Right of a cell (px)" Min="0" Max="40" @bind-Value="Style.Draft.RowPadEnd" />
+                        <PropNumber Label="Action glyphs (px)" Min="10" Max="32" @bind-Value="Style.Draft.ActionIconSize" />
+                        <PropNumber Label="Room around each action (px)" Min="0" Max="12" @bind-Value="Style.Draft.ActionPadding" />
+                    </Properties>
+                    <Control>
+                        @* The sample carries the draft in its own variables, so a row
+                           is seen at the height it would have before the whole
+                           application is put at it. *@
+                        @* Written as a list is written, or the row rules would not
+                           reach it: they name a table inside .wslc-fill, and the
+                           actions are what the glyph and the room around it are for. *@
+                        <div class="wslc-fill" style="@DraftVars">
+                            <MudSimpleTable Dense="Style.Draft.GridDense" Striped="Style.Draft.GridStriped" Bordered="Style.Draft.GridBordered" Hover="Style.Draft.GridHover" Outlined="Style.Draft.GridOutlined" Elevation="Style.Draft.GridElevation" Class="mud-table">
+                                <thead>
+                                    <tr class="mud-table-row"><th class="mud-table-cell"></th><th class="mud-table-cell">Name</th><th class="mud-table-cell">Image</th><th class="mud-table-cell">Actions</th></tr>
+                                </thead>
+                                <tbody class="mud-table-body">
+                                    @foreach (var row in SampleRows)
+                                    {
+                                        <tr class="mud-table-row">
+                                            <td class="mud-table-cell"><MudCheckBox T="bool" Value="false" Size="Size.Small" Dense="true" /></td>
+                                            <td class="mud-table-cell">@row.Name</td>
+                                            <td class="mud-table-cell">@row.Image</td>
+                                            <td class="mud-table-cell">
+                                                <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" Color="Color.Success" title="Start" />
+                                                <MudIconButton Icon="@Icons.Material.Filled.RestartAlt" Size="Size.Small" Color="Color.Warning" title="Restart" />
+                                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="Remove" />
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        </div>
+                    </Control>
+                </LayoutRow>
+
+                <LayoutRow Title="Buttons in a bar" Fixed="Size.Small · Variant.Filled · the page toolbars and the title bar" Changed="StateHasChanged" Reset="ResetButtons">
+                    <Properties>
+                        <PropNumber Label="Height (px)" Min="18" Max="48" @bind-Value="Style.Draft.ButtonHeight" />
+                        <PropNumber Label="Text size (px)" Min="9" Max="20" @bind-Value="Style.Draft.ButtonFontSize" />
+                        <PropNumber Label="Side padding (px)" Min="0" Max="24" @bind-Value="Style.Draft.ButtonPadding" />
+                        <PropNumber Label="Corner radius (px)" Min="0" Max="16" @bind-Value="Style.Draft.ButtonRadius" />
+                    </Properties>
+                    <Control>
+                        <div class="wslc-toolbar" style="@DraftVars">
+                            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.PlayArrow">Run</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Create</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" StartIcon="@Icons.Material.Filled.DeleteSweep">Prune</MudButton>
+                        </div>
+                    </Control>
+                </LayoutRow>
+
+                <LayoutRow Title="Fields in a bar" Fixed="Variant.Filled · Margin.Dense · the search box and the pickers" Changed="StateHasChanged" Reset="ResetBarFields">
+                    <Properties>
+                        <PropNumber Label="Height (px)" Min="18" Max="48" @bind-Value="Style.Draft.FieldHeight" />
+                    </Properties>
+                    <Control>
+                        <div class="wslc-toolbar" style="@DraftVars">
+                            <SearchBox @bind-Value="_sample" Placeholder="Search containers" />
+                        </div>
+                    </Control>
+                </LayoutRow>
+
+
+                <LayoutRow Title="Text fields and selects" Fixed="Variant.Filled · Margin.Dense · helper text on focus (docs/RULES.md)" Changed="StateHasChanged" Reset="ResetFormFields">
+                    <Properties>
+                        <PropNumber Label="Room above the text (px)" Min="0" Max="40" @bind-Value="Style.Draft.FormPadTop" />
+                        <PropNumber Label="Room under it (px)" Min="0" Max="24" @bind-Value="Style.Draft.FormPadBottom" />
+                        <PropNumber Label="Corner radius (px)" Min="0" Max="16" @bind-Value="Style.Draft.FormFieldRadius" />
+                    </Properties>
+                    <Control>
+                        <div class="wslc-fill-scroll wslc-layout-fields" style="@DraftVars">
+                            <MudTextField T="string" @bind-Value="_sample" Label="Name" Variant="Variant.Filled" Margin="Margin.Dense" HelperText="As the forms draw it" HelperTextOnFocus="true" />
+                            <MudSelect T="string" Value="@_samplePick" ValueChanged="@(v => _samplePick = v)" Label="Restart policy" Dense="true" Margin="Margin.Dense" Variant="Variant.Filled">
+                                <MudSelectItem T="string" Value="@("no")">no</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("always")">always</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("unless-stopped")">unless-stopped</MudSelectItem>
+                            </MudSelect>
+                        </div>
+                    </Control>
+                </LayoutRow>
+
+                <LayoutRow Title="Checkboxes" Fixed="The row checkbox and the header row's, at one fixed size" Changed="StateHasChanged" Reset="ResetChecks">
+                    <Properties>
+                        <PropNumber Label="Glyph size (px)" Min="10" Max="28" @bind-Value="Style.Draft.CheckSize" />
+                    </Properties>
+                    <Control>
+                        <div class="wslc-fill" style="@DraftVars">
+                            <MudSimpleTable Dense="Style.Draft.GridDense" Striped="Style.Draft.GridStriped" Bordered="Style.Draft.GridBordered" Elevation="0" Class="mud-table">
+                                <tbody class="mud-table-body">
+                                    <tr class="mud-table-row"><td class="mud-table-cell"><MudCheckBox T="bool" Value="true" Size="Size.Small" Dense="true" /></td><td class="mud-table-cell">web</td></tr>
+                                    <tr class="mud-table-row"><td class="mud-table-cell"><MudCheckBox T="bool" Value="false" Size="Size.Small" Dense="true" /></td><td class="mud-table-cell">db</td></tr>
+                                </tbody>
+                            </MudSimpleTable>
+                        </div>
+                    </Control>
+                </LayoutRow>
+
+                <LayoutRow Title="Bars: spacing and glyphs" Fixed="Page toolbars and the title bar; the glyphs of search, refresh and the view toggle" Changed="StateHasChanged" Reset="ResetBars">
+                    <Properties>
+                        <PropNumber Label="Space between controls (px)" Min="0" Max="24" @bind-Value="Style.Draft.BarGap" />
+                        <PropNumber Label="Glyph size (px)" Min="10" Max="32" @bind-Value="Style.Draft.BarIconSize" />
+                    </Properties>
+                    <Control>
+                        <div class="wslc-toolbar" style="@DraftVars">
+                            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Create</MudButton>
+                            <ViewModeToggle Value="_sampleView" ValueChanged="@(v => _sampleView = v)" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" title="Refresh" />
+                        </div>
+                    </Control>
+                </LayoutRow>
+
+                <LayoutRow Title="Tabs" Fixed="A details screen's tabs: Logs, Inspect, Files, Exec, Stats" Changed="StateHasChanged" Reset="ResetTabs">
+                    <Properties>
+                        <PropNumber Label="Height (px)" Min="18" Max="56" @bind-Value="Style.Draft.TabHeight" />
+                        <PropSelect T="Color" Label="Color" @bind-Value="Style.Draft.TabsColor" />
+                        <PropToggle Label="Rounded" @bind-Value="Style.Draft.TabsRounded" />
+                        <PropToggle Label="Border" @bind-Value="Style.Draft.TabsBorder" />
+                        <PropToggle Label="Centered" @bind-Value="Style.Draft.TabsCentered" />
+                        <PropNumber Label="Elevation (also the lists' header row)" Min="0" Max="24" @bind-Value="Style.Draft.TabsElevation" />
+                        <PropNumber Label="Narrowest tab (px)" Min="0" Max="200" @bind-Value="Style.Draft.TabsMinWidth" />
+                    </Properties>
+                    <Control>
+                        <div style="@DraftVars">
+                            <MudTabs Elevation="Style.Draft.TabsElevation" Rounded="Style.Draft.TabsRounded" Border="Style.Draft.TabsBorder"
+                                     Centered="Style.Draft.TabsCentered" Color="Style.Draft.TabsColor" Class="wslc-fill" MinimumTabWidth="0">
+                                <MudTabPanel Text="Logs" />
+                                <MudTabPanel Text="Inspect" />
+                                <MudTabPanel Text="Files" />
+                            </MudTabs>
+                        </div>
+                    </Control>
+                </LayoutRow>
+
+
+                <LayoutRow Title="Table / cards switch" Fixed="Every list page has one, and it is the same component" Changed="StateHasChanged" Reset="ResetToggle">
+                    <Properties>
+                        <PropSelect T="Size" Label="Size" @bind-Value="Style.Draft.ToggleSize" />
+                        <PropSelect T="Color" Label="Color" @bind-Value="Style.Draft.ToggleColor" />
+                        <PropToggle Label="Outlined" @bind-Value="Style.Draft.ToggleOutlined" />
+                        <PropToggle Label="Delimiters" @bind-Value="Style.Draft.ToggleDelimiters" />
+                        <PropToggle Label="Rounded" @bind-Value="Style.Draft.ToggleRounded" />
+                        <PropToggle Label="Check mark" @bind-Value="Style.Draft.ToggleCheckMark" />
+                    </Properties>
+                    <Control>
+                        <div class="wslc-toolbar" style="@DraftVars">
+                            <MudToggleGroup T="ViewMode" Value="_sampleView" ValueChanged="@(v => _sampleView = v)"
+                                            Size="Style.Draft.ToggleSize" Color="Style.Draft.ToggleColor" Outlined="Style.Draft.ToggleOutlined"
+                                            Delimiters="Style.Draft.ToggleDelimiters" Class="@(Style.Draft.ToggleRounded ? "rounded-pill" : null)" CheckMark="Style.Draft.ToggleCheckMark">
+                                <MudToggleItem Value="ViewMode.Table"><MudIcon Icon="@Icons.Material.Filled.TableRows" Size="Size.Small" /></MudToggleItem>
+                                <MudToggleItem Value="ViewMode.Cards"><MudIcon Icon="@Icons.Material.Filled.GridView" Size="Size.Small" /></MudToggleItem>
+                            </MudToggleGroup>
+                        </div>
+                    </Control>
+                </LayoutRow>
+
+                <LayoutRow Title="Cards" Fixed="A row in cards view, on every list page (EntityCard)" Changed="StateHasChanged" Reset="ResetCards">
+                    <Properties>
+                        <PropNumber Label="Elevation" Min="0" Max="24" @bind-Value="Style.Draft.CardElevation" />
+                        <PropToggle Label="Outlined" @bind-Value="Style.Draft.CardOutlined" />
+                        <PropToggle Label="Square corners" @bind-Value="Style.Draft.CardSquare" />
+                    </Properties>
+                    <Control>
+                        <div style="@DraftVars">
+                            <MudCard Elevation="Style.Draft.CardElevation" Outlined="Style.Draft.CardOutlined" Square="Style.Draft.CardSquare" Class="wslc-card">
+                                <MudCardHeader>
+                                    <CardHeaderContent>
+                                        <MudText Typo="Typo.subtitle2">web</MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">nginx:1.27 · running</MudText>
+                                    </CardHeaderContent>
+                                </MudCardHeader>
+                                <MudCardContent>
+                                    <MudText Typo="Typo.body2">3000 → 8080 · bridge</MudText>
+                                </MudCardContent>
+                            </MudCard>
+                        </div>
+                    </Control>
+                </LayoutRow>
+
+                @* What the screen is for, in the end: the look that has been tried
+                   goes into wslc-style.json, and from there into every client. *@
+                <MudFileUpload T="IBrowserFile" FilesChanged="ImportStyleAsync" Class="ma-0 mt-2 mr-2 d-inline-flex flex-grow-0">
+                    <CustomContent>
+                        <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@context.OpenFilePickerAsync"
+                                   title="Read a look from a file and put it in the fields, ready to try with Apply">Import</MudButton>
+                    </CustomContent>
+                </MudFileUpload>
+                <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="ExportStyleAsync" Class="mt-2 mr-2"
+                           title="The whole look as a file, to carry to another machine or into wslc-style.json">Export</MudButton>
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="CopyStyleAsync" Class="mt-2 mr-2"
+                           title="The whole look as JSON, for src/WslcAgent.UI/wwwroot/wslc-style.json — what the application ships with">Copy as JSON</MudButton>
+                <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="ResetAsync" Class="mt-2"
+                           title="Back to the look the application ships with — applied, not saved, so it can be tried first">Back to defaults</MudButton>
+            </div>
+        </MudTabPanel>
+    </MudTabs>
+</PageShell>
+
+@code {
+    /// <summary>The tabs, in their order; the query names one.</summary>
+    private static readonly string[] Tabs = ["security", "publish", "mcp", "update", "notifications", "user", "layout"];
+
+    private int _tab;
+
+    /// <summary><c>?tab=security|publish|mcp|update|notifications|user|layout</c>: the tab is part of the address, so Back returns to the one left.</summary>
+    [SupplyParameterFromQuery] public string? Tab { get; set; }
+
+    protected override void OnParametersSet() => _tab = Math.Max(0, Array.IndexOf(Tabs, Tab ?? Tabs[0]));
+
+    private void OnTabChanged(int index)
+    {
+        // MudTabs reports the index it settles on after every render; only a
+        // real change deserves a navigation, or the page would reload in a loop.
+        if (index == _tab || index < 0 || index >= Tabs.Length)
+        {
+            return;
+        }
+
+        _tab = index;
+        // A pushed entry, not a replaced one: Back walks the tabs the user opened.
+        Navigation.NavigateTo($"settings?tab={Tabs[index]}");
+    }
+
+    /// <summary>The Layout tab's field sample; it is a real search box, so it is what a bar holds.</summary>
+    private string _sample = "";
+
+    /// <summary>The Layout tab's select and view-toggle samples: real controls, as the bars hold them.</summary>
+    private string _samplePick = "no";
+
+    private ViewMode _sampleView = ViewMode.Table;
+
+    /// <summary>Three rows of something, so a list sample reads like a list.</summary>
+    private static readonly (string Name, string Image)[] SampleRows =
+    [
+        ("web", "nginx:1.27"),
+        ("db", "postgres:16"),
+        ("batch", "alpine:3.20"),
+    ];
+
+    /// <summary>The draft as CSS variables, for the samples: a row at the height it would have, before the application is put at it.</summary>
+    private string DraftVars =>
+        $"--wslc-btn-h: {Style.Draft.ButtonHeight}px; "
+        + $"--wslc-btn-radius: {Style.Draft.ButtonRadius}px; "
+        + $"--wslc-field-h: {Style.Draft.FieldHeight}px; "
+        + $"--wslc-form-pad-top: {Style.Draft.FormPadTop}px; "
+        + $"--wslc-form-pad-bottom: {Style.Draft.FormPadBottom}px; "
+        + $"--wslc-btn-font: {Style.Draft.ButtonFontSize}px; "
+        + $"--wslc-btn-pad: {Style.Draft.ButtonPadding}px; "
+        + $"--wslc-row-pad-start: {Style.Draft.RowPadStart}px; "
+        + $"--wslc-row-pad-end: {Style.Draft.RowPadEnd}px; "
+        + $"--wslc-action-icon: {Style.Draft.ActionIconSize}px; "
+        + $"--wslc-action-pad: {Style.Draft.ActionPadding}px; "
+        + $"--wslc-form-radius: {Style.Draft.FormFieldRadius}px; "
+        + $"--wslc-check: {Style.Draft.CheckSize}px; "
+        + $"--wslc-bar-icon: {Style.Draft.BarIconSize}px; "
+        + $"--wslc-bar-gap: {Style.Draft.BarGap}px; "
+        + $"--wslc-tab-h: {Style.Draft.TabHeight}px; "
+        + $"--wslc-head-shadow: {(Style.Draft.TabsElevation > 0 ? $"var(--mud-elevation-{Style.Draft.TabsElevation})" : "none")}; "
+        + DraftTypeVars;
+
+    /// <summary>
+    /// The four roles as CSS, for the samples: each role's own MudBlazor
+    /// variables pointed at the standard chosen for it. A role left at its own
+    /// typo writes nothing — a variable defined as itself is a cycle.
+    /// </summary>
+    private string DraftTypeVars => string.Concat(
+        new (string Role, Typo Takes)[]
+        {
+            ("h6", Style.Draft.TitleTypo),
+            ("body1", Style.Draft.DefaultTypo),
+            ("body2", Style.Draft.TableTypo),
+            ("caption", Style.Draft.SecondaryTypo),
+            ("subtitle2", Style.Draft.SecondaryTypo),
+            ("overline", Style.Draft.OverlineTypo),
+        }
+        .Where(role => role.Takes.ToString() != role.Role)
+        .SelectMany(role => new[] { "size", "weight", "lineheight", "letterspacing" }
+            .Select(metric => $"--mud-typography-{role.Role}-{metric}: var(--mud-typography-{role.Takes}-{metric}); ")));
+
+    /// <summary>Where the look stands, in one line, so nobody has to guess what Apply did.</summary>
+    private string StyleState => Style switch
+    {
+        { HasPending: true } => "Changed here, not on the screens yet. Apply shows it everywhere without writing it down; Save keeps it on this device.",
+        { HasUnsaved: true } => "Applied to every screen. Walk through the application and come back — nothing is lost. Save keeps it on this device.",
+        _ => "What you see is what this device opens with.",
+    };
+
+    /// <summary>
+    /// Each control's own defaults, taken from what the application ships with
+    /// (wslc-style.json): one place says it, and these only copy the few values
+    /// each row edits.
+    /// </summary>
+    private UiStyleValues Ships => Style.Shipped;
+
+    private void ResetText()
+    {
+        Style.Draft.TitleTypo = Ships.TitleTypo;
+        Style.Draft.DefaultTypo = Ships.DefaultTypo;
+        Style.Draft.TableTypo = Ships.TableTypo;
+        Style.Draft.SecondaryTypo = Ships.SecondaryTypo;
+        Style.Draft.OverlineTypo = Ships.OverlineTypo;
+    }
+
+    private void ResetRows()
+    {
+        Style.Draft.GridDense = Ships.GridDense;
+        Style.Draft.GridStriped = Ships.GridStriped;
+        Style.Draft.GridBordered = Ships.GridBordered;
+        Style.Draft.GridHover = Ships.GridHover;
+        Style.Draft.GridOutlined = Ships.GridOutlined;
+        Style.Draft.GridFixedHeader = Ships.GridFixedHeader;
+        Style.Draft.GridElevation = Ships.GridElevation;
+        Style.Draft.RowPadStart = Ships.RowPadStart;
+        Style.Draft.RowPadEnd = Ships.RowPadEnd;
+        Style.Draft.ActionIconSize = Ships.ActionIconSize;
+        Style.Draft.ActionPadding = Ships.ActionPadding;
+    }
+
+    private void ResetButtons()
+    {
+        Style.Draft.ButtonHeight = Ships.ButtonHeight;
+        Style.Draft.ButtonRadius = Ships.ButtonRadius;
+        Style.Draft.ButtonFontSize = Ships.ButtonFontSize;
+        Style.Draft.ButtonPadding = Ships.ButtonPadding;
+    }
+
+    private void ResetBarFields() => Style.Draft.FieldHeight = Ships.FieldHeight;
+
+    private void ResetFormFields()
+    {
+        Style.Draft.FormPadTop = Ships.FormPadTop;
+        Style.Draft.FormPadBottom = Ships.FormPadBottom;
+        Style.Draft.FormFieldRadius = Ships.FormFieldRadius;
+    }
+
+    private void ResetChecks() => Style.Draft.CheckSize = Ships.CheckSize;
+
+    private void ResetBars()
+    {
+        Style.Draft.BarGap = Ships.BarGap;
+        Style.Draft.BarIconSize = Ships.BarIconSize;
+    }
+
+    private void ResetTabs()
+    {
+        Style.Draft.TabHeight = Ships.TabHeight;
+        Style.Draft.TabsColor = Ships.TabsColor;
+        Style.Draft.TabsRounded = Ships.TabsRounded;
+        Style.Draft.TabsBorder = Ships.TabsBorder;
+        Style.Draft.TabsCentered = Ships.TabsCentered;
+        Style.Draft.TabsElevation = Ships.TabsElevation;
+        Style.Draft.TabsMinWidth = Ships.TabsMinWidth;
+    }
+
+    private void ResetToggle()
+    {
+        Style.Draft.ToggleSize = Ships.ToggleSize;
+        Style.Draft.ToggleColor = Ships.ToggleColor;
+        Style.Draft.ToggleOutlined = Ships.ToggleOutlined;
+        Style.Draft.ToggleDelimiters = Ships.ToggleDelimiters;
+        Style.Draft.ToggleRounded = Ships.ToggleRounded;
+        Style.Draft.ToggleCheckMark = Ships.ToggleCheckMark;
+    }
+
+    private void ResetCards()
+    {
+        Style.Draft.CardElevation = Ships.CardElevation;
+        Style.Draft.CardOutlined = Ships.CardOutlined;
+        Style.Draft.CardSquare = Ships.CardSquare;
+    }
+
+    /// <summary>
+    /// The draft as the file wants it. Pasted into wslc-style.json it stops
+    /// being this device's look and becomes the application's.
+    /// </summary>
+    /// <summary>The look as a file: the browser downloads it, a native client writes it through its own picker.</summary>
+    private async Task ExportStyleAsync()
+    {
+        var json = StyleJson();
+        try
+        {
+            if (Files.Supported)
+            {
+                if (await Files.SaveTextAsync("wslc-style.json", "application/json", json) is { } where)
+                {
+                    Snackbar.Add($"Look written to {where}", Severity.Success);
+                }
+
+                return;
+            }
+
+            await Js.InvokeVoidAsync("wslcAgent.download", "wslc-style.json", json, "application/json");
+            Snackbar.Add("Look exported as wslc-style.json", Severity.Success);
+        }
+        catch (Exception ex) when (ex is JSException or InvalidOperationException or IOException)
+        {
+            Snackbar.Add($"The look could not be written: {ex.Message}", Severity.Error);
+        }
+    }
+
+    /// <summary>
+    /// A look read from a file lands in the fields, not on the screens: it is a
+    /// draft like any other, so it is looked at and tried with Apply before it
+    /// becomes what the application shows.
+    /// </summary>
+    private async Task ImportStyleAsync(IBrowserFile? file)
+    {
+        if (file is null)
+        {
+            return;
+        }
+
+        try
+        {
+            using var reader = new StreamReader(file.OpenReadStream(64 * 1024));
+            var json = await reader.ReadToEndAsync();
+            if (System.Text.Json.JsonSerializer.Deserialize<UiStyleValues>(json) is { } values)
+            {
+                Style.Use(values);
+                Snackbar.Add($"{file.Name} read — Apply to see it, Save to keep it", Severity.Success);
+                StateHasChanged();
+                return;
+            }
+
+            Snackbar.Add($"{file.Name} holds no look", Severity.Warning);
+        }
+        catch (Exception ex) when (ex is System.Text.Json.JsonException or IOException)
+        {
+            Snackbar.Add($"{file.Name} could not be read: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private string StyleJson() =>
+        System.Text.Json.JsonSerializer.Serialize(
+            Style.Draft,
+            new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+
+    private async Task CopyStyleAsync()
+    {
+        var json = StyleJson();
+        try
+        {
+            await Js.InvokeVoidAsync("navigator.clipboard.writeText", json);
+            Snackbar.Add("The look is on the clipboard, for wslc-style.json", Severity.Success);
+        }
+        catch (Exception ex) when (ex is JSException or InvalidOperationException)
+        {
+            // No clipboard (an insecure origin, a locked-down web view): the
+            // values are still readable in the fields themselves.
+            Snackbar.Add("This browser would not give the clipboard", Severity.Warning);
+        }
+    }
+
+    private async Task ResetAsync()
+    {
+        await Style.ResetAsync();
+        StateHasChanged();
+    }
+    private LoginStatus? _status;
+    private string _username = "";
+    private string _password = "";
+    private string _confirm = "";
+    private string? _newToken;
+    private bool _busy;
+    private McpStatus? _mcp;
+    private bool _mcpBusy;
+    private AgentUpdateStatus? _update;
+    private bool _updateBusy;
+    private string _skillClient = "Hermes";
+    private string _hermesProfile = "";
+    private bool _skillRemote;
+    private string _skillSsh = "";
+    private SkillInstallResult? _skillRun;
+
+    private bool Mismatch => _confirm.Length > 0 && _confirm != _password;
+
+    /// <summary>What a client would find at that URL right now, in one line.</summary>
+    private string McpStateText => _mcp switch
+    {
+        null => "",
+        { Settings.Enabled: false } => "not served — clients are told it is switched off",
+        { Settings.AllowDestructiveTools: false } => $"serving {_mcp.Tools} tools, the destructive ones hidden",
+        _ => $"serving {_mcp.Tools} tools, the destructive ones included",
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        Changes.Changed += OnAgentChanged;
+        Changes.Start();
+        await LoadAsync();
+        await ReadUpdateAsync();
+        await AskTheMachineAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _status = await Api.GetLoginStatusAsync();
+            _username = _status.Username;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+
+        try
+        {
+            // The address this page was opened at is one that reaches the agent
+            // from outside it, which the agent's own loopback is not: a client's
+            // installer refuses a 127.0.0.1 URL (Hermes blocks it as unsafe), so
+            // the lines are written with the address you are reading this from.
+            _mcp = await Api.GetMcpSettingsAsync(PageAddress());
+
+            // Start on a client this machine actually has, so the common case is
+            // one press; the rest are a choice away.
+            if (_mcp.SkillTargets.FirstOrDefault(target => target.ClientFound) is { } found
+                && _mcp.SkillCommands.Any(command => found.Client.StartsWith(command.Client, StringComparison.Ordinal)))
+            {
+                _skillClient = _mcp.SkillCommands.First(command => found.Client.StartsWith(command.Client, StringComparison.Ordinal)).Client;
+            }
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"MCP server: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task SaveLoginAsync()
+    {
+        _busy = true;
+        try
+        {
+            await Api.SetLoginCredentialsAsync(_username.Trim(), _password);
+            Snackbar.Add($"Internet login saved for {_username.Trim()}", Severity.Success);
+            _password = "";
+            _confirm = "";
+            await LoadAsync();
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RenewTokenAsync()
+    {
+        _busy = true;
+        try
+        {
+            _newToken = (await Api.RenewApiTokenAsync()).Token;
+            await LoadAsync();
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <summary>Saved on the agent at once, so it stays as left across reloads and restarts.</summary>
+    private async Task SimulateRemoteAsync(bool on)
+    {
+        try
+        {
+            Simulated.Enabled = (await Api.SetTestingSettingsAsync(new TestingSettings(on))).SimulateRemote;
+            Snackbar.Add(on ? "Simulating remote access" : "Remote access simulation off", Severity.Success);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"Testing: {ex.Message}", Severity.Error);
+        }
+    }
+
+    /// <summary>Saved on the agent and in force at once: the next call a client makes already obeys it.</summary>
+    private async Task SaveMcpAsync(McpSettings settings)
+    {
+        _mcpBusy = true;
+        try
+        {
+            _mcp = await Api.SetMcpSettingsAsync(settings);
+            Snackbar.Add(Saved(_mcp.Settings), Severity.Success);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"MCP server: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _mcpBusy = false;
+        }
+
+        static string Saved(McpSettings settings) => settings switch
+        {
+            { Enabled: false } => "MCP server off",
+            { AllowDestructiveTools: true } => "Destructive tools offered, each one still asking for your approval",
+            _ => "Destructive tools hidden",
+        };
+    }
+
+    /// <summary>What the Update tab says the agent is at, and what it will do.</summary>
+    private string UpdateStateText => _update switch
+    {
+        null => "",
+        { Installed: false } => $"{_update.Version}, a development build: no installer replaces it",
+        { AvailableVersion.Length: 0 } => $"{_update.Version}; there is no agent installer in {_update.PackageFolder}: put a newer wslc-ai-agent.msi there to update",
+        { Newer: false } => $"{_update.Version}, up to date (the installer there is {_update.AvailableVersion})",
+        { State: AgentUpdateState.Waiting } => $"{_update.Version}; {_update.AvailableVersion} waits for {_update.InFlight} transfer{(_update.InFlight == 1 ? "" : "s")} to finish",
+        { State: AgentUpdateState.Announced } => $"{_update.Version}; {_update.AvailableVersion} is about to install, and every client can cancel it",
+        { State: AgentUpdateState.Installing } => $"updating to {_update.AvailableVersion}",
+        { Settings.AutoUpdate: true } => $"{_update.Version}; {_update.AvailableVersion} is there and installs on its own",
+        _ => $"{_update.Version}; {_update.AvailableVersion} is there, waiting for Update now",
+    };
+
+    /// <summary>The agent says when its update changes state, from whichever client: the tab follows.</summary>
+    private void OnAgentChanged(ChangeNotice notice)
+    {
+        if (notice.Touches(ChangeNotice.AgentUpdate))
+        {
+            _ = InvokeAsync(ReadUpdateAsync);
+        }
+    }
+
+    private Task ReadUpdateAsync() => AskUpdateAsync(() => Api.GetAgentUpdateAsync(), done: null);
+
+    private Task SaveUpdateAsync(bool on) =>
+        AskUpdateAsync(() => Api.SetAgentUpdateSettingsAsync(_update!.Settings with { AutoUpdate = on }), on ? "Auto update on" : "Auto update off: only Update now installs");
+
+    /// <summary>The package folder as typed, apart from the one saved, so a refresh from the agent does not overwrite what is being typed.</summary>
+    private string _packageFolder = "";
+
+    private bool PackageFolderChanged => _update is not null && _packageFolder.Trim() != (_update.Settings.PackageFolder ?? "");
+
+    private async Task PickPackageFolderAsync()
+    {
+        if (await Pickers.HostFolderAsync(Dialogs, _packageFolder.Length > 0 ? _packageFolder : _update?.PackageFolder ?? "") is { } folder)
+        {
+            _packageFolder = folder;
+        }
+    }
+
+    private Task SavePackageFolderAsync() =>
+        AskUpdateAsync(() => Api.SetAgentUpdateSettingsAsync(_update!.Settings with { PackageFolder = _packageFolder.Trim() }),
+            _packageFolder.Trim().Length > 0 ? $"Package folder: {_packageFolder.Trim()}" : "Package folder: the one the agent was installed with");
+
+    private Task UpdateNowAsync() =>
+        AskUpdateAsync(() => Api.UpdateAgentAsync(), "The agent updates itself as soon as nothing is being transferred");
+
+    private Task CancelUpdateAsync() =>
+        AskUpdateAsync(() => Api.CancelAgentUpdateAsync(), "Update cancelled");
+
+    /// <summary>One call to the agent's update, its answer shown, its failure said; <paramref name="done"/> is what a success says, or null to say nothing.</summary>
+    private async Task AskUpdateAsync(Func<Task<AgentUpdateStatus>> call, string? done)
+    {
+        _updateBusy = true;
+        try
+        {
+            var typing = PackageFolderChanged;
+            _update = await call();
+            if (!typing)
+            {
+                _packageFolder = _update.Settings.PackageFolder ?? "";
+            }
+            if (done is not null)
+            {
+                Snackbar.Add(done, Severity.Success);
+            }
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"Agent update: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _updateBusy = false;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose() => Changes.Changed -= OnAgentChanged;
+
+    /// <summary>The clients that machine has, once it has been asked.</summary>
+    private IReadOnlyList<SkillClient> _clients = [];
+
+    /// <summary>The profiles of the chosen client on the chosen machine, if it reported any.</summary>
+    private IReadOnlyList<string>? Profiles =>
+        _clients.FirstOrDefault(client => client.Client == _skillClient)?.Profiles;
+
+    /// <summary>Says in the list which clients that machine actually has.</summary>
+    private string Found(string client) =>
+        _clients.Count == 0 ? "" : _clients.Any(found => found.Client == client && found.Found) ? "" : " — not there";
+
+    private async Task MachineChangedAsync(bool remote)
+    {
+        _skillRemote = remote;
+
+        // A destination the machine already knows, so picking "another machine"
+        // is one press and not a connection to remember.
+        if (remote && _skillSsh.Length == 0 && _mcp?.SshHosts.FirstOrDefault() is { } known)
+        {
+            _skillSsh = known;
+        }
+
+        await AskTheMachineAsync();
+    }
+
+    private async Task SshChangedAsync(string destination)
+    {
+        _skillSsh = destination;
+        await AskTheMachineAsync();
+    }
+
+    /// <summary>
+    /// Asks the machine that will run the install what it has: the same client
+    /// lives here and on the VPS, and only that machine knows its profiles.
+    /// </summary>
+    private async Task AskTheMachineAsync()
+    {
+        if (_skillRemote && _skillSsh.Trim().Length == 0)
+        {
+            _clients = [];
+            return;
+        }
+
+        try
+        {
+            _clients = await Api.GetSkillClientsAsync(_skillRemote ? _skillSsh.Trim() : "");
+            if (_clients.FirstOrDefault(client => client.Found) is { } first && !Has(_skillClient))
+            {
+                _skillClient = first.Client;
+            }
+
+            if (Profiles is { } profiles && _hermesProfile.Length > 0 && !profiles.Contains(_hermesProfile))
+            {
+                _hermesProfile = "";
+            }
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _clients = [];
+            Snackbar.Add($"Skill: {ex.Message}", Severity.Error);
+        }
+
+        bool Has(string client) => _clients.Any(found => found.Client == client && found.Found);
+    }
+
+    /// <summary>
+    /// The origin this page was served from, when it is not the agent's own
+    /// loopback: opened through the public name, that name is an address other
+    /// machines can fetch the skill from. Opened at 127.0.0.1 it says nothing,
+    /// and the agent's own address stands.
+    /// </summary>
+    private string PageAddress()
+    {
+        var origin = new Uri(Navigation.BaseUri).GetLeftPart(UriPartial.Authority);
+        return new Uri(origin).IsLoopback ? "" : origin;
+    }
+
+    /// <summary>The agent writes the lines, so a different address means asking it again.</summary>
+    private async Task AddressChangedAsync(string address)
+    {
+        try
+        {
+            _mcp = await Api.GetMcpSettingsAsync(address.Trim());
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"MCP server: {ex.Message}", Severity.Error);
+        }
+    }
+
+    /// <summary>
+    /// A Hermes profile is its own command (<c>alex skills install …</c> installs
+    /// into alex), so naming one only swaps the first word of the line.
+    /// </summary>
+    private string ProfileCommand(string command) =>
+        _skillClient == "Hermes" && _hermesProfile.Trim() is { Length: > 0 } profile
+            ? profile + command["hermes".Length..]
+            : command;
+
+    /// <summary>
+    /// Runs that client's own installer and shows what it answered. Nothing is
+    /// copied: the client records the skill the way it records any other.
+    /// </summary>
+    private async Task InstallSkillAsync()
+    {
+        _mcpBusy = true;
+        _skillRun = null;
+        try
+        {
+            _skillRun = await Api.InstallMcpSkillAsync(new SkillInstallRequest(
+                _skillClient, _mcp?.SkillAddress ?? "", _hermesProfile.Trim(), _skillRemote ? _skillSsh.Trim() : ""));
+            Snackbar.Add(
+                _skillRun.Ok ? $"{_skillClient}: skill installed" : $"{_skillClient}: it did not install — read what it answered",
+                _skillRun.Ok ? Severity.Success : Severity.Error);
+            _mcp = await Api.GetMcpSettingsAsync(_mcp?.SkillAddress ?? "");
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"Skill: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _mcpBusy = false;
+        }
+    }
+
+    /// <summary>The agent hands out its own copy, so the file is never older than the tools.</summary>
+    private void DownloadSkill() => Navigation.NavigateTo(Api.McpSkillDownloadUrl().ToString(), forceLoad: true);
+
+    private Task CopyMcpUrlAsync() => CopyAsync(_mcp?.LocalUrl ?? "", "MCP URL copied");
+
+    private Task CopyTokenAsync() => CopyAsync(_newToken ?? "", "API token copied");
+
+    /// <summary>One clipboard for every copy on this page, each saying what it did.</summary>
+    private async Task CopyAsync(string text, string said)
+    {
+        await Js.InvokeVoidAsync("navigator.clipboard.writeText", text);
+        Snackbar.Add(said, Severity.Success);
+    }
+}

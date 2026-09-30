@@ -1,0 +1,179 @@
+@* The exec surface: the pane and nothing else around it. No toolbar over
+   it: the command is typed in the shell itself, so the window gives the pane the whole height and the rail at
+   the right holds every verb: Connect, Reconnect, Copy, Clear. The session
+   state rides on Connect's tooltip, and the pane writes its own notices
+   ([disconnected], [process exited], [error]). The shell runs on the agent
+   (wslc exec over a WebSocket); this only draws it. The session belongs to the
+   tab, not to this view: closing the dialog or leaving the details page keeps
+   the shell and what it printed, opening it again takes it over, and only
+   Close (or Log out) ends it. *@
+@implements IAsyncDisposable
+@inject WslcAgentApi Api
+@inject IJSRuntime Js
+@inject ISnackbar Snackbar
+
+<div class="wslc-action-body">
+    <div class="wslc-action-main wslc-terminal">
+        <div class="wslc-terminal-pane" @ref="_pane"></div>
+    </div>
+    @* The rail every window in the app shares: MudBlazor's filled small icon
+       buttons with its own Material icons, in the app's verb colours — green
+       starts, blue does it again, light blue takes a copy out, red wipes. *@
+    <div class="wslc-action-rail" role="toolbar">
+        <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Color="Color.Success" Size="Size.Small" Variant="Variant.Filled"
+                       title="@ConnectTitle" OnClick="ConnectAsync" Disabled="@(_busy || _live)" />
+        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Primary" Size="Size.Small" Variant="Variant.Filled"
+                       title="Reconnect" OnClick="ConnectAsync" Disabled="_busy" />
+        <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Info" Size="Size.Small" Variant="Variant.Filled"
+                       title="Copy the selection (Ctrl+Shift+C)" OnClick="CopyAsync" Disabled="@(!_started)" />
+        <MudIconButton Icon="@Icons.Material.Filled.PowerSettingsNew" Color="Color.Warning" Size="Size.Small" Variant="Variant.Filled"
+                       title="Close the session: the shell ends and nothing of it is kept" OnClick="CloseAsync" Disabled="@(_busy || !_started)" />
+        <MudIconButton Icon="@Icons.Material.Filled.ClearAll" Color="Color.Error" Size="Size.Small" Variant="Variant.Filled"
+                       title="Clear terminal" OnClick="ClearAsync" Disabled="@(!_started)" />
+    </div>
+</div>
+
+@code {
+    /// <summary>What the agent opens when the field is left empty: bash where the image has it.</summary>
+    public const string DefaultCommand = "/bin/bash -i";
+
+    private readonly DotNetObjectReference<TerminalView> _self;
+    private ElementReference _pane;
+    private IJSObjectReference? _module;
+    private IJSObjectReference? _session;
+    private string _status = "Idle";
+    private bool _started;
+    private bool _live;
+    private bool _busy;
+
+    public TerminalView() => _self = DotNetObjectReference.Create(this);
+
+    /// <summary>Container name or id the shell runs in.</summary>
+    [Parameter, EditorRequired] public string Container { get; set; } = "";
+
+    /// <summary>Connect as soon as the view appears.</summary>
+    [Parameter] public bool AutoConnect { get; set; } = true;
+
+    /// <summary>The session state, on the button that acts on it.</summary>
+    private string ConnectTitle => _live ? _status : $"Connect — {_status}";
+
+    /// <summary>The first line of the pane: the command the agent is about to run.</summary>
+    private string Banner => $"$ wslc exec -it {Container} {DefaultCommand}";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && AutoConnect)
+        {
+            await ConnectAsync();
+        }
+    }
+
+    /// <summary>Called from the terminal module on every state change; <paramref name="resumed"/> is a session taken back from the tab's registry.</summary>
+    [JSInvokable]
+    public Task OnState(string state, string text, bool resumed)
+    {
+        _status = text.Length > 0 ? text : state;
+        _busy = state == "connecting";
+        _live = state == "connected";
+        return InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>What the terminal wants the user told: a copy, a warning, a failure.</summary>
+    [JSInvokable]
+    public void OnToast(string message, string severity) =>
+        Snackbar.Add(message, severity switch
+        {
+            "error" => Severity.Error,
+            "success" => Severity.Success,
+            _ => Severity.Info,
+        });
+
+    private async Task ConnectAsync()
+    {
+        if (Container.Length == 0)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            _module ??= await Js.InvokeAsync<IJSObjectReference>("import", "./_content/WslcAgent.UI/wslc-terminal.js");
+            if (_session is null)
+            {
+                _session = await _module.InvokeAsync<IJSObjectReference>(
+                    "open", _pane, $"exec:{Container}", Api.ContainerExecStreamUrl(Container).ToString(), "", Banner, _self);
+            }
+            else
+            {
+                await _session.InvokeVoidAsync("connect", "", Banner);
+            }
+
+            _started = true;
+        }
+        catch (JSException ex)
+        {
+            await OnState("error", ex.Message, false);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <summary>Ends the shell and forgets the session: the next Connect starts from nothing.</summary>
+    private async Task CloseAsync()
+    {
+        if (_session is null)
+        {
+            return;
+        }
+
+        await _session.InvokeVoidAsync("dispose");
+        await _session.DisposeAsync();
+        _session = null;
+        _started = false;
+        _live = false;
+        _status = "Closed";
+    }
+
+    private async Task ClearAsync()
+    {
+        if (_session is not null)
+        {
+            await _session.InvokeVoidAsync("clear");
+        }
+    }
+
+    /// <summary>The same copy Ctrl+Shift+C does, for a touch screen with no keyboard.</summary>
+    private async Task CopyAsync()
+    {
+        if (_session is not null)
+        {
+            await _session.InvokeVoidAsync("copySelection");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_session is not null)
+            {
+                await _session.InvokeVoidAsync("detach");
+                await _session.DisposeAsync();
+            }
+
+            if (_module is not null)
+            {
+                await _module.DisposeAsync();
+            }
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException or OperationCanceledException)
+        {
+            // The view is going away: a live session stays in the tab's registry, a dead one goes with it.
+        }
+
+        _self.Dispose();
+    }
+}

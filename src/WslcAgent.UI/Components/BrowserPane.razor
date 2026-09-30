@@ -1,0 +1,302 @@
+@* The host browser pane: a browser on the agent's machine at a
+   container's published port, painted here and driven from here, for a client
+   that cannot reach 127.0.0.1 on that machine. Laid out as the Terminal, to give
+   the page every pixel: one bar and the surface under it. The bar carries what
+   the page puts at its start (Dashboard on a tab of its own), the
+   connection state, back, forward, reload, the address (Enter opens it, on
+   that port only) taking the spare width, the zoom, a saved login picked by its
+   title with its user and password to copy or to type into the page, copy to
+   this device, paste from it, Disconnect for the pane that opened the browser,
+   and Close. Closing leaves the browser on its page: opening the port again
+   resumes it. The surface itself is wslc-browse-pane.js. *@
+@implements IAsyncDisposable
+@inject WslcAgentApi Api
+@inject IJSRuntime Js
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+<div class="wslc-terminal">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="wslc-toolbar wslc-browse-toolbar mb-1 flex-shrink-0">
+        @Leading
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Size="Size.Small" title="Back" aria-label="Back" OnClick="@(() => CallAsync("back"))" />
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowForward" Size="Size.Small" title="Forward" aria-label="Forward" OnClick="@(() => CallAsync("forward"))" />
+        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" title="Reload" aria-label="Reload" OnClick="@(() => CallAsync("reload"))" />
+        <div class="wslc-browse-address" @ref="_addressHost">
+            <MudTextField @ref="_addressField" T="string" @bind-Value="_address" Placeholder="Address" Variant="Variant.Filled" Margin="Margin.Dense"
+                          Immediate="true" title="Address — Enter opens it; the browser stays on this port" aria-label="Address"
+                          spellcheck="false" autocomplete="off" OnKeyDown="AddressKeyAsync" />
+        </div>
+        <div class="wslc-browse-zoom">
+            <MudSelect T="int" Value="_zoomOffset" ValueChanged="ZoomAsync" Variant="Variant.Filled" Margin="Margin.Dense" Dense="true"
+                       title="Zoom of the host browser page" aria-label="Zoom" ToStringFunc="ZoomText">
+                @foreach (var offset in ZoomOffsets)
+                {
+                    <MudSelectItem T="int" Value="offset">@ZoomText(offset)</MudSelectItem>
+                }
+            </MudSelect>
+        </div>
+        <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" title="Copy the selection in the host browser to this device" OnClick="@(() => CallAsync("copy"))" />
+        <MudIconButton Icon="@Icons.Material.Filled.ContentPaste" Size="Size.Small" title="Paste this device's clipboard into the host browser" OnClick="@(() => CallAsync("paste"))" />
+        @if (_owner)
+        {
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" OnClick="DisconnectAsync" title="End the host browser session">Disconnect</MudButton>
+        }
+        @if (OnClose.HasDelegate)
+        {
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="CloseAsync" title="Close — the host browser stays on its page">Close</MudButton>
+        }
+    </MudStack>
+    @* The second row: the saved login. *@
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="wslc-toolbar wslc-browse-toolbar mb-1 flex-shrink-0">
+        @if (_logins.Count > 0)
+        {
+            @* A saved login (Settings → Saved logins) picked by title, and each of
+               its three fields with the two things one can do with it: copy it to
+               this device, or type it into the field the page has focused. *@
+            <div class="wslc-browse-login">
+                <MudSelect T="string" Value="_loginId" ValueChanged="PickLogin" Variant="Variant.Filled" Margin="Margin.Dense" Dense="true"
+                           Placeholder="Saved login" title="Saved logins (Settings)" aria-label="Saved login" ToStringFunc="LoginTitle">
+                    @foreach (var login in _logins)
+                    {
+                        <MudSelectItem T="string" Value="@login.Id">@login.Title</MudSelectItem>
+                    }
+                </MudSelect>
+            </div>
+            @if (Picked is { } picked)
+            {
+                @if (picked.Email.Length > 0)
+                {
+                    <span class="wslc-browse-credential" title="Email">@picked.Email</span>
+                    <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" title="Copy the email to this device" OnClick="@(() => CallAsync("copyText", picked.Email))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Keyboard" Size="Size.Small" title="Type the email into the page's focused field" OnClick="@(() => CallAsync("typeText", picked.Email))" />
+                }
+                @if (picked.User.Length > 0)
+                {
+                    <span class="wslc-browse-credential" title="User">@picked.User</span>
+                    <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" title="Copy the user to this device" OnClick="@(() => CallAsync("copyText", picked.User))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Keyboard" Size="Size.Small" title="Type the user into the page's focused field" OnClick="@(() => CallAsync("typeText", picked.User))" />
+                }
+                <span class="wslc-browse-credential" title="Password">@picked.Password</span>
+                <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" title="Copy the password to this device" OnClick="@(() => CallAsync("copyText", picked.Password))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Keyboard" Size="Size.Small" title="Type the password into the page's focused field" OnClick="@(() => CallAsync("typeText", picked.Password))" />
+            }
+        }
+    </MudStack>
+    <div class="wslc-browse-surface" @ref="_surface" tabindex="0" role="application" aria-label="Container published port">
+        <canvas class="wslc-browse-frame" hidden></canvas>
+        <textarea class="wslc-browse-ime" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                  enterkeyhint="done" inputmode="text" aria-label="Type into the remote page" tabindex="0"></textarea>
+        <p class="wslc-browse-placeholder" data-placeholder>Connecting…</p>
+    </div>
+    @* The last line: what the session has to say, which is where an error goes
+       too. Above it every row holds buttons, and a message long enough pushes
+       them off the bar. *@
+    <MudText Typo="Typo.caption" Class="@($"{StatusClass} wslc-browse-status")" role="status" title="@_status">@_status@Rate</MudText>
+</div>
+
+@code {
+    private static readonly int[] ZoomOffsets = [-50, -40, -30, -20, -10, 0, 10, 20, 30, 40, 50];
+
+    private readonly DotNetObjectReference<BrowserPane> _self;
+    private ElementReference _surface;
+    private ElementReference _addressHost;
+    private MudTextField<string>? _addressField;
+    private IJSObjectReference? _module;
+    private IJSObjectReference? _pane;
+    private string _address = "";
+    private int _zoomOffset;
+    private string _status = "Idle";
+    private int _fps;
+    private int _kbps;
+    private string _state = "idle";
+    private bool _owner;
+    private IReadOnlyList<SavedLogin> _logins = [];
+    private string? _loginId;
+
+    public BrowserPane() => _self = DotNetObjectReference.Create(this);
+
+    [Parameter, EditorRequired] public string Container { get; set; } = "";
+
+    /// <summary>The published host port the browser opens.</summary>
+    [Parameter] public string HostPort { get; set; } = "";
+
+    /// <summary>Joins that live browser instead of opening one (View browser sessions → Connect).</summary>
+    [Parameter] public string SessionId { get; set; } = "";
+
+    /// <summary>Where the bar's Close goes; no Close when the pane is a page of its own.</summary>
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>What the page puts at the start of the bar: the way back to the dashboard on a tab of its own.</summary>
+    [Parameter] public RenderFragment? Leading { get; set; }
+
+    /// <summary>The state in the Terminal's colours: green once connected, red on an error.</summary>
+    private string StatusClass => _state switch
+    {
+        "ok" => "mud-success-text text-nowrap",
+        "error" => "mud-error-text text-nowrap",
+        _ => "mud-text-secondary text-nowrap",
+    };
+
+    private static string ZoomText(int offset) => offset > 0 ? $"+{offset}" : offset.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private SavedLogin? Picked => _logins.FirstOrDefault(l => l.Id == _loginId);
+
+    private string LoginTitle(string? id) => _logins.FirstOrDefault(l => l.Id == id)?.Title ?? "";
+
+    private void PickLogin(string id) => _loginId = id;
+
+    protected override void OnInitialized()
+    {
+        _owner = SessionId.Length == 0;
+        _address = $"http://127.0.0.1:{HostPort}/";
+    }
+
+    /// <summary>The saved logins for the picker; without them (none saved, or the agent refused) the bar simply has no picker.</summary>
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _logins = await Api.GetSavedLoginsAsync();
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _logins = [];
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        _module = await Js.InvokeAsync<IJSObjectReference>("import", "./_content/WslcAgent.UI/wslc-browse-pane.js");
+        _pane = await _module.InvokeAsync<IJSObjectReference>(
+            "open", _surface, _addressHost, Api.ContainerBrowseStreamUrl(Container, HostPort, SessionId).ToString(), SessionId, _self);
+    }
+
+    [JSInvokable]
+    public Task OnStatus(string text, string state)
+    {
+        // Said once: the pane repeats its state as it retries, and three
+        // toasts saying the same thing are worse than none.
+        if (state == "error" && text != _status)
+        {
+            Snackbar.Add(text, Severity.Error);
+        }
+
+        _status = text;
+        _state = state;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// What the picture costs, once a second: frames painted and kilobytes
+    /// taken in. It is the one way to tell a slow agent from a slow line from a
+    /// slow paint without guessing at it.
+    /// </summary>
+    [JSInvokable]
+    public Task OnRate(int fps, int kbps)
+    {
+        (_fps, _kbps) = (fps, kbps);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private string Rate => _state == "ok" && _fps > 0 ? $" · {_fps} fps · {_kbps} KB/s" : "";
+
+    [JSInvokable]
+    public Task OnAddress(string url)
+    {
+        _address = url;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Disconnect belongs to the pane that opened the browser; a joined pane only leaves.</summary>
+    [JSInvokable]
+    public Task OnReady(bool owner, int zoom)
+    {
+        _owner = owner;
+        return OnZoom(zoom);
+    }
+
+    /// <summary>The select shows the offset from 100 % in tens (−50 … +50); the browser keeps it per session.</summary>
+    [JSInvokable]
+    public Task OnZoom(int percent)
+    {
+        _zoomOffset = Math.Clamp((int)Math.Round((percent - 100) / 10.0) * 10, -50, 50);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public Task OnEnded()
+    {
+        _owner = false;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CallAsync(string verb, params object?[] args)
+    {
+        if (_pane is not null)
+        {
+            await _pane.InvokeVoidAsync(verb, args);
+        }
+    }
+
+    private async Task AddressKeyAsync(KeyboardEventArgs key)
+    {
+        if (key.Key != "Enter")
+        {
+            return;
+        }
+
+        await CallAsync("navigate", _address);
+        if (_addressField is not null)
+        {
+            await _addressField.BlurAsync();
+        }
+    }
+
+    private async Task ZoomAsync(int offset)
+    {
+        _zoomOffset = offset;
+        await CallAsync("zoom", 100 + offset);
+    }
+
+    private async Task DisconnectAsync()
+    {
+        if (await DialogFlow.ConfirmAsync(Dialogs, "Disconnect", "Disconnect ends the host browser for everyone connected to this session. Continue?", "Disconnect", destructive: true))
+        {
+            await CallAsync("endSession");
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        await CallAsync("detach");
+        await OnClose.InvokeAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_pane is not null)
+            {
+                await _pane.InvokeVoidAsync("dispose");
+                await _pane.DisposeAsync();
+            }
+
+            if (_module is not null)
+            {
+                await _module.DisposeAsync();
+            }
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException or OperationCanceledException)
+        {
+            // The page is going away: the socket closes with it, which detaches.
+        }
+
+        _self.Dispose();
+    }
+}

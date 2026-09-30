@@ -1,0 +1,13 @@
+@* What a volume's card says about it in words: its Mountpoint, its Scope and
+   its Labels. The card's body draws them beside its dials (VolumeCardBody);
+   the dashboard's details object draws them alone. *@
+
+<div class="wslc-card-texts">
+    <MudText Typo="Typo.body2" title="@Volume.Mountpoint"><b>Mountpoint</b> @Readings.Dash(Volume.Mountpoint)</MudText>
+    <MudText Typo="Typo.body2"><b>Scope</b> @Readings.Dash(Volume.Scope)</MudText>
+    <MudText Typo="Typo.body2" title="@Volume.Labels"><b>Labels</b> @Readings.Dash(Volume.Labels)</MudText>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public VolumeSummary Volume { get; set; } = default!;
+}

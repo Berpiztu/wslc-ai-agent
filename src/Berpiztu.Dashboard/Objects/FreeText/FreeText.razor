@@ -1,0 +1,24 @@
+@* A free text: words the user
+   writes — a label, a note — reading nothing, to name a group or say
+   anything on the dashboard. It stands where its alignment puts it, its
+   lines aligned the same way across, at its size, in its colour, and its
+   Text part takes a size, a colour and a weight of its own. Until it is
+   written it says so in design, and out of design it shows nothing. *@
+@namespace Berpiztu.Dashboard.Objects
+@inherits DashboardObject
+@attribute [DashboardObject("berpiztu.text", "Text", Group = "General", Subgroup = "General", Icon = Icons.Material.Filled.TextFields, Columns = 8, Rows = 2, Horizontal = HorizontalAlign.Left, Writes = true)]
+@attribute [DashboardObjectPart(FreeText.TextPart, "Text")]
+
+@if (Instance.Text is { Length: > 0 } text)
+{
+    <div class="@($"bz-dash-text bz-dash-size-{Instance.Size.ToString().ToLowerInvariant()} bz-dash-text-{Horizontal.ToString().ToLowerInvariant()}")">@text</div>
+}
+else if (Designing)
+{
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">Write its text in the properties window</MudText>
+}
+
+@code {
+    /// <summary>Its one part: the words.</summary>
+    public const string TextPart = "text";
+}

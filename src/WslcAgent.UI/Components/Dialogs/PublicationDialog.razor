@@ -1,0 +1,58 @@
+@* Settings → Publishing's Add name: one container port on one public name,
+   the same POST the launch form's Public names rows end in. The name is
+   suggested from the container's name with the machine's suffix under the
+   domain, and can be edited. *@
+@using WslcAgent.ApiClient
+@inject WslcAgentApi Api
+@inject IDialogService Dialogs
+
+<FormDialog SubmitText="Publish" BusyText="Publishing…" OnSubmit="SubmitAsync">
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+        A published port opens from anywhere at its own https name, with no login of the agent's in front of it:
+        publish only what asks for its own password. One name reaches one port.
+    </MudText>
+    <div class="wslc-field-pick has-note">
+        <MudTextField T="string" @bind-Value="_container" Label="Container" Immediate="true" Required="true" RequiredError="A container is required"
+                      Variant="Variant.Filled" Margin="Margin.Dense" HelperTextOnFocus="true" HelperText="Example: open-webui — the name, which the proxy reaches it by"
+                      OnBlur="SuggestName" autocapitalize="none" autocorrect="off" spellcheck="false" />
+        <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick a container" OnClick="PickContainerAsync" />
+    </div>
+    <MudTextField T="string" @bind-Value="_port" Label="Container port" Immediate="true" Required="true" RequiredError="A port is required"
+                  Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" HelperTextOnFocus="true" HelperText="Example: 8080 — the port inside the container, not a host port" />
+    <MudTextField T="string" @bind-Value="_hostname" Label="Public name" Immediate="true" Required="true" RequiredError="A name is required"
+                  Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2 wslc-mono" HelperTextOnFocus="true"
+                  HelperText="@($"Example: open-webui{Settings.NameSuffix}.{Settings.Domain} — one label under the domain")"
+                  autocapitalize="none" autocorrect="off" spellcheck="false" />
+</FormDialog>
+
+@code {
+    private string _container = "";
+    private string _port = "";
+    private string _hostname = "";
+
+    /// <summary>The domain and the suffix the suggested name is built from.</summary>
+    [Parameter, EditorRequired] public PublishingSettings Settings { get; set; } = default!;
+
+    private async Task PickContainerAsync()
+    {
+        if (await Pickers.ContainerAsync(Dialogs, Api, _container) is { } picked)
+        {
+            _container = picked;
+            SuggestName();
+        }
+    }
+
+    /// <summary>Until the name is typed by hand, it follows the container's.</summary>
+    private void SuggestName()
+    {
+        if (_hostname.Length == 0 || _hostname.EndsWith($"{Settings.NameSuffix}.{Settings.Domain}", StringComparison.Ordinal))
+        {
+            _hostname = _container.Trim().Length > 0 ? $"{_container.Trim()}{Settings.NameSuffix}.{Settings.Domain}" : "";
+        }
+    }
+
+    private Task SubmitAsync() =>
+        int.TryParse(_port.Trim(), out var port)
+            ? Api.PublishAsync(new PublishRequest(_container.Trim(), port, _hostname.Trim()))
+            : throw new AgentApiException(400, "The container port has to be a number.");
+}

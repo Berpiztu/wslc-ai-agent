@@ -1,0 +1,115 @@
+@page "/networks"
+@inherits ListPageBase<NetworkSummary>
+
+<PageShell Title="Networks" RequiresSession="true">
+    <TopbarSearch>
+        <SearchBox @bind-Value="Search" Placeholder="Search networks" />
+    </TopbarSearch>
+    <TopbarNav>
+        <BulkBar Count="Selected.Count">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" OnClick="@(() => BulkRemoveAsync("network", (n, ct) => Api.RemoveNetworkAsync(n.Name, ct)))">Remove</MudButton>
+        </BulkBar>
+    </TopbarNav>
+    <Verbs>
+        <NetworksVerbs Changed="RefreshAsync" />
+    </Verbs>
+    <ChildContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap" Spacing="2" Class="wslc-toolbar mb-1 flex-shrink-0"
+                  title="WSLC networks for the selected session: create, list, inspect, connect, disconnect, remove and prune.">
+            <PageStats>
+                <PageStat Value="@($"{Items.Count} networks")" />
+            </PageStats>
+            <ViewModeToggle @bind-Value="View" />
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RefreshAsync" Disabled="Loading" title="Refresh" />
+        </MudStack>
+
+        @if (Error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-2 flex-shrink-0">@Error</MudAlert>
+        }
+
+        @if (View == ViewMode.Table)
+        {
+            <ListGrid TItem="ListRow<NetworkSummary>" Items="Rows" Loading="Loading" Page="Page" PageChanged="p => Page = p" SortChanged="SortChanged" EmptyText="No networks."
+                      MultiSelection="true" @bind-SelectedItems="Selected">
+                <Columns>
+                    <SelectColumn T="ListRow<NetworkSummary>" Size="Size.Small" StickyLeft="true" HeaderClass="@GridColumn.Select" CellClass="@GridColumn.Select" />
+                    @* The dot sorts the list by state: in use first, then the rest. *@
+                    <TemplateColumn T="ListRow<NetworkSummary>" Title="" Sortable="true" SortBy="@(r => r.Value.InUse ? 0 : 1)"
+                                    Resizable="false" StickyLeft="true" HeaderClass="@GridColumn.Bullet" CellClass="@GridColumn.Bullet">
+                        <CellTemplate>
+                            <StateDot Active="context.Item.Value.InUse" Key="@context.Item.Value.Name" />
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <PropertyColumn T="ListRow<NetworkSummary>" TProperty="string" Property="n => n.Value.Name" Title="Name" StickyLeft="true" HeaderClass="@GridColumn.Width(19)" CellClass="@GridColumn.Width(19)" />
+                    <PropertyColumn T="ListRow<NetworkSummary>" TProperty="string" Property="n => n.Value.Driver" Title="Driver" StickyLeft="true" HeaderClass="@GridColumn.Width(5)" CellClass="@GridColumn.Width(5)" />
+                    <PropertyColumn T="ListRow<NetworkSummary>" TProperty="string" Property="n => n.Value.Scope" Title="Scope" HeaderClass="@GridColumn.Width(5)" CellClass="@GridColumn.Width(5)">
+                        <CellTemplate>@Dash(context.Item.Value.Scope)</CellTemplate>
+                    </PropertyColumn>
+                    <PropertyColumn T="ListRow<NetworkSummary>" TProperty="string" Property="n => n.Value.Subnet" Title="Subnet" HeaderClass="@GridColumn.Width(10)" CellClass="@GridColumn.Width(10)">
+                        <CellTemplate>@Dash(context.Item.Value.Subnet)</CellTemplate>
+                    </PropertyColumn>
+                    <PropertyColumn T="ListRow<NetworkSummary>" TProperty="string" Property="n => n.Value.Gateway" Title="Gateway" HeaderClass="@GridColumn.Width(8)" CellClass="@GridColumn.Width(8)">
+                        <CellTemplate>@Dash(context.Item.Value.Gateway)</CellTemplate>
+                    </PropertyColumn>
+                    <PropertyColumn T="ListRow<NetworkSummary>" TProperty="bool" Property="n => n.Value.Internal" Title="Internal" HeaderClass="@GridColumn.Width(5)" CellClass="@GridColumn.Width(5)">
+                        <CellTemplate>@(context.Item.Value.Internal ? "yes" : "—")</CellTemplate>
+                    </PropertyColumn>
+                    <PropertyColumn T="ListRow<NetworkSummary>" TProperty="string" Property="n => n.Value.Id" Title="ID" HeaderClass="@GridColumn.Stretch(13)" CellClass="@($"{GridColumn.Stretch(13)} mud-text-secondary")" />
+                </Columns>
+                <Actions>
+                    <TemplateColumn T="ListRow<NetworkSummary>" Title="Actions" Sortable="false" Resizable="false" DragAndDropEnabled="false" StickyRight="true" HeaderClass="@GridColumn.Actions" CellClass="@GridColumn.Actions">
+                        <CellTemplate>
+                            <NetworkActions Network="context.Item.Value" Changed="RefreshAsync" />
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Actions>
+            </ListGrid>
+        }
+        else
+        {
+            <CardsGrid TItem="NetworkSummary" Items="Visible" Loading="Loading" EmptyText="No networks.">
+                <ItemTemplate Context="n">
+                    <EntityCard Title="@n.Name" Subtitle="@n.Driver" AvatarColor="@(n.InUse ? Color.Success : Color.Default)" Key="@n.Name">
+                        <HeaderActions>
+                            @if (n.InUse)
+                            {
+                                <StateChip State="in use" />
+                            }
+                        </HeaderActions>
+                        <ChildContent>
+                            <NetworkCardBody Network="n" TotalReceived="_received" TotalSent="_sent" />
+                        </ChildContent>
+                        <Actions>
+                            <NetworkActions Network="n" Changed="RefreshAsync" />
+                        </Actions>
+                    </EntityCard>
+                </ItemTemplate>
+            </CardsGrid>
+        }
+    </ChildContent>
+</PageShell>
+
+@code {
+    /// <summary>What every container has received and sent: what a network's dials are a share of.</summary>
+    private long _received;
+    private long _sent;
+
+    protected override async Task<IReadOnlyList<NetworkSummary>> LoadAsync()
+    {
+        var list = await Api.GetNetworksAsync();
+        _received = list.NetReceivedBytes;
+        _sent = list.NetSentBytes;
+        return list.Networks;
+    }
+
+    protected override bool Matches(NetworkSummary n, string search) =>
+        Has(n.Name, search) || Has(n.Driver, search) || Has(n.Scope, search) || Has(n.Subnet, search) || Has(n.Gateway, search) || Has(n.Id, search);
+
+    protected override string KeyOf(NetworkSummary n) => n.Name;
+
+    /// <summary>A network keeps its number in the agent's registry through a recreate, and its place with it.</summary>
+    protected override string PlaceOf(NetworkSummary n) => n.Uid > 0 ? $"uid:{n.Uid}" : n.Name;
+
+    protected override string NameOf(NetworkSummary n) => n.Name;
+}

@@ -1,0 +1,93 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <!-- Per-user MSI for the unpackaged MAUI Windows client. Installs under
+       %LOCALAPPDATA%\WSLC-AI-Client, never under %LOCALAPPDATA%\WSLC.
+       WSLC_AGENTURL is the agent the client connects to; pass it on the
+       msiexec command line for a remote agent. -->
+  <Package
+      Name="WSLC AI Client"
+      Manufacturer="Berpiztu"
+      Version="$(var.MsiVersion)"
+      UpgradeCode="04a8671a-730a-40d6-8446-9b104fb169c4"
+      Language="1033"
+      Scope="perUser">
+    <SummaryInformation
+        Description="WSLC AI Client $(var.MsiVersion)"
+        Comments="$(var.MsiVersion)"
+        Manufacturer="Berpiztu" />
+    <!-- Every other version of the client is replaced, older or newer: an older
+         installer is a way back, not a mistake to refuse; the stock wizard has no page of ours to say so on. -->
+    <Upgrade Id="04a8671a-730a-40d6-8446-9b104fb169c4">
+      <UpgradeVersion Minimum="0.0.0" Maximum="$(var.MsiVersion)" IncludeMinimum="yes" IncludeMaximum="no" MigrateFeatures="yes" Property="WIX_UPGRADE_DETECTED" />
+      <UpgradeVersion Minimum="$(var.MsiVersion)" IncludeMinimum="no" MigrateFeatures="yes" Property="NEWERVERSIONDETECTED" />
+    </Upgrade>
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Property Id="WSLC_AGENTURL" Value="http://127.0.0.1:8069/" Secure="yes" />
+    <WixVariable Id="WixUILicenseRtf" Value="..\license.rtf" />
+    <!-- The client's own icon in Installed apps and Programs and Features, as
+         the agent's installer shows its own: the one MAUI generates into the
+         payload build-client-installer.ps1 publishes. -->
+    <Icon Id="ClientIcon" SourceFile="..\..\dist\client-msi-payload\appicon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="ClientIcon" />
+
+    <Feature Id="Main" Title="WSLC AI Client" Level="1">
+      <ComponentGroupRef Id="PublishedFiles" />
+      <ComponentRef Id="ClientSettingsAndShortcuts" />
+    </Feature>
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="INSTALLFOLDER" Name="WSLC-AI-Client" />
+    </StandardDirectory>
+    <StandardDirectory Id="DesktopFolder" />
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <Component Id="ClientSettingsAndShortcuts" Directory="INSTALLFOLDER" Guid="c2d50b1f-3714-418b-80c4-0fb6781b5c0c">
+      <RegistryValue Root="HKCU" Key="Software\Berpiztu\wslc-agent\Client" Name="Installed" Type="integer" Value="1" KeyPath="yes" />
+      <RegistryValue Root="HKCU" Key="Software\Berpiztu\wslc-agent\Client" Name="AgentUrl" Type="string" Value="[WSLC_AGENTURL]" />
+      <RegistryValue Root="HKCU" Key="Software\Berpiztu\wslc-agent\Client" Name="InstallDir" Type="string" Value="[INSTALLFOLDER]" />
+      <RegistryValue Root="HKCU" Key="Software\Berpiztu\wslc-agent\Client" Name="Version" Type="string" Value="[ProductVersion]" />
+      <Shortcut Id="DesktopShortcut"
+                Name="WSLC AI Client"
+                Directory="DesktopFolder"
+                Target="[INSTALLFOLDER]wslc-ai-client.exe"
+                WorkingDirectory="INSTALLFOLDER"
+                Advertise="no" />
+      <Shortcut Id="StartMenuShortcut"
+                Name="WSLC AI Client"
+                Directory="ProgramMenuFolder"
+                Target="[INSTALLFOLDER]wslc-ai-client.exe"
+                WorkingDirectory="INSTALLFOLDER"
+                Advertise="no" />
+      <RemoveFolder Id="RemoveClientFolder" Directory="INSTALLFOLDER" On="uninstall" />
+    </Component>
+
+    <!-- Once the client is removed, whether to remove its preferences too
+         (RemovePreferences.ps1, which says what they are). Only on a real
+         uninstall with a window to ask in: never when a newer version
+         replaces this one (its own update included), never on a silent
+         uninstall.
+         No console is ever seen: WiX's quiet exec starts a PowerShell with no
+         window, which only starts the script in a second one hidden from its
+         creation and returns at once, so the uninstall finishes and closes
+         instead of waiting for the answer. The script travels encoded, as
+         PowerShell takes it (build-client-installer.ps1). -->
+    <SetProperty Id="WixQuietExec64CmdLine"
+                 Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;Start-Process -WindowStyle Hidden -FilePath '[System64Folder]WindowsPowerShell\v1.0\powershell.exe' -ArgumentList '-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand','$(var.RemovePreferencesCommand)'&quot;"
+                 Before="AskToRemovePreferences"
+                 Sequence="execute" />
+    <CustomAction Id="AskToRemovePreferences"
+                  BinaryRef="Wix4UtilCA_X64"
+                  DllEntry="WixQuietExec64"
+                  Execute="immediate"
+                  Return="ignore" />
+
+    <InstallExecuteSequence>
+      <RemoveExistingProducts After="InstallValidate" />
+      <Custom Action="AskToRemovePreferences" After="InstallFinalize"
+              Condition="REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE AND UILevel &gt; 2" />
+    </InstallExecuteSequence>
+
+    <ui:WixUI Id="WixUI_Minimal" />
+  </Package>
+</Wix>

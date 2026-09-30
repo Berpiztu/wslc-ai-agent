@@ -1,0 +1,150 @@
+@* The pull console: the live wslc pull output, its progress and
+   status. Close leaves the pull running; Cancel stops it, after asking. *@
+@implements IDisposable
+@inject WslcAgentApi Api
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+@inject IJSRuntime Js
+
+<MudDialog ContentClass="wslc-dialog-action">
+    <TitleContent>
+        <DialogTitle Title="Pull progress">
+            <Info>
+                <MudChip T="string" Size="Size.Small" Class="my-0">@Image</MudChip>
+            </Info>
+            <ChildContent>
+                @if (_showCancel)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" OnClick="CancelAsync">Cancel</MudButton>
+                }
+                <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Close())">Close</MudButton>
+            </ChildContent>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <MudProgressLinear Value="_pct" Color="Color.Primary" Class="flex-shrink-0" />
+        @* The status line, and at its end the Logs page's Autorefresh ring: pressed, the
+           console follows its end; while the reader holds the console — pointer over it,
+           finger on it — the ring stands still and the text stays where it is. *@
+        <div class="d-flex align-center flex-shrink-0 my-1">
+            <MudText Typo="Typo.body2" Class="flex-grow-1" role="status">@_status</MudText>
+            <div class="wslc-action-rail wslc-action-row" role="toolbar">
+                <FollowRing Follow="_follow" Held="Held" Title="@FollowRing.TitleFor("the pull output", _follow, Held)" FollowChanged="ToggleFollowAsync" />
+            </div>
+        </div>
+        <pre id="@_outputId" class="wslc-logs-output wslc-logs-pre wslc-logs-wrap"
+             @onpointerenter="@(() => _pointerOn = true)" @onpointerleave="@(() => _pointerOn = false)"
+             @ontouchstart="@(() => _fingerOn = true)" @ontouchend="@(() => _fingerOn = false)" @ontouchcancel="@(() => _fingerOn = false)">@_log</pre>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private static readonly TimeSpan PollEvery = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan StartWait = TimeSpan.FromSeconds(45);
+
+    private readonly string _outputId = "pull-log-" + Guid.NewGuid().ToString("N");
+    private readonly CancellationTokenSource _stop = new();
+    private readonly DateTimeOffset _openedAt = DateTimeOffset.UtcNow;
+    private bool _seenActive;
+    private bool _showCancel = true;
+    private bool _follow = true;
+    private bool _pointerOn;
+    private bool _fingerOn;
+    private int _pct;
+    private string _status = "Waiting for wslc pull…";
+    private string _log = "Waiting for wslc pull output…";
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public string Image { get; set; } = "";
+
+    /// <summary>Opened from a row that already knows the pull has ended: its output is painted at once, and there is nothing to cancel.</summary>
+    [Parameter] public bool Finished { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _seenActive = Finished;
+        _showCancel = !Finished;
+        _ = PollAsync(_stop.Token);
+    }
+
+    /// <summary>
+    /// A pull just asked for may not be running yet: until it has been seen running (45 s
+    /// at most) the console waits instead of painting a previous pull's output as done.
+    /// </summary>
+    private async Task PollAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(PollEvery);
+        try
+        {
+            do
+            {
+                var state = await Api.GetImagePullLogAsync(Image, cancellationToken);
+                _seenActive |= state.Active;
+                if (!state.Active && !_seenActive && DateTimeOffset.UtcNow - _openedAt < StartWait)
+                {
+                    continue;
+                }
+
+                _pct = Math.Clamp(state.Pct, 0, 100);
+                _status = state.Status.Length > 0 ? state.Status : state.Active ? "Pulling..." : "Pull finished";
+                _log = (state.Truncated ? "… earlier output trimmed …\n" : "") + (state.Log.Length > 0 ? state.Log : "Waiting for wslc pull output…");
+                _showCancel = state.Active;
+                await InvokeAsync(Repaint);
+                if (_follow && !Held)
+                {
+                    await Js.InvokeVoidAsync("wslcAgent.scrollToEnd", cancellationToken, _outputId, true);
+                }
+
+                if (!state.Active && _seenActive)
+                {
+                    return;
+                }
+            }
+            while (await timer.WaitForNextTickAsync(cancellationToken));
+        }
+        catch (OperationCanceledException)
+        {
+            // The dialog closed.
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _status = ex.Message.Length > 0 ? ex.Message : "Could not read pull output";
+            await InvokeAsync(Repaint);
+        }
+    }
+
+    private async Task CancelAsync()
+    {
+        if (await PullFlow.CancelAsync(Dialogs, Api, Snackbar, Image))
+        {
+            Dialog.Close();
+        }
+    }
+
+    /// <summary>The reader holds the console — pointer over it, finger on it — and it stays where it is until they leave.</summary>
+    private bool Held => _pointerOn || _fingerOn;
+
+    /// <summary>The ring: on, the console follows its end (jumping there at once); off, the text stays where the reader left it.</summary>
+    private async Task ToggleFollowAsync()
+    {
+        _follow = !_follow;
+        if (_follow)
+        {
+            await Js.InvokeVoidAsync("wslcAgent.scrollToEnd", _outputId);
+        }
+    }
+
+    /// <summary>Cancel lives in the title line, the dialog's own tree: both are repainted.</summary>
+    private void Repaint()
+    {
+        StateHasChanged();
+        Dialog.StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        _stop.Cancel();
+        _stop.Dispose();
+    }
+}

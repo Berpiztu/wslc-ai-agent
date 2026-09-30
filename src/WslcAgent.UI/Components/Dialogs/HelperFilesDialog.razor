@@ -1,0 +1,77 @@
+@* Files of what is not a running container — an image, a volume — in the same
+   Files view, through the temporary container the agent starts for it. The
+   helper goes when the dialog does, however it closes. *@
+@implements IAsyncDisposable
+@inject ISnackbar Snackbar
+
+<MudDialog ContentClass="wslc-dialog-action">
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        @if (_session is null)
+        {
+            <MudProgressLinear Indeterminate="true" />
+        }
+        else
+        {
+            <FilesView Container="@_session.Container" Root="@_session.Root" />
+        }
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private FilesSession? _session;
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    /// <summary>What the files belong to, as the notices name it (<c>alpine:latest</c>, <c>volume data</c>).</summary>
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    /// <summary>Starts the helper.</summary>
+    [Parameter, EditorRequired] public Func<Task<FilesSession>> Open { get; set; } = default!;
+
+    /// <summary>Removes the helper; called once, when the dialog goes.</summary>
+    [Parameter, EditorRequired] public Func<FilesSession, Task> Close { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var opening = Snackbar.Add($"Opening files for {Label}…", Severity.Info, o => o.RequireInteraction = true);
+        try
+        {
+            _session = await Open();
+            Snackbar.Add($"Files — {Label}", Severity.Success);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            Dialog.Cancel();
+        }
+        finally
+        {
+            if (opening is not null)
+            {
+                Snackbar.Remove(opening);
+            }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_session is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await Close(_session);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            // Best effort: a helper left behind stays hidden from the lists.
+        }
+    }
+}

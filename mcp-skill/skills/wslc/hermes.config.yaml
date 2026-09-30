@@ -1,0 +1,19 @@
+# Hermes Agent — nothing to install on the Hermes machine. The WSLC AI Agent
+# serves MCP itself at <agent>/api/v1/mcp (Streamable HTTP, with sessions). Register the URL:
+#   hermes mcp add wslc --url http://127.0.0.1:8069/api/v1/mcp
+# and copy SKILL.md to ~/.hermes/skills/wslc/ so Hermes loads it.
+#
+# Which URL:
+# - Hermes on the WSLC host: http://127.0.0.1:8069/api/v1/mcp (the installed agent;
+#   a development build listens on 8070). Loopback, so no credentials.
+# - Hermes on the far end of an SSH tunnel to that port: the same loopback URL.
+# - Anywhere else: the public name, https://<public-host>/api/v1/mcp, plus the agent's
+#   API token as a Bearer header. Never commit a real token.
+mcp_servers:
+  wslc:
+    url: "http://127.0.0.1:8069/api/v1/mcp"
+    # headers:
+    #   Authorization: "Bearer ***"
+    # Optional hardening: hide tools you never want the model to see.
+    # tools:
+    #   exclude: ["remove_container", "kill_container", "exec_in_container", "stop_session"]

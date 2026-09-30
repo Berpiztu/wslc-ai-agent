@@ -1,0 +1,12 @@
+@* The Networks page's verbs in the round button: Create, Map and Prune.
+   Drawn by the page, and by the dashboard while a network's card is selected. *@
+@inherits PageVerbsBase
+
+<VerbFab StartIcon="@Icons.Material.Filled.Add" Label="Create" Color="Color.Primary" OnClick="@(() => OpenAsync<CreateNetworkDialog>("Create network"))" Title="Create a network" />
+<VerbFab StartIcon="@Icons.Material.Filled.Hub" Label="Map" OnClick="@(() => OpenAsync<NetworkMapDialog>("Network map", large: true))" Title="Network map" />
+<VerbFab StartIcon="@Icons.Material.Filled.DeleteSweep" Label="Prune" Color="Color.Error" OnClick="PruneAsync" Title="Remove every network no container uses" />
+
+@code {
+    private Task PruneAsync() =>
+        ConfirmAndRunAsync("Prune networks", "Remove every network no container uses?", "Prune", "networks", Api.PruneNetworksAsync);
+}

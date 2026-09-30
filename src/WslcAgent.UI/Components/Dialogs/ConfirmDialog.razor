@@ -1,0 +1,53 @@
+@* The one yes/cancel confirmation, with the application's buttons (small,
+   filled, square): Cancel in the default colour, the verb in Error when the
+   action destroys something, Primary otherwise. MudBlazor's message box
+   would draw text buttons, outside the rules.
+
+   One question that is going to be asked again for the next file, and the
+   next, carries a box that says to answer the rest the same way (ForAll).
+   Whichever button is then pressed is the answer to all of them: yes to every
+   one, or no to every one. Left unticked, each is asked for itself. *@
+
+<MudDialog>
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Answer(false))">Cancel</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="@(Destructive ? Color.Error : Color.Primary)" OnClick="@(() => Answer(true))">@YesText</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <MudText Class="wslc-confirm-message">@Message</MudText>
+        @if (ForAll.Length > 0)
+        {
+            <MudCheckBox T="bool" @bind-Value="_forAll" Label="@ForAll" Dense="true" Color="Color.Primary" Class="mt-2" />
+        }
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public string Message { get; set; } = "";
+
+    /// <summary>The verb on the confirming button.</summary>
+    [Parameter, EditorRequired] public string YesText { get; set; } = "";
+
+    /// <summary>True when confirming destroys something: the verb is drawn in the error colour.</summary>
+    [Parameter] public bool Destructive { get; set; }
+
+    /// <summary>
+    /// The words on the box that answers the rest the same way, for a question
+    /// that is one of several. Empty for a question asked once, which is most
+    /// of them, and then there is no box.
+    /// </summary>
+    [Parameter] public string ForAll { get; set; } = "";
+
+    private bool _forAll;
+
+    /// <summary>
+    /// Both buttons answer: Cancel is a no, not a dismissal, since a no here
+    /// is a decision the caller acts on — and it carries the box with it, so
+    /// "no to this one and to the rest" is one press.
+    /// </summary>
+    private void Answer(bool yes) => Dialog.Close(DialogResult.Ok(new Confirmed(yes, _forAll)));
+}

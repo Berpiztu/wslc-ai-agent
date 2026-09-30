@@ -1,0 +1,218 @@
+@* CLI Activity's list: the Logs page's strip, the commands the agent is running
+   and has just run, the latest at the bottom. It is the grid of the log above
+   it, ListGrid, virtualised — a box of panels per command drew all two hundred with
+   their outputs, and Expand all nearly froze the application. A row is the
+   start, the type, the status, the title with its session, the time taken and
+   a failure's exit; opened by its +/−, the command and its output
+   (CliCommandDetail), read by id when it opens. The header's +/− opens and
+   closes every row. *@
+<div class="wslc-fill">
+    @* The list's header row, as every list has one, from the right: the ring, the type filters; at the left
+       the count. The spare width between. *@
+    <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap" Spacing="2" Class="wslc-toolbar mb-1 flex-shrink-0">
+        <PageStats>
+            @* Two lines, the count and under it what waits: side by side they shared a narrow panel's one line and both gave
+               way until neither showed. The second line is always there, blank when
+               nothing waits, so the list under it never moves when it fills. *@
+            <div class="wslc-stat-lines">
+                <PageStat Label="Activity" Value="@Summary" Large="true" />
+                <PageStat Value="@(_held && Pending > 0 ? $"{Pending} in buffer to view" : BlankLine)" Large="true" />
+            </div>
+        </PageStats>
+        @Controls
+    </MudStack>
+    @* A reader on the list — pointer over it, finger on it, or a command open —
+       holds it: the page's follow waits and the ring in the rail stands still.
+       The box's id is what the page scrolls to its end (the table inside it). *@
+    <div id="@Id" class="wslc-fill" role="log" aria-label="wslc commands, latest last"
+         @onpointerenter="@(() => SetHoldAsync(pointer: true))" @onpointerleave="@(() => SetHoldAsync(pointer: false))"
+         @ontouchstart="@(() => SetHoldAsync(touch: true))" @ontouchend="@(() => SetHoldAsync(touch: false))" @ontouchcancel="@(() => SetHoldAsync(touch: false))">
+        <ListGrid TItem="CliTraceEntry" Items="_shown" Virtualize="true" ItemSize="RowHeight"
+                  EmptyText="No CLI activity yet. Actions on Containers, Images, and the rest show up here.">
+            <Columns>
+                <HierarchyColumn T="CliTraceEntry" EnableHeaderToggle="true" HeaderClass="@GridColumn.Toggle" />
+                <PropertyColumn T="CliTraceEntry" TProperty="DateTimeOffset" Property="c => c.StartedAt" Title="Start" HeaderClass="@GridColumn.Width(13)" CellClass="@GridColumn.Width(13)">
+                    <CellTemplate><span class="wslc-log-time">@CliOutput.Clock(context.Item.StartedAt)</span></CellTemplate>
+                </PropertyColumn>
+                <PropertyColumn T="CliTraceEntry" TProperty="string" Property="c => c.Kind" Title="Type" HeaderClass="@GridColumn.Width(10)" CellClass="@GridColumn.Width(10)">
+                    @* As wide as Containers, the longest (9.4 characters in bold). *@
+                    <CellTemplate><span class="wslc-cli-kind" title="@CliKinds.Label(context.Item.Kind)">@CliKinds.ShortLabel(context.Item.Kind)</span></CellTemplate>
+                </PropertyColumn>
+                @* Coloured text, not the chip the panels wore: the virtualiser needs every
+                   row the height of a line of text, and a chip is taller. *@
+                <PropertyColumn T="CliTraceEntry" TProperty="string" Property="c => c.Status" Title="Status" HeaderClass="@GridColumn.Width(9)" CellClass="@GridColumn.Width(9)">
+                    <CellTemplate><span class="@StatusClass(context.Item.Status)">@CliOutput.StatusLabel(context.Item.Status)</span></CellTemplate>
+                </PropertyColumn>
+                @* What a row is about, so it takes the spare width (the command is what is read, not the
+                   exit); its declared width
+                   is its floor, and a longer title ends in "…", whole in its tooltip
+                   with the command line. *@
+                <PropertyColumn T="CliTraceEntry" TProperty="string" Property="c => c.Title" Title="Command" HeaderClass="@GridColumn.Stretch(26)" CellClass="@GridColumn.Stretch(26)">
+                    <CellTemplate>
+                        <span class="wslc-cli-title" title="@context.Item.CommandLine">@context.Item.Title@(string.IsNullOrEmpty(context.Item.Session) ? "" : $" · {context.Item.Session}")</span>
+                    </CellTemplate>
+                </PropertyColumn>
+                <PropertyColumn T="CliTraceEntry" TProperty="TimeSpan?" Property="c => c.Duration" Title="Took" HeaderClass="@GridColumn.Number(7)" CellClass="@GridColumn.Number(7)">
+                    <CellTemplate><span class="mud-text-secondary">@CliOutput.Duration(context.Item.Duration, context.Item.Status)</span></CellTemplate>
+                </PropertyColumn>
+                <PropertyColumn T="CliTraceEntry" TProperty="int?" Property="c => c.ExitCode" Title="Exit" HeaderClass="@GridColumn.Width(4)" CellClass="@GridColumn.Width(4)">
+                    @* The code alone: the column says it is the exit (on a phone there is no room to
+                       spare for a word written in every row). *@
+                    <CellTemplate><span class="wslc-cli-exit">@(context.Item.Status != "success" && context.Item.ExitCode is { } exitCode ? exitCode.ToString(System.Globalization.CultureInfo.InvariantCulture) : "")</span></CellTemplate>
+                </PropertyColumn>
+            </Columns>
+            <ChildRowContent>
+                <OpenRowMark Key="@context.Item.Id" Opened="RowOpenedAsync" Closed="RowClosedAsync" />
+                @* The list's commands are abridged (no output); the page hands the
+                   whole one once it has read it, and until then the row says so. *@
+                <div class="wslc-cli-detail">
+                    @if (Detail(context.Item) is { } whole)
+                    {
+                        <CliCommandDetail Command="whole" />
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary wslc-cli-block">Reading the output…</MudText>
+                    }
+                </div>
+            </ChildRowContent>
+        </ListGrid>
+    </div>
+</div>
+
+@code {
+    /// <summary>The rows whose detail is open, by command id: the grid does not say, so the detail itself does (OpenRowMark).</summary>
+    private readonly HashSet<string> _open = [];
+
+    /// <summary>
+    /// The commands drawn: the page's while the list is free, the ones it had
+    /// when the reader took hold while it is held. Nothing arrives, leaves or
+    /// changes under a reader; what comes meanwhile waits, counted in the
+    /// header, and is drawn when they let go.
+    /// </summary>
+    private IReadOnlyList<CliTraceEntry> _shown = [];
+    private bool _pointerOn;
+    private bool _fingerOn;
+    private bool _held;
+
+    /// <summary>The ids of the commands drawn, which the page's are counted against while the list is held.</summary>
+    private HashSet<string> _shownIds = [];
+
+    /// <summary>The row height of the log's grid, which this one shares: what the virtualiser is told, so its scroll bar is true to the rows.</summary>
+    private const float RowHeight = 29.45f;
+
+    /// <summary>A line with nothing on it that still takes a line's height: a no-break space (U+00A0), which an ordinary one would collapse to nothing.</summary>
+    private static readonly string BlankLine = ((char)0xA0).ToString();
+
+    /// <summary>The box's id, for the page that scrolls it to its end.</summary>
+    [Parameter, EditorRequired] public string Id { get; set; } = "";
+
+    /// <summary>True while the reader holds the list — pointer over it, finger on it, or a command open — and false again when they let go.</summary>
+    [Parameter] public EventCallback<bool> HeldChanged { get; set; }
+
+    /// <summary>
+    /// The command whole, output included, for a row that is open; null while
+    /// the page is still reading it. The commands listed are abridged, so the
+    /// page answers this from what it has fetched by entry id.
+    /// </summary>
+    [Parameter] public Func<CliTraceEntry, CliTraceEntry?> Detail { get; set; } = command => command;
+
+    /// <summary>The page's controls for this list — its Autorefresh and its type filters (LogsControls) — placed in the header row after the count.</summary>
+    [Parameter] public RenderFragment? Controls { get; set; }
+
+    /// <summary>
+    /// The commands, oldest first: the latest ends up at the bottom. The page
+    /// hands over a couple of hundred at most, CLI Activity's own capacity.
+    /// </summary>
+    [Parameter, EditorRequired] public IReadOnlyList<CliTraceEntry> Commands { get; set; } = [];
+
+    public bool Held => _pointerOn || _fingerOn || _open.Count > 0;
+
+    /// <summary>
+    /// The header's count: the commands listed, adding up as they come. While
+    /// the reader holds the list, a stat of its own beside it says how many
+    /// arrived since they took hold and wait — "3 in buffer to view".
+    /// </summary>
+    private string Summary => $"{_shown.Count} command{(_shown.Count == 1 ? "" : "s")}";
+
+    /// <summary>
+    /// The commands the page has and the list does not, by id, wherever they
+    /// stand. Not the ones after the last seen: running commands are listed
+    /// last, and the agent's event reader is one that never ends, so the last
+    /// command was always it and every new one landed before it, uncounted —
+    /// the count showed a 1 that came and went and never grew. A running command that ends keeps its id, and is not
+    /// new.
+    /// </summary>
+    private int Pending => Commands.Count(command => !_shownIds.Contains(command.Id));
+
+    /// <summary>While the list is free the reader sees everything that arrives.</summary>
+    protected override void OnParametersSet()
+    {
+        if (!_held)
+        {
+            CatchUp();
+        }
+    }
+
+    /// <summary>The list draws what the page has, and all of it has been seen.</summary>
+    private void CatchUp()
+    {
+        _shown = Commands;
+        _shownIds = Commands.Select(command => command.Id).ToHashSet(StringComparer.Ordinal);
+    }
+
+    private Task SetHoldAsync(bool? pointer = null, bool? touch = null)
+    {
+        _pointerOn = pointer ?? _pointerOn;
+        _fingerOn = touch ?? _fingerOn;
+        return TellHeldAsync();
+    }
+
+    private Task RowOpenedAsync(string id)
+    {
+        _open.Add(id);
+        return TellHeldAsync();
+    }
+
+    private Task RowClosedAsync(string id)
+    {
+        _open.Remove(id);
+        return TellHeldAsync();
+    }
+
+    /// <summary>Only a change is told: the pointer moves over the list far more often than the hold changes.</summary>
+    private Task TellHeldAsync()
+    {
+        if (_held == Held)
+        {
+            return Task.CompletedTask;
+        }
+
+        _held = Held;
+        if (!_held)
+        {
+            // Let go: what waited is drawn and scrolled into view, so nothing is pending any more.
+            CatchUp();
+        }
+
+        return HeldChanged.InvokeAsync(_held);
+    }
+
+    /// <summary>The status's colour, as CLI Activity had it: green done, amber running, red failed or timed out.</summary>
+    public static Color StatusColor(string status) => status switch
+    {
+        "success" => Color.Success,
+        "running" => Color.Warning,
+        "error" or "timeout" => Color.Error,
+        _ => Color.Default,
+    };
+
+    /// <summary>The same colours on the status's text, the row's.</summary>
+    private static string StatusClass(string status) => StatusColor(status) switch
+    {
+        Color.Success => "mud-success-text",
+        Color.Warning => "mud-warning-text",
+        Color.Error => "mud-error-text",
+        _ => "mud-text-secondary",
+    };
+}

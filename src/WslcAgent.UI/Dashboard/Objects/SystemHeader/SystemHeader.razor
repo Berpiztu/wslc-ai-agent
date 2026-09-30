@@ -1,0 +1,19 @@
+@* The System card's header: "System", the session every command targets,
+   the avatar green while it runs and red stopped (no chip: the colour says
+   it), standing alone. It fills its cells with the header's tone. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits WslcObject
+@attribute [DashboardObject("wslc.system-header", "System header", Group = "System", Subgroup = "System", Icon = Icons.Material.Filled.AccountBox, Columns = 16, Rows = 4, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Left)]
+@inject SessionState Session
+
+<div class="@SectionClass("wslc-card-part-summary")">
+    <EntityCardPart>
+        <EntityCardHeader Title="System" Subtitle="@Session.Selected" AvatarColor="@(Session.Active ? Color.Success : Color.Error)" Key="system" />
+    </EntityCardPart>
+</div>
+
+@code {
+    protected override void OnInitialized() => Hear(h => Session.Changed += h, h => Session.Changed -= h);
+}

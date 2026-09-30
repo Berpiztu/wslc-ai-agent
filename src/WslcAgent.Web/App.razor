@@ -1,0 +1,7 @@
+@* Pages live in WslcAgent.UI; this host only routes to them. *@
+<Router AppAssembly="@typeof(MainLayout).Assembly" NotFoundPage="typeof(WslcAgent.UI.Pages.NotFound)">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+    </Found>
+</Router>

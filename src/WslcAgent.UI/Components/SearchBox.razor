@@ -1,0 +1,26 @@
+@* The list page's search box: in the title bar, before the page's own verbs,
+   on every width. *@
+<MudTextField T="string" Value="Value" ValueChanged="ValueChanged" Immediate="true" DebounceInterval="150" Placeholder="@Placeholder"
+              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Margin="Margin.Dense"
+              Variant="Variant.Filled" Clearable="true" Class="wslc-search" />
+
+@code {
+    [Parameter] public string Value { get; set; } = "";
+
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    [Parameter] public string Placeholder { get; set; } = DefaultPlaceholder;
+
+    private const string DefaultPlaceholder = "Search...";
+
+    /// <summary>
+    /// The placeholder goes back to its default before each page's parameters
+    /// land: the title bar keeps this one instance from page to page, and a page
+    /// that names none (Containers, Images) kept the last page's "Search volumes".
+    /// </summary>
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        Placeholder = DefaultPlaceholder;
+        return base.SetParametersAsync(parameters);
+    }
+}

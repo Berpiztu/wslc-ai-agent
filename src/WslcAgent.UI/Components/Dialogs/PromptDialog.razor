@@ -1,0 +1,91 @@
+@* A prompt: the question, one text field
+   carrying the current value already selected so a couple of characters can
+   be changed without retyping the name, Cancel and the verb. Returns the
+   trimmed text; nothing when cancelled. *@
+@inject IJSRuntime Js
+
+<MudDialog>
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Cancel</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="Submit" Disabled="@(_value.Trim().Length == 0)">@SubmitText</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField Margin="Margin.Dense" T="string" Value="_value" ValueChanged="Typed" Label="@Label" HelperText="@HelperText" Immediate="true" Variant="Variant.Filled"
+                      spellcheck="false" autocomplete="off" AutoFocus="true" @ref="_field" OnKeyDown="OnKeyDown" />
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private MudTextField<string> _field = default!;
+    private string _value = "";
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    [Parameter] public string HelperText { get; set; } = "";
+
+    [Parameter] public string SubmitText { get; set; } = "OK";
+
+    /// <summary>What the field starts with (a name being changed); it opens selected, ready to be typed over.</summary>
+    [Parameter] public string Value { get; set; } = "";
+
+    protected override void OnInitialized() => _value = Value;
+
+    /// <summary>
+    /// Focus and select: the field is ready to be typed
+    /// into without reaching for it, and a name already there is typed over in
+    /// one keystroke, or arrowed into to change two characters. The field asks
+    /// for the focus itself (<c>AutoFocus</c>) and the dialog takes it back
+    /// while it opens, so both wait a frame: before that the focus is dropped
+    /// and so is a selection.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        await Task.Delay(50);
+        await _field.FocusAsync();
+        if (_value.Length > 0)
+        {
+            await _field.SelectAsync();
+        }
+    }
+
+    /// <summary>
+    /// The verb turns on as soon as there is a name to use it on. The title
+    /// row's buttons live in the dialog's own tree, so a keystroke has to tell
+    /// it to repaint: without that the field fills up and the verb stays grey,
+    /// and only Enter creates anything.
+    /// </summary>
+    private void Typed(string value)
+    {
+        _value = value;
+        Dialog.StateHasChanged();
+    }
+
+    private void OnKeyDown(KeyboardEventArgs key)
+    {
+        if (key.Key == "Enter")
+        {
+            Submit();
+        }
+    }
+
+    /// <summary>
+    /// No validation message before anything is typed: the empty field simply
+    /// keeps the verb disabled, instead of greeting the user with an error.
+    /// </summary>
+    private void Submit()
+    {
+        if (_value.Trim().Length > 0)
+        {
+            Dialog.Close(DialogResult.Ok(_value.Trim()));
+        }
+    }
+}

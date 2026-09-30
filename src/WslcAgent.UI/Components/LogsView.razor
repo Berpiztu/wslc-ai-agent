@@ -1,0 +1,256 @@
+@* Container logs: the last lines in a code block that owns
+   the scroll, lines coloured by level, and the action rail at the right
+   (search / wrap / autorefresh / refresh / jump to end / copy / clear).
+   Autorefresh is the Logs page's ring: every 2 s the lines are read again and
+   the box goes to its end — unless the reader holds the box, pointer over it
+   or finger on it, when the lines stay as they are and the ring stands still,
+   and the box catches up on the first tick after they leave. Nothing moves
+   under a reader, and nothing scrolls when nothing new arrived. *@
+@using WslcAgent.ApiClient
+@inject WslcAgentApi Api
+@inject IJSRuntime Js
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+@implements IDisposable
+
+<div class="wslc-action-body">
+    <div class="wslc-action-main">
+        @if (_searchOpen)
+        {
+            <div class="wslc-action-search">
+                <MudTextField T="string" @bind-Value="_query" Placeholder="Filter logs…" Immediate="true" DebounceInterval="150"
+                              Variant="Variant.Filled" Margin="Margin.Dense" Class="wslc-search" Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Close"
+                              OnAdornmentClick="CloseSearch" AutoFocus="true" />
+                <MudSelect T="string" @bind-Value="_level" Dense="true" Margin="Margin.Dense" Variant="Variant.Filled" Class="wslc-action-level">
+                    <MudSelectItem T="string" Value="@("")">All levels</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("debug")">Debug</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("info")">Info</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("warning")">Warning</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("error")">Error</MudSelectItem>
+                </MudSelect>
+            </div>
+        }
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-1 flex-shrink-0">@_error</MudAlert>
+        }
+        @* A reader on the box — pointer over it, finger on it — holds it: its Autorefresh waits and its ring stands still. *@
+        <div id="@_outputId" class="wslc-logs-output wslc-fill-scroll @(_wrap ? "wslc-logs-wrap" : "")" role="log"
+             @onpointerenter="@(() => _pointerOn = true)" @onpointerleave="@(() => _pointerOn = false)"
+             @ontouchstart="@(() => _fingerOn = true)" @ontouchend="@(() => _fingerOn = false)" @ontouchcancel="@(() => _fingerOn = false)">
+            @if (_lines.Count == 0)
+            {
+                <div class="wslc-log-line wslc-log-empty">@(_viewCleared ? "Logs cleared." : "No logs.")</div>
+            }
+            @foreach (var line in _lines.Where(l => l.Matches(_query, _level)))
+            {
+                <div class="wslc-log-line @(line.Level.Length > 0 ? "log-level-" + line.Level : "")">@(line.Text.Length == 0 ? " " : line.Text)</div>
+            }
+        </div>
+    </div>
+    @* The rail every window in the app shares: MudBlazor's filled small icon
+       buttons with its own Material icons, in the app's verb colours. A toggle
+       says its state the way a switch does: pressed in and blue while it is
+       on, standing proud of the rail and green while it is off. *@
+    <div class="wslc-action-rail" role="toolbar">
+        <MudIconButton Icon="@Icons.Material.Filled.Search" Color="@RailToggle.Color(_searchOpen)" Class="@RailToggle.Class(_searchOpen)" Size="Size.Small" Variant="Variant.Filled"
+                       title="@(_searchOpen ? "Search / filter on — click to close" : "Search / filter off — click to open")" OnClick="@(() => _searchOpen = !_searchOpen)" />
+        <MudIconButton Icon="@Icons.Material.Filled.WrapText" Color="@RailToggle.Color(_wrap)" Class="@RailToggle.Class(_wrap)" Size="Size.Small" Variant="Variant.Filled"
+                       title="@(_wrap ? "Wrap on — click to turn off" : "Wrap off — click to turn on")" OnClick="@(() => _wrap = !_wrap)" />
+        <FollowRing Follow="_follow" Held="Held" Title="@FollowRing.TitleFor("the log", _follow, Held)" FollowChanged="ToggleFollowAsync" />
+        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Primary" Size="Size.Small" Variant="Variant.Filled"
+                       title="Refresh logs (reload history)" OnClick="ReloadAsync" Disabled="_loading" />
+        <MudIconButton Icon="@Icons.Material.Filled.VerticalAlignBottom" Color="Color.Default" Size="Size.Small" Variant="Variant.Filled"
+                       title="Jump to end" OnClick="JumpToEndAsync" />
+        <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Info" Size="Size.Small" Variant="Variant.Filled"
+                       title="Copy logs" OnClick="CopyAsync" />
+        <MudIconButton Icon="@Icons.Material.Filled.ClearAll" Color="Color.Error" Size="Size.Small" Variant="Variant.Filled"
+                       title="Clear view — Refresh reloads history" OnClick="ClearAsync" />
+    </div>
+</div>
+
+@code {
+    private static readonly TimeSpan RefreshEvery = TimeSpan.FromSeconds(2);
+    private const int SyncWindow = 12;
+    private readonly string _outputId = "logs-" + Guid.NewGuid().ToString("N");
+    private List<LogLine> _lines = [];
+    private string _query = "";
+    private string _level = "";
+    private bool _searchOpen;
+    private bool _wrap;
+    private bool _follow = true;
+    private bool _pointerOn;
+    private bool _fingerOn;
+    private bool _loading;
+    private bool _viewCleared;
+    private bool _scrollPending;
+    private List<string>? _clearedTail;
+    private string? _error;
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _stop;
+
+    [Parameter, EditorRequired] public string Container { get; set; } = "";
+
+    [Parameter] public int Tail { get; set; } = 200;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+        _stop = new CancellationTokenSource();
+        _timer = new PeriodicTimer(RefreshEvery);
+        _ = PollAsync(_stop.Token);
+    }
+
+    /// <summary>The reader holds the box — pointer over it, finger on it — and its Autorefresh waits, as the Logs page's windows do.</summary>
+    private bool Held => _pointerOn || _fingerOn;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_scrollPending)
+        {
+            _scrollPending = false;
+            if (!Held)
+            {
+                await Js.InvokeVoidAsync("wslcAgent.scrollToEnd", _outputId);
+            }
+        }
+    }
+
+    /// <summary>Every two seconds while Autorefresh is on and nobody holds the box; held, it catches up on the first tick after.</summary>
+    private async Task PollAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (await _timer!.WaitForNextTickAsync(cancellationToken))
+            {
+                if (_follow && !Held)
+                {
+                    await RefreshAsync();
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    /// <summary>The snapshot; after a view clear only the lines past the cleared ones.</summary>
+    private async Task RefreshAsync()
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        _loading = true;
+        try
+        {
+            var lines = LogLines.Split(await Api.GetContainerLogsAsync(Container, Tail, false));
+            var shown = _clearedTail is null ? lines : LinesAfter(lines, _clearedTail);
+            // The end is sought only when something new arrived: a box that jumps to
+            // where it already is still jumps.
+            _scrollPending = _follow && !shown.Select(l => l.Text).SequenceEqual(_lines.Select(l => l.Text));
+            _lines = shown;
+            _error = null;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _error = ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase)
+                ? "Container no longer exists. Logs are unavailable after the container is removed."
+                : ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    /// <summary>The lines after the last occurrence of <paramref name="tail"/> (a sliding window, so repeated lines do not break the sync); everything when it is not there.</summary>
+    private static List<LogLine> LinesAfter(List<LogLine> lines, List<string> tail)
+    {
+        for (var start = lines.Count - tail.Count; start >= 0; start--)
+        {
+            if (Enumerable.Range(0, tail.Count).All(i => lines[start + i].Text == tail[i]))
+            {
+                return lines.Skip(start + tail.Count).ToList();
+            }
+        }
+
+        return lines;
+    }
+
+    private async Task ReloadAsync()
+    {
+        _viewCleared = false;
+        _clearedTail = null;
+        await RefreshAsync();
+    }
+
+    private async Task ToggleFollowAsync()
+    {
+        _follow = !_follow;
+        if (_follow)
+        {
+            await RefreshAsync();
+            // Turned on, the box goes to its last line at once, whether or not
+            // anything new came.
+            _scrollPending = true;
+        }
+    }
+
+    private void CloseSearch()
+    {
+        _query = "";
+        _searchOpen = false;
+    }
+
+    private async Task JumpToEndAsync() => await Js.InvokeVoidAsync("wslcAgent.scrollToEnd", _outputId);
+
+    private async Task CopyAsync()
+    {
+        var text = string.Join('\n', _lines.Where(l => l.Matches(_query, _level)).Select(l => l.Text));
+        if (text.Trim().Length == 0)
+        {
+            Snackbar.Add("No logs to copy", Severity.Info);
+            return;
+        }
+
+        try
+        {
+            await Js.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            Snackbar.Add("Logs copied to clipboard", Severity.Success);
+        }
+        catch (JSException)
+        {
+            Snackbar.Add("Failed to copy logs", Severity.Error);
+        }
+    }
+
+    /// <summary>A view clear, not a host truncation: Refresh reloads the history.</summary>
+    private async Task ClearAsync()
+    {
+        if (_lines.Count == 0)
+        {
+            Snackbar.Add(_viewCleared ? "Logs already cleared — use Refresh to reload history" : "No logs to clear", Severity.Info);
+            return;
+        }
+
+        if (!await DialogFlow.ConfirmAsync(Dialogs, "Clear logs",
+                "Clear the logs currently shown in this viewer? New lines still appear if autorefresh is on. Use Refresh to reload history.", "Clear"))
+        {
+            return;
+        }
+
+        _clearedTail = _lines.TakeLast(SyncWindow).Select(l => l.Text).ToList();
+        _lines = [];
+        _viewCleared = true;
+        Snackbar.Add("Logs cleared — Refresh reloads history", Severity.Success);
+    }
+
+    public void Dispose()
+    {
+        _stop?.Cancel();
+        _timer?.Dispose();
+    }
+}

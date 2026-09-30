@@ -1,0 +1,143 @@
+@* The Ports popup of the launch form: one row
+   per port pair, the list-editor look, with three columns and a check —
+   host port, container port, Reverse proxy, and the name the port is
+   published under, the container's name by default, editable, greyed while
+   the check is off; the suffix and the domain of Settings → Publishing are
+   added by the agent. Returns the two lists the form keeps: the --publish
+   values and the agent's public names (containerPort:name, one per ticked
+   row). *@
+@inject WslcAgentApi Api
+
+<MudDialog>
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success" OnClick="Save">Save</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <RowsHeader Label="Ports" OnAdd="Add" />
+        <MudPaper Outlined="true" Class="wslc-picker-list pa-2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-1">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary wslc-port-col">Host port</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary wslc-port-col">Container port</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary wslc-port-check">Reverse proxy</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary flex-grow-1">Name</MudText>
+            </MudStack>
+            @for (var index = 0; index < _rows.Count; index++)
+            {
+                var row = _rows[index];
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-1">
+                    <MudTextField T="string" @bind-Value="row.HostPort" Placeholder="8080" Immediate="true" Variant="Variant.Filled" Margin="Margin.Dense" Class="wslc-port-col wslc-mono" />
+                    <MudTextField T="string" @bind-Value="row.ContainerPort" Placeholder="80" Immediate="true" Variant="Variant.Filled" Margin="Margin.Dense" Class="wslc-port-col wslc-mono" />
+                    <MudCheckBox T="bool" @bind-Value="row.Proxy" Size="Size.Small" Dense="true" Class="wslc-port-check" title="Publish this container port on the name" />
+                    <MudTextField T="string" @bind-Value="row.Name" Placeholder="@_defaultName" Immediate="true" Variant="Variant.Filled" Margin="Margin.Dense"
+                                  Disabled="@(!row.Proxy)" Class="flex-grow-1 wslc-mono" autocapitalize="none" autocorrect="off" spellcheck="false" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error" Class="wslc-row-remove" title="Remove row" OnClick="@(() => _rows.Remove(row))" />
+                </MudStack>
+            }
+        </MudPaper>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+            One port pair per row; each row becomes a --publish flag. Reverse proxy publishes the container port at
+            <span class="wslc-mono">https://name@(_suffix).@(_domain)/</span> (the suffix and the domain are Settings → Publishing's),
+            open from anywhere with no login of the agent's in front: tick it only for what asks for its own password.
+            The container has to be on the publishing network, in Networks below; Save refuses otherwise. Saving the
+            form is what publishes.
+        </MudText>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    /// <summary>One row: the port pair as <c>--publish</c> takes it, and whether and as what it is published.</summary>
+    private sealed class PortRow
+    {
+        /// <summary>The host side, with its ip when the value had one (<c>127.0.0.1:8081</c>).</summary>
+        public string HostPort { get; set; } = "";
+
+        public string ContainerPort { get; set; } = "";
+
+        public bool Proxy { get; set; }
+
+        public string Name { get; set; } = "";
+
+        /// <summary><c>[host:]hostPort:containerPort</c>, empty when the row has no ports.</summary>
+        public string Spec => HostPort.Trim().Length > 0 && ContainerPort.Trim().Length > 0 ? $"{HostPort.Trim()}:{ContainerPort.Trim()}" : "";
+
+        /// <summary>The value's container port is what follows the last colon (a <c>/proto</c> stays with it); the rest is the host side.</summary>
+        public static PortRow Parse(string value)
+        {
+            var colon = value.LastIndexOf(':');
+            return colon < 0
+                ? new PortRow { HostPort = value.Trim(), ContainerPort = value.Trim() }
+                : new PortRow { HostPort = value[..colon].Trim(), ContainerPort = value[(colon + 1)..].Trim() };
+        }
+
+        /// <summary>The port alone, without a <c>/tcp</c>, is what a public name is keyed by.</summary>
+        public string PortOnly => ContainerPort.Split('/')[0].Trim();
+    }
+
+    private List<PortRow> _rows = [];
+    private string _defaultName = "";
+    private string _domain = "";
+    private string _suffix = "";
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    /// <summary>The <c>--publish</c> values; the dialog works on its own copy.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<string> Publish { get; set; } = [];
+
+    /// <summary>The agent's public names, <c>containerPort:prefix</c>.</summary>
+    [Parameter] public IReadOnlyList<string> PublicNames { get; set; } = [];
+
+    /// <summary>The container's name, what the default public name starts with.</summary>
+    [Parameter] public string ContainerName { get; set; } = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var names = PublicNames
+            .Select(n => n.Split(':', 2))
+            .Where(p => p.Length == 2)
+            .ToDictionary(p => p[0].Trim(), p => p[1].Trim(), StringComparer.Ordinal);
+        _rows = Publish.Select(PortRow.Parse).ToList();
+        foreach (var row in _rows.Where(r => names.ContainsKey(r.PortOnly)))
+        {
+            row.Proxy = true;
+            row.Name = names[row.PortOnly];
+        }
+
+        _defaultName = ContainerName.Trim();
+        try
+        {
+            var settings = await Api.GetPublishingSettingsAsync();
+            _domain = settings.Domain;
+            _suffix = settings.NameSuffix;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _domain = "…";
+        }
+
+        foreach (var row in _rows.Where(r => r.Name.Length == 0))
+        {
+            row.Name = _defaultName;
+        }
+    }
+
+    private void Add()
+    {
+        _rows.Add(new PortRow { Name = _defaultName });
+        Dialog.StateHasChanged();
+    }
+
+    /// <summary>Blank rows are dropped, as in every list editor; a ticked row without a name is not published.</summary>
+    private void Save()
+    {
+        var kept = _rows.Where(r => r.Spec.Length > 0).ToList();
+        var publish = kept.Select(r => r.Spec).ToList();
+        var names = kept.Where(r => r.Proxy && r.Name.Trim().Length > 0)
+            .Select(r => $"{r.PortOnly}:{r.Name.Trim().ToLowerInvariant()}")
+            .Distinct()
+            .ToList();
+        Dialog.Close(DialogResult.Ok(new PortRowsResult(publish, names)));
+    }
+}

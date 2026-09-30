@@ -1,0 +1,18 @@
+@* A style property with a closed set of values (Size, Variant, Color…):
+   one select over the enum, in Settings → Layout's properties column. *@
+@typeparam T where T : struct, Enum
+
+<MudSelect T="T" Value="Value" ValueChanged="ValueChanged" Label="@Label" Dense="true" Margin="Margin.Dense" Variant="Variant.Filled">
+    @foreach (var value in Enum.GetValues<T>())
+    {
+        <MudSelectItem T="T" Value="value">@value</MudSelectItem>
+    }
+</MudSelect>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    [Parameter] public T Value { get; set; }
+
+    [Parameter] public EventCallback<T> ValueChanged { get; set; }
+}

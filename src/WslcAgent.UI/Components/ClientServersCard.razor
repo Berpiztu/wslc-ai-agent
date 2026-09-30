@@ -1,0 +1,82 @@
+@* A native client's "This client" card: the agents it knows — this machine, the
+   LAN, the public address — and the one it talks to. Choosing another starts the
+   client again on it; its sign-in screen follows when that agent asks for one.
+   It also stands on the sign-in screen, so an agent that does not answer, or
+   whose login is unknown, is never a dead end. Nothing in the browser. *@
+@using WslcAgent.UI.Access
+@inject IClientServers Servers
+@inject ISnackbar Snackbar
+
+@if (Servers.Supported)
+{
+    <MudPaper Outlined="true" Class="@($"pa-4 {Class}")">
+        <MudText Typo="Typo.h6">This client</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+            The agent this app talks to. Add another — an agent on the LAN or the public address — and connect to it;
+            the app starts again on that agent and asks for its login if it needs one.
+        </MudText>
+        <MudList T="string" Dense="true" Class="mb-2">
+            @foreach (var server in Servers.Saved)
+            {
+                var current = string.Equals(server, Servers.Current, StringComparison.OrdinalIgnoreCase);
+                <MudListItem T="string">
+                    @* The address takes the room that is left and scrolls sideways when it
+                       needs more: a long one used to push the two buttons past the card's
+                       right edge on a phone, where they could not be reached at all. *@
+                    <div class="d-flex align-center gap-2 wslc-server-row">
+                        <MudIcon Icon="@(current ? Icons.Material.Filled.RadioButtonChecked : Icons.Material.Filled.RadioButtonUnchecked)"
+                                 Color="@(current ? Color.Success : Color.Default)" Size="Size.Small" />
+                        <MudText Typo="Typo.body2" Class="wslc-mono wslc-server-address">@server</MudText>
+                        @if (current)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Success" Class="wslc-server-note">in use</MudText>
+                        }
+                        else
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Link" Color="Color.Success" Size="Size.Small" Variant="Variant.Filled"
+                                           title="Connect to this agent (the app starts again)" OnClick="@(() => Servers.SwitchTo(server))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" Variant="Variant.Filled"
+                                           title="Forget this agent" OnClick="@(() => Servers.Remove(server))" />
+                        }
+                    </div>
+                </MudListItem>
+            }
+        </MudList>
+        <div class="wslc-field-pick has-note">
+            <MudTextField T="string" @bind-Value="_address" Label="Add an agent" Variant="Variant.Filled" Margin="Margin.Dense" Immediate="true"
+                          HelperTextOnFocus="true" HelperText="Example: https://agent.example.com or http://192.168.1.10:8069" autocomplete="off"
+                          autocapitalize="none" autocorrect="off" spellcheck="false" InputMode="InputMode.url"
+                          OnKeyDown="AddOnEnter" />
+            <MudFab Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" title="Add this agent to the list"
+                    Disabled="@(_address.Trim().Length == 0)" OnClick="Add" />
+        </div>
+    </MudPaper>
+}
+
+@code {
+    private string _address = "";
+
+    [Parameter] public string Class { get; set; } = "";
+
+    private void Add()
+    {
+        try
+        {
+            var saved = Servers.Add(_address);
+            Snackbar.Add($"Added {saved}", Severity.Success);
+            _address = "";
+        }
+        catch (ArgumentException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void AddOnEnter(KeyboardEventArgs key)
+    {
+        if (key.Key == "Enter" && _address.Trim().Length > 0)
+        {
+            Add();
+        }
+    }
+}

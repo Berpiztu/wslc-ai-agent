@@ -1,0 +1,14 @@
+@* The first line of the File transfers card's header (TransfersCardObject;
+   each of the header's three lines an object of its own): its title, as
+   the card's reading labels it. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits TransfersCardObject
+@attribute [DashboardObject("wslc.host-transfers-title", "File transfers title", Group = "System", Subgroup = "System", Icon = Icons.Material.Filled.Title, Columns = 9, Rows = 1, Horizontal = HorizontalAlign.Left, CardOnly = true)]
+@* Its one line a part, so its colour and weight are its own to change. *@
+@attribute [DashboardObjectPart("label", "Title")]
+
+<div class="@ReadingClass">
+    <ReadingSummary Label="File transfers" Value="" ValueShown="false" HintShown="false" />
+</div>

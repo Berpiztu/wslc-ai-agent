@@ -1,0 +1,25 @@
+@* A volume's header: the Volumes list's card header — its name,
+   what stands under it, the avatar green when something uses it, and its
+   "in use" chip — standing alone. It fills its cells with the header's tone, and
+   its type size scales it. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits VolumeObject
+@attribute [DashboardObject("wslc.volume-header", "Volume header", Group = "Volume", Subgroup = "User", Icon = Icons.Material.Filled.AccountBox, Source = VolumeSourceFamily.FamilyKey, Columns = 16, Rows = 4, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Left, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both)]
+
+@if (Volume is { } r)
+{
+    <div class="@SectionClass("wslc-card-part-summary")">
+        <EntityCardPart>
+            <EntityCardHeader Title="@r.Name" Subtitle="@r.Driver" AvatarColor="@(r.InUse ? Color.Success : Color.Default)" Key="@r.Name">
+                <HeaderActions>
+                    @if (r.InUse)
+                    {
+                        <StateChip State="in use" />
+                    }
+                </HeaderActions>
+            </EntityCardHeader>
+        </EntityCardPart>
+    </div>
+}

@@ -1,0 +1,23 @@
+@* A volume's own verbs: view files, the menu and remove, the group the
+   Volumes list's card keeps at the right end of its actions row, standing
+   alone. Its menu holds what the shortcuts do, as a table row's does, since
+   the shortcuts may not be on the dashboard. It stands at the right until
+   another alignment is chosen. In design the canvas makes it inert. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits VolumeObject
+@attribute [DashboardObject("wslc.volume-verbs", "Volume verbs", Group = "Volume", Subgroup = "User", Icon = Icons.Material.Filled.SmartButton, Source = VolumeSourceFamily.FamilyKey, Columns = 6, Rows = 2, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Right, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both)]
+
+@if (Volume is { } r)
+{
+    <div class="@SectionClass()">
+        <EntityCardPart>
+            <MudCardActions Class="py-1">
+                <VerbTaps>
+                    <VolumeActions Volume="r" Changed="@(() => Volumes.RefreshAsync())" />
+                </VerbTaps>
+            </MudCardActions>
+        </EntityCardPart>
+    </div>
+}

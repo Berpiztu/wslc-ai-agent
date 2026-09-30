@@ -1,0 +1,26 @@
+@* The lines of the File transfers card (TransfersCardObject):
+   every file travelling in or out of the containers the
+   card's header filters to, the container named on each line; a cross on
+   every line — the agent's are cancelled after the usual confirmation, the
+   ones still waiting here are taken out of the queue. The agent keeps the
+   transfers whatever the session, and this client's queue says at once when
+   it changes. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits TransfersCardObject
+@attribute [DashboardObject("wslc.host-transfers-lines", "File transfers lines", Group = "System", Subgroup = "System", Icon = Icons.Material.Filled.ImportExport, Columns = 16, Rows = 8, Fills = true, Horizontal = HorizontalAlign.Left, Vertical = VerticalAlign.Top, CardOnly = true)]
+
+<div class="@($"{TypeClass} wslc-dash-transfers")">
+    <TransfersList Transfers="Shown" Where="true" Everyone="true" Names="NameOf" Head="false"
+                   EmptyText="@(Filter.Length > 0 ? $"Nothing is moving in or out of {NameOf(Filter)}." : "Nothing is moving in or out of any container.")"
+                   Cancel="CancelAsync" Dismiss="DismissAsync" Drop="DropAsync" />
+</div>
+
+@code {
+    private Task CancelAsync(ContainerTransfer transfer) => TransferFlow.CancelAsync(Dialogs, Api, Snackbar, Mine, [transfer]);
+
+    private Task DismissAsync(ContainerTransfer transfer) => TransferFlow.DismissAsync(Api, Snackbar, Mine, [transfer]);
+
+    private Task DropAsync(ContainerTransfer waiting) => TransferFlow.DropAsync(Dialogs, Mine, [waiting]);
+}

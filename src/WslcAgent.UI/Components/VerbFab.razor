@@ -1,0 +1,35 @@
+@* One verb of a page in the centre button's list: a filled, extended MudFab
+   — the glyph and its word — in the colour by meaning. Every page verb goes through this, so the list
+   reads the same on every screen; running the verb closes the list, through
+   the cascaded VerbsMenu. *@
+
+<MudFab Variant="Variant.Filled" Color="Color" StartIcon="@StartIcon" Label="@Label" Size="Size.Medium"
+        Disabled="Disabled" Href="@Href" Target="@Target" title="@Title" aria-label="@Title" OnClick="ClickAsync" />
+
+@code {
+    [CascadingParameter] private VerbsMenu? Menu { get; set; }
+
+    [Parameter, EditorRequired] public string StartIcon { get; set; } = "";
+
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    /// <summary>Colour by meaning: none for a verb, Primary for the one that creates, Success for Run.</summary>
+    [Parameter] public Color Color { get; set; } = Color.Default;
+
+    [Parameter] public EventCallback OnClick { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>A verb that opens a page elsewhere (Hub) is a link, not a click.</summary>
+    [Parameter] public string? Href { get; set; }
+
+    [Parameter] public string? Target { get; set; }
+
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    private async Task ClickAsync()
+    {
+        Menu?.Close();
+        await OnClick.InvokeAsync();
+    }
+}

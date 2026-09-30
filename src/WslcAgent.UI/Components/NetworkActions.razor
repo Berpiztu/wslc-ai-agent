@@ -1,0 +1,28 @@
+@* Per-network actions: [🔗 connect] [⛓ disconnect] [🔍 view & edit] [remove]. *@
+@inherits EntityActionsBase
+@using WslcAgent.UI.Components.Dialogs
+
+<MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center">
+    <MudIconButton Icon="@Icons.Material.Filled.Link" Size="Size.Small" title="Connect container" Disabled="Busy" OnClick="@(() => AttachAsync(disconnect: false))" />
+    <MudIconButton Icon="@Icons.Material.Filled.LinkOff" Size="Size.Small" title="Disconnect container" Disabled="Busy" OnClick="@(() => AttachAsync(disconnect: true))" />
+    <MudIconButton Icon="@Icons.Material.Filled.EditNote" Size="Size.Small" title="View &amp; edit" Disabled="Busy"
+                   OnClick="@(() => OpenAsync<NetworkDetailsDialog>($"View & edit — {Network.Name}", new DialogParameters<NetworkDetailsDialog> { { d => d.Network, Network.Name } }))" />
+    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="Remove network" Disabled="Busy"
+                   OnClick="@(() => RemoveAsync("network", Network.Name, ct => Api.RemoveNetworkAsync(Network.Name, ct)))" />
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public NetworkSummary Network { get; set; } = default!;
+
+    protected override string Key => Network.Name;
+
+    private Task AttachAsync(bool disconnect) =>
+        OpenAsync<NetworkContainerDialog>(
+            disconnect ? "Disconnect container" : "Connect container",
+            new DialogParameters<NetworkContainerDialog>
+            {
+                { d => d.Network, Network.Name },
+                { d => d.AllowsStaticIp, Network.AllowsStaticIp },
+                { d => d.Disconnect, disconnect },
+            });
+}

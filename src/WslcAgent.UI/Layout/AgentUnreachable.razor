@@ -1,0 +1,41 @@
+@inject HttpClient Http
+@inject WslcAgent.UI.Access.IClientServers Servers
+@inject WslcAgent.UI.Lifetime.IClientLifetime Lifetime
+@inject NavigationManager Navigation
+
+@* The agent is not answering: what the application shows instead of itself,
+   whether it went while the user worked (MainLayout's veil) or was already
+   gone when the client opened (nothing of the
+   application is drawn around the failure). It names the address being asked,
+   since choosing the wrong one is the usual reason, and offers the only things
+   that can be done about it: a native client goes to the screen where the
+   agent is chosen, a browser page loads again, and either can close. *@
+<MudPaper Class="pa-6" Elevation="4">
+    <MudStack AlignItems="AlignItems.Center" Spacing="2">
+        <MudProgressCircular Color="Color.Info" Indeterminate="true" />
+        <MudText Typo="Typo.subtitle1" role="status">Waiting for the agent…</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">@Http.BaseAddress</MudText>
+        <MudStack Row="true" Spacing="2" Class="mt-2">
+            @if (Servers.Supported)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="ChangeAgent" title="Choose another agent">Change agent</MudButton>
+            }
+            else
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="Reload" title="Load the page again">Reload</MudButton>
+            }
+            @if (Lifetime.Supported)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="Lifetime.Close" title="Close the application">Close</MudButton>
+            }
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@code {
+    /// <summary>The sign-in screen holds the native client's chooser of agents; it has a layout of its own, so no veil follows it there.</summary>
+    private void ChangeAgent() => Navigation.NavigateTo("login");
+
+    /// <summary>A browser page can neither close its tab nor choose another agent: it loads again, from the agent if it is back.</summary>
+    private void Reload() => Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+}

@@ -1,0 +1,173 @@
+@* A window floating over the dashboard while it is designed: the properties
+   window and the toolbox, which can be hidden. Outlined as the fields are, its name sits
+   on its top line, in the gap the line leaves for it, and its verbs on its
+   bottom line at its right. The top line moves it, so it is put where it
+   hides nothing being worked on. One that can be hidden has a key on its top
+   line that folds it into a button of one cell where it stood; a press on
+   the button opens it again. One that can be closed has a key there that
+   closes it (the dashboard's zoom, out of design). *@
+@inject DashboardInterop Interop
+
+@if (_hidden)
+{
+    @* The button moves as the window does: carried, it goes where it is let go, and the window opens there; a
+       press let go without moving opens it. *@
+    <div class="@($"bz-dash-window bz-dash-window-folded {Class}")" @ref="_folded" style="@Position"
+         @onpointerdown="@(pointer => PressAsync(_folded, _folded, pointer))" @onpointermove="Move" @onpointerup="ReleaseFolded">
+        @* Filled, so the button is seen on any card it stands over (outlined,
+           it had next to no ground), and without
+           MudBlazor's drop shadow, which read as a thin black edge on the magenta. *@
+        <MudIconButton Icon="@FoldedIcon" Color="FoldedColor" Variant="Variant.Filled" DropShadow="false" Class="bz-dash-window-unfold"
+                       title="@($"{Name}: press to show it, drag to move it")" aria-label="@($"Show {Name}")" OnClick="@(() => _hidden = _carried)" />
+    </div>
+}
+else
+{
+    <div class="@(_at is null && Anchor is not null ? $"bz-dash-window bz-dash-window-placing {Class}" : $"bz-dash-window {Class}")" @ref="_window" style="@Position">
+        @* Outlined as the fields are, and raised as MudBlazor raises its
+           popovers: MudPaper leaves its Elevation off an
+           outlined paper, so the elevation is MudBlazor's own class. *@
+        <MudPaper Outlined="true" Class="bz-dash-window-frame mud-elevation-8 pa-2 pt-4 pb-4">
+            <div class="bz-dash-window-title" @ref="_title" title="Drag to move the window"
+                 @onpointerdown="@(pointer => PressAsync(_window, _title, pointer))" @onpointermove="Move" @onpointerup="Release">
+                <MudText Typo="Typo.caption" Class="bz-dash-window-name">@Name</MudText>
+                @if (Hideable)
+                {
+                    <div class="bz-dash-window-hide" @onpointerdown:stopPropagation="true">
+                        <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small" title="@($"Hide {Name}")"
+                                       aria-label="@($"Hide {Name}")" OnClick="@(() => _hidden = true)" />
+                    </div>
+                }
+                else if (OnClose.HasDelegate)
+                {
+                    <div class="bz-dash-window-hide" @onpointerdown:stopPropagation="true">
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" title="@($"Close {Name}")"
+                                       aria-label="@($"Close {Name}")" OnClick="OnClose" />
+                    </div>
+                }
+            </div>
+            <div class="bz-dash-window-body">@ChildContent</div>
+            @if (Verbs is not null)
+            {
+                <div class="bz-dash-window-verbs">@Verbs</div>
+            }
+        </MudPaper>
+    </div>
+}
+
+@code {
+    /// <summary>How far a press may wander and still be a press, not a move.</summary>
+    private const double TapDistance = 4;
+
+    private ElementReference _window;
+    private ElementReference _title;
+    private ElementReference _folded;
+
+    /// <summary>The move under way has gone past a press's wander.</summary>
+    private bool _carried;
+
+    /// <summary>Folded into its button.</summary>
+    private bool _hidden;
+
+    /// <summary>Where the window stands once it has been placed or moved; until then the stylesheet places it.</summary>
+    private (double Left, double Top)? _at;
+
+    /// <summary>A move by the title under way: where the window and the pointer were when it began.</summary>
+    private (double Left, double Top, double X, double Y)? _moving;
+
+    /// <summary>What its top line calls it.</summary>
+    [Parameter, EditorRequired] public string Name { get; set; } = "";
+
+    /// <summary>Its own class: its width, and where the stylesheet places it until it is moved.</summary>
+    [Parameter] public string Class { get; set; } = "";
+
+    [Parameter, EditorRequired] public RenderFragment ChildContent { get; set; } = default!;
+
+    /// <summary>The verbs on its bottom line, at its right.</summary>
+    [Parameter] public RenderFragment? Verbs { get; set; }
+
+    /// <summary>It can be folded into a button of one cell.</summary>
+    [Parameter] public bool Hideable { get; set; }
+
+    /// <summary>
+    /// One that cannot be folded may be closed instead, by a key at the same
+    /// place on its top line (the dashboard's zoom): whoever shows it takes it away.
+    /// </summary>
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>The folded button's glyph.</summary>
+    [Parameter] public string FoldedIcon { get; set; } = Icons.Material.Filled.Widgets;
+
+    /// <summary>The folded button's colour: the toolbox's the theme's magenta, told from the green buttons it may stand beside.</summary>
+    [Parameter] public Color FoldedColor { get; set; } = Color.Success;
+
+    /// <summary>One that can be hidden opens folded into its button, and is opened when it is wanted (the toolbox).</summary>
+    [Parameter] public bool StartsFolded { get; set; }
+
+    protected override void OnInitialized() => _hidden = Hideable && StartsFolded;
+
+    /// <summary>
+    /// The element whose top-left corner it first stands in, a little inside
+    /// it (the canvas's frame, for the toolbox); none leaves it where the
+    /// stylesheet puts it. A function, since the element is drawn with it.
+    /// </summary>
+    [Parameter] public Func<ElementReference>? Anchor { get; set; }
+
+    private string? Position => _at is { } at
+        ? FormattableString.Invariant($"left: {at.Left:0}px; top: {at.Top:0}px; right: auto")
+        : null;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && Anchor is { } anchor)
+        {
+            var box = await Interop.MeasureAsync(anchor());
+            _at = (box.Left + 8, box.Top + 8);
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>A press on what moves the window, or the button it folds into: where it stands and where the pointer was, the pointer kept.</summary>
+    private async Task PressAsync(ElementReference moved, ElementReference held, PointerEventArgs pointer)
+    {
+        if (pointer.Button != 0)
+        {
+            return;
+        }
+
+        var box = await Interop.MeasureAsync(moved);
+        _moving = (box.Left, box.Top, pointer.ClientX, pointer.ClientY);
+        _carried = false;
+        await Interop.CaptureAsync(held, pointer.PointerId);
+    }
+
+    /// <summary>It follows the pointer once the pointer has gone further than a press wanders.</summary>
+    private void Move(PointerEventArgs pointer)
+    {
+        if (_moving is not { } from)
+        {
+            return;
+        }
+
+        var dx = pointer.ClientX - from.X;
+        var dy = pointer.ClientY - from.Y;
+        if (_carried || Math.Abs(dx) + Math.Abs(dy) > TapDistance)
+        {
+            _carried = true;
+            _at = (from.Left + dx, from.Top + dy);
+        }
+    }
+
+    private void Release() => _moving = null;
+
+    /// <summary>The folded button let go: where it was carried to, or, pressed without moving, the window opens.</summary>
+    private void ReleaseFolded()
+    {
+        var tapped = _moving is not null && !_carried;
+        _moving = null;
+        if (tapped)
+        {
+            _hidden = false;
+        }
+    }
+}

@@ -1,0 +1,25 @@
+@* A value written in: a text or a
+   number, outlined, its word as its own label, no note under it, applied as
+   it is typed. One of the dashboard's three fields — this one, ChoiceField
+   and PickerField — which every property is made of, so they all look and
+   sit alike; the grid they stand in (berpiztu-dashboard.css, .bz-dash-props)
+   gives them their cells. *@
+@typeparam T
+
+<MudTextField T="T" Value="Value" ValueChanged="ValueChanged" Label="@Label" Immediate="true"
+              Margin="Margin.Dense" Variant="Variant.Outlined" HelperTextOnFocus="false"
+              title="@Title" Class="@Class" />
+
+@code {
+    [Parameter] public T Value { get; set; } = default!;
+
+    [Parameter] public EventCallback<T> ValueChanged { get; set; }
+
+    /// <summary>The field's word, inside its border.</summary>
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    /// <summary>The tooltip: what the value is.</summary>
+    [Parameter] public string Title { get; set; } = "";
+
+    [Parameter] public string? Class { get; set; }
+}

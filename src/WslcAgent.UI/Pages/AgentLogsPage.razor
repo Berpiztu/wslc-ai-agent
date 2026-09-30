@@ -1,0 +1,991 @@
+@page "/logs"
+@implements IDisposable
+@inject WslcAgentApi Api
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject IJSRuntime Js
+@inject LogsPreference Preference
+@inject AgentLink Link
+
+@* The Logs page as a list page, holding the CLI activity too: the
+   selection's count in the title bar (no search box: typing in it sent the
+   page back to its start at every letter), Delete all beside it; one header
+   row, the entry count at the left and the
+   tools at the right — Select all, Clear, Expand all (Collapse all once every
+   entry is open), the level filter, Refresh; then two rows fill the page. The
+   first is the grid every list uses, pager and all: every entry the agent
+   will hand over is loaded, the pager at the bottom walks through them 50 at
+   a time as on Containers, and the headers sort, so the reader orders and
+   pages the log as they like. The second, half the height until the divider
+   is moved, is the
+   strip of what is happening: one line per wslc command, the latest at the
+   bottom as in a chat — its time, its state, how long it took, its title and
+   its line — the running ones included; it follows its end while the reader
+   is there. In the grid, a row that has more than its own line
+   has a +/−: a stack trace, or a wslc command, which opens the
+   way the Activity list opens it — its type and title, how it ended, how long it
+   took, the line itself and what it printed. A command still running is a row
+   too, listed as RUNNING until the entry that says how it ended takes its
+   place, under the same key, so an open row stays open through the change.
+   Time, level, source and message keep their colours, the level and the
+   message taking the level's colour from debug up. What is shown lives in the
+   URL: the level, the page, the types the list hides. The
+   log is a log: its level and its type filters to find things, and — since
+   two rails of eight did not fit the height — its controls across that same row
+   (LogsControls), the Activity list's twin, closing it from the right: its
+   Autorefresh last, on until switched off, holding still while the reader
+   is on the grid so what is being read never moves; its
+   type filters before it, so a search can be narrowed to the commands of one
+   kind; the level before those. At the left, beside the count: Copy, which
+   takes the ticked entries in the agent's own text form, or every entry
+   shown when none is ticked; Delete of the ticked entries. The Activity
+   list below is what is live: its own header row — the count with one +/−
+   beside it, as the grid's header has, then, at the right, its controls:
+   the list's filters as one group (All, then a toggle per type; pressed,
+   that type is listed) and its Autorefresh, a ring with a round button
+   inside and no box, the size of the square buttons: pressed, the ring goes
+   round and the list follows its end the way a chat does — turning it on
+   jumps to the last line, each reload keeps the end in view — and while the
+   pointer or a finger is on the list, or a command is open there, the ring
+   stands still and the list stays put, until they leave. The two
+   Autorefreshes are one read every two seconds; each window takes it only
+   with its own switch on. *@
+<OptionalShell Shell="@(!Embedded)" Title="@Title">
+    <TopbarNav>
+        @* The count alone: Delete of the ticked entries is the bin beside the
+           grid's count, and a second one up here said the same thing twice. *@
+        <BulkBar Count="_selected.Count" />
+    </TopbarNav>
+    <Verbs>
+        <VerbFab StartIcon="@Icons.Material.Filled.DeleteSweep" Label="Delete all" Color="Color.Error" OnClick="DeleteAllAsync"
+                 Disabled="@(_entries is null || _entries.Count == 0)" Title="Delete every entry of the agent's log, the ones shown and the ones past them alike" />
+    </Verbs>
+    <ChildContent>
+        @Above
+        <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap" Spacing="2" Class="wslc-toolbar mb-1 flex-shrink-0">
+            @* The row has the Activity list's shape: at the left the
+               title and the count — how many of the loaded entries the level and the
+               search leave, "23 of 24 entries", the count alone when they leave all —
+               then the spare width, then at the right the level and the two verbs.
+               No Select all and no Clear: the grid's header tick does both. No
+               Expand all: the +/− in the grid's header, beside that tick, opens every
+               row with something to show and closes them again. *@
+            @* The order, from the right: the ring, the type
+               filters, the level; at the left the count with the verbs beside it —
+               Copy, Delete of the ticked entries — the spare width between. No Refresh:
+               the grid reads again on its own Autorefresh, on a link that came back,
+               and after a delete, so no button is needed for it. *@
+            <PageStats>
+                <PageStat Label="Log" Value="@EntriesText" Large="true" />
+                <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Info" Size="Size.Small" Variant="Variant.Filled" Class="align-self-center" OnClick="CopyAsync" Disabled="Visible.Count == 0" title="@CopyTitle" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" Variant="Variant.Filled" Class="align-self-center" OnClick="DeleteSelectedAsync" Disabled="Deletable.Count == 0"
+                               title="@(Deletable.Count == _selected.Count ? "Delete the ticked entries" : "Delete the ticked entries; a command still running is not in the log yet")" />
+            </PageStats>
+            <div class="wslc-action-level">
+                <MudSelect T="string" Value="Level" ValueChanged="SelectLevel" Variant="Variant.Filled" Margin="Margin.Dense" Dense="true" aria-label="Log level filter">
+                    @foreach (var (value, label) in Levels)
+                    {
+                        <MudSelectItem T="string" Value="@value">@label</MudSelectItem>
+                    }
+                </MudSelect>
+            </div>
+            @* The grid's controls close the row: its type filters, then its Autorefresh
+               at the very end. With that off the grid never reloads on its own, so what
+               is being read never moves. *@
+            <LogsControls Follow="_followLog" Held="GridHeld" FollowTitle="@LogFollowTitle" FollowChanged="ToggleFollowLog"
+                          Hidden="_hiddenLog" Count="CountLog" ToggleAll="ToggleAllKindsLog" ToggleKind="ToggleKindLog" />
+        </MudStack>
+
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-2 flex-shrink-0">@_error</MudAlert>
+        }
+
+        @* Two rows, each an action window of its own — main column and rail — one
+           above the other in the split panel, so each keeps the verbs that are
+           its own: the grid's filters, Autorefresh and Copy above; the Activity
+           list's Autorefresh below. *@
+        <div class="wslc-fill" @onpointerup="RememberDividerAsync" @onkeyup="RememberDividerAsync">
+                @* MudBlazor's split panel between the two rows: the divider drags up and
+                   down, so a reader watching the strip can give it the room, and a double
+                   click puts it back where it opened. It opens where it was left, and at
+                   half and half on a device where it never was moved. *@
+                <MudSplitPanel @ref="_split" Horizontal="true" Transparent="true" Elevation="0" MinPanelSize="MinPane" PanelGap="PaneGap" ResetOnDoubleClick="true"
+                               FirstPanelInitialSize="@(Halved ? null : Preference.Grid)" Class="wslc-fill"
+                               ClassFirstPanel="wslc-split-pane wslc-split-top" ClassSecondPanel="wslc-split-pane" ClassDivider="wslc-split-divider">
+                <FirstPanel>
+                @* MudBlazor's own grid, as its docs draw it: virtualised — the rows in view asked for as the reader
+                   scrolls, no pager, a measured row height — and the row detail view its
+                   HierarchyColumn gives, with the +/− in the header that opens and closes
+                   every row (EnableHeaderToggle), the button greyed on a row with nothing
+                   to show. Nothing of the page's own in front of it: the columns stay
+                   where they are when a row opens. *@
+                @* A reader on the grid — pointer over it, finger on it, or a row open —
+                   holds it, as the Activity list is held: its Autorefresh waits and its
+                   ring stands still, and both pick up again when they leave. *@
+                <div id="@GridId" class="wslc-fill" @onpointerenter="@(() => _pointerOnGrid = true)" @onpointerleave="@(() => _pointerOnGrid = false)"
+                     @ontouchstart="@(() => _fingerOnGrid = true)" @ontouchend="@(() => _fingerOnGrid = false)" @ontouchcancel="@(() => _fingerOnGrid = false)">
+                <ListGrid TItem="AgentLogEntry" Items="Visible" Virtualize="true" ItemSize="RowHeight"
+                          Loading="_shown is null" EmptyText="@EmptyText" MultiSelection="true" @bind-SelectedItems="_selected" RowClassFunc="RowClass">
+                    <Columns>
+                        <HierarchyColumn T="AgentLogEntry" EnableHeaderToggle="true" ButtonDisabledFunc="@(entry => !HasDetail(entry))"
+                                         HeaderClass="@GridColumn.Toggle" />
+                        <SelectColumn T="AgentLogEntry" Size="Size.Small" StickyLeft="true" HeaderClass="@GridColumn.Select" CellClass="@GridColumn.Select" />
+                        <PropertyColumn T="AgentLogEntry" TProperty="string" Property="e => e.Timestamp" Title="Time" HeaderClass="@GridColumn.Width(19)" CellClass="@GridColumn.Width(19)">
+                            <CellTemplate><span class="wslc-log-time">@(context.Item.DisplayTimestamp.Length > 0 ? context.Item.DisplayTimestamp : "n/a")</span></CellTemplate>
+                        </PropertyColumn>
+                        <PropertyColumn T="AgentLogEntry" TProperty="string" Property="e => e.Level" Title="Level" HeaderClass="@GridColumn.Width(5)" CellClass="@GridColumn.Width(5)">
+                            @* Three letters, the whole word in the tooltip, to be narrower:
+                               WARNING in bold is 9.9 characters of Inter and was
+                               cut short in the 8 it had; WRN is 4.9. *@
+                            <CellTemplate><span class="wslc-log-level" title="@context.Item.Level">@ShortLevel(context.Item.Level)</span></CellTemplate>
+                        </PropertyColumn>
+                        @* Message before Source: the source says the same
+                           thing row after row, and on a phone what has to fit is the message.
+                           Message keeps the spare width wherever it stands (the stretch is a
+                           class, not the last column). *@
+                        <PropertyColumn T="AgentLogEntry" TProperty="string" Property="e => e.Message" Title="Message" HeaderClass="@GridColumn.Stretch(26)" CellClass="@GridColumn.Stretch(26)">
+                            @* A command's row shows its arguments: the source column already says
+                               it is wslc, and the word in front of every one of them said nothing. *@
+                            <CellTemplate><span class="wslc-log-message" title="@context.Item.Message">@(context.Item.Command is { } command ? Arguments(command) : context.Item.Message)</span></CellTemplate>
+                        </PropertyColumn>
+                        <PropertyColumn T="AgentLogEntry" TProperty="string" Property="e => e.Source" Title="Source" HeaderClass="@GridColumn.Width(29)" CellClass="@GridColumn.Width(29)">
+                            <CellTemplate><span class="wslc-log-source" title="@context.Item.Source">@context.Item.Source</span></CellTemplate>
+                        </PropertyColumn>
+                    </Columns>
+                    <ChildRowContent>
+                        <OpenRowMark Key="@context.Item.Key" Opened="RowOpened" Closed="RowClosed" />
+                        @if (context.Item.Command is { } command)
+                        {
+                            @* CLI Activity's row and its disclosure, under the log line that records
+                               the command: type, title, status, time taken, session, start and exit;
+                               then the labels a step in and what they label a step further. *@
+                            <div class="wslc-cli-detail">
+                                <div class="wslc-cli-line">
+                                    <MudText Typo="Typo.body2" Class="wslc-cli-kind flex-shrink-0">@CliKinds.Label(command.Kind)</MudText>
+                                    <MudText Typo="Typo.body1" Class="wslc-cli-title text-truncate" title="@command.Title">@command.Title</MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="@CliActivityList.StatusColor(command.Status)" Variant="Variant.Text" Class="ma-0">@CliOutput.StatusLabel(command.Status)</MudChip>
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary flex-shrink-0">@CliOutput.Duration(command.Duration, command.Status)</MudText>
+                                    @if (command.Session.Length > 0)
+                                    {
+                                        <MudText Typo="Typo.body2" Class="wslc-log-sep flex-shrink-0">@command.Session ·</MudText>
+                                    }
+                                    <MudText Typo="Typo.body2" Class="wslc-log-time flex-shrink-0">@CliOutput.Clock(command.StartedAt)</MudText>
+                                    @if (command.Status != "success" && command.ExitCode is { } exitCode)
+                                    {
+                                        <MudText Typo="Typo.body2" Class="wslc-cli-exit flex-shrink-0">· exit @exitCode</MudText>
+                                    }
+                                </div>
+                                @* The list is abridged: the output is read by id when the row opens. *@
+                                @if (Full(context.Item) is { Command: { } whole })
+                                {
+                                    <CliCommandDetail Command="whole" />
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary wslc-cli-block">Reading the output…</MudText>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <pre class="wslc-logs-output wslc-logs-pre wslc-logs-wrap wslc-log-details">@string.Join('\n', context.Item.Trace)</pre>
+                        }
+                    </ChildRowContent>
+                </ListGrid>
+                </div>
+                </FirstPanel>
+                <SecondPanel>
+                @* The strip: CLI Activity's own list — what the agent is running and has
+                   just run, a row each that opens on its output, the log's own grid — the latest at
+                   the bottom, held at its end while the reader is there. Its controls go
+                   in its header row: its Autorefresh — the ring stands still while the
+                   reader holds the list — and its type filters. *@
+                <CliActivityList Id="@StripId" Commands="Strip" Detail="FullCommand" HeldChanged="OnListHeldChanged">
+                    <Controls>
+                        <LogsControls Follow="_followCli" Held="_listHeld" FollowTitle="@CliFollowTitle" FollowChanged="ToggleFollowCliAsync"
+                                      Hidden="_hidden" Count="Count" ToggleAll="ToggleAllKinds" ToggleKind="ToggleKind" />
+                    </Controls>
+                </CliActivityList>
+                </SecondPanel>
+                </MudSplitPanel>
+        </div>
+    </ChildContent>
+</OptionalShell>
+
+@code {
+    /// <summary>The title bar's word: Logs, or the page that shows the log beneath something else (the agent's own, AgentPage).</summary>
+    [Parameter] public string Title { get; set; } = "Logs";
+
+    /// <summary>
+    /// The log inside another screen, a dashboard's object (AgentLog): its
+    /// content alone, filling what it is given; the title bar's count and
+    /// Delete all stay with the Logs page.
+    /// </summary>
+    [Parameter] public bool Embedded { get; set; }
+
+    /// <summary>What stands over the log, on a page that shows it beneath something else: the agent's System card (AgentPage).</summary>
+    [Parameter] public RenderFragment? Above { get; set; }
+
+    /// <summary>
+    /// The log beneath or inside something else opens with the entries and the
+    /// Activity half and half (the Activity in sight), and its divider is its
+    /// own, the Logs page's left as it was.
+    /// </summary>
+    private bool Halved => Embedded || Above is not null;
+
+    /// <summary>Everything the agent hands over: its cap, not a tail of 500, so the page holds the whole log the API can give.</summary>
+    private const int Tail = 5000;
+
+    /// <summary>What the page shows first, the tail: on screen at once, while the rest is still on its way.</summary>
+    private const int FirstTail = 500;
+
+    /// <summary>
+    /// How many commands the Activity list draws, CLI Activity's own capacity:
+    /// each is a panel of its own, and five thousand of them froze the page.
+    /// </summary>
+    private const int StripCapacity = 200;
+
+    /// <summary>The level a command still running is listed under, the agent's <c>RUNNING</c>.</summary>
+    private const string RunningLevel = "RUNNING";
+
+    /// <summary>A level in the three letters a log reader knows it by; one this page does not name keeps its own.</summary>
+    private static string ShortLevel(string level) => level switch
+    {
+        "INFO" => "INF",
+        "DEBUG" => "DBG",
+        "WARNING" => "WRN",
+        "ERROR" => "ERR",
+        RunningLevel => "RUN",
+        _ => level,
+    };
+
+    /// <summary>CLI Activity reloaded every two seconds; Autorefresh does the same here while it is on.</summary>
+    private static readonly TimeSpan RefreshEvery = TimeSpan.FromSeconds(2);
+
+    private static readonly (string Value, string Label)[] Levels =
+    [
+        ("all", "All"), ("DEBUG", "Debug"), ("INFO", "Info"), ("WARNING", "Warning"), ("ERROR", "Error"), (RunningLevel, "Running"),
+    ];
+
+    private HashSet<AgentLogEntry> _selected = [];
+    private IReadOnlySet<string> _hidden = new HashSet<string>();
+    private IReadOnlySet<string> _hiddenLog = new HashSet<string>();
+    /// <summary>The latest read: what the Activity list shows, and the type counts.</summary>
+    private IReadOnlyList<AgentLogEntry>? _entries;
+
+    /// <summary>What the grid shows: the read it was given last — the first load, Refresh, a delete — while <see cref="_entries"/> keeps arriving for the list; so what is being read never moves.</summary>
+    private IReadOnlyList<AgentLogEntry>? _shown;
+    private IReadOnlyList<AgentLogEntry> _visible = [];
+    private (IReadOnlyList<AgentLogEntry>? Entries, string Level, string? Hidden) _visibleOf;
+    /// <summary>
+    /// What the Activity list is made of, as the grid has <see cref="_shown"/>: every
+    /// full read, and the polls only while its own Autorefresh is on. Off, the list
+    /// stays as it is whatever the grid's switch says.
+    /// </summary>
+    private IReadOnlyList<AgentLogEntry>? _stripEntries;
+    private IReadOnlyList<CliTraceEntry> _strip = [];
+    private (IReadOnlyList<AgentLogEntry>? Entries, string? Hidden) _stripOf;
+    private MudSplitPanel? _split;
+
+    /// <summary>The entries read whole, by id: a row or a panel opened, a copy. The list itself is abridged.</summary>
+    private readonly Dictionary<int, AgentLogEntry> _full = [];
+
+    /// <summary>The ids on their way, so a row drawn twice asks once.</summary>
+    private readonly HashSet<int> _fetching = [];
+    private bool _jumpToEnd;
+    private bool _followEnd;
+
+    /// <summary>The grid goes to its last row on the next draw: Autorefresh turned on, or new rows while it is on and nobody holds the grid.</summary>
+    private bool _gridToEnd;
+    private bool _followCli;
+    private bool _followLog;
+    private bool _listHeld;
+
+    /// <summary>Neither row can be dragged under this height, in pixels: the Activity header row and two of its lines; a header and a row of the grid.</summary>
+    private const int MinPane = 96;
+
+    /// <summary>The divider's height, in pixels.</summary>
+    private const int PaneGap = 6;
+    private bool _loading;
+    private string? _error;
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _stop;
+
+    /// <summary>The types the Activity list's rail hides, comma-separated; absent, every type is listed.</summary>
+    [SupplyParameterFromQuery(Name = "hide")] public string? HideQuery { get; set; }
+
+    /// <summary>The types the grid's rail hides, the same way: the grid filters by type on its own.</summary>
+    [SupplyParameterFromQuery(Name = "hidelog")] public string? HideLogQuery { get; set; }
+
+    /// <summary>The level shown lives in the URL, so back returns to the previous filter.</summary>
+    [SupplyParameterFromQuery(Name = "level")] public string? LevelQuery { get; set; }
+
+    /// <summary>The strip's box, for the scroll helper.</summary>
+    private const string StripId = "agent-logs-strip";
+
+    /// <summary>The grid's box, for the scroll helper, which scrolls the table inside it.</summary>
+    private const string GridId = "agent-logs-grid";
+
+    private string Level => Levels.Any(l => l.Value == LevelQuery) ? LevelQuery! : "all";
+
+    /// <summary>
+    /// The strip's commands: the last <see cref="StripCapacity"/> wslc commands
+    /// loaded, after the type toggles and nothing else — the strip is what is
+    /// happening, not what is being searched for; the grid holds the rest.
+    /// Cached like <see cref="Visible"/>.
+    /// <para>
+    /// In the order they started, running ones among them. Running ones
+    /// used to come last: the agent's event reader, which never ends, stood
+    /// at the bottom for good, and a short
+    /// command went in after it while it ran and before it once it ended — the
+    /// list moved a row up and back every two seconds. By its start a running
+    /// command already stands where its finished entry will, under the same
+    /// key, and the list only grows at the end.
+    /// </para>
+    /// </summary>
+    private IReadOnlyList<CliTraceEntry> Strip
+    {
+        get
+        {
+            var of = (_stripEntries, HideQuery);
+            if (_stripOf != of)
+            {
+                _strip = _stripEntries is null
+                    ? []
+                    : _stripEntries.Where(e => e.Command is not null && !_hidden.Contains(e.Kind)).Select(e => e.Command!).OrderBy(command => command.StartedAt).TakeLast(StripCapacity).ToList();
+                _stripOf = of;
+            }
+
+            return _strip;
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        _hidden = CliKinds.Parse(HideQuery);
+        _hiddenLog = CliKinds.Parse(HideLogQuery);
+    }
+
+    /// <summary>
+    /// The grid's entries after its two filters, the level and its type toggles.
+    /// Built once per load or filter, not per render: the grid takes a
+    /// new list as new data and pages it again, and the page reads this several
+    /// times while drawing itself.
+    /// </summary>
+    private IReadOnlyList<AgentLogEntry> Visible
+    {
+        get
+        {
+            var of = (_shown, Level, HideLogQuery);
+            if (_visibleOf != of)
+            {
+                // The same rows stay the same list: an entry the filters hide
+                // changed nothing the grid shows, and a new list had it draw
+                // every row again and move under the reader.
+                List<AgentLogEntry> visible = _shown is null ? [] : [.. _shown.Where(Shown)];
+                if (!SameEntries(_visible, visible))
+                {
+                    _visible = visible;
+                }
+
+                _visibleOf = of;
+            }
+
+            return _visible;
+        }
+    }
+
+    private bool Shown(AgentLogEntry entry) =>
+        (Level == "all" || entry.Level == Level)
+        && !_hiddenLog.Contains(entry.Kind);
+
+    /// <summary>An entry with something to open: a command, or lines beyond its own (a stack trace). A count, not the trace itself: this is asked of every row on every render.</summary>
+    private static bool HasDetail(AgentLogEntry entry) => entry.Command is not null || entry.Details.Count > AgentLogEntry.HeaderLines;
+
+    /// <summary>The grid's row height, measured in the DOM (6 + 16.47 + 6 of padding and line, and the border): what the virtualiser is told, so its scroll bar is true to the rows.</summary>
+    private const float RowHeight = 29.45f;
+
+    /// <summary>The ticked entries that are in the log: a command still running has no entry to delete yet.</summary>
+    private IReadOnlyList<int> Deletable => _selected.Where(e => e.EntryId is int).Select(e => e.EntryId!.Value).ToList();
+
+    private string EmptyText => _shown is { Count: > 0 } ? "No entries match." : "No logs yet.";
+
+    /// <summary>"23 of 24 entries" while the level or the search leave some out; "24 entries" when they leave all.</summary>
+    private string EntriesText => _shown is { Count: var loaded } && Visible.Count != loaded
+        ? $"{Visible.Count} of {loaded} entries"
+        : $"{Visible.Count} entries";
+
+    /// <summary>The row carries its level, so time, level, source and message take the level's colours.</summary>
+    private static string RowClass(AgentLogEntry entry, int index) => $"wslc-log-entry log-level-{entry.Level.ToLowerInvariant()}";
+
+    /// <summary>
+    /// The page draws itself first and reads afterwards, as every list does:
+    /// the header row and the grid's own header are on screen before a byte of
+    /// the log arrives. Then the last 500 entries, which come and draw in an
+    /// instant, and only then the whole tail, which replaces them in place: an
+    /// entry keeps its key across the two, so a tick or an open row made in
+    /// the meantime is kept.
+    /// </summary>
+    protected override void OnInitialized()
+    {
+        Link.Changed += OnLinkChanged;
+        _stop = new CancellationTokenSource();
+        _timer = new PeriodicTimer(RefreshEvery);
+        _ = FirstLoadAsync();
+        _ = PollAsync(_stop.Token);
+    }
+
+    /// <summary>The agent answers again: the grid reads again, as every list does; while it was gone the layout said so.</summary>
+    private void OnLinkChanged()
+    {
+        if (Link.Online)
+        {
+            _ = InvokeAsync(async () =>
+            {
+                await LoadAsync(Tail, showInGrid: true);
+                StateHasChanged();
+            });
+        }
+    }
+
+    /// <summary>
+    /// What this device remembers of the page, applied before the first rows:
+    /// Autorefresh as it was, and the hidden types and the level when the
+    /// address carries neither — the address wins when it does (Back, a link),
+    /// and the sidebar's link carries nothing, which is when the memory speaks.
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        await Preference.ReadyAsync();
+        _followCli = Preference.FollowCli;
+        _followLog = Preference.FollowLog;
+
+        if (HideQuery is null && HideLogQuery is null && LevelQuery is null
+            && (Preference.Hidden is { Length: > 0 } || Preference.HiddenLog is { Length: > 0 } || Preference.Level is { Length: > 0 } and not "all"))
+        {
+            Navigation.NavigateTo(
+                Navigation.GetUriWithQueryParameters(new Dictionary<string, object?>
+                {
+                    ["hide"] = Preference.Hidden is { Length: > 0 } hidden ? hidden : null,
+                    ["hidelog"] = Preference.HiddenLog is { Length: > 0 } hiddenLog ? hiddenLog : null,
+                    ["level"] = Preference.Level is { Length: > 0 } and not "all" ? Preference.Level : null,
+                }),
+                replace: true);
+        }
+    }
+
+    /// <summary>
+    /// The screen settles before the log is read: the page, the drawer closing
+    /// behind the tap that chose it. Reading and drawing five hundred entries
+    /// holds the one thread the browser gives the application, and started at
+    /// once it held the drawer half-closed for as long as it took.
+    /// </summary>
+    private static readonly TimeSpan Settle = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>The strip opens on its last line: each step of the first load lands it at the end.</summary>
+    private async Task FirstLoadAsync()
+    {
+        await Task.Delay(Settle);
+        await LoadAsync(FirstTail, showInGrid: true);
+        _jumpToEnd = true;
+        _gridToEnd = _followLog;
+        await InvokeAsync(StateHasChanged);
+        await LoadAsync(Tail, showInGrid: true);
+        _jumpToEnd = true;
+        _gridToEnd = _followLog;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// While either Autorefresh is on, a read every two seconds, and each takes
+    /// it only with its own switch on: the Activity list its new commands, the
+    /// grid its new rows, each keeping its end in view for a reader who is not
+    /// holding it. Off, each stays as it is until a full read.
+    /// </summary>
+    private async Task PollAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (await _timer!.WaitForNextTickAsync(cancellationToken))
+            {
+                // One read serves both Autorefreshes, and each takes it only with its
+                // own switch on, so with it off what is being read never moves (the
+                // Activity list once took every read).
+                // With the agent gone the layout's probe is the only call made.
+                if ((_followCli || _followLog) && Link.Online)
+                {
+                    await AppendAsync();
+                    // Held (pointer, finger or an open row), the grid stays as it is; it catches up on the first tick after.
+                    // Only a read that brought something moves either list: the
+                    // same entries are the same list (AppendAsync), and neither
+                    // grid is handed anything or sent to its end for them.
+                    if (_followLog && !GridHeld && _entries is not null && !ReferenceEquals(_shown, _entries))
+                    {
+                        // Its end is what it shows: a new entry the filters hide is
+                        // not a reason to send the grid to it.
+                        var last = Visible.LastOrDefault()?.Key;
+                        Show(_entries);
+                        _gridToEnd |= Visible.LastOrDefault()?.Key != last;
+                    }
+
+                    var arrived = _followCli && !ReferenceEquals(_stripEntries, _entries);
+                    if (arrived)
+                    {
+                        _stripEntries = _entries;
+                    }
+
+                    _followEnd = arrived;
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The page closed.
+        }
+    }
+
+    /// <summary>
+    /// What waits for the rows to be drawn: the strip's jump to its last line
+    /// (opening, or Autorefresh turned on) and its follow of the end after a
+    /// reload.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_jumpToEnd)
+        {
+            _jumpToEnd = false;
+            _followEnd = false;
+            await Js.InvokeVoidAsync("wslcAgent.scrollToEnd", StripId);
+        }
+        else if (_followEnd)
+        {
+            _followEnd = false;
+            // The hold is the one thing that stops the list: pointer on it, finger on it,
+            // a command open. Free, every reload goes to the end — not only when the box
+            // was already there, which left it behind after one turn of the wheel.
+            if (!_listHeld)
+            {
+                await Js.InvokeVoidAsync("wslcAgent.scrollToEnd", StripId);
+            }
+        }
+
+        if (_gridToEnd)
+        {
+            _gridToEnd = false;
+            if (!GridHeld)
+            {
+                await Js.InvokeVoidAsync("wslcAgent.scrollToEnd", GridId);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A pointer or a key let go anywhere in the two rows: the divider's place
+    /// (the grid's height, the one measure the split panel gives) is remembered
+    /// when it changed. The panel says nothing when it is dragged, so the page
+    /// asks after every release; the answer costs one call.
+    /// </summary>
+    private async Task RememberDividerAsync()
+    {
+        if (_split is null || Halved)
+        {
+            return;
+        }
+
+        try
+        {
+            Preference.SetGrid(await _split.GetDividerPositionAsync());
+        }
+        catch (JSException)
+        {
+            // The panel is gone or not built: nothing to remember.
+        }
+    }
+
+    /// <summary>
+    /// Reads the last <paramref name="tail"/> entries, abridged, and moves the
+    /// ticks and the open rows onto the new rows by key, as every list does
+    /// across a poll: a command that ended keeps the key it ran under, so it
+    /// stays ticked or open as the entry it became.
+    /// </summary>
+    private async Task LoadAsync(int tail, bool showInGrid)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        _loading = true;
+        try
+        {
+            var entries = await Api.GetAgentLogsAsync(tail);
+            _entries = entries;
+            if (showInGrid)
+            {
+                Show(entries);
+                _stripEntries = entries;
+            }
+
+            _error = null;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            // The agent not answering is said once, by the layout, over the screen.
+            Snackbar.Add("Failed to refresh logs", Severity.Error);
+            _error = Link.Online ? ex.Message : null;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    /// <summary>
+    /// What Autorefresh reads: only the entries after the last one the page has,
+    /// appended, and the running rows replaced — so the list only grows at the
+    /// end and what is being read never moves. The whole list, re-read every two
+    /// seconds with every output inside, was tens of megabytes and left the
+    /// application slow long after this page was closed.
+    /// </summary>
+    private async Task AppendAsync()
+    {
+        var last = _entries?.LastOrDefault(e => !e.Running)?.EntryId;
+        if (last is null)
+        {
+            await LoadAsync(Tail, showInGrid: false);
+            return;
+        }
+
+        if (_loading)
+        {
+            return;
+        }
+
+        _loading = true;
+        try
+        {
+            var fresh = await Api.GetAgentLogsAsync(after: last);
+            var known = _entries!.Where(e => !e.Running).Select(e => e.EntryId!.Value).ToHashSet();
+            List<AgentLogEntry> read = [.. _entries!.Where(e => !e.Running), .. fresh.Where(e => e.Running || !known.Contains(e.EntryId!.Value))];
+            // A read that brought nothing new leaves the list as it was, the same
+            // list: a new one every two seconds — the commands still running come
+            // back as new objects each time — had both grids draw every row again
+            // and the log shake up and down under the reader, on a phone.
+            if (!SameEntries(_entries!, read))
+            {
+                _entries = read;
+            }
+
+            _error = null;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            // The agent not answering is said once, by the layout, over the screen.
+            Snackbar.Add("Failed to refresh logs", Severity.Error);
+            _error = Link.Online ? ex.Message : null;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    /// <summary>The same entries in the same order, as far as a row shows them: each one's key, its level (running, then how it ended) and its line.</summary>
+    private static bool SameEntries(IReadOnlyList<AgentLogEntry> shown, IReadOnlyList<AgentLogEntry> read) =>
+        shown.Count == read.Count
+        && shown.Zip(read).All(pair => pair.First.Key == pair.Second.Key && pair.First.Level == pair.Second.Level && pair.First.Message == pair.Second.Message);
+
+    /// <summary>
+    /// The entry whole, for a row that is open: itself when it has nothing more
+    /// to fetch (no command, or one still running, whose output is not written
+    /// yet), what was fetched when it was, and null while the fetch is on its
+    /// way — the row says so and is drawn again when it lands.
+    /// </summary>
+    private AgentLogEntry? Full(AgentLogEntry entry)
+    {
+        if (entry.Command is null || entry.EntryId is not { } id)
+        {
+            return entry;
+        }
+
+        if (_full.TryGetValue(id, out var whole))
+        {
+            return whole;
+        }
+
+        _ = FetchAsync([id]);
+        return null;
+    }
+
+    /// <summary>The Activity list's command whole, by way of the entry that records it.</summary>
+    private CliTraceEntry? FullCommand(CliTraceEntry command)
+    {
+        var entry = _entries?.FirstOrDefault(e => e.Key == command.Id);
+        return entry is null ? command : Full(entry)?.Command;
+    }
+
+    /// <summary>Reads these entries whole, once each; a failure leaves them to be asked for again when they are drawn again.</summary>
+    private async Task FetchAsync(IReadOnlyList<int> ids)
+    {
+        var wanted = ids.Where(id => !_full.ContainsKey(id) && _fetching.Add(id)).ToList();
+        if (wanted.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (var entry in await Api.GetAgentLogEntriesAsync(wanted))
+            {
+                _full[entry.EntryId!.Value] = entry;
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add("Failed to read the log entry", Severity.Error);
+        }
+        finally
+        {
+            _fetching.ExceptWith(wanted);
+        }
+    }
+
+    /// <summary>
+    /// The grid takes a read: the ticks and the open rows move onto the new rows
+    /// by key, as every list does across a poll — a command that ended keeps the
+    /// key it ran under, so it stays ticked or open as the entry it became.
+    /// </summary>
+    private void Show(IReadOnlyList<AgentLogEntry> entries)
+    {
+        var selectedKeys = _selected.Select(e => e.Key).ToHashSet(StringComparer.Ordinal);
+        _shown = entries;
+        var selected = entries.Where(e => selectedKeys.Contains(e.Key)).ToHashSet();
+        // The same ticks stay the same set, which the grid is bound to: a new
+        // one is a changed parameter and a grid drawn again for nothing.
+        if (!selected.SetEquals(_selected))
+        {
+            _selected = selected;
+        }
+    }
+
+    /// <summary>A delete is a new list: a rewritten file gives its later entries new lines, so selection, open rows and what was read whole start over.</summary>
+    private async Task ReloadAfterDeleteAsync()
+    {
+        _selected.Clear();
+        _full.Clear();
+        await LoadAsync(Tail, showInGrid: true);
+    }
+
+    /// <summary>The Activity list's Autorefresh: turning it on reloads and goes to the list's last line once; from then on it follows a reader who is at the end and not holding the list.</summary>
+    private async Task ToggleFollowCliAsync()
+    {
+        _followCli = !_followCli;
+        Preference.SetFollowCli(_followCli);
+        if (_followCli)
+        {
+            await AppendAsync();
+            _stripEntries = _entries;
+            _jumpToEnd = true;
+        }
+    }
+
+    private string CliFollowTitle => _followCli
+        ? _listHeld ? "Autorefresh of the activity on, holding still while you are on the list — click to switch off" : "Autorefresh of the activity on (every 2 s) — click to switch off"
+        : "Autorefresh of the activity off — click to switch on";
+
+    /// <summary>The list says the reader is on it, or has a command open: the ring stops and the follow waits.</summary>
+    private void OnListHeldChanged(bool held) => _listHeld = held;
+
+    private void SelectLevel(string level)
+    {
+        Preference.SetLevel(level);
+        Filter("level", level == "all" ? null : level, replace: false);
+    }
+
+    /// <summary>All: every type shown when any is hidden; every type hidden when all are shown.</summary>
+    private void ToggleAllKinds() =>
+        Hide(_hidden.Count == 0 ? string.Join(',', CliKinds.Groups.Select(g => g.Key)) : "");
+
+    /// <summary>A rail toggle pressed or released: that type joins or leaves the hidden ones, in the order the rail lists them.</summary>
+    private void ToggleKind(string kind)
+    {
+        var hidden = new HashSet<string>(_hidden, StringComparer.Ordinal);
+        if (!hidden.Remove(kind))
+        {
+            hidden.Add(kind);
+        }
+
+        Hide(string.Join(',', CliKinds.Groups.Select(g => g.Key).Where(hidden.Contains)));
+    }
+
+    /// <summary>The hidden types, remembered on this device and put in the address; empty is every type shown, which is also remembered.</summary>
+    private void Hide(string hidden)
+    {
+        Preference.SetHidden(hidden);
+        Filter("hide", hidden.Length > 0 ? hidden : null, replace: false);
+    }
+
+    /// <summary>The grid's rail: the same toggles over the grid's own filter, so a search can be narrowed to one type of command.</summary>
+    private void ToggleAllKindsLog() =>
+        HideLog(_hiddenLog.Count == 0 ? string.Join(',', CliKinds.Groups.Select(g => g.Key)) : "");
+
+    private void ToggleKindLog(string kind)
+    {
+        var hidden = new HashSet<string>(_hiddenLog, StringComparer.Ordinal);
+        if (!hidden.Remove(kind))
+        {
+            hidden.Add(kind);
+        }
+
+        HideLog(string.Join(',', CliKinds.Groups.Select(g => g.Key).Where(hidden.Contains)));
+    }
+
+    private void HideLog(string hidden)
+    {
+        Preference.SetHiddenLog(hidden);
+        Filter("hidelog", hidden.Length > 0 ? hidden : null, replace: false);
+    }
+
+    /// <summary>The grid rail's counts: the entries the grid holds of that type, every entry for All (a message of the agent's own is general).</summary>
+    private int CountLog(string? kind) => _shown?.Count(e => kind is null || e.Kind == kind) ?? 0;
+
+    /// <summary>The grid's Autorefresh: on, the grid goes to its last row and takes what arrives every two seconds, following its end; off, it keeps its rows until Refresh.</summary>
+    private async Task ToggleFollowLog()
+    {
+        _followLog = !_followLog;
+        Preference.SetFollowLog(_followLog);
+        if (_followLog)
+        {
+            await AppendAsync();
+            if (_entries is not null)
+            {
+                Show(_entries);
+            }
+
+            // Turned on, the grid goes to its last row at once, whether or not anything new came.
+            _gridToEnd = true;
+        }
+    }
+
+    private string LogFollowTitle => _followLog
+        ? GridHeld ? "Autorefresh of the log on, holding still while you are on the grid or have a row open — click to switch off" : "Autorefresh of the log on (every 2 s) — click to switch off"
+        : "Autorefresh of the log off, the rows stay as they are — click to switch on";
+
+    private bool _pointerOnGrid;
+    private bool _fingerOnGrid;
+
+    /// <summary>The rows whose detail is open, by key: MudBlazor's grid does not say, so the detail itself does (OpenRowMark).</summary>
+    private readonly HashSet<string> _openRows = [];
+
+    /// <summary>The reader holds the grid — pointer over it, finger on it, or a row open — and its Autorefresh waits, as the Activity list's does.</summary>
+    private bool GridHeld => _pointerOnGrid || _fingerOnGrid || _openRows.Count > 0;
+
+    private void RowOpened(string key) => _openRows.Add(key);
+
+    private void RowClosed(string key) => _openRows.Remove(key);
+
+    /// <summary>A filter changed: the rows are other rows now. Typing replaces the history entry, a chosen level or type adds one.</summary>
+    private void Filter(string name, string? value, bool replace) =>
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter(name, value), replace);
+
+    /// <summary>The rail's counts: the commands loaded of that type, or every command for All; over the whole read, so the numbers do not move with the toggles.</summary>
+    private int Count(string? kind) => _stripEntries?.Count(e => e.Command is not null && (kind is null || e.Kind == kind)) ?? 0;
+
+    private async Task DeleteSelectedAsync()
+    {
+        var ids = Deletable;
+        if (ids.Count == 0 || !await DialogFlow.ConfirmAsync(Dialogs, "Delete logs", $"Delete {ids.Count} selected log entr{(ids.Count == 1 ? "y" : "ies")}?", "Delete", destructive: true))
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await Api.DeleteAgentLogEntriesAsync(ids);
+            Snackbar.Add(Deleted(result.Deleted), Severity.Success);
+            await ReloadAfterDeleteAsync();
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add("Failed to delete selected logs", Severity.Error);
+        }
+    }
+
+    /// <summary>The whole log, not the rows loaded: the agent empties every file it reads.</summary>
+    private async Task DeleteAllAsync()
+    {
+        if (!await DialogFlow.ConfirmAsync(Dialogs, "Delete all logs", "Delete every entry of the agent's log, the ones shown and the ones past them alike?", "Delete all", destructive: true))
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await Api.ClearAgentLogsAsync();
+            Snackbar.Add(Deleted(result.Deleted), Severity.Success);
+            await ReloadAfterDeleteAsync();
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add("Failed to delete the logs", Severity.Error);
+        }
+    }
+
+    private static string Deleted(int count) => $"Deleted {count} log entr{(count == 1 ? "y" : "ies")}";
+
+    private string CopyTitle => _selected.Count > 0
+        ? $"Copy the {_selected.Count} selected entr{(_selected.Count == 1 ? "y" : "ies")}"
+        : "Copy every entry shown (tick rows to copy only those)";
+
+    /// <summary>
+    /// The ticked entries, or every entry shown, in the agent's own text form (as
+    /// <c>/logs/text</c> writes them), detail lines included — whole: the commands
+    /// among them are read entire first, in one request, since the list has no output.
+    /// </summary>
+    private async Task CopyAsync()
+    {
+        var entries = (_selected.Count > 0 ? Visible.Where(_selected.Contains) : Visible).ToList();
+        if (entries.Count == 0)
+        {
+            Snackbar.Add("No log entries to copy", Severity.Info);
+            return;
+        }
+
+        await FetchAsync(entries.Where(e => e.Command is not null && e.EntryId is not null).Select(e => e.EntryId!.Value).ToList());
+        var text = string.Join('\n', entries.Select(e => AsText(Full(e) ?? e)));
+        try
+        {
+            await Js.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            Snackbar.Add("Log entries copied to clipboard", Severity.Success);
+        }
+        catch (JSException)
+        {
+            Snackbar.Add("Could not copy to the clipboard", Severity.Error);
+        }
+    }
+
+    /// <summary>The command without the word every command shares; the copy and the file keep the whole line.</summary>
+    private static string Arguments(CliTraceEntry command) => string.Join(' ', command.Args);
+
+    private static string AsText(AgentLogEntry entry) =>
+        string.Join('\n', new[] { $"{entry.Timestamp} | {entry.Level,-8} | {entry.Source} - {entry.Message}" }.Concat(entry.Trace));
+
+    /// <summary>The page lets go of what it read: thousands of entries kept alive after leaving were what made every other page slow.</summary>
+    public void Dispose()
+    {
+        Link.Changed -= OnLinkChanged;
+        _stop?.Cancel();
+        _timer?.Dispose();
+        _entries = null;
+        _shown = null;
+        _stripEntries = null;
+        _visible = [];
+        _strip = [];
+        _full.Clear();
+    }
+}

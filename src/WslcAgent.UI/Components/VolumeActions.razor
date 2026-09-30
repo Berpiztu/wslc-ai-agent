@@ -1,0 +1,67 @@
+@* Per-volume actions: [📁 files] [⋮ more] [remove].
+   Files open through a helper container with the volume mounted; the menu
+   holds container usage and View & edit. *@
+@inherits EntityActionsBase
+
+@* On a card the menu held only these two, so they are buttons there and the
+   menu goes with them: a menu of nothing is worse than no menu. In a table row
+   it stays, with View & edit first. *@
+<div class="@(Shortcuts ? "wslc-row-verbs" : "")">
+@if (Shortcuts || ShortcutsAlone)
+{
+    <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center" Class="wslc-row-shortcuts">
+        <MudIconButton Icon="@Icons.Material.Filled.EditNote" Size="Size.Small" title="View &amp; edit" Disabled="Busy" OnClick="InspectAsync" />
+        <MudIconButton Icon="@Icons.Material.Filled.Inventory2" Size="Size.Small" title="View container usage" Disabled="Busy" OnClick="UsageAsync" />
+    </MudStack>
+}
+@if (!ShortcutsAlone)
+{
+<MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center">
+    <MudIconButton Icon="@Icons.Material.Filled.Folder" Size="Size.Small" title="View files" OnClick="FilesAsync" />
+    @if (!Shortcuts)
+    {
+        <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" title="More actions" Disabled="Busy" OpenChanged="MenuOpenChanged">
+            <MudMenuItem Icon="@Icons.Material.Filled.EditNote" OnClick="InspectAsync">View &amp; edit</MudMenuItem>
+            <MudMenuItem Icon="@Icons.Material.Filled.Inventory2" OnClick="UsageAsync">View container usage</MudMenuItem>
+        </MudMenu>
+    }
+    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="Remove volume" Disabled="Busy"
+                   OnClick="@(() => RemoveAsync("volume", Volume.Name, ct => Api.RemoveVolumeAsync(Volume.Name, ct)))" />
+</MudStack>
+}
+</div>
+
+@code {
+    [Parameter, EditorRequired] public VolumeSummary Volume { get; set; } = default!;
+
+    /// <summary>The card's own group: the two verbs the menu held, as buttons.</summary>
+    [Parameter] public bool Shortcuts { get; set; }
+
+    /// <summary>The shortcuts with nothing else: the dashboard's object of them, the resource's own verbs being another.</summary>
+    [Parameter] public bool ShortcutsAlone { get; set; }
+
+    protected override string Key => Volume.Name;
+
+    /// <summary>The volume's files from its root, through the helper the agent keeps for it until the window closes.</summary>
+    private Task FilesAsync() =>
+        ResourceViews.FilesAsync(Dialogs, $"Files — volume {Volume.Name}", $"volume {Volume.Name}",
+            () => Api.OpenVolumeFilesAsync(Volume.Name), _ => Api.CloseVolumeFilesAsync(Volume.Name));
+
+    private Task UsageAsync() =>
+        ResourceViews.ReportAsync(Dialogs, $"Container usage — {Volume.Name}", async () =>
+            UsageReports.Volume(await Api.GetVolumeUsersAsync(Volume.Name)));
+
+    private Task InspectAsync() =>
+        ResourceViews.InspectAsync(Dialogs, $"View & edit — {Volume.Name}",
+            async () => (await Api.GetVolumeInspectAsync(Volume.Name)).Json,
+            item => [
+                new("Mountpoint", InspectFact.Text(item, "Mountpoint"), Mono: true),
+                new("Scope", InspectFact.Text(item, "Scope")),
+                new("Created", InspectFact.Text(item, "CreatedAt") is { Length: > 0 } created ? created : InspectFact.Text(item, "Created")),
+            ],
+            item => [
+                new("Name", InspectFact.Text(item, "Name")),
+                new("Driver", InspectFact.Text(item, "Driver")),
+                new("Labels", InspectFact.Keys(item, "Labels", pairs: true), Mono: true),
+            ]);
+}

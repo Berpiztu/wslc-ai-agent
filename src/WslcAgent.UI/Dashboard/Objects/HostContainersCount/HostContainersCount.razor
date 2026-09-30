@@ -1,0 +1,32 @@
+@* How many containers run of how many there are: one of the host's
+   counts. It reads the overview the host's counts share
+   (HostOverviewRead); it has no source to choose. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@inherits WslcObject
+@attribute [DashboardObject("wslc.host-containers", "Containers count", Group = "Host readings", Subgroup = "System", Icon = Icons.Material.Filled.ViewInAr, Columns = 8, Rows = 4)]
+@attribute [DashboardObjectPart("label", "Label")]
+@attribute [DashboardObjectPart("value", "Value", Bold = true)]
+@attribute [DashboardObjectPart("hint", "Hint")]
+@inject HostOverviewRead Overview
+@inject NavigationManager Navigation
+
+<div class="@ReadingClass">
+    <ReadingSummary Label="Containers" Value="@(Counts is { } c ? $"{c.Running} / {c.Total}" : "—")"
+                    Hint="@ReadingHint(Counts is not null, Counts?.Error == true, "running / total")" Error="@(Counts?.Error == true)" />
+</div>
+
+@code {
+    private HomeContainers? Counts => Overview.Value?.Containers;
+
+    protected override void OnInitialized() => Follow(Overview);
+
+    /// <summary>A count opens its page.</summary>
+    public override bool Opens => true;
+
+    public override Task OpenAsync()
+    {
+        Navigation.NavigateTo("containers");
+        return Task.CompletedTask;
+    }
+}

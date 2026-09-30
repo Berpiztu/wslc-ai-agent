@@ -1,0 +1,33 @@
+@* The table's title-less first column: a green
+   dot while the row is active (running container, image/volume/network in
+   use), an empty cell otherwise. While a verb runs on the row (BusyRows, by
+   Key) the dot pulses in place: it appears pulsing when a container starts
+   and settles green once it runs; it pulses when one stops and goes away
+   once it has stopped. Nothing else in the row moves. *@
+@implements IDisposable
+@inject BusyRows Rows
+
+@if (Active || Busy)
+{
+    <MudTooltip Text="@(Busy ? "working…" : Title)" RootClass="@(Busy ? "wslc-dot wslc-dot-busy" : "wslc-dot")">
+        <MudIcon Icon="@Icons.Material.Filled.Circle" Color="Color.Success" Size="Size.Small" />
+    </MudTooltip>
+}
+
+@code {
+    [Parameter, EditorRequired] public bool Active { get; set; }
+
+    /// <summary>What the dot means for this resource: "running", "in use", "in use by 3 containers".</summary>
+    [Parameter] public string Title { get; set; } = "in use";
+
+    /// <summary>The row's key, the one its actions component reports busy with; null where no verb can run.</summary>
+    [Parameter] public string? Key { get; set; }
+
+    private bool Busy => Rows.IsBusy(Key);
+
+    protected override void OnInitialized() => Rows.Changed += OnChanged;
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Rows.Changed -= OnChanged;
+}

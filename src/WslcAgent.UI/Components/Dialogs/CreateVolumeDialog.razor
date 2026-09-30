@@ -1,0 +1,31 @@
+@* The one place a volume is created (Volumes page now, volume pickers later). *@
+@using WslcAgent.ApiClient
+@inject WslcAgentApi Api
+
+<FormDialog SubmitText="Create" OnSubmit="CreateAsync">
+    <MudTextField T="string" @bind-Value="_name" Label="Name" Placeholder="data" Immediate="true"
+                  Required="true" RequiredError="A volume name is required"
+                  Variant="Variant.Filled" Margin="Margin.Dense" />
+    <MudSelect T="string" @bind-Value="_driver" Label="Driver" Dense="true" Margin="Margin.Dense" Variant="Variant.Filled" Class="mt-2">
+        <MudSelectItem T="string" Value="@("guest")">guest (inside the utility VM)</MudSelectItem>
+        <MudSelectItem T="string" Value="@("vhd")">vhd (virtual disk)</MudSelectItem>
+    </MudSelect>
+    @if (_driver == "vhd")
+    {
+        <MudTextField T="string" @bind-Value="_size" Label="Size" Placeholder="8GB" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+        <SquareCheckBox @bind-Value="_fixed" Label="Fixed size (allocate now)" />
+    }
+    <MudTextField T="string" @bind-Value="_label" Label="Label" Placeholder="env=prod" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+    <MudTextField T="string" @bind-Value="_option" Label="Driver option" Placeholder="type=tmpfs" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+</FormDialog>
+
+@code {
+    private string _name = "";
+    private string _driver = "guest";
+    private string _size = "";
+    private bool _fixed;
+    private string _label = "";
+    private string _option = "";
+
+    private Task CreateAsync() => Api.CreateVolumeAsync(new CreateVolumeRequest(_name, _driver, _size, _fixed, _label, _option));
+}

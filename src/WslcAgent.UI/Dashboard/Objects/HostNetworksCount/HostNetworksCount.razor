@@ -1,0 +1,31 @@
+@* How many networks there are: one of the
+   host's counts, over the overview they share (HostOverviewRead). *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@inherits WslcObject
+@attribute [DashboardObject("wslc.host-networks", "Networks count", Group = "Host readings", Subgroup = "System", Icon = Icons.Material.Filled.Lan, Columns = 8, Rows = 4)]
+@attribute [DashboardObjectPart("label", "Label")]
+@attribute [DashboardObjectPart("value", "Value", Bold = true)]
+@attribute [DashboardObjectPart("hint", "Hint")]
+@inject HostOverviewRead Overview
+@inject NavigationManager Navigation
+
+<div class="@ReadingClass">
+    <ReadingSummary Label="Networks" Value="@(Networks is { } n ? $"{n.Count}" : "—")"
+                    Hint="@ReadingHint(Networks is not null, Networks?.Error == true, "networks")" Error="@(Networks?.Error == true)" />
+</div>
+
+@code {
+    private HomeCount? Networks => Overview.Value?.Networks;
+
+    protected override void OnInitialized() => Follow(Overview);
+
+    /// <summary>A count opens its page.</summary>
+    public override bool Opens => true;
+
+    public override Task OpenAsync()
+    {
+        Navigation.NavigateTo("networks");
+        return Task.CompletedTask;
+    }
+}

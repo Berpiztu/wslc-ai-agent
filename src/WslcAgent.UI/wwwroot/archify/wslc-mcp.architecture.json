@@ -1,0 +1,312 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "WSLC AI Agent — skill and MCP",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1040,
+      560
+    ],
+    "views": [
+      {
+        "id": "skill",
+        "label": "The wslc skill",
+        "focus": [
+          "skill",
+          "clients"
+        ],
+        "note": "One SKILL.md, embedded in the agent, installed into Hermes, OpenClaw or Claude Code by each client's own installer, here or over SSH."
+      },
+      {
+        "id": "call",
+        "label": "A tool call",
+        "focus": [
+          "clients",
+          "mcp",
+          "tools",
+          "wslc",
+          "runtime"
+        ],
+        "note": "The client lists and calls tools at /api/v1/mcp; the tools call the same services as the API and drive wslc."
+      },
+      {
+        "id": "gate",
+        "label": "Destructive tools",
+        "focus": [
+          "tools",
+          "gate",
+          "clients"
+        ],
+        "note": "remove, kill, exec, stop session: the client shows a yes/no prompt; without one, a two-call token. Nothing the model passes counts."
+      },
+      {
+        "id": "switches",
+        "label": "The operator's switches",
+        "focus": [
+          "settings",
+          "switches",
+          "mcp"
+        ],
+        "note": "Settings → MCP: serve at all, and offer the destructive tools. Read on every request, so a change needs no restart."
+      },
+      {
+        "id": "remote",
+        "label": "A client elsewhere",
+        "focus": [
+          "clients",
+          "mcp"
+        ],
+        "note": "From another machine, a client reaches /api/v1/mcp through a public host's forward (main diagram); at loopback no login is asked."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "skill",
+      "type": "database",
+      "label": "wslc skill",
+      "sublabel": "installed in the client",
+      "pos": [
+        40,
+        60
+      ],
+      "size": [
+        140,
+        56
+      ],
+      "tag": "from /api/v1/mcp/skill"
+    },
+    {
+      "id": "clients",
+      "type": "external",
+      "label": "AI clients",
+      "sublabel": "Hermes · OpenClaw · Claude Code",
+      "pos": [
+        40,
+        200
+      ],
+      "size": [
+        140,
+        64
+      ],
+      "tag": "wslc skill"
+    },
+    {
+      "id": "settings",
+      "type": "frontend",
+      "label": "Settings → MCP",
+      "sublabel": "switches · skill install",
+      "pos": [
+        40,
+        340
+      ],
+      "size": [
+        140,
+        64
+      ]
+    },
+    {
+      "id": "mcp",
+      "type": "backend",
+      "label": "MCP endpoint",
+      "sublabel": "/api/v1/mcp · stateful HTTP",
+      "pos": [
+        260,
+        200
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "tag": "C# SDK"
+    },
+    {
+      "id": "switches",
+      "type": "database",
+      "label": "mcp.json",
+      "sublabel": "serve · destructive tools",
+      "pos": [
+        260,
+        340
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "tag": "per request"
+    },
+    {
+      "id": "gate",
+      "type": "security",
+      "label": "Approval gate",
+      "sublabel": "elicitation or token",
+      "pos": [
+        260,
+        60
+      ],
+      "size": [
+        160,
+        56
+      ]
+    },
+    {
+      "id": "tools",
+      "type": "backend",
+      "label": "Tools",
+      "sublabel": "resources · sessions · publishing",
+      "pos": [
+        500,
+        200
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "tag": "shared services"
+    },
+    {
+      "id": "wslc",
+      "type": "external",
+      "label": "wslc CLI",
+      "sublabel": "Microsoft WSLC",
+      "pos": [
+        720,
+        200
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "runtime",
+      "type": "cloud",
+      "label": "Containers",
+      "sublabel": "Hyper-V utility VM",
+      "pos": [
+        720,
+        340
+      ],
+      "size": [
+        150,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Windows host (user session)",
+      "wraps": [
+        "mcp",
+        "switches",
+        "tools",
+        "gate",
+        "wslc"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "wslc-ai-agent.exe (.NET)",
+      "wraps": [
+        "mcp",
+        "switches",
+        "tools",
+        "gate"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "skill-to-clients",
+      "from": "skill",
+      "to": "clients",
+      "label": "own installer · or SSH",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    },
+    {
+      "id": "clients-to-mcp",
+      "from": "clients",
+      "to": "mcp",
+      "label": "MCP · Streamable HTTP",
+      "variant": "emphasis",
+      "labelDy": -26
+    },
+    {
+      "id": "settings-to-switches",
+      "from": "settings",
+      "to": "switches",
+      "label": "saves"
+    },
+    {
+      "id": "switches-to-mcp",
+      "from": "switches",
+      "to": "mcp",
+      "label": "read on every request",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "mcp-to-tools",
+      "from": "mcp",
+      "to": "tools",
+      "label": "list · call",
+      "variant": "emphasis"
+    },
+    {
+      "id": "tools-to-gate",
+      "from": "tools",
+      "to": "gate",
+      "label": "destructive: ask first",
+      "variant": "security",
+      "fromSide": "top",
+      "toSide": "right"
+    },
+    {
+      "id": "tools-to-wslc",
+      "from": "tools",
+      "to": "wslc",
+      "label": "same services as /api/v1",
+      "labelDy": -26
+    },
+    {
+      "id": "wslc-to-runtime",
+      "from": "wslc",
+      "to": "runtime",
+      "label": "run / exec",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Skill",
+      "items": [
+        "One SKILL.md, embedded in the agent and served at /api/v1/mcp/skill, so it never falls behind the tools",
+        "Tested with Hermes, OpenClaw and Claude Code"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Tools",
+      "items": [
+        "Containers, images, volumes, networks, sessions, system, publishing",
+        "Official C# SDK, stateful Streamable HTTP; the same service layer as /api/v1"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Safety",
+      "items": [
+        "Destructive tools: a yes/no prompt in the client, or a two-call token",
+        "Two switches in Settings, in force on the next request"
+      ]
+    }
+  ]
+}

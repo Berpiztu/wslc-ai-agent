@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Splash: the container glyph alone; MAUI centres it on the splash Color
+     (#1e293b) set in the csproj, so the screen matches the dark theme. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 456 456">
+  <g fill="none" stroke="#e2e8f0" stroke-width="22" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M228 78 L352 150 V306 L228 378 L104 306 V150 Z"/>
+    <path d="M104 150 L228 222 L352 150"/>
+    <path d="M228 222 V378"/>
+  </g>
+  <g fill="none" stroke="#818cf8" stroke-width="22" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M140 262 L172 286 L140 310"/>
+    <path d="M186 322 H226"/>
+  </g>
+</svg>

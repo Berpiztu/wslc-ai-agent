@@ -1,0 +1,45 @@
+@* A raw document in the logs box: an inspect JSON or a report such as container usage. *@
+
+<MudDialog ContentClass="wslc-dialog-action">
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error">@_error</MudAlert>
+        }
+        else if (_json is null)
+        {
+            <MudProgressLinear Indeterminate="true" />
+        }
+        else
+        {
+            <pre class="wslc-logs-output wslc-logs-pre wslc-fill-scroll">@_json</pre>
+        }
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private string? _json;
+    private string? _error;
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    /// <summary>Produces the JSON to show; an <see cref="AgentApiException"/> or <see cref="HttpRequestException"/> shows its message instead.</summary>
+    [Parameter, EditorRequired] public Func<Task<string>> Load { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _json = await Load();
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _error = ex.Message;
+        }
+    }
+}

@@ -1,0 +1,25 @@
+@* An image's header: the Images list's card header — its name,
+   what stands under it, the avatar green when something uses it, and its
+   "in use" chip — standing alone. It fills its cells with the header's tone, and
+   its type size scales it. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits ImageObject
+@attribute [DashboardObject("wslc.image-header", "Image header", Group = "Image", Subgroup = "User", Icon = Icons.Material.Filled.AccountBox, Source = ImageSourceFamily.FamilyKey, Columns = 16, Rows = 4, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Left, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both)]
+
+@if (Image is { } r)
+{
+    <div class="@SectionClass("wslc-card-part-summary")">
+        <EntityCardPart>
+            <EntityCardHeader Title="@r.Repository" Subtitle="@Readings.Dash(r.Tag)" AvatarColor="@(r.InUse ? Color.Success : Color.Default)" Key="@r.Reference">
+                <HeaderActions>
+                    @if (r.InUse)
+                    {
+                        <StateChip State="in use" />
+                    }
+                </HeaderActions>
+            </EntityCardHeader>
+        </EntityCardPart>
+    </div>
+}

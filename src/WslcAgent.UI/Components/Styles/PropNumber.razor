@@ -1,0 +1,15 @@
+@* A numeric style property (Elevation, Lines…) in Settings → Layout's
+   properties column. *@
+<MudNumericField T="int" Value="Value" ValueChanged="ValueChanged" Label="@Label" Min="Min" Max="Max" Margin="Margin.Dense" Variant="Variant.Filled" />
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    [Parameter] public int Value { get; set; }
+
+    [Parameter] public EventCallback<int> ValueChanged { get; set; }
+
+    [Parameter] public int Min { get; set; }
+
+    [Parameter] public int Max { get; set; } = 24;
+}

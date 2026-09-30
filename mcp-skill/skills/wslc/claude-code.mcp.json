@@ -1,0 +1,9 @@
+{
+  "_comment": "Claude Code: save as .mcp.json in the project, or `claude mcp add --transport http wslc http://127.0.0.1:8069/api/v1/mcp`. Nothing to install: the WSLC AI Agent serves MCP itself at /mcp (8069 installed, 8070 development). Remote: use the public https URL and add \"headers\": {\"Authorization\": \"Bearer ***\"} with the agent's API token. Copy mcp-skill/skills/wslc/SKILL.md to .claude/skills/wslc/ (project) or ~/.claude/skills/wslc/ (user).",
+  "mcpServers": {
+    "wslc": {
+      "type": "http",
+      "url": "http://127.0.0.1:8069/api/v1/mcp"
+    }
+  }
+}

@@ -1,0 +1,61 @@
+@* Published ports as a green mono link (host→container); a
+   dash when there are none. With the container it belongs to, a click is the
+   row menu's "Open with browser": the popup with every port and its ways in,
+   Local (a tab at the agent's machine, the host browser pane anywhere else)
+   and Remote (its public name, from anywhere). After the text, the mark that
+   says whether the container is published. Without a container (the Styles
+   page) it links the preferred port on the agent's host. *@
+@inject HttpClient Http
+@inject SimulatedRemote Simulated
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+@inject IJSRuntime Js
+@inject WslcAgent.UI.Links.IClientLinks Links
+
+@if (Ports.Count == 0)
+{
+    <span class="wslc-ports-empty wslc-mono">—</span>
+}
+else if (Container.Length > 0)
+{
+    @* The link and the mark share the cell: the text gives way with an ellipsis,
+       the mark never does. *@
+    <span class="wslc-ports">
+        <a class="wslc-ports-link wslc-mono" href="@Href" title="Open with browser"
+           @onclick="OpenAsync" @onclick:preventDefault="true" @onclick:stopPropagation="true">@Text</a>
+        @* The publication mark: blue when the container has a
+           public name, grey when it has none; the names on hover. Theme colours;
+           the glyph one step under the icon size, so it never
+           takes the text's room. *@
+        <MudIcon Icon="@Icons.Material.Filled.Public" Size="Size.Small" Class="wslc-ports-mark" Color="@(Publications.Count > 0 ? Color.Info : Color.Default)" Title="@MarkTitle" />
+    </span>
+}
+else
+{
+    <a class="wslc-ports-link wslc-mono" href="@Preferred?.Url(PublishedPorts.HostOf(Http.BaseAddress))" target="_blank" rel="noopener"
+       title="Open published port in browser" @onclick:stopPropagation="true">@Text</a>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<string> Ports { get; set; } = [];
+
+    /// <summary>The container's id: the click then opens as Open with browser does.</summary>
+    [Parameter] public string Container { get; set; } = "";
+
+    /// <summary>The container's public names, so a published port opens there.</summary>
+    [Parameter] public IReadOnlyList<Publication> Publications { get; set; } = [];
+
+    private string Text => string.Join(", ", Ports.Select(p => p.Replace("->", "→")));
+
+    private PublishedPorts.Published? Preferred => PublishedPorts.Parse(Ports).FirstOrDefault();
+
+    private string? PublicUrl => Preferred is { } port ? PublishedPorts.PublicUrl(port, Publications) : null;
+
+    private string? Href => PublicUrl ?? Preferred?.Url(PublishedPorts.HostOf(Http.BaseAddress));
+
+    private string MarkTitle => Publications.Count > 0
+        ? "Published: " + string.Join(", ", Publications.Select(p => p.Hostname))
+        : "Not published";
+
+    private Task OpenAsync() => BrowserFlow.OpenAsync(Dialogs, Snackbar, Js, Links, Http.BaseAddress, Simulated, Container, Ports, Publications);
+}

@@ -1,0 +1,298 @@
+@page "/system"
+@implements IDisposable
+@inject WslcAgent.UI.Components.Styles.UiStyle Style
+@inject WslcAgentApi Api
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+@inject SessionState Session
+@inject WslcAgent.UI.Updates.IClientUpdates Client
+
+<PageShell Title="System">
+    <Verbs>
+        @foreach (var (target, label) in Cleanups)
+        {
+            <VerbFab StartIcon="@Icons.Material.Filled.DeleteSweep" Label="@(_running == target ? "Working..." : label)" Color="Color.Error" Disabled="_running is not null"
+                     OnClick="@(() => CleanupAsync(target, label))" Title="@label" />
+        }
+        <VerbFab StartIcon="@Icons.Material.Filled.Compress" Label="Compact VHDX" Color="Color.Warning" Disabled="@(_overview is null || _overview.CompactionBlocked)" OnClick="CompactAsync"
+                 Title="@(_overview?.CompactionBlocked == true ? $"Stop session {_overview.SelectedSession} first: it holds its VHDX open" : "Opens the host terminal in a modal and runs Optimize-VHD elevated there")" />
+    </Verbs>
+    <ChildContent>
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-2">@_error</MudAlert>
+        }
+        else if (_overview is null)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else
+        {
+            var o = _overview;
+            @* Only the selected session blocks: the VHDX being compacted is its
+               own, and another session running holds its own file, in its own
+               folder. Those others are still
+               listed — they are why the machine is busy — but they do not stop
+               anything. *@
+            @if (o.CompactionBlocked)
+            {
+                <MudPaper Elevation="1" Class="pa-3 mb-2">
+                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">
+                        Compaction is blocked while session @o.SelectedSession is running and holds its VHDX open.
+                        Compact VHDX never terminates a session: stop it from the Session panel first. It then trims in a temporary session
+                        on the same storage and runs <code>Optimize-VHD -Mode Full</code> elevated.
+                    </MudAlert>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Active @(o.ActiveSessions.Count == 1 ? "session" : "sessions"): @string.Join(", ", o.ActiveSessions.Select(s => s.DisplayName.Length > 0 ? s.DisplayName : s.Id))
+                    </MudText>
+                    @if (o.ActiveStoragePath.Length > 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">VHDX held open: <code>@o.ActiveStoragePath</code>.</MudText>
+                    }
+                </MudPaper>
+            }
+            else if (o.SessionsError.Length > 0)
+            {
+                <MudPaper Elevation="1" Class="pa-3 mb-2">
+                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">Could not verify active WSLC sessions before compaction.</MudAlert>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@o.SessionsError</MudText>
+                </MudPaper>
+            }
+
+            <MudPaper Elevation="1" Class="pa-3 mb-2">
+                <MudText Typo="Typo.h6" Class="mb-1">Tool version</MudText>
+                <pre class="wslc-logs-output wslc-logs-pre wslc-logs-wrap">@o.Version</pre>
+                @* The native client's version, green or amber with its install, as
+                   on the System card; nothing in a browser. *@
+                @if (Client.Supported && Client.InstalledVersion.Length > 0)
+                {
+                    <div class="wslc-summary mt-2">
+                        <div><span class="wslc-summary-label">Client</span><ClientVersionBadge /></div>
+                    </div>
+                }
+                @if (!o.Info.IsEmpty)
+                {
+                    <div class="wslc-summary mt-2">
+                        @foreach (var (label, value) in InfoFields(o.Info))
+                        {
+                            <div><span class="wslc-summary-label">@label</span><span class="wslc-summary-value" title="@value">@value</span></div>
+                        }
+                    </div>
+                }
+            </MudPaper>
+
+            <MudPaper Elevation="1" Class="pa-3 mb-2">
+                <MudText Typo="Typo.h6" Class="mb-1">WSLC VHDX files</MudText>
+                <div class="wslc-summary mb-2">
+                    <div><span class="wslc-summary-label">Session VHDX file length total</span><span class="wslc-summary-value">@Bytes.Humanize(o.Store.TotalBytes)</span></div>
+                    <div><span class="wslc-summary-label">Storage VHDX file length</span><span class="wslc-summary-value">@Bytes.Humanize(o.Store.TotalStorageBytes)</span></div>
+                    <div><span class="wslc-summary-label">Largest session VHDX file</span><span class="wslc-summary-value">@Bytes.Humanize(o.Store.LargestSessionBytes)</span></div>
+                    <div><span class="wslc-summary-label">Images total size</span><span class="wslc-summary-value">@Bytes.Humanize(o.ImageTotalBytes)</span></div>
+                </div>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">WSLC session store root: <code>@o.Store.BasePath</code></MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">VHDX values are file lengths on disk, not live payload inside WSLC.</MudText>
+                @if (o.Store.Error.Length > 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@o.Store.Error</MudText>
+                }
+            </MudPaper>
+
+            <MudPaper Elevation="1" Class="pa-3 mb-2">
+                <MudText Typo="Typo.h6" Class="mb-1">Session VHDX files</MudText>
+                @if (o.Store.Sessions.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">No WSLC session VHDX files found.</MudText>
+                }
+                else
+                {
+                    <MudSimpleTable Dense="Style.Applied.GridDense" Bordered="Style.Applied.GridBordered" Striped="Style.Applied.GridStriped" Hover="Style.Applied.GridHover" Outlined="Style.Applied.GridOutlined">
+                        <thead><tr><th>Session</th><th>Storage</th><th>Swap</th><th>Total</th><th>Modified</th></tr></thead>
+                        <tbody>
+                            @foreach (var session in o.Store.Sessions)
+                            {
+                                <tr>
+                                    <td>
+                                        <div>
+                                            @session.Name
+                                            @if (session.IsActive)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="my-0">active</MudChip>
+                                            }
+                                            @if (session.IsSelected)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Class="my-0">selected</MudChip>
+                                            }
+                                        </div>
+                                        <div class="mud-text-secondary">@session.Path</div>
+                                    </td>
+                                    <td>@Bytes.Humanize(session.StorageBytes)</td>
+                                    <td>@Bytes.Humanize(session.SwapBytes)</td>
+                                    <td>@Bytes.Humanize(session.TotalBytes)</td>
+                                    <td>@When(session.LastModified)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+            </MudPaper>
+
+            <MudPaper Elevation="1" Class="pa-3 mb-2">
+                <MudText Typo="Typo.h6" Class="mb-1">Largest images</MudText>
+                @if (o.ImageError.Length > 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@o.ImageError</MudText>
+                }
+                else if (o.TopImages.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">No images found.</MudText>
+                }
+                else
+                {
+                    <MudSimpleTable Dense="Style.Applied.GridDense" Bordered="Style.Applied.GridBordered" Striped="Style.Applied.GridStriped" Hover="Style.Applied.GridHover" Outlined="Style.Applied.GridOutlined">
+                        <thead><tr><th>Image</th><th>Tag</th><th>Size</th><th>Created</th></tr></thead>
+                        <tbody>
+                            @foreach (var image in o.TopImages)
+                            {
+                                <tr>
+                                    <td>@(image.Repository.Length > 0 ? image.Repository : "<none>")</td>
+                                    <td>@(image.Tag.Length > 0 ? image.Tag : "latest")</td>
+                                    <td>@Bytes.Humanize(image.SizeBytes)</td>
+                                    <td>@When(image.Created)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">Showing @o.TopImages.Count of @o.ImageCount registered images.</MudText>
+                }
+            </MudPaper>
+        }
+    </ChildContent>
+</PageShell>
+
+@code {
+    private static readonly (string Target, string Label)[] Cleanups =
+    [
+        ("images", "Prune images"), ("volumes", "Prune volumes"), ("networks", "Prune networks"),
+    ];
+
+    private SystemOverview? _overview;
+    private string? _error;
+
+    /// <summary>The cleanup under way; every cleanup button waits for it.</summary>
+    private string? _running;
+
+    /// <summary>The one screen that watches the sessions: another client, or a terminal on the machine, can start or stop one, and this page says which run.</summary>
+    private static readonly TimeSpan WatchEvery = TimeSpan.FromSeconds(5);
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _stop;
+
+    protected override Task OnInitializedAsync()
+    {
+        // Starting or stopping the session changes this page: what runs, and
+        // whether Compact VHDX can go ahead. It is read again, in place — and
+        // every five seconds while the page is open, the poll the sidebar's
+        // session panel used to run for the whole app (one wslc system info
+        // per client every five seconds filled the log; only System watches now).
+        Session.Changed += OnSessionChanged;
+        _stop = new CancellationTokenSource();
+        _timer = new PeriodicTimer(WatchEvery);
+        _ = WatchAsync(_stop.Token);
+        return LoadAsync();
+    }
+
+    private async Task WatchAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (await _timer!.WaitForNextTickAsync(cancellationToken))
+            {
+                await LoadAsync();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The page closed.
+        }
+    }
+
+    private void OnSessionChanged() => _ = InvokeAsync(async () =>
+    {
+        await LoadAsync();
+        StateHasChanged();
+    });
+
+    public void Dispose()
+    {
+        Session.Changed -= OnSessionChanged;
+        _stop?.Cancel();
+        _timer?.Dispose();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _overview = await Api.GetSystemAsync();
+            _error = null;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _error = $"Could not load System: {ex.Message}";
+        }
+    }
+
+    private async Task CleanupAsync(string target, string label)
+    {
+        if (!await DialogFlow.ConfirmAsync(Dialogs, label, $"{label}? This removes unused WSLC resources and may take a while.", label, destructive: true))
+        {
+            return;
+        }
+
+        _running = target;
+        var progress = Snackbar.Add($"{label}...", Severity.Info, options => options.RequireInteraction = true);
+        try
+        {
+            var result = await Api.CleanupAsync(target);
+            Snackbar.Add(result.Summary.Length > 0 ? result.Summary : $"{label} completed", Severity.Success, options => options.VisibleStateDuration = 6000);
+            await LoadAsync();
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add(ex.Message.Length > 0 ? ex.Message : $"Failed to {label.ToLowerInvariant()}", Severity.Error);
+        }
+        finally
+        {
+            if (progress is not null)
+            {
+                Snackbar.Remove(progress);
+            }
+
+            _running = null;
+        }
+    }
+
+    /// <summary>System → Compact VHDX: asks, then the host terminal runs the job in a dialog.</summary>
+    private async Task CompactAsync()
+    {
+        const string question = "Open the host terminal and compact there? It trims in a temporary session, then runs Optimize-VHD elevated. Refuses while a WSLC session is active; nothing of yours is terminated.";
+        if (!await DialogFlow.ConfirmAsync(Dialogs, "Compact VHDX", question, "Compact VHDX"))
+        {
+            return;
+        }
+
+        await DialogFlow.ShowAsync<CompactVhdxDialog>(Dialogs, "Compact VHDX", large: true);
+        await LoadAsync();
+    }
+
+    private static IEnumerable<(string Label, string Value)> InfoFields(SystemRuntimeInfo info) =>
+        new[]
+        {
+            ("Client", info.ClientVersion), ("Kernel", info.Kernel), ("Windows", info.Windows),
+            ("Session manager", info.SessionManager), ("Direct3D", info.Direct3D), ("DxCore", info.DxCore),
+            ("Settings file", info.SettingsFile),
+        }.Where(field => field.Item2.Length > 0);
+
+    private static string When(DateTimeOffset? moment) =>
+        moment is { } value ? value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture) : "—";
+}

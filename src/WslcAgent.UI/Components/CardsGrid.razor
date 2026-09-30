@@ -1,0 +1,83 @@
+@* The cards counterpart of ListGrid: fills the height left on the page, the
+   cards area owns the scrollbar, and the pager is always the last line with
+   the same page sizes as the table. Pages only provide the card template. *@
+@typeparam TItem
+
+<div class="wslc-fill">
+    <div class="wslc-fill-scroll pa-1">
+        @* Cards wait with a ring in the middle of the area, not with the table's
+           line across the top: a panel of cards is not a row of them, and the
+           progress of anything in this view is a ring. *@
+        @if (Loading && !Items.Any())
+        {
+            <div class="wslc-cards-loading">
+                <MudProgressCircular Indeterminate="true" Color="Color.Primary" Class="wslc-cards-loading-dial" />
+            </div>
+        }
+        else if (!Items.Any())
+        {
+            <EmptyState Text="@EmptyText" />
+        }
+        @* One layout at every width: the cards take the width they need and as
+           many as fit stand in a row. A count per breakpoint would divide the
+           room instead, and a card narrower than its action row loses its last
+           verb over the edge. *@
+        <div class="wslc-cards-grid">
+            @foreach (var item in PageItems)
+            {
+                @ItemTemplate(item)
+            }
+        </div>
+    </div>
+    @* Same shape as the table pager: rows per page, range, first/prev/next/last. *@
+    <div class="wslc-pager d-flex align-center flex-shrink-0">
+        <MudSpacer />
+        <MudText Typo="Typo.body2" Class="mud-table-pagination-caption">Cards per page:</MudText>
+        <MudSelect T="int" Value="_pageSize" ValueChanged="SetPageSize" Dense="true" Variant="Variant.Filled" Margin="Margin.Dense"
+                   Class="mud-table-pagination-select">
+            @foreach (var size in PageSizes)
+            {
+                <MudSelectItem T="int" Value="size">@size</MudSelectItem>
+            }
+        </MudSelect>
+        <MudText Typo="Typo.body2" Class="mud-table-pagination-caption">@RangeText</MudText>
+        <div class="mud-table-pagination-actions d-flex">
+            <MudIconButton Icon="@Icons.Material.Filled.FirstPage" Size="Size.Small" Disabled="Page <= 1" OnClick="() => _page = 1" title="First page" />
+            <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Size="Size.Small" Disabled="Page <= 1" OnClick="() => _page = Page - 1" title="Previous page" />
+            <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" Disabled="Page >= PageCount" OnClick="() => _page = Page + 1" title="Next page" />
+            <MudIconButton Icon="@Icons.Material.Filled.LastPage" Size="Size.Small" Disabled="Page >= PageCount" OnClick="() => _page = PageCount" title="Last page" />
+        </div>
+    </div>
+</div>
+
+@code {
+    private static readonly int[] PageSizes = [10, 25, 50, 100];
+
+    [Parameter, EditorRequired] public IReadOnlyList<TItem> Items { get; set; } = [];
+
+    [Parameter, EditorRequired] public RenderFragment<TItem> ItemTemplate { get; set; } = default!;
+
+    [Parameter] public bool Loading { get; set; }
+
+    [Parameter] public string EmptyText { get; set; } = "Nothing to show.";
+
+    private int _pageSize = 25;
+    private int _page = 1;
+
+    private int PageCount => Math.Max(1, (Items.Count + _pageSize - 1) / _pageSize);
+
+    /// <summary>Current page, clamped: the list may shrink between refreshes.</summary>
+    private int Page => Math.Clamp(_page, 1, PageCount);
+
+    private IEnumerable<TItem> PageItems => Items.Skip((Page - 1) * _pageSize).Take(_pageSize);
+
+    private string RangeText => Items.Count == 0
+        ? "0 of 0"
+        : $"{(Page - 1) * _pageSize + 1}-{Math.Min(Page * _pageSize, Items.Count)} of {Items.Count}";
+
+    private void SetPageSize(int size)
+    {
+        _pageSize = size;
+        _page = 1;
+    }
+}

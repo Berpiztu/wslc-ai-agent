@@ -1,0 +1,32 @@
+@* The Autorefresh switch of a live window, as the Logs page drew it: a ring with a round button inside and no
+   box around it, the size of the rail's square buttons. Pressed, the ring goes
+   round in blue and the window follows what arrives; pressed again, both stop
+   and the ring turns green. While the reader holds the window — pointer over
+   it, finger on it — the ring stands still without switching off, and the
+   window stays put until they leave. One ring for every live window: the Logs
+   page's two, a container's logs, the pull console. *@
+
+<MudIconButton Icon="@null" Color="@RailToggle.Color(Follow)" Class="wslc-rail-ring" Size="Size.Small" Variant="Variant.Text"
+               title="@Title" aria-pressed="@(Follow ? "true" : "false")" OnClick="FollowChanged">
+    <MudProgressCircular Class="wslc-rail-spinner" Color="Color.Inherit" Size="Size.Small" StrokeWidth="5" Indeterminate="@(Follow && !Held)" Value="100">
+        <MudIcon Icon="@Icons.Material.Filled.Circle" Class="wslc-rail-spinner-dot" />
+    </MudProgressCircular>
+</MudIconButton>
+
+@code {
+    /// <summary>Autorefresh on.</summary>
+    [Parameter] public bool Follow { get; set; }
+
+    /// <summary>The reader holds the window: the ring stands still without switching off.</summary>
+    [Parameter] public bool Held { get; set; }
+
+    /// <summary>The tooltip: what is on or off, and that the ring is holding still when it is.</summary>
+    [Parameter] public string Title { get; set; } = "";
+
+    [Parameter] public EventCallback FollowChanged { get; set; }
+
+    /// <summary>The tooltip every live window words the same way: what the ring is following, whether it is holding, how to switch it.</summary>
+    public static string TitleFor(string what, bool follow, bool held) => follow
+        ? held ? $"Autorefresh of {what} on, holding still while you are on it — click to switch off" : $"Autorefresh of {what} on (every 2 s) — click to switch off"
+        : $"Autorefresh of {what} off, it stays as it is — click to switch on";
+}

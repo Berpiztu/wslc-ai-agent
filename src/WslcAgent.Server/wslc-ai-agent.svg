@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Icon of wslc-ai-agent.exe: the app glyph on the theme's green (Success
+     #10b981) so the agent stands apart from the client's indigo icon.
+     wslc-ai-agent.ico next to it is rendered from this file. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 456 456">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#10b981"/>
+      <stop offset="1" stop-color="#047857"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.3" cy="0.25" r="0.8">
+      <stop offset="0" stop-color="#6ee7b7" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#6ee7b7" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="456" height="456" rx="96" fill="url(#bg)"/>
+  <rect width="456" height="456" rx="96" fill="url(#glow)"/>
+  <g fill="none" stroke="#ecfdf5" stroke-width="22" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M228 78 L352 150 V306 L228 378 L104 306 V150 Z"/>
+    <path d="M104 150 L228 222 L352 150"/>
+    <path d="M228 222 V378"/>
+  </g>
+  <g fill="none" stroke="#a7f3d0" stroke-width="22" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M140 262 L172 286 L140 310"/>
+    <path d="M186 322 H226"/>
+  </g>
+</svg>

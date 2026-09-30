@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- App icon foreground: an isometric container (hexagon with a lid) holding
+     a terminal prompt. Sized for Android's adaptive-icon safe zone. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="456" height="456" viewBox="0 0 456 456">
+  <g fill="none" stroke="#e2e8f0" stroke-width="22" stroke-linejoin="round" stroke-linecap="round">
+    <!-- outer hexagon -->
+    <path d="M228 78 L352 150 V306 L228 378 L104 306 V150 Z"/>
+    <!-- lid edges giving the cube its depth -->
+    <path d="M104 150 L228 222 L352 150"/>
+    <path d="M228 222 V378"/>
+  </g>
+  <!-- prompt: chevron and cursor on the front face -->
+  <g fill="none" stroke="#818cf8" stroke-width="22" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M140 262 L172 286 L140 310"/>
+    <path d="M186 322 H226"/>
+  </g>
+</svg>

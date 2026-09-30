@@ -1,0 +1,399 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject PageChrome Chrome
+@inject WslcAgent.UI.Components.ThemePreference ThemeChoice
+@inject WslcAgent.UI.Components.Styles.UiStyle Style
+@inject AgentAccessToken Session
+@inject WslcAgent.UI.Access.IClientServers Servers
+@inject WslcAgent.UI.Access.IAgentTokenStore Tokens
+@inject WslcAgentApi Api
+@inject SimulatedRemote Simulated
+@inject SessionState WslcSession
+@inject AgentLink Link
+@inject UnhandledErrors Errors
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject IJSRuntime Js
+@inject WslcAgent.UI.Components.AgentBuild Build
+
+<MudThemeProvider Theme="WslcTheme.Theme" @bind-IsDarkMode="_darkMode" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<Toasts />
+<ClientUpdateWatcher />
+<AgentUpdateWatcher />
+<WslcAgent.UI.Notifications.ClientNotificationsWatcher />
+
+@* Nothing of the application is drawn until it knows what it is drawing on and
+   for whom: the hand or the mouse, the theme and
+   the look this device was left with, and whether the caller holds a session.
+   With no session and away from the agent's machine the sign-in screen takes
+   over, and this screen is never shown at all. Whatever the address asks for —
+   the dashboard, Containers, any page — opens once, already in its own shape,
+   instead of opening as something else and turning into itself. *@
+@if (!_ready)
+{
+    <div class="wslc-app-waiting">
+        @if (LinkOff)
+        {
+            @* The agent was already gone when the client opened: the panel that
+               names the address and offers the way on, and no page around it. *@
+            <AgentUnreachable />
+        }
+        else
+        {
+            <BootSplash />
+        }
+    </div>
+}
+else
+{
+
+@*
+    The composition, drawn with MudBlazor (one navigation button on every
+    host, the phone and the desktop alike):
+    - top bar row 1: at the left the application's name over the
+      session line (selector, refresh, power, status), then the page title and
+      its status slot; the page's search centred; then on the right the page's
+      nav slot (bulk actions), Styles, the page zoom, the theme toggle and Log
+      out (for a signed-in session);
+    - top bar row 2: the page's section actions, only when the page has some;
+    - content: a viewport-high column so list pages fill it;
+    - the navigation button at the bottom centre, coloured by the session —
+      green running, red stopped — on an empty strip of the bar's tone, whose
+      list holds every section and the page's verbs (Run, Create, Pull…).
+*@
+@* wslc-dark lets the stylesheet give the dark theme its own value where the
+   palette has none for it (the light blue of the Activity labels). *@
+<MudLayout Class="@(_darkMode ? "wslc-dark" : null)">
+    <MudAppBar Elevation="1">
+        @* Three columns: at the left the application's name over the session line
+           and then the page's title, the page's search in the centre of the bar,
+           the verbs, the zoom, the theme and Log out at the right. Either side
+           gives way before the search moves off centre, and nothing ever overlaps. *@
+        <div class="@($"wslc-appbar-row{(Chrome.TopbarSearch is null ? "" : " has-search")}")">
+            <div class="wslc-appbar-start">
+                @* The brand and the session, two lines in one block: what this client is and what it is on. *@
+                <div class="wslc-appbar-brand">
+                    @* The client's version is not beside the name any more: it
+                       pushed the bar off a phone's width, and it lives on the
+                       System card and the System page. *@
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudText Typo="Typo.h6" Class="wslc-brand-name">WSLC AI Agent</MudText>
+                    </MudStack>
+                    <SessionPanel />
+                </div>
+                @* The page, two lines: its title
+                   and status on the first, its search on the second. *@
+                <div class="wslc-appbar-page">
+                    <div class="wslc-appbar-page-title">
+                        <MudText Typo="Typo.h6" Class="wslc-title">@(Chrome.TitleContent ?? (RenderFragment)(title => title.AddContent(0, Chrome.Title)))</MudText>
+                        @if (Chrome.Status is not null)
+                        {
+                            <div class="ml-4">@Chrome.Status</div>
+                        }
+                    </div>
+                    @if (Chrome.TopbarSearch is not null)
+                    {
+                        <div class="@($"wslc-appbar-search{SessionOffClass}")" inert="@SessionOff">@Chrome.TopbarSearch</div>
+                    }
+                </div>
+            </div>
+            <div class="wslc-appbar-end">
+                @if (Chrome.TopbarNav is not null)
+                {
+                    <div class="@($"wslc-topnav mr-2{SessionOffClass}")" inert="@SessionOff">@Chrome.TopbarNav</div>
+                }
+                @* This client's own things as a 2×2 at the right edge: the theme toggle and Log out on the first
+                   line, the page zoom across the second, so the search keeps its
+                   room. *@
+                <div class="wslc-appbar-client">
+                    <MudIconButton Icon="@(_darkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" Size="Size.Small" Color="Color.Inherit"
+                                   title="Theme" aria-label="Theme" OnClick="ToggleTheme" />
+                    @* The doorway, always in sight, even
+                       with no session to end: it then only goes to the sign-in screen.
+                       The tooltip says it for anyone unsure of the glyph. *@
+                    <MudIconButton Icon="@Icons.Material.Filled.Logout" Size="Size.Small" Color="Color.Inherit" OnClick="LogOutAsync" title="Log out" aria-label="Log out" />
+                    <ZoomControl />
+                </div>
+            </div>
+        </div>
+    </MudAppBar>
+
+    <MudMainContent Class="wslc-main d-flex flex-column" inert="@LinkOff">
+        @if (Chrome.SectionActions is not null)
+        {
+            <MudToolBar Dense="true" Class="@($"wslc-section-actions flex-shrink-0{SessionOffClass}")" inert="@SessionOff">
+                @Chrome.SectionActions
+            </MudToolBar>
+        }
+        <div class="wslc-page pa-2">
+            @* A screen that throws takes itself down, not the application: the
+               panel says what happened and offers the way on. The alternative is
+               Blazor's own bar at the foot of the window, which says "An
+               unhandled error has occurred" and leaves the app dead — and on a
+               phone, with no console to read, that is a dead end. *@
+            <ErrorBoundary @ref="_errors">
+                <ChildContent>@Body</ChildContent>
+                <ErrorContent Context="error">
+                    <ErrorPanel Error="error" OnRetry="Recover" />
+                </ErrorContent>
+            </ErrorBoundary>
+        </div>
+    </MudMainContent>
+
+    <PageVerbsFab />
+
+    @* The agent stopped answering. The application is not made to work without
+       it, so the screen waits under this, deaf to pointer and keyboard, instead
+       of every page and every poll saying "Failed to fetch" on its own; the
+       layout asks for the agent's health until it answers, and then every page
+       reads again. The way out: a native client can go and
+       choose another agent — the sign-in screen, which has the chooser and its
+       own layout, so the veil goes with this one — or close itself; a browser
+       page can do neither, so it offers to reload. *@
+    <MudOverlay Visible="LinkOff" DarkBackground="true" AutoClose="false" ZIndex="1400">
+        <AgentUnreachable />
+    </MudOverlay>
+</MudLayout>
+}
+
+@code {
+    /// <summary>Light until this device says otherwise (ThemePreference, read on the first render).</summary>
+    private bool _darkMode;
+
+    private ErrorBoundary? _errors;
+
+    /// <summary>Draws the screen again after an error the panel showed.</summary>
+    private void Recover() => _errors?.Recover();
+
+    /// <summary>The caller holds a session (not merely sitting at the agent's machine): only then does Log out mean something.</summary>
+    private bool _signedIn;
+
+    /// <summary>The device, the look and the session are known: from here the page may be drawn, once and in its own shape.</summary>
+    private bool _ready;
+
+    /// <summary>
+    /// Everything the first paint depends on, before there is a first paint: the device, the theme and the look this device
+    /// was left with, then the session. A caller with no session away from the
+    /// agent's machine is sent to the sign-in screen from here, so no page is
+    /// drawn and then taken away; whatever answer comes, the screen opens once.
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        Chrome.Changed += OnChromeChanged;
+        WslcSession.Changed += OnChromeChanged;
+        Link.Changed += OnLinkChanged;
+        Errors.Reported += OnUnhandled;
+        Session.SignInRequired += OnSignInRequired;
+        await ReadDeviceAsync();
+        // Which build of the agent served this application: from here on, an
+        // answer from a different one means the two no longer match.
+        await NoteBuildAsync();
+        try
+        {
+            var status = await Api.GetLoginStatusAsync();
+            _signedIn = status.SignedIn;
+            // Sitting at the agent's machine is session enough; anywhere else a
+            // caller without one signs in before any of this is drawn.
+            if (!status.SignedIn && !status.Local)
+            {
+                GoToLogin();
+                return;
+            }
+
+            Simulated.Enabled = (await Api.GetTestingSettingsAsync()).SimulateRemote;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            // The agent did not say who this caller is. When it is not there at
+            // all — stopped, or a gateway in front of it answering for it — none
+            // of the application is drawn (an address whose agent was down opened a dashboard that was nobody's,
+            // with the failure as a toast over it). A native client goes where
+            // the agent is chosen, since that is what the user has to change; a
+            // browser page, which has no chooser, waits on the panel that names
+            // the address. An agent that answered, whatever it answered, leaves
+            // the application to open: the pages report it themselves.
+            if (LinkOff)
+            {
+                if (Servers.Supported)
+                {
+                    GoToLogin();
+                }
+
+                return;
+            }
+        }
+
+        _ready = true;
+    }
+
+    /// <summary>The device answered: the hand or the mouse, the theme and the look are this device's own, not the safe first paint's.</summary>
+    private bool _deviceRead;
+
+    /// <summary>The theme and the look, both from this device; a host whose helpers are not up yet is asked again on the first render.</summary>
+    private async Task ReadDeviceAsync()
+    {
+        try
+        {
+            _darkMode = await ThemeChoice.ReadAsync();
+            await Style.LoadAsync();
+            _deviceRead = true;
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException or InvalidOperationException)
+        {
+            // Light, mouse and the stylesheet's own look for now; the first render asks again.
+        }
+    }
+
+    /// <summary>The safety net for a host whose page helpers were not up when the layout asked: by the first render they are.</summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_deviceRead)
+        {
+            await ReadDeviceAsync();
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>A call was refused: sign in, then come back to this page.</summary>
+    private void OnSignInRequired() => InvokeAsync(GoToLogin);
+
+    /// <summary>The sign-in screen, which on a native client also holds the chooser of agents, with the way back to the page the user was on.</summary>
+    private void GoToLogin()
+    {
+        var here = "/" + Navigation.ToBaseRelativePath(Navigation.Uri);
+        if (!here.StartsWith("/login", StringComparison.Ordinal))
+        {
+            Navigation.NavigateTo($"login?next={Uri.EscapeDataString(here)}");
+        }
+    }
+
+    /// <summary>Ends the session on the agent and here; the browser reloads so nothing of the old one stays in memory.</summary>
+    private async Task LogOutAsync()
+    {
+        await CloseTerminalsAsync();
+        try
+        {
+            await Api.LogoutAsync();
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            // Signed out here all the same: the session is forgotten below.
+        }
+
+        Session.Value = null;
+        Tokens.Save(null);
+        _signedIn = false;
+        Navigation.NavigateTo("login", forceLoad: OperatingSystem.IsBrowser());
+    }
+
+    /// <summary>
+    /// Terminal sessions outlive their pages, in the tab's registry; signing out
+    /// must not leave a shell running on the agent. The native client does not
+    /// reload the page, so the sockets would otherwise stay open.
+    /// </summary>
+    private async Task CloseTerminalsAsync()
+    {
+        try
+        {
+            await using var terminals = await Js.InvokeAsync<IJSObjectReference>("import", "./_content/WslcAgent.UI/wslc-terminal.js");
+            await terminals.InvokeVoidAsync("closeAll");
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException or OperationCanceledException)
+        {
+            // No terminal was ever opened here, or the page is already gone.
+        }
+    }
+
+    /// <summary>The page only lists what lives in the WSLC session, and the session is stopped: its verbs go dead with it.</summary>
+    private bool SessionOff => Chrome.RequiresSession && !WslcSession.Active;
+
+    /// <summary>
+    /// An error nothing caught, where Blazor's yellow bar used to be: a toast that
+    /// stays and can be copied, and the application goes on — a WebAssembly app is
+    /// not dead after one, whatever the bar made it look like.
+    /// </summary>
+    private void OnUnhandled(string message) => InvokeAsync(() => Snackbar.Add($"Unexpected error: {message}", Severity.Error));
+
+    private static readonly TimeSpan ProbeEvery = TimeSpan.FromSeconds(2);
+
+    private bool _probing;
+
+    /// <summary>The agent does not answer. The sign-in screen has a layout of its own, so this never covers the chooser of agents.</summary>
+    private bool LinkOff => !Link.Online;
+
+    /// <summary>The link went: the screen waits and the agent is asked until it answers. Back: the screen wakes.</summary>
+    private void OnLinkChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+        if (!Link.Online)
+        {
+            _ = ProbeAsync();
+        }
+    }
+
+    /// <summary>
+    /// Asks for the agent's health every two seconds until an answer comes: the
+    /// answer itself brings the link back (<see cref="AgentLinkHandler"/>), and
+    /// every page reads again on that. Health needs no sign-in, so a session that
+    /// expired meanwhile is met by the pages, not here.
+    /// </summary>
+    private async Task ProbeAsync()
+    {
+        if (_probing)
+        {
+            return;
+        }
+
+        _probing = true;
+        try
+        {
+            while (!Link.Online)
+            {
+                await Task.Delay(ProbeEvery);
+                // The agent that answers after a silence may not be the one
+                // that went: a development agent is stopped and built and
+                // started again all day, and its UI has to follow.
+                await NoteBuildAsync();
+            }
+        }
+        finally
+        {
+            _probing = false;
+        }
+    }
+
+    /// <summary>Asks the agent how it is, which is also how it says which build it is; a silent agent is the probe's business, not this one's.</summary>
+    private async Task NoteBuildAsync()
+    {
+        try
+        {
+            Build.Seen(await Api.GetHealthAsync());
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or AgentApiException)
+        {
+            // Still gone, or too old to say: the next probe asks again.
+        }
+    }
+
+    private string SessionOffClass => SessionOff ? " wslc-session-off" : "";
+
+    private void OnChromeChanged() => InvokeAsync(StateHasChanged);
+
+    /// <summary>The theme toggle stands in the title bar, between the zoom and Log out.</summary>
+    private void ToggleTheme()
+    {
+        _darkMode = !_darkMode;
+        ThemeChoice.Set(_darkMode);
+    }
+
+    public void Dispose()
+    {
+        Chrome.Changed -= OnChromeChanged;
+        WslcSession.Changed -= OnChromeChanged;
+        Link.Changed -= OnLinkChanged;
+        Errors.Reported -= OnUnhandled;
+        Session.SignInRequired -= OnSignInRequired;
+    }
+}

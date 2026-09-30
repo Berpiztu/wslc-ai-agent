@@ -1,0 +1,637 @@
+@page "/"
+@page "/dashboard"
+@* Berpiztu's dashboard with WSLC's objects, the Home page; /dashboard leads
+   here too. Designing it is a step of its own in the history: the
+   address carries it, so Back takes the dashboard out of design.
+
+   Two views, the landscape's and the portrait's, each laid out on its own
+   and kept together. Out of design the window's orientation chooses —
+   wider than tall, or taller than wide — and chooses again as the window is
+   reshaped or a phone turned; in design the view is chosen (ViewVerb) and
+   laid out in a frame of its size in the middle of the page — a phone's for
+   the portrait one, 16:9 for the landscape one, until another is set at the
+   toolbox's top — and out of design it is zoomed to fit the screen. The
+   view designed can be given to the other, to start it from it.
+
+   Nothing designed reaches where the dashboard is kept without Save: each
+   change is a draft on this
+   device, the place's, the page's and the view's own (DeviceDashboardDrafts),
+   which a power cut or a lost connection does not lose and which design
+   opens again; Discard lets it go, and leaving design with one asks first.
+   Copy and Save as default work on what is saved, and say so where there is
+   a draft.
+
+   Kept with the user on the agent or on this device, the device's choice
+   (DashboardPlace): in View the round button names the
+   place and the view and switches to the other place, showing what it holds
+   and writing nothing; in design Copy writes the page and the view being
+   designed over the same page and view of the other place, and nothing
+   else, asking first where there is one.
+
+   Two pages (each seen at a glance, with no scrolling): System, the host's, and User, what the user runs, each a
+   dashboard of its own with its two views, switched by the round button's
+   Page verb in view; design designs the page it was opened on. The page is in the address
+   (?page=user) and remembered on the device, the last one opening again;
+   the verb is red while one of the other page's alarms is up.
+
+   Out of design a tap selects a card or an object standing alone, and the round button then
+   offers its verbs alone — a resource's family's page verbs, the very ones
+   its list page offers, and Open where what is selected opens something —
+   and the dashboard's own come back when nothing is. *@
+@implements IAsyncDisposable
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Designer
+@using Berpiztu.Dashboard.Storage
+@using WslcAgent.UI.Dashboard
+@using BoardView = Berpiztu.Dashboard.Model.DashboardView
+@using ViewFit = Berpiztu.Dashboard.Model.ViewFit
+@using BoardLayout = Berpiztu.Dashboard.Model.DashboardLayout
+@inject NavigationManager Navigation
+@inject DashboardPlace Place
+@inject AgentObjectDefaults Defaults
+@inject ObjectCatalogue Catalogue
+@inject DashboardInterop Interop
+@inject IJSRuntime Js
+@inject DashboardMeasures Measures
+@inject WslcAgentApi Api
+@inject IDialogService Dialogs
+@inject DeviceDashboardDrafts Drafts
+@inject WslcAgent.UI.Components.Styles.UiStyle Style
+@inject ISnackbar Snackbar
+@inject ContainerRows Containers
+@inject ImageRows Images
+@inject VolumeRows Volumes
+@inject WslcAgent.UI.Dashboard.NetworkRows Networks
+
+@* The title bar names the page on screen and where the dashboard is kept:
+   "Dashboard (System, server)", and between the two the view on screen,
+   landscape or portrait, in design as out of it, so which of the
+   dashboard's alarms are in force is read at a glance. *@
+<PageShell Title="@Title">
+    <TitleContent>
+        Dashboard
+        @if (_view is not null)
+        {
+            <span class="wslc-title-icon" title="@($"{ViewVerb.Name(_view == BoardView.Portrait)} view")">
+                <MudIcon Icon="@ViewVerb.Icon(_view == BoardView.Portrait)" />
+            </span>
+        }
+        (@PageName(PageKey), @Named(Place.Scope))
+    </TitleContent>
+    <Verbs>
+        @if (!Designing && _selection.Objects.Count > 0)
+        {
+            @switch (Family)
+            {
+                case ContainerSourceFamily.FamilyKey:
+                    <ContainersVerbs Changed="@(() => Containers.RefreshAsync())" />
+                    break;
+                case ImageSourceFamily.FamilyKey:
+                    <ImagesVerbs Changed="@(() => Images.RefreshAsync())" />
+                    break;
+                case VolumeSourceFamily.FamilyKey:
+                    <VolumesVerbs Changed="@(() => Volumes.RefreshAsync())" />
+                    break;
+                case NetworkSourceFamily.FamilyKey:
+                    <NetworksVerbs Changed="@(() => Networks.RefreshAsync())" />
+                    break;
+            }
+            @if (_selection.Opens)
+            {
+                <VerbFab StartIcon="@Icons.Material.Filled.Launch" Label="Open" OnClick="@(() => _designer?.OpenAsync() ?? Task.CompletedTask)"
+                         Title="Open what is selected: its full chart, or its page" />
+            }
+        }
+        else
+        {
+            @* How each object is born, designed on the board of every object,
+               on a development agent alone, which ships it; offered in design
+               and out of it, so it is never out of reach. *@
+            @if (Defaults.Writable)
+            {
+                <VerbFab StartIcon="@Icons.Material.Filled.Widgets" Label="Objects" OnClick="@(() => Navigation.NavigateTo("dashboard/objects"))"
+                         Title="How each object is born, in the landscape view and the portrait one" />
+            }
+            @if (Designing)
+            {
+                @* Nothing reaches where the dashboard is kept without Save:
+                   until then what is designed is a draft on this device,
+                   which Discard lets go. *@
+                <VerbFab StartIcon="@Icons.Material.Filled.Save" Label="Save" Disabled="@(_designer?.Unsaved != true)" OnClick="SaveAsync"
+                         Title="@($"Save this {PageName(PageKey)} {_view} view where the dashboard is kept, {Named(Place.Scope)}; until then it is kept on this device only")" />
+                <VerbFab StartIcon="@Icons.Material.Filled.RestorePage" Label="Discard" Disabled="@(_designer?.Unsaved != true)" OnClick="DiscardAsync"
+                         Title="Discard what is not saved: this view back as it is saved" />
+                <VerbFab StartIcon="@Icons.Material.Filled.ContentCopy"
+                         Label="@(Place.Scope == DashboardScope.User ? "Copy to device" : "Copy to server")" OnClick="CopyPlaceAsync"
+                         Title="@(Place.Scope == DashboardScope.User
+                                    ? $"Write this {PageName(PageKey)} {_view} view over the one this device keeps, and stay with the user's; everything else is left as it is"
+                                    : $"Write this {PageName(PageKey)} {_view} view over the one the user keeps, and stay with this device's; everything else is left as it is")" />
+                @* Which of this view's alarms the status bar shows too. *@
+                <VerbFab StartIcon="@Icons.Material.Filled.NotificationsActive" Label="Status alarms" OnClick="@(() => _designer?.ShowStatusAlarmsAsync() ?? Task.CompletedTask)"
+                         Title="Choose which of this view's alarms the status bar shows, on every screen" />
+                <ViewVerb Portrait="@(_view == BoardView.Portrait)" />
+                @* The server's dashboard made the one a user with none is given,
+                   on a development agent alone,
+                   which writes it back to the repository for the installer. *@
+                @if (Defaults.Writable && Place.Scope == DashboardScope.User)
+                {
+                    <VerbFab StartIcon="@Icons.Material.Filled.Inventory2" Label="Save as default" OnClick="SaveAsDefaultAsync"
+                             Title="@($"Ship this {PageName(PageKey)} {_view} view in the dashboard a user with none is given, the rest of it left as it is; what reads one of this machine's containers, images, volumes or networks is left out")" />
+                }
+                @* The view designed given to the other, to start one from the
+                   other: for every user. *@
+                @if (_view is not null)
+                {
+                    <VerbFab StartIcon="@Icons.Material.Filled.ContentCopy" Label="@($"Copy {_view} → {Other}")" OnClick="CopyViewAsync"
+                             Title="@($"Lay out the {Other} view as this one, each object as it is born on the {Other}")" />
+                }
+            }
+            else
+            {
+                @* The other page, in view (a verb, not tabs, which took a row
+                   of the dashboard's room;
+                   design designs the page it was opened on, and its button
+                   holds enough), named as the place is: where it is, and
+                   after the arrow where a tap takes it; red while one of the
+                   other page's alarms is up, so it is seen unopened. Its
+                   icon is the page it is on, as the place's is. *@
+                <VerbFab StartIcon="@(PageKey == UserPage ? Icons.Material.Filled.Person : Icons.Material.Filled.Computer)"
+                         Label="@($"Page: {PageName(PageKey)} → {PageName(OtherPage)}")" OnClick="SwitchPageAsync"
+                         Color="@(PageUp(OtherPage) ? Color.Error : Color.Default)"
+                         Title="@(PageUp(OtherPage) ? $"Show the {PageName(OtherPage)} page: one of its alarms is up" : $"Show the {PageName(OtherPage)} page")" />
+                @* Where the dashboard is kept, and which of its views is on
+                   screen, named in the one place either is named; a tap takes
+                   it to the other place. *@
+                <VerbFab StartIcon="@(Place.Scope == DashboardScope.User ? Icons.Material.Filled.Cloud : Icons.Material.Filled.Devices)"
+                         Label="@PlaceLabel" OnClick="SwitchPlaceAsync"
+                         Title="@(Place.Scope == DashboardScope.User
+                                    ? "Kept with the user on the agent, the same on every client; tap to keep it on this device instead"
+                                    : "Kept on this device alone; tap to keep it with the user, the same on every client")" />
+                @* The dashboard's own zoom, out of design: shown or hidden from
+                   here, in a window of its own
+                   floating over the dashboard, since the dashboard does not
+                   scroll while this list is open. *@
+                <VerbFab StartIcon="@Icons.Material.Filled.ZoomIn" Label="@(_zooming ? "Hide zoom" : "Show zoom")" OnClick="@(() => _zooming = !_zooming)"
+                         Title="@(_zooming ? "Hide the dashboard's zoom" : "Show the dashboard's zoom, in a window that stays open while the dashboard is moved")" />
+            }
+            <DesignVerb Designing="Designing" />
+        }
+    </Verbs>
+    <ChildContent>
+        <div class="wslc-dash-board" @ref="_pane">
+            @if (_store is not null)
+            {
+                @* A designer per store, made anew each time Show makes one: keyed
+                   by the place's name, the render that ran while the place was
+                   being remembered (an await) made it with the store of the
+                   place before, and it kept that one — a switch showed the
+                   previous place's dashboard, the server's User page blank
+                   after coming back from the device. *@
+                <DashboardDesigner @key="_store" @ref="_designer" Store="_store" Draft="_draft" Framed="true" Fitting="_fitting" CardElevation="Style.Applied.CardElevation" DraftChanged="@(() => StateHasChanged())" Designing="Designing" View="@(_view!)" Defaults="Defaults" Measures="Measures"
+                                   SelectionChanged="OnSelectionChanged" />
+            }
+        </div>
+        @* Not modal, moved by its title, over the dashboard's top-left corner
+           when it opens; the zoom scales the dashboard alone, never this
+           window. *@
+        @if (_zooming && !Designing)
+        {
+            <FloatingWindow Name="Zoom" Anchor="@(() => _pane)" OnClose="@(() => _zooming = false)">
+                <ZoomControl @key="ZoomOf" Remembered="wslcAgent.dashboardZoom" Of="@ZoomOf" Label="@($"Dashboard zoom, {ZoomOf}")" />
+                @* How the view meets a screen of another aspect (as a
+                   television offers it): whole, filling
+                   it, or stretched to it; this page's and view's, on this device. *@
+                <MudToggleGroup T="ViewFit" Value="@(_fitting ?? ViewFit.Fill)" ValueChanged="FitAsync" Size="Style.Applied.ToggleSize" Color="Style.Applied.ToggleColor"
+                                Outlined="Style.Applied.ToggleOutlined" Delimiters="Style.Applied.ToggleDelimiters"
+                                Class="@(Style.Applied.ToggleRounded ? "rounded-pill mt-2" : "mt-2")" CheckMark="Style.Applied.ToggleCheckMark">
+                    <MudToggleItem Value="ViewFit.Fit" Text="Fit" title="The whole view, as large as it goes, its aspect kept; the room left over at both sides" />
+                    <MudToggleItem Value="ViewFit.Fill" Text="Fill" title="The screen filled, the aspect kept; what goes past it scrolled to" />
+                    <MudToggleItem Value="ViewFit.Width" Text="Width" title="The screen's whole width filled, larger or smaller, the aspect kept; what goes past its bottom scrolled to" />
+                    <MudToggleItem Value="ViewFit.Stretch" Text="Stretch" title="The screen filled both ways, the aspect given up: the cells stretched" />
+                    <MudToggleItem Value="ViewFit.Fluid" Text="Fluid" title="As the Containers screen's cards: nothing zoomed, the cards widened to the screen's width, their height as designed; what goes past the bottom scrolled to" />
+                </MudToggleGroup>
+            </FloatingWindow>
+        }
+    </ChildContent>
+</PageShell>
+
+@code {
+    /// <summary>The dashboard's designer; none until it is first drawn.</summary>
+    private DashboardDesigner? _designer;
+
+    /// <summary>What holds the dashboard, the zoom window's anchor.</summary>
+    private ElementReference _pane;
+
+    /// <summary>The window is taller than it is wide; null until the browser has said.</summary>
+    private bool? _portrait;
+
+    /// <summary>The window's orientation watched, so the view follows it.</summary>
+    private IAsyncDisposable? _watch;
+
+    /// <summary>The User page's name; the System page is the main one, which has none.</summary>
+    private const string UserPage = "user";
+
+    /// <summary>The query parameter that names the page on screen; absent for System.</summary>
+    private const string PageQueryName = "page";
+
+    /// <summary>The view on screen, the page it is of, and the store of its layout; null until it is known, and nothing is drawn till then.</summary>
+    private string? _view;
+
+    /// <summary>The dashboard's zoom window is shown: its verb shows it and hides it, its key closes it.</summary>
+    private bool _zooming;
+
+    /// <summary>How the view is fitted to the screen out of design, as this device keeps it for this page and view; unknown until it is read, and the view unseen till then.</summary>
+    private ViewFit? _fitting;
+    private string? _page;
+    private DashboardViewStore? _store;
+
+    /// <summary>Where this device keeps what is designed of the view on screen until Save: the place's, the page's and the view's own.</summary>
+    private IDashboardStore? _draft;
+
+    /// <summary>Leaving design with a draft asks first (<see cref="LeavingAsync"/>).</summary>
+    private IDisposable? _guard;
+
+    /// <summary>Each page's layout in the view on screen, for its tab's red dot, and the reads its alarms need, kept read.</summary>
+    private readonly Dictionary<string, BoardLayout> _pages = [];
+    private IDisposable? _following;
+
+    /// <summary>Whether the page was designed at the last parameters: a change reads the pages' alarms again.</summary>
+    private bool? _wasDesigning;
+
+    /// <summary>What is selected out of design, whose verbs the round button offers.</summary>
+    private DashboardSelection _selection = DashboardSelection.None;
+
+    [SupplyParameterFromQuery(Name = DesignVerb.Query)] public string? Design { get; set; }
+
+    [SupplyParameterFromQuery(Name = ViewVerb.Query)] public string? ViewQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = PageQueryName)] public string? PageQuery { get; set; }
+
+    /// <summary>The page on screen: User's name, or null for System.</summary>
+    private string? PageKey => PageQuery == UserPage ? UserPage : null;
+
+    private bool Designing => DesignVerb.Says(Design);
+
+    /// <summary>The view to show: the one chosen in design; out of it, the one the window's orientation asks for, once known.</summary>
+    private string? Wanted => Designing ? ViewVerb.Of(ViewQuery)
+        : _portrait is { } portrait ? portrait ? BoardView.Portrait : BoardView.Landscape
+        : null;
+
+    /// <summary>The view the one on screen is given to.</summary>
+    private string Other => _view == BoardView.Portrait ? BoardView.Landscape : BoardView.Portrait;
+
+    /// <summary>The family the selected objects read, when they all read one: a resource card's, whose page verbs are offered.</summary>
+    private string? Family =>
+        _selection.Objects.Select(o => Catalogue.Find(o.Type)?.About.Source).Where(source => source is { Length: > 0 }).Distinct().ToList() is [var family]
+            ? family
+            : null;
+
+    /// <summary>The verb of the place: where the dashboard is kept, the view on screen, and after the arrow the place a tap takes it to.</summary>
+    private string PlaceLabel =>
+        $"Dashboard: {Named(Place.Scope)} ({ViewVerb.Name(_view == BoardView.Portrait)}) → {Named(Place.Other)}";
+
+    private static string Named(DashboardScope scope) => scope == DashboardScope.User ? "server" : "device";
+
+    /// <summary>The page's name as the browser's tab shows it, where the view's icon cannot go.</summary>
+    private string Title => $"Dashboard ({PageName(PageKey)}, {Named(Place.Scope)})";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Measures.Changed += OnMeasured;
+        _guard = Navigation.RegisterLocationChangingHandler(LeavingAsync);
+        await Defaults.LoadAsync();
+        await Place.LoadAsync();
+        if (PageQuery is null && await Place.LastPageAsync() is { } last)
+        {
+            Navigation.NavigateTo(Navigation.GetUriWithQueryParameter(PageQueryName, last), replace: true);
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (Designing)
+        {
+            _selection = DashboardSelection.None;
+        }
+
+        Show(Wanted);
+        Place.Design(Designing ? Wanted : null);
+        if (_wasDesigning != Designing)
+        {
+            _wasDesigning = Designing;
+            _ = ReadPagesAsync();
+        }
+    }
+
+    /// <summary>The window's orientation watched from the first render: the browser tells it at once, and again each time it turns.</summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _watch = await Interop.WatchOrientationAsync(TurnedAsync);
+        }
+    }
+
+    /// <summary>The window's orientation told, or turned: out of design, the view it asks for shown; in design it is kept, and chosen there.</summary>
+    private Task TurnedAsync(bool portrait) => InvokeAsync(() =>
+    {
+        _portrait = portrait;
+        if (!Designing)
+        {
+            Show(Wanted);
+            StateHasChanged();
+        }
+    });
+
+    /// <summary>This view shown, from its own store in the place the dashboard is kept, the selection let go; nothing while it is not known.</summary>
+    private void Show(string? view, bool again = false)
+    {
+        if (view is null || (view == _view && PageKey == _page && !again))
+        {
+            return;
+        }
+
+        _view = view;
+        _page = PageKey;
+        _store = new DashboardViewStore(new DashboardPageStore(Place.Store, _page), view);
+        _draft = Drafts.For(Named(Place.Scope), PageName(_page), view);
+        _selection = DashboardSelection.None;
+        _ = ReadPagesAsync();
+        // The zoom this device keeps for this page and view, from its first
+        // paint, not only once the zoom window is opened.
+        _ = Js.InvokeAsync<int>("wslcAgent.dashboardZoom", ZoomOf).AsTask();
+        _fitting = null;
+        _ = ReadFittingAsync();
+    }
+
+    /// <summary>
+    /// Which of the dashboard's zooms is in force: one per page and view,
+    /// kept on the device — System's landscape, User's portrait….
+    /// </summary>
+    private string ZoomOf => $"{PageName(_page)}/{_view}".ToLowerInvariant();
+
+    /// <summary>The page the verb of the page takes the dashboard to.</summary>
+    private string? OtherPage => PageKey == UserPage ? null : UserPage;
+
+    /// <summary>A page as the verb names it.</summary>
+    private static string PageName(string? page) => page == UserPage ? "User" : "System";
+
+    /// <summary>The other page shown, a step of its own in the history, and remembered on the device.</summary>
+    private async Task SwitchPageAsync()
+    {
+        var page = OtherPage;
+        await Place.RememberPageAsync(page);
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter(PageQueryName, page));
+    }
+
+    /// <summary>
+    /// Every page's layout in the view on screen read, for its tab's red dot,
+    /// and what their alarms watch kept read, the page not on screen's too.
+    /// </summary>
+    private async Task ReadPagesAsync()
+    {
+        if (_view is not { } view)
+        {
+            return;
+        }
+
+        var whole = await Place.Store.LoadAsync();
+        _pages.Clear();
+        foreach (var page in new[] { (string?)null, UserPage })
+        {
+            _pages[page ?? ""] = BoardLayout.Read(DashboardViews.Read(DashboardPages.Read(whole, page), view));
+        }
+
+        var was = _following;
+        _following = Measures.Follow(_pages.Values.SelectMany(layout => layout.Objects
+            .SelectMany(o => Catalogue.Find(o.Type)?.AlarmsOn(o).Select(on => (o, on.Measure.Measure)) ?? [])));
+        was?.Dispose();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Some alarm of this page is up: its tab's red dot.</summary>
+    private bool PageUp(string? page) => _pages.TryGetValue(page ?? "", out var layout) && Catalogue.AnyUp(layout, Measures);
+
+    private void OnMeasured() => _ = InvokeAsync(StateHasChanged);
+
+    public async ValueTask DisposeAsync()
+    {
+        Measures.Changed -= OnMeasured;
+        _guard?.Dispose();
+        _following?.Dispose();
+        Place.Design(null);
+        if (_watch is not null)
+        {
+            await _watch.DisposeAsync();
+        }
+    }
+
+    /// <summary>The dashboard kept in the other place from now on, and what it holds shown; nothing is written to it.</summary>
+    private async Task SwitchPlaceAsync()
+    {
+        await Place.UseAsync(Place.Other);
+        Show(_view, again: true);
+    }
+
+    /// <summary>
+    /// The page and the view being designed — System's portrait view, say —
+    /// written over the same page and view of the other place, this one
+    /// staying where it is, and everything else the other place keeps left as
+    /// it was (System designed on a phone and copied is System's portrait
+    /// view copied, never User, never the landscape).
+    /// It copies what this place keeps of its own, not what it shows: a view
+    /// kept nowhere shows the default, and copying that wrote the default over
+    /// the user's dashboard, its User page gone. It asks first where the other
+    /// place holds that view, which it would lose.
+    /// </summary>
+    private async Task CopyPlaceAsync()
+    {
+        if (!SavedFirst() || _view is not { } view)
+        {
+            return;
+        }
+
+        var there = Place.Of(Place.Other);
+        var name = Place.Other == DashboardScope.User ? "the user" : "this device";
+        var what = $"{PageName(PageKey)} {view}";
+        if (DashboardViews.Read(DashboardPages.Read(await Place.Of(Place.Scope).LoadAsync(), PageKey), view) is not { Length: > 0 } mine)
+        {
+            Snackbar.Add($"{(Place.Scope == DashboardScope.User ? "The user keeps" : "This device keeps")} no {what} view of its own: what shows is the default, and it is not copied over another.", Severity.Info);
+            return;
+        }
+
+        var theirs = await there.LoadAsync();
+        var theirPage = DashboardPages.Read(theirs, PageKey);
+        if (DashboardViews.Read(theirPage, view) is { Length: > 0 }
+            && !await DialogFlow.ConfirmAsync(Dialogs, $"Copy the {what} view", $"Write this {what} view over the one {name} keeps? That one cannot be brought back; everything else {name} keeps is left as it is.", "Copy", destructive: true))
+        {
+            return;
+        }
+
+        await there.SaveAsync(DashboardPages.Write(theirs, PageKey, DashboardViews.Write(theirPage, view, mine)));
+        Snackbar.Add($"The {what} view copied to {name}.", Severity.Success);
+    }
+
+    /// <summary>
+    /// The view designed given to the other — what it shows, where it shows
+    /// it, each object as it is born there — after asking where the other has
+    /// a layout of its own, which it would lose; the other then shown.
+    /// </summary>
+    private async Task CopyViewAsync()
+    {
+        if (!SavedFirst() || _view is not { } from)
+        {
+            return;
+        }
+
+        var to = Other;
+        var pageStore = new DashboardPageStore(Place.Store, _page);
+        var whole = await pageStore.LoadAsync();
+        if (DashboardViews.Read(whole, to) is { } there && BoardLayout.Read(there).Objects.Count > 0
+            && !await DialogFlow.ConfirmAsync(Dialogs, $"Copy {from} → {to}",
+                $"Lay out the {to} view as this one? What the {to} view has now cannot be brought back.", "Copy", destructive: true))
+        {
+            return;
+        }
+
+        var source = BoardLayout.Read(DashboardViews.Read(whole, from));
+        var columns = to == BoardView.Portrait ? BoardView.PhoneColumns : BoardLayout.Read(whole).Columns;
+        var given = DashboardViews.Given(source, to, columns, Defaults);
+        await pageStore.SaveAsync(DashboardViews.Write(whole, to, given.Write()));
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter(ViewVerb.Query, to == BoardView.Portrait ? BoardView.Portrait : null));
+    }
+
+    /// <summary>
+    /// The page and the view being designed, as the server keeps them, written
+    /// into the default the agent ships, after asking, without what reads one
+    /// of this machine's resources (ShippedDashboard); the default's other
+    /// page and view left as they are, as Copy does. A release agent refuses
+    /// it, and says so.
+    /// </summary>
+    private async Task SaveAsDefaultAsync()
+    {
+        if (!SavedFirst() || _view is not { } view)
+        {
+            return;
+        }
+
+        var what = $"{PageName(PageKey)} {view}";
+        if (DashboardViews.Read(DashboardPages.Read(await Place.Of(Place.Scope).LoadAsync(), PageKey), view) is not { Length: > 0 } mine)
+        {
+            Snackbar.Add($"The user keeps no {what} view of its own: what shows is the default already.", Severity.Info);
+            return;
+        }
+
+        if (!await DialogFlow.ConfirmAsync(Dialogs, "Save as default",
+                $"Ship this {what} view as the one a user with none is given? The default's {what} view is written over; the rest of the default is left as it is.", "Save", destructive: true))
+        {
+            return;
+        }
+
+        try
+        {
+            var shipped = await Api.GetDefaultDashboardV2Async();
+            var page = DashboardPages.Read(shipped, PageKey);
+            await Api.SetDefaultDashboardV2Async(DashboardPages.Write(shipped, PageKey, DashboardViews.Write(page, view, ShippedDashboard.Of(mine))));
+            Snackbar.Add($"The {what} view saved in the default dashboard; the next installer ships it.", Severity.Success);
+        }
+        catch (Exception failure) when (failure is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add(failure.Message, Severity.Error);
+        }
+    }
+
+    private void OnSelectionChanged(DashboardSelection selection) => _selection = selection;
+
+    /// <summary>
+    /// The fitting this device keeps for this page and view
+    /// (<c>wslcAgent.dashboardViewFit</c>), from its first paint. Where none is,
+    /// the view says: the portrait one, a phone standing or a narrow window,
+    /// opens Fluid, since Fill squeezed the cards that hold several charts and
+    /// Fluid keeps each at its own size; the landscape one opens Fill, the
+    /// screen filled with the view's aspect kept.
+    /// </summary>
+    private async Task ReadFittingAsync()
+    {
+        var kept = await Js.InvokeAsync<string?>("wslcAgent.dashboardViewFit", ZoomOf);
+        _fitting = Enum.TryParse<ViewFit>(kept, ignoreCase: true, out var fitting)
+            ? fitting
+            : _view == BoardView.Portrait ? ViewFit.Fluid : ViewFit.Fill;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Fit, Fill or Stretch chosen in the zoom's window: applied at once, and kept on this device for this page and view.</summary>
+    private async Task FitAsync(ViewFit fitting)
+    {
+        _fitting = fitting;
+        await Js.InvokeAsync<string?>("wslcAgent.dashboardViewFit", ZoomOf, fitting.ToString().ToLowerInvariant());
+    }
+
+    /// <summary>Save: the view as designed written where the dashboard is kept; a failure is the designer's to say, the draft kept.</summary>
+    private async Task SaveAsync()
+    {
+        if (_designer is not null && await _designer.SaveAsync())
+        {
+            _ = ReadPagesAsync();
+        }
+    }
+
+    /// <summary>Discard, once confirmed: the view back as it is saved.</summary>
+    private async Task DiscardAsync()
+    {
+        if (_designer is { Unsaved: true } designer
+            && await DialogFlow.ConfirmAsync(Dialogs, "Discard changes?", "This view has changes that are not saved. Discard them?", "Discard", destructive: true))
+        {
+            await designer.DiscardAsync();
+        }
+    }
+
+    /// <summary>
+    /// Copy and Save as default work on what is saved: with changes not saved
+    /// they would leave them out without a word, so they say so and do nothing.
+    /// </summary>
+    private bool SavedFirst()
+    {
+        if (_designer?.Unsaved != true)
+        {
+            return true;
+        }
+
+        Snackbar.Add("This view has changes that are not saved: Save or Discard them first.", Severity.Info);
+        return false;
+    }
+
+    /// <summary>
+    /// Leaving design with changes not saved — Done, Back, a link, Objects —
+    /// asks first, as every screen with unsaved work does; the answer to leave
+    /// lets them go, as Discard does. A step that stays in design on this page
+    /// — the other view — asks nothing: each view keeps its own draft.
+    /// </summary>
+    private async ValueTask LeavingAsync(LocationChangingContext context)
+    {
+        if (!Designing || _designer is not { Unsaved: true } designer || StaysInDesign(context.TargetLocation))
+        {
+            return;
+        }
+
+        if (await DialogFlow.ConfirmAsync(Dialogs, "Discard changes?", "This view has changes that are not saved. Leave design and discard them?", "Discard", destructive: true))
+        {
+            await designer.DiscardAsync();
+            return;
+        }
+
+        context.PreventNavigation();
+    }
+
+    /// <summary>The address goes on designing this same page.</summary>
+    private bool StaysInDesign(string target)
+    {
+        var there = Navigation.ToAbsoluteUri(target);
+        var query = there.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Select(pair => pair.Split('=', 2))
+            .ToLookup(pair => Uri.UnescapeDataString(pair[0]), pair => pair.Length > 1 ? Uri.UnescapeDataString(pair[1]) : "");
+        return there.AbsolutePath == Navigation.ToAbsoluteUri(Navigation.Uri).AbsolutePath
+            && DesignVerb.Says(query[DesignVerb.Query].FirstOrDefault())
+            && query[PageQueryName].FirstOrDefault() == PageQuery;
+    }
+}

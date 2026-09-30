@@ -1,0 +1,27 @@
+@* A page's shell where it stands as a page, and its content alone where it
+   stands inside another screen (the log as a
+   dashboard's object): there the title bar and the round button are the
+   other screen's, so the page's title, its top-bar slot and its verbs stay
+   with the page, and the content fills what it is given. *@
+
+@if (Shell)
+{
+    <PageShell Title="@Title" TopbarNav="TopbarNav" Verbs="Verbs">@ChildContent</PageShell>
+}
+else
+{
+    <div class="wslc-embedded-page">@ChildContent</div>
+}
+
+@code {
+    /// <summary>It stands as a page, with the shell every page renders in.</summary>
+    [Parameter] public bool Shell { get; set; } = true;
+
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    [Parameter] public RenderFragment? TopbarNav { get; set; }
+
+    [Parameter] public RenderFragment? Verbs { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

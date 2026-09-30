@@ -1,0 +1,191 @@
+@* The one navigation control, at the bottom centre of every page on an
+   empty strip of the bar's tone: one large button that opens, floating over
+   the page with nothing behind them but the page, one row of sections and
+   the page's verbs above it. The row grows
+   out of the circle like two horns, on one rectangle of its own colour,
+   left to right: Home, Volumes, Networks, Images, Containers, the circle,
+   Logs, Terminal, Registry, System, Settings — five and five, every section
+   in sight. The row measures itself against the window and closes up when
+   it has to: the air between the buttons first, then its size, and at the
+   last the words, leaving the glyphs (wslcAgent, as the toolbars do).
+   Above the button, the page's own verbs
+   (Run, Create, Pull…). Every button is a FAB with its word, so nobody has to
+   guess a glyph; the buttons are opaque and the space around them is not,
+   and with the list closed there is nothing but the button. The list is never
+   empty, so the button is never disabled and the bar never changes shape
+   between screens.
+
+   The button's colour is the session's: green while the session runs, red
+   while it is stopped — when nothing the page's verbs offer can run; the
+   verbs go grey and inert with the page then, the sections stay. Starting
+   and stopping the session lives in the session line of the title bar.
+
+   The list closes on a verb (VerbFab, through the cascaded VerbsMenu), on a
+   section, or on a tap outside (the clear overlay under the
+   buttons) — and on nothing else. It is drawn here, not by MudFabMenu: that
+   one closes by itself the moment the pointer leaves it, hover mode or not
+   (measured in the browser), and a menu that goes while
+   the hand moves towards it is no menu.
+
+   The strip is the status bar too: the dashboard's alarms ticked in Status
+   alarms stand at either side of the button (DashboardStatus), gone while
+   the list is open, whose row of sections takes the strip. The Architecture
+   button is a verb of every screen (ArchitectureVerb). *@
+@implements IDisposable
+@inject PageChrome Chrome
+@inject SessionState Session
+@inject NavigationManager Navigation
+@inject OpenDetails Open
+
+@* Under the bar, over the page: a tap anywhere but the buttons closes them. *@
+<MudOverlay Visible="_open" OnClick="Close" LockScroll="false" ZIndex="1000" />
+
+@* The strip the button stands on: MudAppBar
+   pinned to the bottom, empty, in the bar's own tone with its elevation, the
+   button centred in it and the row of sections centred on the same line. *@
+<MudAppBar Bottom="true" Elevation="1" Class="wslc-bottomnav">
+<div class="wslc-bottomnav-fab wslc-verbs-anchor">
+    <MudFab Color="@(Session.Active ? Color.Success : Color.Error)" StartIcon="@(_open ? Icons.Material.Filled.Close : Icons.Material.Filled.Bolt)" Size="Size.Large"
+            Class="wslc-verbs-button" OnClick="Toggle" title="@Title" aria-label="@Title" aria-expanded="@(_open ? "true" : "false")" />
+    @if (_open)
+    {
+        <div class="wslc-verbs-menu" role="menu">
+            <CascadingValue Value="_menu" IsFixed="true">
+                @* Architecture, a verb of every screen, above the page's own and
+                   apart from them: a stopped session greys and stills those, not it. *@
+                <div class="wslc-verbs-list">
+                    <ArchitectureVerb />
+                </div>
+                @if (Chrome.Verbs is not null)
+                {
+                    <div class="@(Off ? "wslc-verbs-list wslc-session-off" : "wslc-verbs-list")" inert="@Off">
+                        @Chrome.Verbs
+                    </div>
+                }
+            </CascadingValue>
+            @* One row on the rectangle, in this order from left to right:
+               Home, Volumes, Networks, Images, Containers, the circle, Logs,
+               Terminal, Registry, System, Settings. The left side is written
+               from the circle outward and drawn reversed; the hole in the
+               middle is the circle's, and is what the row measures itself by
+               (wslcAgent, .wslc-verbs-nav) when it has to close up. *@
+            @* The bar that measures itself is as wide as the window and holds the
+               rectangle; the rectangle is as wide as its buttons. Were the measured
+               box the rectangle, every measurement would change its width and send
+               it back to the tape measure, for ever. *@
+            <div class="wslc-verbs-nav">
+                <div class="wslc-verbs-row">
+                    <div class="wslc-verbs-side wslc-verbs-side-start">
+                        @foreach (var section in Primary)
+                        {
+                            @SectionButton(section)
+                        }
+                        @SectionButton(Home)
+                    </div>
+                    <div class="wslc-verbs-hole"></div>
+                    <div class="wslc-verbs-side wslc-verbs-side-end">
+                        @foreach (var section in Secondary)
+                        {
+                            @SectionButton(section)
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+@* The dashboard's alarms, at either side of the button. *@
+@if (!_open)
+{
+    <DashboardStatus />
+}
+</MudAppBar>
+
+@code {
+    /// <summary>One section of the app as the list shows it: the word, the glyph and where it goes.</summary>
+    private sealed record Section(string Label, string Icon, string Href, string Title);
+
+    private static readonly Section Home = new("Home", Icons.Material.Filled.Home, "", "The dashboard");
+
+    /// <summary>The four resources, from the circle outward; Home stands beyond them.</summary>
+    private IReadOnlyList<Section> Primary =>
+    [
+        new("Containers", Icons.Material.Filled.ViewInAr, Open.Containers.Length > 0 ? Open.Containers : "containers", "Containers"),
+        new("Images", Icons.Material.Filled.Layers, "images", "Images"),
+        new("Networks", Icons.Material.Filled.Lan, "networks", "Networks"),
+        new("Volumes", Icons.Material.Filled.Storage, "volumes", "Volumes"),
+    ];
+
+    /// <summary>The other sections, to the right of the circle, from the button outward.</summary>
+    private static readonly IReadOnlyList<Section> Secondary =
+    [
+        new("Logs", Icons.Material.Filled.Subject, "logs", "Agent logs"),
+        new("Terminal", Icons.Material.Filled.Terminal, "terminal", "Host terminal"),
+        new("Registry", Icons.Material.Filled.Key, "registry", "Registry logins"),
+        new("System", Icons.Material.Filled.Memory, "system", "System"),
+        new("Settings", Icons.Material.Filled.Settings, "settings", "Settings"),
+    ];
+
+    private bool _open;
+    private VerbsMenu _menu = default!;
+
+    /// <summary>The page's verbs need the session and it is stopped: they cannot run.</summary>
+    private bool Off => Chrome.RequiresSession && !Session.Active;
+
+    private string Title => (Off, Session.Active) switch
+    {
+        (true, _) => "Sections and this screen's verbs · the session is stopped, start it from the session button in the title bar",
+        (_, true) => "Sections and this screen's verbs · session running",
+        _ => "Sections and this screen's verbs · session stopped",
+    };
+
+    /// <summary>
+    /// A filled button of the rectangle's colour, as approved; the section on
+    /// screen is the key held down: in the
+    /// primary blue and pressed into the rectangle (wslc-verbs-current).
+    /// </summary>
+    private RenderFragment SectionButton(Section section) =>
+        @<MudFab Variant="Variant.Filled" Color="Color.Surface" Size="Size.Small" StartIcon="@section.Icon" Label="@section.Label"
+                 Class="@(IsCurrent(section) ? "wslc-verbs-current" : null)" aria-current="@(IsCurrent(section) ? "page" : null)"
+                 OnClick="@(() => Go(section.Href))" title="@section.Title" aria-label="@section.Label" />;
+
+    private bool IsCurrent(Section section)
+    {
+        var here = Navigation.ToBaseRelativePath(Navigation.Uri).Split('/', '?', '#')[0];
+        return section.Href.Length == 0 ? here.Length == 0 : here.Equals(section.Href.Split('/')[0], StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void Toggle() => _open = !_open;
+
+    private void Close() => _open = false;
+
+    /// <summary>A verb ran: the buttons go, from the verb's own click.</summary>
+    private void CloseFromVerb() => _ = InvokeAsync(() =>
+    {
+        _open = false;
+        StateHasChanged();
+    });
+
+    private void Go(string href)
+    {
+        _open = false;
+        Navigation.NavigateTo(href);
+    }
+
+    protected override void OnInitialized()
+    {
+        _menu = new VerbsMenu(CloseFromVerb);
+        Chrome.Changed += OnChanged;
+        Session.Changed += OnChanged;
+        Open.Changed += OnChanged;
+    }
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Chrome.Changed -= OnChanged;
+        Session.Changed -= OnChanged;
+        Open.Changed -= OnChanged;
+    }
+}

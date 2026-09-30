@@ -1,0 +1,105 @@
+@* What the ring's magnifier opens: every file on the move for this container,
+   the ones this client still holds in its queue, and a cross on each. Closing
+   it leaves them moving; the crosses are what stops anything. *@
+@implements IDisposable
+@inject WslcAgentApi Api
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+@inject FileTransfers Transfers
+
+<MudDialog ContentClass="wslc-dialog-action">
+    <TitleContent>
+        <DialogTitle Title="Transfers">
+            <Info>
+                <MudChip T="string" Size="Size.Small" Class="my-0">@Name</MudChip>
+            </Info>
+            <ChildContent>
+                @* What it stops is what has not ended: the one travelling and
+                   everything of this container still waiting its turn, which
+                   is what the count has to say or the button promises less
+                   than it does. *@
+                @if (_transfers.Count(transfer => transfer.Active || transfer.IsWaiting) is > 1 and var several)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" OnClick="CancelAllAsync">Cancel @several</MudButton>
+                }
+                <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Close())">Close</MudButton>
+            </ChildContent>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <TransfersList Transfers="_transfers" EmptyText="@EmptyText"
+                       Cancel="CancelAsync" Dismiss="DismissAsync" Drop="DropAsync" />
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private static readonly TimeSpan PollEvery = TimeSpan.FromSeconds(1);
+
+    private readonly CancellationTokenSource _stop = new();
+    private IReadOnlyList<ContainerTransfer> _transfers = [];
+    private string _error = "";
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    /// <summary>The container these files are going into or coming out of, as the client named it.</summary>
+    [Parameter, EditorRequired] public string Container { get; set; } = "";
+
+    /// <summary>What to call it on the screen; its id when it has no name of its own.</summary>
+    [Parameter] public string Name { get; set; } = "";
+
+    private string EmptyText => _error.Length > 0 ? _error : "Nothing is moving in or out of this container.";
+
+    protected override void OnInitialized()
+    {
+        // What this client holds decides which crosses are drawn, and that
+        // changes here rather than on the agent's beat.
+        Transfers.QueueChanged += OnQueueChanged;
+        _ = PollAsync(_stop.Token);
+    }
+
+    public void Dispose()
+    {
+        Transfers.QueueChanged -= OnQueueChanged;
+        _stop.Cancel();
+        _stop.Dispose();
+    }
+
+    /// <summary>The agent's list, every second: the same list every client reads, so what is shown here is what is really happening.</summary>
+    private async Task PollAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(PollEvery);
+        try
+        {
+            do
+            {
+                try
+                {
+                    _transfers = TransferFlow.Showing(TransferFlow.For(await Api.GetContainerTransfersAsync(cancellationToken), Container, Name));
+                    _error = "";
+                }
+                catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+                {
+                    _error = ex.Message;
+                }
+
+                await InvokeAsync(StateHasChanged);
+            }
+            while (await timer.WaitForNextTickAsync(cancellationToken));
+        }
+        catch (OperationCanceledException)
+        {
+            // The dialog closed.
+        }
+    }
+
+    private void OnQueueChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private Task CancelAsync(ContainerTransfer transfer) => TransferFlow.CancelAsync(Dialogs, Api, Snackbar, Transfers, [transfer]);
+
+    private Task CancelAllAsync() => TransferFlow.StopAsync(Dialogs, Api, Snackbar, Transfers, _transfers);
+
+    private Task DismissAsync(ContainerTransfer transfer) => TransferFlow.DismissAsync(Api, Snackbar, Transfers, [transfer]);
+
+    /// <summary>A file still waiting its turn: it never started, so it is let out of the agent's queue rather than stopped. Asked for all the same.</summary>
+    private Task DropAsync(ContainerTransfer waiting) => TransferFlow.DropAsync(Dialogs, Transfers, [waiting]);
+}

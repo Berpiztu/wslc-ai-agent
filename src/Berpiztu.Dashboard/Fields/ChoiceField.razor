@@ -1,0 +1,71 @@
+@* A choice among values, its list opened by the field — our own and not
+   MudBlazor's select. One of the two kinds of
+   choice there are: this one with fixed values (Small, Medium, Large), and
+   ListField, whose values are read from a list or a table and handed to this
+   one, so both drop the same list. Its field is the dashboard's picker field
+   (PickerField); MudBlazor's menu only places the list, keeps it short,
+   makes it at least as wide as the field and wider where a value's name
+   needs it (a colour's name was cut otherwise), opens
+   it above the field — MudBlazor turns it below where there is no room
+   above — since the fields low in the window are the ones a list fell off
+   the page from, and closes it when the pointer goes
+   elsewhere. *@
+@typeparam T
+
+<MudMenu Class="@($"bz-dash-choice {Class}".Trim())" FullWidth="true" RelativeWidth="DropdownWidth.Adaptive"
+         AnchorOrigin="Origin.TopLeft" TransformOrigin="Origin.BottomLeft" Dense="true" MaxHeight="ListHeight" PopoverClass="@ListClass"
+         OpenChanged="OpenChangedAsync">
+    <ActivatorContent>
+        @* The menu opens only when told (MudBlazor 9 hands its activator a
+           MenuContext and does nothing on a click by itself): a press on the
+           field toggles it, and so does the arrow, whose button keeps its
+           press from reaching the field. *@
+        <div class="bz-dash-choice-field" @onclick="@(() => context.ToggleAsync(EventArgs.Empty))">
+            <PickerField Text="@TextOf(Value)" Label="@Label" Title="@Title" Bare="Bare" OnPick="@(() => context.ToggleAsync(EventArgs.Empty))" />
+        </div>
+    </ActivatorContent>
+    <ChildContent>
+        @if (Options.Count == 0)
+        {
+            <MudMenuItem Disabled="true">@EmptyText</MudMenuItem>
+        }
+        @foreach (var option in Options)
+        {
+            <MudMenuItem OnClick="@(() => ValueChanged.InvokeAsync(option.Value))">@option.Text</MudMenuItem>
+        }
+    </ChildContent>
+</MudMenu>
+
+@code {
+    /// <summary>How tall the list may grow before it scrolls: a handful of rows, never the whole page.</summary>
+    private const int ListHeight = 240;
+
+    [Parameter, EditorRequired] public IReadOnlyList<FieldOption<T>> Options { get; set; } = [];
+
+    [Parameter] public T Value { get; set; } = default!;
+
+    [Parameter] public EventCallback<T> ValueChanged { get; set; }
+
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    [Parameter] public string Title { get; set; } = "";
+
+    [Parameter] public string? Class { get; set; }
+
+    /// <summary>Its field bare, with no outline and no line under it (<see cref="PickerField.Bare"/>).</summary>
+    [Parameter] public bool Bare { get; set; }
+
+    /// <summary>The classes of the list it drops, which opens over the page and not inside the field, so it takes nothing of what holds the field unless given here.</summary>
+    [Parameter] public string? ListClass { get; set; }
+
+    /// <summary>What the list says when it has no value to offer.</summary>
+    [Parameter] public string EmptyText { get; set; } = "Nothing to choose";
+
+    /// <summary>The list is about to show: a ListField reads its values here.</summary>
+    [Parameter] public EventCallback OnOpen { get; set; }
+
+    private Task OpenChangedAsync(bool open) => open ? OnOpen.InvokeAsync() : Task.CompletedTask;
+
+    private string TextOf(T value) =>
+        Options.FirstOrDefault(option => EqualityComparer<T>.Default.Equals(option.Value, value))?.Text ?? "";
+}

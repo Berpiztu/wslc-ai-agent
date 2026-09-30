@@ -1,0 +1,27 @@
+@* A container's own verbs: start or stop, restart, the menu and remove, the
+   group the Containers list's card keeps at the right end of its actions row,
+   standing alone. Its shortcuts are an object of their own (ContainerShortcuts),
+   so the user places each; its menu is
+   therefore the whole list, as a table row's is, since the shortcuts may not
+   be on the dashboard at all. A verb that changes the container reads the
+   list again at once, so every object of the container shows the change. It
+   fills its cells with the row's tone and stands at the right, until another
+   alignment is chosen. In design the canvas makes it inert. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits ContainerObject
+@attribute [DashboardObject("wslc.container-verbs", "Container verbs", Group = "Container", Subgroup = "User", Icon = Icons.Material.Filled.SmartButton, Source = ContainerSourceFamily.FamilyKey, Columns = 8, Rows = 2, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Right, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both)]
+
+@if (Container is { } c)
+{
+    <div class="@SectionClass()">
+        <EntityCardPart>
+            <MudCardActions Class="py-1">
+                <VerbTaps>
+                    <ContainerActions Container="c" Changed="@(() => Containers.RefreshAsync())" />
+                </VerbTaps>
+            </MudCardActions>
+        </EntityCardPart>
+    </div>
+}

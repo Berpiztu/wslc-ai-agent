@@ -1,0 +1,22 @@
+@* What was read and written, as a Disk chart card's summary says it — its
+   label, its last value, what it is — a reading of its
+   own beside the chart, for the same subject as its chart: the host, or a
+   container, named in its hint (ChartObject). *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@inherits ChartObject
+@attribute [DashboardObject("wslc.host-disk-activity", "Disk activity reading", Group = "Charts", Icon = Icons.Material.Filled.SwapVert, Source = SubjectSourceFamily.FamilyKey, DefaultSource = SubjectSourceFamily.Host, Columns = 8, Rows = 4, CardOnly = true)]
+@attribute [DashboardObjectPart("label", "Label", Optional = true)]
+@attribute [DashboardObjectPart("value", "Value", Bold = true, Optional = true)]
+@attribute [DashboardObjectPart("hint", "Hint", Optional = true)]
+
+<div class="@ReadingClass">
+    <ReadingSummary Label="Disk" Value="@(Data?.Value ?? "—")" Hint="@ReadingHint(Read, Failed, Meaning)" Error="Failed"
+                    LabelShown="@Shows("label")" ValueShown="@Shows("value")" HintShown="@Shows("hint")" />
+</div>
+
+@code {
+    protected override string Chart => HostCharts.Disk;
+
+    private string Meaning => Container is { } container ? $"{container.Name}, read / write" : "read / write";
+}

@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A newer push to the same branch makes the running build pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# A clean machine on every push, driven by the same scripts as the README's
+# Quick start: when a step breaks for a new user, it breaks here first.
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      # The prerequisites a user installs from docs/developer/prerequisites.md.
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install workloads
+        run: dotnet workload restore WslcAgent.slnx
+
+      - name: Check prerequisites
+        run: .\check-prereqs.ps1
+
+      # No private file on CI, as on a fresh clone: every one is absent.
+      - name: Check private files
+        run: .\check-private.ps1
+
+      - name: Build and test
+        run: .\build.ps1 -Configuration Release
+
+      # A build must not change what git tracks.
+      - name: Nothing tracked changed
+        run: |
+          $changed = git status --porcelain --untracked-files=no
+          if ($changed) { $changed; throw "The build changed tracked files." }

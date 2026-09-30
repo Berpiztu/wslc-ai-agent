@@ -1,0 +1,58 @@
+@* The one list editor: a repeatable value per row, the volume-rows look inside
+   a dialog. Title row holds Save and Close, the rows head holds Add, and only
+   the boxed list scrolls, so the dialog opens at one size and keeps it whatever
+   the row count. Returns the edited values. *@
+
+<MudDialog>
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success" OnClick="Save">Save</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <RowsHeader Label="@Label" OnAdd="Add" />
+        <MudPaper Outlined="true" Class="wslc-picker-list pa-2">
+            @for (var index = 0; index < _rows.Count; index++)
+            {
+                var row = index;
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-1">
+                    <MudTextField T="string" @bind-Value="_rows[row]" Placeholder="@Placeholder" Immediate="true" Variant="Variant.Filled" Margin="Margin.Dense" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error" Class="wslc-row-remove" title="Remove row" OnClick="@(() => _rows.RemoveAt(row))" />
+                </MudStack>
+            }
+        </MudPaper>
+        @if (Hint.Length > 0)
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">@Hint</MudText>
+        }
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private List<string> _rows = [];
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    /// <summary>The values to edit; the dialog works on its own copy.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<string> Values { get; set; } = [];
+
+    /// <summary>The rows head label, the field's own (Publish, Env).</summary>
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    [Parameter] public string Placeholder { get; set; } = "";
+
+    [Parameter] public string Hint { get; set; } = "";
+
+    protected override void OnInitialized() => _rows = [.. Values];
+
+    private void Add()
+    {
+        _rows.Add("");
+        Dialog.StateHasChanged();
+    }
+
+    /// <summary>Blank rows are dropped.</summary>
+    private void Save() =>
+        Dialog.Close(DialogResult.Ok<IReadOnlyList<string>>([.. _rows.Select(r => r.Trim()).Where(r => r.Length > 0)]));
+}

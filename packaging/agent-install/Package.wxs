@@ -1,0 +1,132 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <!-- Per-user MSI for the agent. Installs under %LOCALAPPDATA%\WSLC-AI-Agent,
+       never under %LOCALAPPDATA%\WSLC, which belongs to the wslc CLI.
+       Bind host and port are MSI properties (WSLC_BINDHOST, WSLC_AGENTPORT),
+       asked by the wizard in AgentUi.wxs or passed on the msiexec command
+       line; the agent reads them from HKCU at start-up. wslc only works in an
+       interactive user session, so AgentLogonTask.ps1 registers a per-user
+       logon task that starts the agent now and at every logon, and removes it
+       on uninstall. -->
+  <Package
+      Name="WSLC AI Agent"
+      Manufacturer="Berpiztu"
+      Version="$(var.MsiVersion)"
+      UpgradeCode="94bb9fe5-4005-46ba-aab1-bddb047aed08"
+      Language="1033"
+      Scope="perUser">
+    <SummaryInformation
+        Description="WSLC AI Agent $(var.MsiVersion)"
+        Comments="$(var.MsiVersion)"
+        Manufacturer="Berpiztu" />
+    <!-- Every other version of the agent is replaced, older or newer: an older
+         installer is a way back, not a mistake to refuse. A newer one on the PC is said on the welcome page, with its number
+         when it left one (Version under the agent's key, written by this installer
+         and by the agent itself at every start). -->
+    <Upgrade Id="94bb9fe5-4005-46ba-aab1-bddb047aed08">
+      <UpgradeVersion Minimum="0.0.0" Maximum="$(var.MsiVersion)" IncludeMinimum="yes" IncludeMaximum="no" MigrateFeatures="yes" Property="WIX_UPGRADE_DETECTED" />
+      <UpgradeVersion Minimum="$(var.MsiVersion)" IncludeMinimum="no" MigrateFeatures="yes" Property="NEWERVERSIONDETECTED" />
+    </Upgrade>
+    <Property Id="INSTALLEDVERSION">
+      <RegistrySearch Id="InstalledAgentVersion" Root="HKCU" Key="Software\Berpiztu\wslc-agent\Agent" Name="Version" Type="raw" />
+    </Property>
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Property Id="WSLC_BINDHOST" Value="127.0.0.1" Secure="yes" />
+    <Property Id="WSLC_AGENTPORT" Value="8069" Secure="yes" />
+    <!-- Where the agent looks for its own newer installer and the clients':
+         asked by the wizard, and written beside the agent as plain text
+         (wslc-ai-agent.ini), not in the registry. -->
+    <Property Id="WSLC_PACKAGESFOLDER" Value="$(var.PackagesFolder)" Secure="yes" />
+    <WixVariable Id="WixUILicenseRtf" Value="..\license.rtf" />
+    <Icon Id="AgentIcon" SourceFile="..\..\src\WslcAgent.Server\wslc-ai-agent.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AgentIcon" />
+
+    <Feature Id="Main" Title="WSLC AI Agent" Level="1">
+      <ComponentGroupRef Id="PublishedFiles" />
+      <ComponentRef Id="AgentSettings" />
+      <ComponentRef Id="AgentLogonTask" />
+      <ComponentRef Id="DashboardShortcut" />
+    </Feature>
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="INSTALLFOLDER" Name="WSLC-AI-Agent" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <Component Id="AgentSettings" Directory="INSTALLFOLDER" Guid="4f478d7e-7537-477b-a221-fb2a116ae956">
+      <RegistryValue Root="HKCU" Key="Software\Berpiztu\wslc-agent\Agent" Name="Installed" Type="integer" Value="1" KeyPath="yes" />
+      <RegistryValue Root="HKCU" Key="Software\Berpiztu\wslc-agent\Agent" Name="BindHost" Type="string" Value="[WSLC_BINDHOST]" />
+      <RegistryValue Root="HKCU" Key="Software\Berpiztu\wslc-agent\Agent" Name="Port" Type="string" Value="[WSLC_AGENTPORT]" />
+      <RegistryValue Root="HKCU" Key="Software\Berpiztu\wslc-agent\Agent" Name="InstallDir" Type="string" Value="[INSTALLFOLDER]" />
+      <RegistryValue Root="HKCU" Key="Software\Berpiztu\wslc-agent\Agent" Name="Version" Type="string" Value="[ProductVersion]" />
+      <!-- Read by the agent as Wslc:ClientPackagesPath; removed on uninstall. -->
+      <IniFile Id="PackagesFolderIni" Action="addLine" Directory="INSTALLFOLDER" Name="wslc-ai-agent.ini"
+               Section="Wslc" Key="ClientPackagesPath" Value="[WSLC_PACKAGESFOLDER]" />
+      <RemoveFolder Id="RemoveAgentFolder" Directory="INSTALLFOLDER" On="uninstall" />
+    </Component>
+
+    <Component Id="AgentLogonTask" Directory="INSTALLFOLDER" Guid="9c1f3a62-5b8e-4d07-a4c3-2f6e8b1d5a70">
+      <File Id="AgentLogonTaskPs1" Source="AgentLogonTask.ps1" KeyPath="yes" />
+    </Component>
+
+    <!-- The dashboard opens in the browser; the agent itself has no window. -->
+    <Component Id="DashboardShortcut" Directory="ProgramMenuFolder" Guid="6e2b9d48-0c7a-4f15-9a3e-7d4c1b8f2e59">
+      <RegistryValue Root="HKCU" Key="Software\Berpiztu\wslc-agent\Agent" Name="DashboardShortcut" Type="integer" Value="1" KeyPath="yes" />
+      <util:InternetShortcut Id="DashboardUrl" Name="WSLC AI Agent" Target="http://[WSLC_BINDHOST]:[WSLC_AGENTPORT]/" Type="url" IconFile="[INSTALLFOLDER]wslc-ai-agent.exe" IconIndex="0" />
+    </Component>
+
+    <!-- The logon task registered and removed with no window at all (a black
+         console flashed up during the
+         install; -WindowStyle Hidden hides it only once it has been drawn).
+         WiX's quiet exec runs the command with none, its command line handed
+         over as the action's data. -->
+    <SetProperty Id="RegisterAgentLogonTask"
+                 Value="&quot;[SystemFolder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]AgentLogonTask.ps1&quot; -Register"
+                 Before="RegisterAgentLogonTask"
+                 Sequence="execute" />
+    <CustomAction Id="RegisterAgentLogonTask"
+                  BinaryRef="Wix4UtilCA_X64"
+                  DllEntry="WixQuietExec64"
+                  Execute="commit"
+                  Impersonate="yes"
+                  Return="check" />
+    <SetProperty Id="UnregisterAgentLogonTask"
+                 Value="&quot;[SystemFolder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]AgentLogonTask.ps1&quot; -Unregister"
+                 Before="UnregisterAgentLogonTask"
+                 Sequence="execute" />
+    <CustomAction Id="UnregisterAgentLogonTask"
+                  BinaryRef="Wix4UtilCA_X64"
+                  DllEntry="WixQuietExec64"
+                  Execute="deferred"
+                  Impersonate="yes"
+                  Return="ignore" />
+
+    <!-- The installed agent and its icon beside the clock stopped before the
+         installer looks for files in use (a
+         manual install asked three times to close them; the logon script
+         stops them too, but only after that look). Every process running out
+         of the install folder, by its path: never one picked by image name,
+         since the development agent is called the same and runs elsewhere.
+         Nothing is running there on a first install, and nothing is stopped.
+         No braces in the command: a formatted text reads them as its own. -->
+    <SetProperty Id="WixQuietExec64CmdLine"
+                 Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;Get-Process | Where-Object Path -Like '[INSTALLFOLDER]*' | Stop-Process -Force&quot;"
+                 Before="StopInstalledAgent"
+                 Sequence="execute" />
+    <CustomAction Id="StopInstalledAgent"
+                  BinaryRef="Wix4UtilCA_X64"
+                  DllEntry="WixQuietExec64"
+                  Execute="immediate"
+                  Return="ignore" />
+
+    <InstallExecuteSequence>
+      <Custom Action="StopInstalledAgent" Before="InstallValidate" />
+      <RemoveExistingProducts After="InstallValidate" />
+      <Custom Action="RegisterAgentLogonTask" After="InstallFiles" Condition="NOT REMOVE~=&quot;ALL&quot;" />
+      <Custom Action="UnregisterAgentLogonTask" Before="RemoveFiles" Condition="REMOVE~=&quot;ALL&quot;" />
+    </InstallExecuteSequence>
+
+    <UIRef Id="WslcAgentUI" />
+  </Package>
+</Wix>

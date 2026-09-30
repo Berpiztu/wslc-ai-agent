@@ -1,0 +1,9 @@
+/* Boot-time chrome only: the splash shown before Blazor starts and the
+   unhandled-error bar. Everything else is MudBlazor. */
+
+/* The splash mirrors the native apps' splash screen (glyph on #1e293b) and
+   turns Blazor's download progress into a bar under the glyph. Blazor sets
+   --blazor-load-percentage and --blazor-load-percentage-text on the page
+   while it downloads the runtime. */
+/* No #blazor-error-ui: the bar is gone from index.html, and an error nothing
+   caught goes to a toast (UnhandledErrors). */

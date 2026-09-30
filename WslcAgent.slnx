@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Berpiztu.Dashboard/Berpiztu.Dashboard.csproj" />
+    <Project Path="src/WslcAgent.ApiClient/WslcAgent.ApiClient.csproj" />
+    <Project Path="src/WslcAgent.App/WslcAgent.App.csproj" />
+    <Project Path="src/WslcAgent.Mcp/WslcAgent.Mcp.csproj" />
+    <Project Path="src/WslcAgent.Server/WslcAgent.Server.csproj" />
+    <Project Path="src/WslcAgent.Toasts/WslcAgent.Toasts.csproj" />
+    <Project Path="src/WslcAgent.Tray/WslcAgent.Tray.csproj" />
+    <Project Path="src/WslcAgent.UI/WslcAgent.UI.csproj" />
+    <Project Path="src/WslcAgent.Web/WslcAgent.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/WslcAgent.Server.Tests/WslcAgent.Server.Tests.csproj" />
+  </Folder>
+</Solution>

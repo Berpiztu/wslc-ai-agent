@@ -1,0 +1,312 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "WSLC AI Agent — terminals",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1160,
+      560
+    ],
+    "views": [
+      {
+        "id": "in-app",
+        "label": "A shell in the app",
+        "focus": [
+          "clients",
+          "exec",
+          "conpty",
+          "process",
+          "runtime"
+        ],
+        "note": "xterm.js in the UI, one WebSocket per shell, a process behind a ConPTY on the agent: the host shell, or wslc exec into a container."
+      },
+      {
+        "id": "protocol",
+        "label": "The exec protocol",
+        "focus": [
+          "clients",
+          "exec"
+        ],
+        "note": "Client → start, stdin, resize, pong, close. Agent → ready (backend, pty), stdout, ping, warning, exit, error."
+      },
+      {
+        "id": "pty",
+        "label": "ConPTY or pipes",
+        "focus": [
+          "exec",
+          "conpty",
+          "pipes"
+        ],
+        "note": "Behind a ConPTY the shell sees a terminal: it echoes, draws its prompt, answers a resize. Without one: pipes and a client line editor."
+      },
+      {
+        "id": "sessions",
+        "label": "Sessions outlive the page",
+        "focus": [
+          "registry",
+          "clients"
+        ],
+        "note": "Leaving a page detaches the surface and keeps the shell; the page that comes back takes it over. Close, Log out or the tab closing end it."
+      },
+      {
+        "id": "native",
+        "label": "At the agent's machine",
+        "focus": [
+          "clients",
+          "native",
+          "process"
+        ],
+        "note": "Open in terminal starts Windows Terminal, or a console, on the agent's desktop. A remote client is refused and gets the in-app one."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "registry",
+      "type": "database",
+      "label": "Session registry",
+      "sublabel": "this tab's shells, by key",
+      "pos": [
+        40,
+        60
+      ],
+      "size": [
+        140,
+        56
+      ],
+      "tag": "wslc-terminal.js"
+    },
+    {
+      "id": "clients",
+      "type": "frontend",
+      "label": "Clients",
+      "sublabel": "xterm.js in the Blazor UI",
+      "pos": [
+        40,
+        200
+      ],
+      "size": [
+        140,
+        64
+      ],
+      "tag": "PWA + MAUI"
+    },
+    {
+      "id": "exec",
+      "type": "backend",
+      "label": "Exec bridge",
+      "sublabel": "one process ↔ one WebSocket",
+      "pos": [
+        260,
+        200
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "tag": "/terminal · /exec/stream"
+    },
+    {
+      "id": "conpty",
+      "type": "backend",
+      "label": "ConPTY",
+      "sublabel": "pseudo console · pty: true",
+      "pos": [
+        500,
+        100
+      ],
+      "size": [
+        160,
+        56
+      ],
+      "tag": "Windows"
+    },
+    {
+      "id": "pipes",
+      "type": "backend",
+      "label": "Pipes",
+      "sublabel": "no tty · pty: false",
+      "pos": [
+        500,
+        300
+      ],
+      "size": [
+        160,
+        56
+      ],
+      "tag": "elsewhere"
+    },
+    {
+      "id": "native",
+      "type": "backend",
+      "label": "Windows Terminal",
+      "sublabel": "a window on the agent's desktop",
+      "pos": [
+        260,
+        420
+      ],
+      "size": [
+        160,
+        56
+      ],
+      "tag": "local only"
+    },
+    {
+      "id": "process",
+      "type": "external",
+      "label": "Shell process",
+      "sublabel": "cmd.exe · wslc exec -i",
+      "pos": [
+        720,
+        200
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "runtime",
+      "type": "cloud",
+      "label": "Containers",
+      "sublabel": "Hyper-V utility VM",
+      "pos": [
+        980,
+        200
+      ],
+      "size": [
+        150,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Windows host (user session)",
+      "wraps": [
+        "exec",
+        "conpty",
+        "pipes",
+        "native",
+        "process"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "wslc-ai-agent.exe (.NET)",
+      "wraps": [
+        "exec",
+        "conpty",
+        "pipes"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "registry-to-clients",
+      "from": "registry",
+      "to": "clients",
+      "label": "keeps the shell across pages",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 24
+    },
+    {
+      "id": "clients-to-exec",
+      "from": "clients",
+      "to": "exec",
+      "label": "WebSocket · exec protocol",
+      "variant": "emphasis",
+      "labelDy": -26
+    },
+    {
+      "id": "exec-to-conpty",
+      "from": "exec",
+      "to": "conpty",
+      "label": "on Windows",
+      "variant": "emphasis"
+    },
+    {
+      "id": "exec-to-pipes",
+      "from": "exec",
+      "to": "pipes",
+      "label": "without a pseudo console",
+      "variant": "dashed"
+    },
+    {
+      "id": "conpty-to-process",
+      "from": "conpty",
+      "to": "process",
+      "label": "VT in · keystrokes out",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "top"
+    },
+    {
+      "id": "pipes-to-process",
+      "from": "pipes",
+      "to": "process",
+      "label": "plain text",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "bottom",
+      "labelSegment": 0
+    },
+    {
+      "id": "process-to-runtime",
+      "from": "process",
+      "to": "runtime",
+      "label": "inside a container",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDy": -26
+    },
+    {
+      "id": "clients-to-native",
+      "from": "clients",
+      "to": "native",
+      "label": "Open in terminal · at the agent's machine",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "left"
+    },
+    {
+      "id": "native-to-process",
+      "from": "native",
+      "to": "process",
+      "label": "its own window",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "bottom"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "In the app",
+      "items": [
+        "Host shell and any container's shell, in the browser and the apps: xterm.js, vendored, loaded the first time a terminal opens",
+        "Copy, paste, the wheel, resize: the terminal surface, feature for feature"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "On the agent",
+      "items": [
+        "ConPTY on Windows: the shell sees a real terminal (colours, vim, top); pipes and a client-side line editor elsewhere",
+        "Terminal jobs: System → Compact VHDX types its script into the host shell"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Sessions",
+      "items": [
+        "A shell outlives the page: detached on leaving, taken over on return; ended by Close, Log out or the tab closing",
+        "At the agent's own machine, Windows Terminal opens instead; never for a remote client"
+      ]
+    }
+  ]
+}

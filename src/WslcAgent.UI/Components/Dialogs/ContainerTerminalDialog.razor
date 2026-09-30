@@ -1,0 +1,48 @@
+@* Exec from the row menu: the terminal in a dialog, with a
+   second verb — a real terminal window on the agent's desktop, which only the
+   agent's own machine can ask for. *@
+@inject WslcAgentApi Api
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" StartIcon="@WslcIcons.Terminal" OnClick="OpenNativeAsync" Disabled="_opening"
+                       title="Open a terminal window on the agent's desktop">Open on the agent</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <div class="wslc-dialog-action">
+            <TerminalView Container="@Container" />
+        </div>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private bool _opening;
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public string Container { get; set; } = "";
+
+    private async Task OpenNativeAsync()
+    {
+        _opening = true;
+        Dialog.StateHasChanged();
+        try
+        {
+            var opened = await Api.OpenContainerTerminalAsync(Container);
+            Snackbar.Add($"Opened in {opened.Window}: {opened.Command}", Severity.Success);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _opening = false;
+            Dialog.StateHasChanged();
+        }
+    }
+}

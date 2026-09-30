@@ -1,0 +1,17 @@
+@* The round button's Status alarms: the list of the view's alarms, in a dialog of its own,
+   each tick applied at once; Close leaves it. *@
+
+<MudDialog>
+    <DialogContent>
+        <StatusAlarmsList Document="Document" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => Dialog.Close())" Variant="Variant.Filled" Color="Color.Primary">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public DashboardDocument Document { get; set; } = default!;
+}

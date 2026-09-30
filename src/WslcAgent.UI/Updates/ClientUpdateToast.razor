@@ -1,0 +1,22 @@
+@* The offer of a newer client: a green toast at the bottom that
+   stays until answered, "New version available (x). Install?" with Yes, No
+   and Forget this version. Rendered inside the snackbar by ClientUpdateWatcher. *@
+@using WslcAgent.ApiClient.Contracts
+
+<MudStack Spacing="1">
+    <MudText Typo="Typo.body2">New version available (@Remote). Install?</MudText>
+    <MudStack Row="true" Spacing="1">
+        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => OnAnswer.InvokeAsync(ClientUpdateAnswer.Install))">Yes</MudButton>
+        <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => OnAnswer.InvokeAsync(null))">No</MudButton>
+        <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => OnAnswer.InvokeAsync(ClientUpdateAnswer.Forget))">Forget this version</MudButton>
+    </MudStack>
+</MudStack>
+
+@code {
+    [Parameter] public ClientPackageInfo Package { get; set; } = default!;
+
+    /// <summary>Install, Forget, or null for No; the watcher closes the toast and acts.</summary>
+    [Parameter] public EventCallback<ClientUpdateAnswer?> OnAnswer { get; set; }
+
+    private string Remote => Package.Version.Length > 0 ? Package.Version : $"build {Package.Build}";
+}

@@ -1,0 +1,26 @@
+@* Table / cards switch shared by every list page (containers, images, volumes, networks). *@
+@implements IDisposable
+@inject WslcAgent.UI.Components.Styles.UiStyle Style
+
+<MudToggleGroup T="ViewMode" Value="Value" ValueChanged="ValueChanged" Size="Style.Applied.ToggleSize" Color="Style.Applied.ToggleColor"
+                Outlined="Style.Applied.ToggleOutlined" Delimiters="Style.Applied.ToggleDelimiters"
+                Class="@(Style.Applied.ToggleRounded ? "rounded-pill" : null)" CheckMark="Style.Applied.ToggleCheckMark">
+    <MudToggleItem Value="ViewMode.Table" title="Table">
+        <MudIcon Icon="@Icons.Material.Filled.TableRows" Size="Size.Small" />
+    </MudToggleItem>
+    <MudToggleItem Value="ViewMode.Cards" title="Cards">
+        <MudIcon Icon="@Icons.Material.Filled.GridView" Size="Size.Small" />
+    </MudToggleItem>
+</MudToggleGroup>
+
+@code {
+    protected override void OnInitialized() => Style.Changed += OnStyleChanged;
+
+    private void OnStyleChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Style.Changed -= OnStyleChanged;
+
+    [Parameter] public ViewMode Value { get; set; }
+
+    [Parameter] public EventCallback<ViewMode> ValueChanged { get; set; }
+}

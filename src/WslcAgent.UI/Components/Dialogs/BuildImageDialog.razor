@@ -1,0 +1,209 @@
+@* Build image: one dialog with two faces, the form and then the
+   live output of the build the agent runs. Build and Close sit on the title
+   line in every state; once a build runs Close becomes Cancel, which asks and
+   then stops it. It cannot be left by Escape or a click outside while a build
+   is under way. *@
+@implements IDisposable
+@inject WslcAgentApi Api
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <DialogTitle Title="Build image">
+            @if (!_finished)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="BuildAsync" Disabled="@(_job is not null)">Build</MudButton>
+            }
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="CloseAsync">@(_job is null ? "Close" : "Cancel")</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        @if (!_started)
+        {
+            <MudForm @ref="_form">
+                <div class="wslc-field-pick has-note">
+                    <MudTextField T="string" @bind-Value="_path" Label="Build context" Placeholder="folder containing the Dockerfile" Immediate="true"
+                                  Required="true" RequiredError="A build context is required" Variant="Variant.Filled" Margin="Margin.Dense" />
+                    <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick context folder" OnClick="PickContextAsync" />
+                </div>
+                <MudTextField T="string" @bind-Value="_tag" Label="Tag" Placeholder="myapp:latest" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+                <MudTextField T="string" @bind-Value="_dockerfile" Label="Dockerfile" Placeholder="Dockerfile" HelperText="Relative to the context, or an absolute path"
+                              HelperTextOnFocus="true" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+                <MudTextField T="string" @bind-Value="_target" Label="Target stage" Placeholder="builder" HelperText="Multi-stage builds only"
+                              HelperTextOnFocus="true" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+                <MudTextField T="string" @bind-Value="_buildArgs" Label="Build args" Placeholder="KEY=VALUE (one per line)" Lines="2" Sizing="InputSizing.Auto"
+                              Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+                <MudTextField T="string" @bind-Value="_labels" Label="Labels" Placeholder="key=value (one per line)" Lines="2" Sizing="InputSizing.Auto"
+                              Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+                <SquareCheckBox @bind-Value="_noCache" Label="No cache" />
+                <SquareCheckBox @bind-Value="_pull" Label="Pull newer base images" />
+            </MudForm>
+        }
+        else
+        {
+            @if (_finished)
+            {
+                <MudProgressLinear Value="100" Color="@(_state == "done" ? Color.Success : Color.Error)" />
+            }
+            else
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            <MudText Typo="Typo.body2" Class="my-1" role="status">@_status</MudText>
+            <pre class="wslc-logs-output wslc-logs-pre wslc-logs-wrap">@((_truncated ? "… earlier output trimmed …\n" : "") + string.Join('\n', _output))</pre>
+        }
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private static readonly TimeSpan PollEvery = TimeSpan.FromMilliseconds(700);
+
+    private MudForm? _form;
+    private string _path = "";
+    private string _tag = "";
+    private string _dockerfile = "";
+    private string _target = "";
+    private string _buildArgs = "";
+    private string _labels = "";
+    private bool _noCache;
+    private bool _pull;
+
+    private readonly CancellationTokenSource _stop = new();
+    private string? _job;
+    private bool _started;
+    private bool _finished;
+    private bool _built;
+    private string _state = "";
+    private string _status = "";
+    private IReadOnlyList<string> _output = [];
+    private bool _truncated;
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    private async Task PickContextAsync()
+    {
+        if (await Pickers.HostFolderAsync(Dialogs, _path) is { } folder)
+        {
+            _path = folder;
+        }
+    }
+
+    private async Task BuildAsync()
+    {
+        if (_form is null)
+        {
+            return;
+        }
+
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            return;
+        }
+
+        _started = true;
+        _status = "Starting…";
+        try
+        {
+            var job = await Api.StartImageBuildAsync(new BuildImageRequest(_path, _tag, _dockerfile, _target, _buildArgs, _labels, _noCache, _pull));
+            _job = job.Job;
+            Repaint();
+            _ = PollAsync(job.Job, _stop.Token);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Finish("error", ex.Message);
+            Repaint();
+        }
+    }
+
+    private async Task PollAsync(string job, CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(PollEvery);
+        try
+        {
+            do
+            {
+                var state = await Api.GetImageBuildAsync(job, cancellationToken);
+                _output = state.Output;
+                _truncated = state.Truncated;
+                if (state.State == "running")
+                {
+                    _status = $"Building{(state.Tag.Length > 0 ? " " + state.Tag : "")}…";
+                }
+                else if (state.State == "done")
+                {
+                    Finish("done", state.Tag.Length > 0 ? $"Built {state.Tag}" : "Build finished");
+                }
+                else
+                {
+                    Finish(state.State, state.Error.Length > 0 ? state.Error : $"Build {state.State}");
+                }
+
+                await InvokeAsync(Repaint);
+            }
+            while (!_finished && await timer.WaitForNextTickAsync(cancellationToken));
+        }
+        catch (OperationCanceledException)
+        {
+            // The dialog closed.
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Finish("error", ex.Message);
+            await InvokeAsync(Repaint);
+        }
+    }
+
+    /// <summary>The title line (Build, Close or Cancel) is the dialog's own tree: it is repainted with the content.</summary>
+    private void Repaint()
+    {
+        StateHasChanged();
+        Dialog.StateHasChanged();
+    }
+
+    /// <summary>The job is dropped once it ends, so Close no longer offers to cancel a build that is over.</summary>
+    private void Finish(string state, string message)
+    {
+        _state = state;
+        _status = message;
+        _finished = true;
+        _job = null;
+        if (state == "done")
+        {
+            _built = true;
+            Snackbar.Add("Image built", Severity.Success);
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        if (_job is { } job)
+        {
+            if (!await DialogFlow.ConfirmAsync(Dialogs, "Cancel build", "Cancel this build? The partial image layers are discarded.", "Cancel build", destructive: true))
+            {
+                return;
+            }
+
+            _job = null;
+            await _stop.CancelAsync();
+            try
+            {
+                await Api.CancelImageBuildAsync(job);
+            }
+            catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+            {
+                // The dialog is closing; the build ended on its own or is already gone.
+            }
+        }
+
+        Dialog.Close(_built ? DialogResult.Ok(true) : DialogResult.Cancel());
+    }
+
+    public void Dispose()
+    {
+        _stop.Cancel();
+        _stop.Dispose();
+    }
+}

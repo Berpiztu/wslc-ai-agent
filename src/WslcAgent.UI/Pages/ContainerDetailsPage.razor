@@ -1,0 +1,261 @@
+@page "/containers/{Id}"
+@using WslcAgent.UI.Components.Launch
+@implements IDisposable
+@inject WslcAgent.UI.Components.Styles.UiStyle Style
+@inject WslcAgentApi Api
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject OpenDetails Open
+
+<PageShell Title="@Title" RequiresSession="true">
+    <TopbarNav>
+        @* Until the header is there (loading, or the container is gone) the way back stands in the top bar. *@
+        @if (_details is null)
+        {
+            @BackToList
+        }
+    </TopbarNav>
+    <ChildContent>
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-2 flex-shrink-0">@_error</MudAlert>
+        }
+        else if (_details is null)
+        {
+            <MudProgressLinear Indeterminate="true" Class="flex-shrink-0" />
+        }
+        else
+        {
+            @* One line: state, image and ports. The name is the page title above,
+               and the id is in the address and in Inspect; both used to be
+               repeated here and cost a whole row of content. The state's dot
+               and its start or stop verb come first, and there is no refresh:
+               the header re-reads itself every ten seconds. *@
+            <section class="wslc-details-header wslc-toolbar mb-1 flex-shrink-0">
+                <div class="wslc-details-head">
+                    <div class="wslc-details-title-row">
+                        <ContainerLifecycle Container="AsSummary" Changed="RefreshAsync" />
+                        <span class="wslc-details-meta-item wslc-details-meta-wide" title="@_details.Image"><span class="wslc-details-meta-label">Image</span> <span class="wslc-details-meta-value">@_details.Image</span></span>
+                        <span class="wslc-details-meta-item"><span class="wslc-details-meta-label">Ports</span> <PortsLink Ports="_details.Ports" Container="@_details.Id" Publications="_details.Publications" /></span>
+                    </div>
+                </div>
+                @* Outside the line that gives way: the way back is the one control
+                   that has to be there at every width, and inside it was the first
+                   thing a long image name pushed off the screen. *@
+                <div class="wslc-details-back">@BackToList</div>
+            </section>
+
+            @* The tabs: Logs, Inspect (View & edit), Bind mounts, Exec, Files, Stats. *@
+            <MudTabs Elevation="Style.Applied.TabsElevation" Rounded="Style.Applied.TabsRounded" Border="Style.Applied.TabsBorder"
+                     Centered="Style.Applied.TabsCentered" Color="Style.Applied.TabsColor"
+                     TabPanelsClass="wslc-tab-panels" Class="wslc-fill" MinimumTabWidth="@($"{Style.Applied.TabsMinWidth}px")" ActivePanelIndex="_tab" ActivePanelIndexChanged="OnTabChanged">
+                <MudTabPanel Text="Logs">
+                    <LogsView Container="@Id" />
+                </MudTabPanel>
+                <MudTabPanel Text="Inspect">
+                    @* The form is the action view: the summary card and the fields scroll in the main column, the rail stands at the top of the second. *@
+                    <ContainerForm Mode="LaunchMode.Edit" Form="_form" SourceId="@Id" OnDone="OnRecreated" OnCancel="RefreshAsync" MainClass="wslc-fill-scroll">
+                        <Above>
+                            <div class="wslc-summary mb-2">
+                                <div><span class="wslc-summary-label">Name</span><span class="wslc-summary-value">@_details.Name</span></div>
+                                <div><span class="wslc-summary-label">ID</span><span class="wslc-summary-value">@_details.Id</span></div>
+                                <div><span class="wslc-summary-label">Image</span><span class="wslc-summary-value" title="@_details.Image">@_details.Image</span></div>
+                                <div><span class="wslc-summary-label">State</span><span class="wslc-summary-value">@_details.State</span></div>
+                                <div><span class="wslc-summary-label">Ports</span><span class="wslc-summary-value"><PortsLink Ports="_details.Ports" Container="@_details.Id" Publications="_details.Publications" /></span></div>
+                                <div><span class="wslc-summary-label">Created</span><span class="wslc-summary-value">@_details.Created</span></div>
+                            </div>
+                        </Above>
+                        <Below>
+                            <MudExpansionPanels Class="mt-2">
+                                <MudExpansionPanel Text="Raw inspect JSON">
+                                    <pre class="wslc-logs-output wslc-logs-wrap wslc-logs-pre">@_details.Inspect</pre>
+                                </MudExpansionPanel>
+                            </MudExpansionPanels>
+                        </Below>
+                    </ContainerForm>
+                </MudTabPanel>
+                <MudTabPanel Text="Bind mounts">
+                    <MudSimpleTable Dense="Style.Applied.GridDense" Bordered="Style.Applied.GridBordered" Striped="Style.Applied.GridStriped"
+                                    Hover="Style.Applied.GridHover" Outlined="Style.Applied.GridOutlined" Class="wslc-fill-scroll">
+                        <thead><tr><th>Type</th><th>Source / Volume</th><th>Destination</th><th>Mode</th></tr></thead>
+                        <tbody>
+                            @foreach (var mount in _details.Mounts)
+                            {
+                                <tr><td>@mount.Type</td><td>@mount.Source</td><td>@mount.Destination</td><td>@mount.Mode</td></tr>
+                            }
+                            @if (_details.Mounts.Count == 0)
+                            {
+                                <tr><td colspan="4">No mounts.</td></tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                </MudTabPanel>
+                <MudTabPanel Text="Exec">
+                    @* Mounted with the tab: a shell must not be started behind a tab nobody opened. *@
+                    @if (_tab == 3)
+                    {
+                        <TerminalView Container="@Id" />
+                    }
+                </MudTabPanel>
+                <MudTabPanel Text="Files">
+                    @if (_tab == 4)
+                    {
+                        <FilesView Container="@Id" Path="@(FilePath ?? "/")" PathChanged="OnFilePathChanged"
+                                   File="@(FileEdited ?? "")" FileChanged="OnFileEditedChanged" />
+                    }
+                </MudTabPanel>
+                <MudTabPanel Text="Stats">
+                    @if (_tab == 5)
+                    {
+                        <ContainerStatsView Container="@Id" />
+                    }
+                </MudTabPanel>
+            </MudTabs>
+        }
+    </ChildContent>
+</PageShell>
+
+@code {
+    /// <summary>"← Containers": back to the list (the browser's back button and the phone's gesture do the same through the router); in the header row, at its far right.</summary>
+    private RenderFragment BackToList => @<MudButton Size="Size.Small" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.ArrowBack" Class="rounded-0" OnClick="@(() => Navigation.NavigateTo("containers"))">Containers</MudButton>;
+
+    private static readonly string[] Tabs = ["logs", "inspect", "mounts", "exec", "files", "stats"];
+    private static readonly TimeSpan HeaderRefresh = TimeSpan.FromSeconds(10);
+    private ContainerDetails? _details;
+    private LaunchForm _form = new();
+    private string _formOf = "";
+    private string? _error;
+    private int _tab;
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _stop;
+
+    [Parameter] public string Id { get; set; } = "";
+
+    /// <summary><c>?tab=logs|inspect|mounts|exec|files|stats</c>, the deep link to a tab.</summary>
+    [SupplyParameterFromQuery] public string? Tab { get; set; }
+
+    /// <summary><c>?path=</c>: the folder the Files tab is showing, so Back walks the folders that were opened.</summary>
+    [SupplyParameterFromQuery(Name = "path")] public string? FilePath { get; set; }
+
+    /// <summary><c>?file=</c>: the file open in the Files editor. Opening one is a step, so Back from it returns to its folder.</summary>
+    [SupplyParameterFromQuery(Name = "file")] public string? FileEdited { get; set; }
+
+    private string Title => _details is null ? "Container" : _details.Name.Length > 0 ? _details.Name : _details.Id;
+
+    private ContainerSummary AsSummary => new(_details!.Id, _details.Name, _details.Image, _details.State, "", "", _details.Created, "", _details.Ports, "", "", "", "");
+
+    /// <summary>The container is read once per id; a tab change (the query) only selects the panel.</summary>
+    protected override async Task OnParametersSetAsync()
+    {
+        // The section is showing this container: the sidebar's Containers entry
+        // comes back here while it is open.
+        Open.SetContainer(Id);
+        _tab = Math.Max(0, Array.IndexOf(Tabs, Tab ?? "logs"));
+        if (_formOf != Id)
+        {
+            await RefreshAsync();
+        }
+    }
+
+    /// <summary>The header is read again every 10 s, and no longer once the container is gone.</summary>
+    /// <summary>A look applied in Settings reaches these tabs without the screen being opened again.</summary>
+    private void OnStyleChanged() => InvokeAsync(StateHasChanged);
+
+    protected override void OnInitialized()
+    {
+        Style.Changed += OnStyleChanged;
+        _stop = new CancellationTokenSource();
+        _timer = new PeriodicTimer(HeaderRefresh);
+        _ = PollAsync(_stop.Token);
+    }
+
+    private async Task PollAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (await _timer!.WaitForNextTickAsync(cancellationToken))
+            {
+                await RefreshAsync();
+                await InvokeAsync(StateHasChanged);
+                if (_error is not null)
+                {
+                    Snackbar.Add("Container no longer exists (removed). Stopped auto-refresh.", Severity.Warning);
+                    return;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        try
+        {
+            _details = await Api.GetContainerDetailsAsync(Id);
+            if (_formOf != _details.Id)
+            {
+                // The header refreshes every 10 s; the form keeps the user's edits until the container itself changes.
+                _form = LaunchForm.From(_details.Form);
+                _formOf = _details.Id;
+            }
+
+            _error = null;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _error = ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase) ? $"Container {Id} no longer exists." : ex.Message;
+        }
+    }
+
+    public void Dispose()
+    {
+        Style.Changed -= OnStyleChanged;
+        _stop?.Cancel();
+        _timer?.Dispose();
+    }
+
+    private void OnTabChanged(int index)
+    {
+        // MudTabs reports the index it settles on after every render; only a
+        // real change deserves a navigation, or the page would reload in a loop.
+        if (index == _tab || index < 0 || index >= Tabs.Length)
+        {
+            return;
+        }
+
+        _tab = index;
+        // A pushed entry, not a replaced one: Back walks the tabs the user
+        // opened (Exec → Logs → the list → wherever they came from), with the
+        // mouse's back button and with the phone's gesture alike.
+        Navigation.NavigateTo($"containers/{Id}?tab={Tabs[index]}");
+    }
+
+    /// <summary>
+    /// The Files tab's folder is part of the address, so Back walks the
+    /// folders that were opened before leaving the page, exactly as it walks
+    /// the tabs and the pages.
+    /// </summary>
+    private void OnFilePathChanged(string path) =>
+        Navigation.NavigateTo($"containers/{Id}?tab=files&path={Query(path)}");
+
+    /// <summary>
+    /// A value for the query that stays readable: a slash needs no escaping
+    /// there, and escaping it turned every folder into a wall of <c>%2F</c> in
+    /// the address bar.
+    /// </summary>
+    private static string Query(string value) => Uri.EscapeDataString(value).Replace("%2F", "/", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Opening a file for editing is a step of its own, on top of its folder:
+    /// Back from the editor shows that folder again, and only the next Back
+    /// leaves it. Closing the editor walks that same step back.
+    /// </summary>
+    private void OnFileEditedChanged(string file) =>
+        // Only the name: the folder is already in `path`, and repeating it made
+        // the address twice as long for nothing.
+        Navigation.NavigateTo($"containers/{Id}?tab=files&path={Query(FilePath ?? "/")}&file={Query(file)}");
+
+    private void OnRecreated(string newId) => Navigation.NavigateTo($"containers/{newId}?tab=inspect");
+}

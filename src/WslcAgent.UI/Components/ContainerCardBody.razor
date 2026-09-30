@@ -1,0 +1,19 @@
+@* What a container's card says about it, in two columns: the readings as
+   they always were, and beside them the dials in a grid of three. Only two
+   measures exist for a container today — the CPU and the memory the CLI
+   reports — so the rest of the grid is room, not blanks. One body, drawn by
+   the Containers page's card and by a container's card on the
+   dashboard, so the two never tell the
+   container apart. *@
+
+<div class="wslc-card-detail">
+    <ContainerCardTexts Container="Container" />
+    <div class="wslc-card-dials">
+        <UsageDial Label="CPU" Reading="@Container.CpuPercent" Live="@Container.IsRunning" Title="@($"CPU {Readings.Dash(Container.CpuPercent)}")" />
+        <UsageDial Label="Memory" Reading="@Container.MemPercent" Live="@Container.IsRunning" Title="@($"Memory {Readings.Dash(Container.MemUsage)}")" />
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ContainerSummary Container { get; set; } = default!;
+}

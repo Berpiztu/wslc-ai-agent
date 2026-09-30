@@ -1,0 +1,261 @@
+@* The network map: networks as hubs, containers as nodes with
+   their address on each network, spokes between them. One strip on top holds
+   the counts, what to filter by (Networks or Containers) and a chip per item,
+   All first. Filtering by containers draws them on top, with the networks they
+   are on and every container sharing one. *@
+@implements IAsyncDisposable
+@inject WslcAgentApi Api
+@inject IJSRuntime Js
+@inject ISnackbar Snackbar
+
+<MudDialog ContentClass="wslc-dialog-action">
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Row="true" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2 flex-shrink-0">
+            <MudText Typo="Typo.body2" title="@NetworkHint"><span class="mud-text-secondary">Networks</span> @(_topology is null ? "—" : SelectedNetworks.Count)</MudText>
+            <MudText Typo="Typo.body2" title="@ContainerHint"><span class="mud-text-secondary">Containers</span> @(_topology is null ? "—" : VisibleContainers.Count)</MudText>
+            <MudDivider Vertical="true" FlexItem="true" />
+            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="@On(!_byContainers)" OnClick="@(() => SetMode(false))">Networks</MudChip>
+            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="@On(_byContainers)" OnClick="@(() => SetMode(true))">Containers</MudChip>
+            <MudDivider Vertical="true" FlexItem="true" />
+            @if (_topology is null)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Loading…</MudText>
+            }
+            else
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="@On(AllOn)" OnClick="ToggleAll">All</MudChip>
+                @foreach (var name in ItemNames)
+                {
+                    <MudChip T="string" @key="name" Size="Size.Small" Color="Color.Primary" Variant="@On(Selected.Contains(name))" OnClick="@(() => Toggle(name))">@name</MudChip>
+                }
+            }
+        </MudStack>
+
+        <div @ref="_card" class="mud-paper mud-paper-outlined wslc-fill-scroll d-flex">
+            @if (_topology is not null && Empty)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary ma-auto">@(_byContainers ? "No containers to draw." : "No networks to draw.")</MudText>
+            }
+            else if (_topology is not null && _cardWidth > 0)
+            {
+                var (layout, scale) = NetworkMapLayout.Fit(_cardWidth, _cardHeight, SelectedNetworks.Count, VisibleContainers.Count, IpRows, _byContainers);
+                var hubs = SelectedNetworks.Select((network, i) => (Network: network, X: layout.HubX(i), Y: layout.HubY)).ToList();
+                <svg class="ma-auto flex-shrink-0" role="img" aria-label="Network architecture" viewBox="0 0 @N(layout.CanvasWidth) @N(layout.CanvasHeight)"
+                     preserveAspectRatio="xMidYMid meet" width="@N(Math.Round(layout.CanvasWidth * scale))" height="@N(Math.Round(layout.CanvasHeight * scale))">
+                    @for (var i = 0; i < VisibleContainers.Count; i++)
+                    {
+                        var node = VisibleContainers[i];
+                        var nodeX = layout.NodeX(i);
+                        var boxTop = layout.NodeY - (layout.NodeHeight / 2);
+                        var attachments = Attachments(node);
+                        for (var row = 0; row < attachments.Count; row++)
+                        {
+                            var hub = hubs.FirstOrDefault(h => h.Network.Name == attachments[row].Network);
+                            if (hub.Network is null)
+                            {
+                                continue;
+                            }
+
+                            var ipY = boxTop + 26 + (row * NetworkMapLayout.RowHeight);
+                            var hubEdge = _byContainers ? hub.Y - (NetworkMapLayout.HubHeight / 2) + 4 : hub.Y + (NetworkMapLayout.HubHeight / 2) - 4;
+                            var nodeEdge = _byContainers ? ipY + 2 : ipY - 5;
+                            <line x1="@N(hub.X)" y1="@N(hubEdge)" x2="@N(nodeX)" y2="@N(nodeEdge)" style="stroke: var(--mud-palette-lines-default)" stroke-width="1.4" />
+                        }
+                    }
+
+                    @foreach (var hub in hubs)
+                    {
+                        var x = hub.X - (layout.HubWidth / 2);
+                        var y = hub.Y - (NetworkMapLayout.HubHeight / 2);
+                        <rect x="@N(x)" y="@N(y)" width="@N(layout.HubWidth)" height="@N(NetworkMapLayout.HubHeight)" rx="8"
+                              style="fill: var(--mud-palette-surface); stroke: var(--mud-palette-primary)" stroke-width="1.2" />
+                        <SvgText x="@N(hub.X)" y="@N(y + 16)" text-anchor="middle" style="fill: var(--mud-palette-text-primary)" font-size="13" font-weight="600" Value="@(NetworkMapLayout.FitText(hub.Network.Name, layout.HubWidth, 13))" />
+                        <SvgText x="@N(hub.X)" y="@N(y + 29)" text-anchor="middle" style="fill: var(--mud-palette-text-secondary)" font-size="10" Value="@(NetworkMapLayout.FitText(hub.Network.Driver.Trim().Length > 0 ? hub.Network.Driver.Trim() : "—", layout.HubWidth, 10))" />
+                        <SvgText x="@N(hub.X)" y="@N(y + 41)" text-anchor="middle" style="fill: var(--mud-palette-text-secondary)" font-size="10" font-family="ui-monospace, monospace" Value="@(NetworkMapLayout.FitText(hub.Network.Subnet.Trim(), layout.HubWidth, 10))" />
+                    }
+
+                    @for (var i = 0; i < VisibleContainers.Count; i++)
+                    {
+                        var node = VisibleContainers[i];
+                        var nodeX = layout.NodeX(i);
+                        var x = nodeX - (layout.NodeWidth / 2);
+                        var y = layout.NodeY - (layout.NodeHeight / 2);
+                        var stroke = node.State == "running" ? "var(--mud-palette-success)" : "var(--mud-palette-lines-default)";
+                        <rect x="@N(x)" y="@N(y)" width="@N(layout.NodeWidth)" height="@N(layout.NodeHeight)" rx="8"
+                              style="fill: var(--mud-palette-surface); stroke: @stroke" stroke-width="1.2" />
+                        <SvgText x="@N(nodeX)" y="@N(y + 14)" text-anchor="middle" style="fill: var(--mud-palette-text-primary)" font-size="11" Value="@(NetworkMapLayout.FitText(node.Name, layout.NodeWidth, 11))" />
+                        var lines = Attachments(node);
+                        @for (var row = 0; row < Math.Max(1, lines.Count); row++)
+                        {
+                            var network = lines.Count > 0 && lines[row].Network.Length > 0 ? lines[row].Network : "—";
+                            var ip = lines.Count > 0 && lines[row].Ip.Length > 0 ? lines[row].Ip : "—";
+                            @* A narrow box keeps the address: the spoke already says which network. *@
+                            <SvgText x="@N(nodeX)" y="@N(y + 30 + (row * NetworkMapLayout.RowHeight))" text-anchor="middle" style="fill: var(--mud-palette-text-secondary)"
+                                  font-size="10" font-family="ui-monospace, monospace" Value="@(NetworkMapLayout.FitText(layout.NodeWidth < 130 ? ip : $"{network} {ip}", layout.NodeWidth, 10))" />
+                        }
+                    }
+                </svg>
+            }
+        </div>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private readonly DotNetObjectReference<NetworkMapDialog> _self;
+    private readonly HashSet<string> _selectedNetworks = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _selectedContainers = new(StringComparer.Ordinal);
+    private ElementReference _card;
+    private IJSObjectReference? _module;
+    private IJSObjectReference? _observer;
+    private NetworkTopology? _topology;
+    private bool _byContainers;
+    private double _cardWidth;
+    private double _cardHeight;
+
+    public NetworkMapDialog() => _self = DotNetObjectReference.Create(this);
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    private IReadOnlyList<string> ItemNames =>
+        _topology is null ? [] : _byContainers ? _topology.Containers.Select(c => c.Name).ToList() : _topology.Networks.Select(n => n.Name).ToList();
+
+    private HashSet<string> Selected => _byContainers ? _selectedContainers : _selectedNetworks;
+
+    private bool AllOn => ItemNames.Count > 0 && ItemNames.All(Selected.Contains);
+
+    /// <summary>Filtering by containers: the networks the selected containers are on.</summary>
+    private HashSet<string> MarkedNetworks =>
+        _topology is null ? [] : _topology.Containers.Where(c => _selectedContainers.Contains(c.Name)).SelectMany(c => c.Attachments).Select(a => a.Network).ToHashSet(StringComparer.Ordinal);
+
+    private IReadOnlyList<NetworkSummary> SelectedNetworks
+    {
+        get
+        {
+            if (_topology is null)
+            {
+                return [];
+            }
+
+            var names = _byContainers ? MarkedNetworks : _selectedNetworks;
+            return _topology.Networks.Where(n => names.Contains(n.Name)).ToList();
+        }
+    }
+
+    private IReadOnlyList<TopologyContainer> VisibleContainers
+    {
+        get
+        {
+            if (_topology is null)
+            {
+                return [];
+            }
+
+            var networks = _byContainers ? MarkedNetworks : _selectedNetworks;
+            return _topology.Containers
+                .Where(c => (_byContainers && _selectedContainers.Contains(c.Name)) || c.Attachments.Any(a => networks.Contains(a.Network)))
+                .ToList();
+        }
+    }
+
+    private bool Empty => _byContainers ? VisibleContainers.Count == 0 : SelectedNetworks.Count == 0;
+
+    private int IpRows => Math.Max(1, VisibleContainers.Select(c => Attachments(c).Count).DefaultIfEmpty(1).Max());
+
+    private string NetworkHint => _byContainers ? "Attached to the selection" : _selectedNetworks.Count == ItemNames.Count ? "All networks" : "Selected";
+
+    private string ContainerHint => !_byContainers ? "Attached to the selection" : _selectedContainers.Count == ItemNames.Count ? "All containers" : "Selected + sharing";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _topology = await Api.GetNetworkTopologyAsync();
+            _selectedNetworks.UnionWith(_topology.Networks.Select(n => n.Name));
+            _selectedContainers.UnionWith(_topology.Containers.Select(c => c.Name));
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add(ex.Message.Length > 0 ? ex.Message : "Failed to load network map", Severity.Error);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _module = await Js.InvokeAsync<IJSObjectReference>("import", "./_content/WslcAgent.UI/wslc-network-map.js");
+            _observer = await _module.InvokeAsync<IJSObjectReference>("observe", _card, _self);
+        }
+    }
+
+    /// <summary>The card's size from the map module: the layout is drawn for it.</summary>
+    [JSInvokable]
+    public Task OnCardSize(double width, double height)
+    {
+        _cardWidth = width;
+        _cardHeight = height;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>The attachments drawn for a container: the ones on networks the map shows.</summary>
+    private List<TopologyAttachment> Attachments(TopologyContainer container)
+    {
+        var shown = SelectedNetworks.Select(n => n.Name).ToHashSet(StringComparer.Ordinal);
+        return container.Attachments.Where(a => shown.Contains(a.Network)).ToList();
+    }
+
+    private void SetMode(bool byContainers) => _byContainers = byContainers;
+
+    private void ToggleAll()
+    {
+        if (AllOn)
+        {
+            Selected.Clear();
+        }
+        else
+        {
+            Selected.UnionWith(ItemNames);
+        }
+    }
+
+    private void Toggle(string name)
+    {
+        if (!Selected.Remove(name))
+        {
+            Selected.Add(name);
+        }
+    }
+
+    private static Variant On(bool on) => on ? Variant.Filled : Variant.Outlined;
+
+    /// <summary>SVG numbers are invariant, whatever the browser's culture.</summary>
+    private static string N(double value) => value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_observer is not null)
+            {
+                await _observer.InvokeVoidAsync("dispose");
+                await _observer.DisposeAsync();
+            }
+
+            if (_module is not null)
+            {
+                await _module.DisposeAsync();
+            }
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException or OperationCanceledException)
+        {
+            // The dialog is going away with the page.
+        }
+
+        _self.Dispose();
+    }
+}
