@@ -14,8 +14,9 @@
     manage containers.
     Once the agent is installed, it downloads the Windows and Android clients'
     installers into the agent's package folder, from which the agent's web
-    page offers them and the agent updates the clients. Then it offers to
-    create the publishing container
+    page offers them and the agent updates the clients, and offers to install
+    the Windows client on this machine too. Then it offers to create the
+    publishing container
     (the network, the proxy's map and the nginx proxy that put a container on
     a public HTTPS name): the agent's own Set up, which leaves alone what
     exists. The domain and the rest are set afterwards in Settings > Publish.
@@ -96,6 +97,15 @@ param([switch]$Client)
             Invoke-WebRequest -Uri "https://github.com/Berpiztu/wslc-ai-agent/releases/latest/download/$package" -OutFile (Join-Path $folder $package) -UseBasicParsing
         }
         Write-Host "The Windows and Android clients can now be downloaded from the agent's web page ($folder)." -ForegroundColor Green
+
+        # Downloaded by PowerShell, the client's installer opens with no
+        # SmartScreen warning; it connects to this machine's agent by default.
+        $installClient = try { Read-Host "Install the Windows client on this machine too? [y/N]" } catch { "" }
+        if ($installClient -match '^\s*(y|yes)\s*$') {
+            Write-Host "Opening the Windows client's installer..." -ForegroundColor Cyan
+            Start-Process -FilePath (Join-Path $folder "wslc-ai-client.msi") -Wait
+            Write-Host "Done. Open WSLC AI Client from the Start menu." -ForegroundColor Green
+        }
     } catch {
         Write-Host "The clients' installers were not downloaded: $($_.Exception.Message)" -ForegroundColor Yellow
         Write-Host "Copy wslc-ai-client.msi and wslc-ai-client.apk from the release into the package folder shown in Settings > Update." -ForegroundColor Yellow

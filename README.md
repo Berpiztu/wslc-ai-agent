@@ -156,7 +156,8 @@ you change them) and for its package folder ([How to update](#how-to-update)).
 If Windows warns that the installer is from an unknown publisher: **More info
 → Run anyway**. Once installed, it downloads the Windows and Android clients
 into the agent's package folder, so anyone opening the agent's web page can
-download them from there, and asks whether to create the publishing
+download them from there; asks whether to install the Windows client on this
+machine too; and asks whether to create the publishing
 container, the nginx proxy that puts a container on a public HTTPS name
 (default: no); its domain is then set in **Settings → Publish**. Prefer the browser? Download it from the
 [latest release](https://github.com/Berpiztu/wslc-ai-agent/releases/latest).
