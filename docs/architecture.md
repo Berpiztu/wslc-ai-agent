@@ -137,8 +137,9 @@ To change one, edit its `.architecture.json` (which keeps `meta.animation:
 the skill at showcase quality (`archify validate` / `deliver` / `visual-check`),
 and run `node packaging/patch-archify-motion.mjs`. The HTML is the delivered
 artifact, never edited by hand: the script is the one change made to it, so
-the Live button always plays, a reduced-motion preference only starting the
-diagram paused, and a press plays the trace again.
+both play buttons always play (Live, and "Play story" of the guided views),
+a reduced-motion preference only starting the diagram paused, and a press on
+Live plays the trace again.
 
 GitHub Pages publishes the four at
 https://berpiztu.github.io/wslc-ai-agent/architecture/

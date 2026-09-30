@@ -4973,7 +4973,6 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       svg [data-node-id], svg [data-edge-from], svg [data-detail], svg [data-detail-anchor], svg [data-legend-hit], svg { transition: none !important; }
     }
   </style>
-<style>/* wslc-agent: motion patched */</style>
 </head>
 <body>
   <!-- Toolbar: theme, live visual style, trace motion, presentation stage, and export.
@@ -9350,7 +9349,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       buildChapterIndex();
 
       function reducedMotion() {
-        return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        return false;
       }
 
       function findNode(id) {
@@ -10468,7 +10467,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         var automaticPlaybackAllowed = storyAutomaticPlaybackAllowed();
         panel.setAttribute('data-playing', playing ? 'true' : 'false');
         syncStoryPlayback();
-        play.disabled = !playing && !automaticPlaybackAllowed;
+        play.disabled = false;
         play.setAttribute('aria-pressed', playing ? 'true' : 'false');
         play.setAttribute('aria-label', viewerText(playing
           ? 'viewer.guided.pause'
@@ -10642,6 +10641,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       }
 
       function togglePlayback() {
+        var governor = Archify.motionGovernor;
+        if (!playing && governor && governor.capable && governor.isPaused()) governor.resume();
         return playing ? (pausePlayback(), false) : startPlayback();
       }
 

@@ -1,25 +1,26 @@
 // Patches the Archify diagrams in src/WslcAgent.UI/wwwroot/archify after
-// they are generated, so their motion button always plays:
+// they are generated, so their two play buttons always play:
 //
 //   node packaging/patch-archify-motion.mjs
 //
-// Archify disables the button and stops every animation when the system asks
-// for reduced motion, which Windows does in a virtual machine or over Remote
-// Desktop, and phones in power saving: the diagram could then never move.
-// Here that preference only decides that the diagram starts paused; the
-// reader can still press Live, an animation the user starts. And Archify
-// plays the trace once, on load: here pressing Live plays it again.
+// Archify disables the motion button (Still / Live) and "Play story", and
+// stops every animation, when the system asks for reduced motion, which
+// Windows does in a virtual machine or over Remote Desktop, and phones in
+// power saving: the diagram could then never move. Here that preference only
+// decides that the diagram starts paused; the reader can still press either
+// button, an animation the user starts. Archify also plays the trace once,
+// on load: here pressing Live plays it again, and "Play story" pressed while
+// the diagram is still switches it to Live first.
 //
-// Each anchor must be found exactly once, or the file is left untouched and
-// the script fails: a new Archify version needs this script looked at again.
-// A file already patched is skipped.
+// Each patch is applied once: one already in the file is skipped, and one
+// whose anchor is not found exactly once leaves the file untouched and fails
+// the script, as a new Archify version needs this script looked at again.
 
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const folder = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "WslcAgent.UI", "wwwroot", "archify");
-const marker = "/* wslc-agent: motion patched */";
 
 const patches = [
   {
@@ -28,7 +29,7 @@ const patches = [
     to: "function reducedMotion() {\n        return false;\n      }",
   },
   {
-    what: "the button is never disabled",
+    what: "the motion button is never disabled",
     from: "btn.disabled = systemPaused;",
     to: "btn.disabled = false;",
   },
@@ -61,25 +62,42 @@ const patches = [
     from: "      svg[data-animation=\"trace\"] [data-animate] {\n        animation: none !important;",
     to: "      html[data-motion=\"still\"] svg[data-animation=\"trace\"] [data-animate] {\n        animation: none !important;",
   },
+  {
+    what: "the story plays under reduced motion",
+    from: "buildChapterIndex();\n\n      function reducedMotion() {\n        return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);\n      }",
+    to: "buildChapterIndex();\n\n      function reducedMotion() {\n        return false;\n      }",
+  },
+  {
+    what: "Play story is never disabled",
+    from: "play.disabled = !playing && !automaticPlaybackAllowed;",
+    to: "play.disabled = false;",
+  },
+  {
+    what: "Play story switches a still diagram to Live",
+    from: "function togglePlayback() {\n        return playing ? (pausePlayback(), false) : startPlayback();\n      }",
+    to: [
+      "function togglePlayback() {",
+      "        var governor = Archify.motionGovernor;",
+      "        if (!playing && governor && governor.capable && governor.isPaused()) governor.resume();",
+      "        return playing ? (pausePlayback(), false) : startPlayback();",
+      "      }",
+    ].join("\n"),
+  },
 ];
 
 let failed = false;
 for (const file of readdirSync(folder).filter((name) => name.endsWith(".html"))) {
   const path = join(folder, file);
   let html = readFileSync(path, "utf8");
-  if (html.includes(marker)) {
-    console.log(`${file}: already patched`);
-    continue;
-  }
-  const missing = patches.filter((patch) => html.split(patch.from).length !== 2);
+  const pending = patches.filter((patch) => !html.includes(patch.to));
+  const missing = pending.filter((patch) => html.split(patch.from).length !== 2);
   if (missing.length > 0) {
     failed = true;
     console.error(`${file}: not patched, anchor not found exactly once: ${missing.map((patch) => patch.what).join("; ")}`);
     continue;
   }
-  for (const patch of patches) html = html.replace(patch.from, patch.to);
-  html = html.replace("</head>", `<style>${marker}</style>\n</head>`);
-  writeFileSync(path, html);
-  console.log(`${file}: patched`);
+  for (const patch of pending) html = html.replace(patch.from, patch.to);
+  if (pending.length > 0) writeFileSync(path, html);
+  console.log(`${file}: ${pending.length > 0 ? `patched (${pending.map((patch) => patch.what).join("; ")})` : "already patched"}`);
 }
 process.exit(failed ? 1 : 0);
