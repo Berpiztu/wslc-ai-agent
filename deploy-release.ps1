@@ -10,9 +10,13 @@
     versionCode); everyday builds raise only this checkout's own, in
     private\version.props. A release raises the repository's above both:
 
-      1. Stops when the working tree has uncommitted changes.
-      2. Goes to main and brings it up to date, from whatever branch it was
-         run on. Then, for each open pull request into main, waits for its
+      1. Takes what this checkout holds: goes to main, from whatever branch
+         it was run on (one with commits of its own has to be merged or
+         offered as a pull request first), and commits the changes not
+         committed yet, with a message it writes itself; new files are
+         listed and taken only when the person says so.
+      2. Brings main up to date (rebasing that commit on top). Then, for
+         each open pull request into main, waits for its
          checks and asks whether to merge it (squash); one whose checks fail
          is reported and left alone. main is brought up to date again with
          what was merged, so the release carries it.
@@ -67,19 +71,46 @@ Set-Location $RepoRoot
 $Props = Join-Path $RepoRoot "Directory.Build.props"
 $Csproj = Join-Path $RepoRoot "src\WslcAgent.App\WslcAgent.App.csproj"
 
-# 1. A release commits exactly the versions: nothing else may ride with it.
-$dirty = @(git status --porcelain --untracked-files=no)
-if ($dirty.Count -gt 0) {
-    throw "Commit or discard these changes first; a release commits its versions alone:`n$($dirty -join "`n")"
+# 1. What this checkout holds goes into the release: the release is made on
+# main, and the changes not committed yet are carried there and committed,
+# with no message to write.
+$branch = (git branch --show-current)
+if ($branch -ne "main") {
+    $ahead = [int](git rev-list --count "main..HEAD")
+    if ($ahead -gt 0) {
+        throw "The branch $branch has $ahead commit(s) main does not; push it and open a pull request (this script then offers it), or merge it into main, and run this again."
+    }
+    git switch main
+    if ($LASTEXITCODE -ne 0) { throw "Could not switch to main with these changes; commit or put them aside and run this again." }
+}
+
+if (@(git status --porcelain).Count -gt 0) {
+    Write-Host "Changes not committed yet, which this release takes:" -ForegroundColor Cyan
+    git status --short --untracked-files=no
+    git add --update
+    $new = @(git ls-files --others --exclude-standard)
+    if ($new.Count -gt 0) {
+        Write-Host "New files, not in the repository yet:" -ForegroundColor Cyan
+        $new | ForEach-Object { Write-Host "  $_" }
+        $answer = Read-Host "Take these new files into the release too? (y/n)"
+        if ($answer -match '^(y|yes|s|si)$') { git add -- $new }
+    }
+    git diff --cached --quiet
+    if ($LASTEXITCODE -ne 0) {
+        $changed = @(git diff --cached --name-only)
+        $summary = ($changed | Select-Object -First 4) -join ", "
+        if ($changed.Count -gt 4) { $summary += " and $($changed.Count - 4) more" }
+        git commit -m "Changes released from this checkout: $summary"
+        if ($LASTEXITCODE -ne 0) { throw "git commit failed with exit code $LASTEXITCODE" }
+    }
 }
 
 # 2. The release is made from main as GitHub has it, with the open pull
-# requests the person chooses merged into it first.
+# requests the person chooses merged into it first. What was committed here
+# goes on top of it.
 function Sync-Main {
-    git switch main
-    if ($LASTEXITCODE -ne 0) { throw "Could not switch to main." }
-    git pull --ff-only
-    if ($LASTEXITCODE -ne 0) { throw "main could not be brought up to date (git pull --ff-only); sort it out and run this again." }
+    git pull --rebase
+    if ($LASTEXITCODE -ne 0) { throw "main could not be brought up to date (git pull --rebase); sort it out and run this again." }
 }
 
 Sync-Main

@@ -87,10 +87,16 @@ public abstract class DashboardObject : ComponentBase
     public virtual Task OpenAsync() => Task.CompletedTask;
 
     /// <summary>
-    /// The object's source no longer exists (its container was deleted, not
-    /// renamed): it leaves the dashboard. Called by the object
-    /// once what it reads says so for certain — a read that failed says
-    /// nothing either way.
+    /// The object's source is not on this agent (its container was deleted,
+    /// or the dashboard came from another machine): it stays in the
+    /// dashboard, shown in design for another source to be chosen and left
+    /// out of the view (<see cref="DashboardDocument.Lose"/>). Called by the
+    /// object once what it reads says so for certain — a read that failed
+    /// says nothing either way.
     /// </summary>
-    protected Task SourceGoneAsync() => Document?.ForgetAsync(Instance.Id) ?? Task.CompletedTask;
+    protected Task SourceGoneAsync()
+    {
+        Document?.Lose(Instance);
+        return Task.CompletedTask;
+    }
 }

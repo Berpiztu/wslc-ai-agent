@@ -85,7 +85,7 @@ public abstract class ChartObject : WslcObject
         }
     }
 
-    /// <summary>The container list read: the container's stats followed once it is known, the object gone with it.</summary>
+    /// <summary>The container list read: the container's stats followed once it is known, the object kept without it once it is not here.</summary>
     private void OnContainers() => _ = InvokeAsync(() =>
     {
         if (SubjectUid is { } uid && Containers.Gone(uid))

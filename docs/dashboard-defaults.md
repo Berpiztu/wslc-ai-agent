@@ -50,9 +50,14 @@ exported dashboard carries what each uid is (`sources`: `"25": { "kind":
 "container", "name": "wslc-published" }`), and loading it changes each uid
 for this agent's own resource of the same kind and name. An object whose
 resource this agent does not have is loaded without a source, for the user to
-choose; Tools names those resources before anything is loaded. Without this,
-the dashboard read the unknown uid as a resource that had been deleted and
-took its objects off.
+choose; Tools names those resources before anything is loaded.
+
+**Nothing is taken off.** An object whose resource is not on this agent (a
+file from an agent that carried no names, or a container deleted since) stays
+in the dashboard: in design it says its container (or image, volume,
+network) is not on this machine, for another to be chosen; out of design it
+is not drawn, since there is nothing it could show. Choosing another source
+brings it back.
 
 **JSON against JSON.** Tools compares each of the four views of the user's
 dashboard with the release's (the installation's, or the package folder's

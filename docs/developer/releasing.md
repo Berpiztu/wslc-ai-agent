@@ -13,13 +13,15 @@ the installers at exactly those versions, and publishes them.
 
 ## One command
 
-From the root of the repository, with nothing uncommitted, on any branch:
+From the root of the repository, on any branch, straight after a build:
 
 ```powershell
 .\deploy-release.ps1
 ```
 
-It goes to `main` and brings it up to date first. Then it takes each open
+It takes what this checkout holds: it goes to `main` and commits the changes
+not committed yet, with a message it writes itself (new files are listed,
+and taken only when you answer `y`). It brings `main` up to date. Then it takes each open
 pull request into `main` in turn: it waits for its checks, and asks whether
 to merge it into this release (`y` merges it, squashed, and deletes its
 branch; anything else leaves it open). One whose checks fail is reported and

@@ -4,8 +4,8 @@ namespace WslcAgent.UI.Dashboard;
 /// What every object of a resource family shares: its source is one resource,
 /// chosen in the properties window by its registry uid; it reads the list the
 /// family's objects share (<see cref="RegistryRows{TList, TRow}"/>), is drawn
-/// again with each read, and leaves the dashboard once a read says its
-/// resource is gone.
+/// again with each read, and once a read says its resource is not here it is
+/// kept for another to be chosen: shown so in design, left out of the view.
 /// </summary>
 public abstract class RegistryObject<TList, TRow> : WslcObject
     where TList : class

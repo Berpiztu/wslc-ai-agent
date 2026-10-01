@@ -432,14 +432,31 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
 
 
     /// <summary>
-    /// An object whose source is gone (its container deleted) leaves the
-    /// dashboard, and a group it leaves with no object goes with
-    /// it — as the store holds it and as it is designed. It is not the user's
-    /// change, so it is not something undo takes back: undoing it would only
-    /// bring back an object with nothing to read.
+    /// The objects whose source this agent does not have (a container
+    /// deleted, or a dashboard loaded from another machine), by the source
+    /// they were found without. Nothing is removed (the owner's decision of
+    /// 1 October 2026): such an object stays in the dashboard, shown in
+    /// design for the user to choose another source and left out of the view,
+    /// where there is nothing it could show. It is known while the page lives,
+    /// and choosing another source is what clears it.
     /// </summary>
-    public Task ForgetAsync(string id) =>
-        Layout.Find(id) is null && _saved.Find(id) is null ? Task.CompletedTask : BesideTheUserAsync(layout => layout.Without(id));
+    private readonly Dictionary<string, string?> _lost = [];
+
+    /// <summary>An object says what it reads is not on this agent.</summary>
+    public void Lose(ObjectInstance instance)
+    {
+        if (IsLost(instance))
+        {
+            return;
+        }
+
+        _lost[instance.Id] = instance.Source;
+        Changed?.Invoke();
+    }
+
+    /// <summary>The object reads a source this agent does not have: the one it was found without, still chosen.</summary>
+    public bool IsLost(ObjectInstance instance) =>
+        _lost.TryGetValue(instance.Id, out var source) && source == instance.Source;
 
     /// <summary>
     /// The canvas shows this many columns now — as many cells as its width
@@ -494,38 +511,6 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
         Changed?.Invoke();
         await KeepAsync();
         return true;
-    }
-
-    /// <summary>
-    /// What is not the user's change made to the dashboard as the store holds
-    /// it, written there at once, and to what is designed, whose draft follows;
-    /// and to the layout undo would bring back.
-    /// </summary>
-    private async Task BesideTheUserAsync(Func<DashboardLayout, DashboardLayout> change)
-    {
-        var unsaved = Unsaved;
-        _saved = change(_saved);
-        Layout = unsaved ? change(Layout) : _saved;
-        _before = _before is { } before ? change(before) : null;
-        LetGoOfWhatIsGone();
-        Changed?.Invoke();
-        await _saving.WaitAsync();
-        try
-        {
-            await store.SaveAsync(_saved.Write());
-            if (draft is not null)
-            {
-                await KeepDraftAsync(draft);
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            SaveFailed?.Invoke(ex);
-        }
-        finally
-        {
-            _saving.Release();
-        }
     }
 
     /// <summary>

@@ -46,10 +46,11 @@
                          @onpointerenter="@(() => Hover(group.Id))" @onpointerleave="@(() => Hover(null))">
                     </div>
                 }
-                @* A hidden piece is not drawn, in design or out of it; its card's properties show it again. *@
+                @* A hidden piece is not drawn, in design or out of it; its card's properties show it again.
+                   One whose source is not here is drawn in design, saying so, and not out of it. *@
                 @foreach (var instance in _document.Layout.Objects.Where(o => o.Hidden != true))
                 {
-                    if (Catalogue.Find(instance.Type) is not { } kind || (!Designing && Unset(kind, instance)))
+                    if (Catalogue.Find(instance.Type) is not { } kind || (!Designing && (Unset(kind, instance) || _document.IsLost(instance))))
                     {
                         continue;
                     }
@@ -62,7 +63,11 @@
                         <div class="@(kind.About.Fills ? "bz-dash-content bz-dash-fill" : "bz-dash-content")">
                             @if (Unset(kind, instance))
                             {
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@($"{kind.Label}: choose its {Families.Find(kind.About.Source)?.Noun ?? "source"}")</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@($"{kind.Label}: choose its {Noun(kind)}")</MudText>
+                            }
+                            else if (_document.IsLost(instance))
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Warning">@($"{kind.Label}: its {Noun(kind)} is not on this machine; choose another")</MudText>
                             }
                             else
                             {
@@ -460,6 +465,9 @@
 
     /// <summary>An object that needs a source and has none yet: an empty place in design, nothing out of it.</summary>
     private static bool Unset(ObjectDescriptor kind, ObjectInstance instance) => kind.HasSource && kind.SourceOf(instance) is null;
+
+    /// <summary>What a kind reads, as the user calls it: "container", "image"…</summary>
+    private string Noun(ObjectDescriptor kind) => Families.Find(kind.About.Source)?.Noun ?? "source";
 
     private Dictionary<string, object?> Parameters(ObjectInstance instance) => new()
     {
