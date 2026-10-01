@@ -1,0 +1,481 @@
+@* The dashboard's Tools: how each kind of object is born; the user's dashboard
+   against the release and the installation's own default, view by view, JSON
+   against JSON; every state it was saved in (v2.3: the release's version and
+   the user's revision within it), any of which is brought back; and files
+   loaded and exported (IDashboardFiles, which the application implements).
+   Nothing is loaded unless it is chosen here; a file needing a newer
+   application says so and is not loaded. *@
+@using Microsoft.AspNetCore.Components.Forms
+@inject IDashboardFiles Files
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+<MudPaper Outlined="true" Class="pa-4">
+    <MudText Typo="Typo.h6">Objects' defaults</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+        How each kind of object is born. Every release ships them, and newer ones can arrive between releases; they are
+        loaded only if you choose. What you change with Design objects, at the top of the toolbox, is kept apart and stays
+        over any newer base: a kind you changed that the newer base changed too is shown here for you to settle.
+    </MudText>
+    @if (_status is null)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else
+    {
+        <MudText Typo="Typo.body2">Base: @InUse(_status.ObjectDefaults, "loaded from a file")</MudText>
+        @if (_status.ObjectDefaults.Changes > 0)
+        {
+            <MudText Typo="Typo.body2">Your changes over it: @_status.ObjectDefaults.Changes @(_status.ObjectDefaults.Changes == 1 ? "kind" : "kinds")</MudText>
+        }
+        @if (_status.ObjectDefaults.Conflicts.Count > 0)
+        {
+            <MudPaper Outlined="true" Class="pa-3 mt-2">
+                <MudText Typo="Typo.body2" Class="mud-warning-text mb-1">
+                    The base changed @_status.ObjectDefaults.Conflicts.Count @(_status.ObjectDefaults.Conflicts.Count == 1 ? "kind" : "kinds") you changed too. Keep yours, or take the new one:
+                </MudText>
+                @foreach (var conflict in _status.ObjectDefaults.Conflicts)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudText Typo="Typo.body2" Class="flex-grow-1">@conflict.Type · @conflict.View</MudText>
+                        <MudButton Size="Size.Small" Variant="Variant.Filled" Disabled="_busy" OnClick="@(() => SettleAsync([conflict], keepMine: true))">Keep mine</MudButton>
+                        <MudButton Size="Size.Small" Variant="Variant.Filled" Disabled="_busy" OnClick="@(() => SettleAsync([conflict], keepMine: false))">Take new</MudButton>
+                    </MudStack>
+                }
+                <MudStack Row="true" Spacing="2" Class="mt-2">
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Disabled="_busy" OnClick="@(() => SettleAsync(_status.ObjectDefaults.Conflicts, keepMine: true))">Keep all mine</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Disabled="_busy" OnClick="@(() => SettleAsync(_status.ObjectDefaults.Conflicts, keepMine: false))">Take all new</MudButton>
+                </MudStack>
+            </MudPaper>
+        }
+        @if (_status.ObjectDefaults.Waiting is { } waiting)
+        {
+            <MudText Typo="Typo.body2" Class="@WaitingClass(_status.ObjectDefaults)">@Waiting(_status.ObjectDefaults, waiting)</MudText>
+        }
+        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2" Class="mt-2">
+            @if (_status.ObjectDefaults.Newer)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download"
+                           Disabled="@(_busy || _status.ObjectDefaults.Refusal.Length > 0)" OnClick="@(() => LoadObjectDefaultsAsync(""))"
+                           title="Use the newer objects' defaults waiting to be loaded">Load</MudButton>
+            }
+            <MudFileUpload T="IBrowserFile" FilesChanged="LoadObjectDefaultsFileAsync" Class="ma-0 d-inline-flex flex-grow-0" Disabled="_busy">
+                <CustomContent>
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@context.OpenFilePickerAsync" Disabled="_busy"
+                               title="Use the objects' defaults of a file">Load from file</MudButton>
+                </CustomContent>
+                @* No chip of the file chosen: it would push the row's buttons apart. *@
+                <SelectedTemplate></SelectedTemplate>
+            </MudFileUpload>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Upload" Disabled="_busy" OnClick="ExportObjectDefaultsAsync"
+                       title="The objects' defaults in use, your changes included, with their version, as a file another installation loads">Export</MudButton>
+            @if (_status.ObjectDefaults.Loaded is not null)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Disabled="_busy" OnClick="ResetObjectDefaultsAsync"
+                           title="The release's objects' defaults as the base again; your changes stay over it">Shipped base</MudButton>
+            }
+            @if (_status.ObjectDefaults.Changes > 0)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" Disabled="_busy" OnClick="ClearChangesAsync"
+                           title="Drop every change you made, backed up first: the base alone again">Drop my changes</MudButton>
+            }
+        </MudStack>
+    }
+</MudPaper>
+
+<MudPaper Outlined="true" Class="pa-4">
+    <MudText Typo="Typo.h6">Your dashboard</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+        Each view against the release and against this installation's own default, object by object. Load takes the
+        release's view, Reset puts back the default this installation has; only that view changes, and every state your
+        dashboard was saved in stays in the history below.
+    </MudText>
+    @if (_status is not null)
+    {
+        <MudText Typo="Typo.body2">Now: @Revision(_status.Dashboard.Current)</MudText>
+        <MudText Typo="Typo.body2" Class="mb-2">Compared with: v@(_status.Dashboard.ReleaseVersion), @_status.Dashboard.ReleaseSource</MudText>
+        <MudExpansionPanels MultiExpansion="true" Dense="true" Outlined="true">
+            @foreach (var view in _status.Dashboard.Views)
+            {
+                <MudExpansionPanel Text="@Summary(view)">
+                    @Differences("From the release:", view.FromRelease)
+                    @if (view.OwnDefault)
+                    {
+                        @Differences("From this installation's default:", view.FromOwnDefault)
+                    }
+                    <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2" Class="mt-2">
+                        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_busy || view.FromRelease.Count == 0)"
+                                   OnClick="@(() => LoadReleaseViewAsync(view.View))"
+                                   title="Put the release's view in your dashboard; this installation's default is not touched">Load the release's</MudButton>
+                        <MudButton Size="Size.Small" Variant="Variant.Filled" Disabled="_busy" OnClick="@(() => ResetViewAsync(view.View))"
+                                   title="Put back the default this installation has for this view">Reset to the default</MudButton>
+                    </MudStack>
+                </MudExpansionPanel>
+            }
+        </MudExpansionPanels>
+        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2" Class="mt-2">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" Disabled="_busy" OnClick="ResetAllAsync"
+                       title="Every view as the release has it, at once">Back to the release (v@(_status.Dashboard.ReleaseVersion))…</MudButton>
+            <MudFileUpload T="IBrowserFile" FilesChanged="@(file => ChooseDashboardFileAsync(file, PendingMode.LoadViews))" Class="ma-0 d-inline-flex flex-grow-0" Disabled="_busy">
+                <CustomContent>
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@context.OpenFilePickerAsync" Disabled="_busy"
+                               title="Choose which views of a dashboard file, exported here or elsewhere, replace yours">Load from file…</MudButton>
+                </CustomContent>
+                @* No chip of the file chosen: it would push the row's buttons apart. *@
+                <SelectedTemplate></SelectedTemplate>
+            </MudFileUpload>
+        </MudStack>
+        @PendingPanel(PendingMode.LoadViews)
+
+        <MudText Typo="Typo.body1" Class="mt-4 mb-1">Export your dashboard</MudText>
+        @foreach (var view in _status.Views)
+        {
+            <MudCheckBox T="bool" Value="@_export.Contains(view.Id)" ValueChanged="@(on => Tick(_export, view.Id, on))"
+                         Label="@view.Title" Dense="true" Size="Size.Small" />
+        }
+        <MudButton Size="Size.Small" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Upload" Class="mt-2"
+                   Disabled="@(_busy || _export.Count == 0)" OnClick="ExportViewsAsync"
+                   title="The views ticked as a file, with this dashboard's version and revision, which another installation of this version or later loads">Export</MudButton>
+    }
+</MudPaper>
+
+<MudPaper Outlined="true" Class="pa-4">
+    <MudText Typo="Typo.h6">Default dashboard</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+        What a user with none is given, and what Reset puts back: the release's, with this installation's own views over it —
+        saved with Save as default, or loaded from a file. A newer release never replaces them; how they differ from it is
+        shown here.
+    </MudText>
+    @if (_status is not null)
+    {
+        @if (_status.Dashboard.Views.All(view => !view.OwnDefault))
+        {
+            <MudText Typo="Typo.body2">Every view is the release's (v@(_status.Dashboard.ReleaseVersion)).</MudText>
+        }
+        else
+        {
+            <MudExpansionPanels MultiExpansion="true" Dense="true" Outlined="true">
+                @foreach (var view in _status.Dashboard.Views.Where(view => view.OwnDefault))
+                {
+                    <MudExpansionPanel Text="@($"{Title(view.View)}: this installation's own, from v{view.OwnBasedOn}; {Count(view.OwnFromRelease)} from the release")">
+                        @Differences("From the release:", view.OwnFromRelease)
+                        <MudButton Size="Size.Small" Variant="Variant.Filled" Class="mt-2" Disabled="_busy" OnClick="@(() => ResetDefaultViewAsync(view.View))"
+                                   title="This view of the default back to the release's; your dashboard is not touched">Back to the release's</MudButton>
+                    </MudExpansionPanel>
+                }
+            </MudExpansionPanels>
+        }
+        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2" Class="mt-2">
+            <MudFileUpload T="IBrowserFile" FilesChanged="@(file => ChooseDashboardFileAsync(file, PendingMode.LoadDefault))" Class="ma-0 d-inline-flex flex-grow-0" Disabled="_busy">
+                <CustomContent>
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@context.OpenFilePickerAsync" Disabled="_busy"
+                               title="Choose which views of a dashboard file become this installation's default">Load from file…</MudButton>
+                </CustomContent>
+                <SelectedTemplate></SelectedTemplate>
+            </MudFileUpload>
+        </MudStack>
+        @PendingPanel(PendingMode.LoadDefault)
+    }
+</MudPaper>
+
+<MudPaper Outlined="true" Class="pa-4">
+    <MudText Typo="Typo.h6">History</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+        Every state your dashboard was saved in: the version it comes from — the installation's, or a file's — and your
+        revision within it. Restore brings one back as it was; the history keeps everything.
+    </MudText>
+    @if (_history is not null)
+    {
+        <MudTable T="DashboardRevisionInfo" Items="_history" Dense="true" Hover="true" FixedHeader="true" Height="320px">
+            <HeaderContent>
+                <MudTh>Revision</MudTh>
+                <MudTh>Saved</MudTh>
+                <MudTh>What</MudTh>
+                <MudTh>From</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>v@(context.Version).@context.Revision</MudTd>
+                <MudTd>@context.Saved.Replace('T', ' ')</MudTd>
+                <MudTd>@context.Note</MudTd>
+                <MudTd>@Origin(context)</MudTd>
+                <MudTd>
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Disabled="@(_busy || context.Id == _status?.Dashboard.Current?.Id)"
+                               OnClick="@(() => RestoreAsync(context))" title="Bring the dashboard back to this state">Restore</MudButton>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@code {
+    /// <summary>What a choice of views from a file is for: your dashboard, or this installation's default.</summary>
+    private enum PendingMode { LoadViews, LoadDefault }
+
+    /// <summary>A choice of views of a file on its way: what for, the file, which views, which ticked.</summary>
+    private sealed record PendingDashboard(PendingMode Mode, string Text, string Label, IReadOnlyList<string> Views, HashSet<string> Chosen);
+
+    /// <summary>The largest file read from the device; a dashboard is a few dozen kilobytes.</summary>
+    private const long MaxFileBytes = 4 * 1024 * 1024;
+
+    private DashboardFilesStatus? _status;
+    private IReadOnlyList<DashboardRevisionInfo>? _history;
+    private PendingDashboard? _pending;
+    private readonly HashSet<string> _export = [];
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RunAsync(async () =>
+        {
+            _status = await Files.StatusAsync();
+            _history = await Files.HistoryAsync();
+        });
+        if (_status is not null)
+        {
+            _export.UnionWith(_status.Views.Select(view => view.Id));
+        }
+    }
+
+    /// <summary>A view's panel title: how many differences from the release, and from this installation's default.</summary>
+    private string Summary(DashboardViewDiff view) =>
+        $"{Title(view.View)}: {Count(view.FromRelease)} from the release" + (view.OwnDefault ? $", {Count(view.FromOwnDefault)} from this installation's default" : "");
+
+    private static string Count(IReadOnlyList<DashboardDifference> differences) =>
+        differences.Count == 0 ? "the same" : differences.Count == 1 ? "1 difference" : $"{differences.Count} differences";
+
+    /// <summary>A list of differences under its heading, or that there is none.</summary>
+    private static RenderFragment Differences(string heading, IReadOnlyList<DashboardDifference> differences) => @<div class="mb-2">
+        <MudText Typo="Typo.body2" Class="font-weight-bold">@heading</MudText>
+        @if (differences.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">The same.</MudText>
+        }
+        @foreach (var difference in differences)
+        {
+            <MudText Typo="Typo.body2">@difference.Object · @difference.Change · @difference.Detail</MudText>
+        }
+    </div>;
+
+    /// <summary>A revision as it reads: v2.3, where its version came from, and when it was saved.</summary>
+    private static string Revision(DashboardRevisionInfo? revision) => revision is null
+        ? "nothing recorded yet"
+        : $"v{revision.Version}.{revision.Revision}, {Origin(revision)}, saved {revision.Saved.Replace('T', ' ')}";
+
+    private static string Origin(DashboardRevisionInfo revision) =>
+        revision.Name.Length > 0 ? $"{revision.Source}: {revision.Name}" : revision.Source;
+
+    private static string InUse(DashboardFileState state, string loadedAs) => state.Loaded is { } loaded
+        ? $"v{loaded.Version}, {loadedAs} (the release ships v{state.Shipped.Version})"
+        : $"v{state.Shipped.Version}, shipped with the release";
+
+    /// <summary>What waits to be loaded, and why it cannot be when it cannot.</summary>
+    private static string Waiting(DashboardFileState state, DashboardFileVersion waiting) =>
+        state.Refusal.Length > 0 ? $"Waiting: v{waiting.Version}. {state.Refusal}"
+        : state.Newer ? $"Waiting: v{waiting.Version}, newer — Load takes it."
+        : $"Waiting: v{waiting.Version}, not newer than the one in use.";
+
+    private static string WaitingClass(DashboardFileState state) =>
+        state.Refusal.Length > 0 ? "mud-warning-text" : state.Newer ? "mud-info-text" : "mud-text-secondary";
+
+    private string Title(string view) => _status?.Views.FirstOrDefault(name => name.Id == view)?.Title ?? view;
+
+    private static void Tick(HashSet<string> views, string view, bool on)
+    {
+        if (on)
+        {
+            views.Add(view);
+        }
+        else
+        {
+            views.Remove(view);
+        }
+    }
+
+    private Task LoadObjectDefaultsAsync(string file) => RunAsync(async () =>
+    {
+        _status = await Files.LoadObjectDefaultsAsync(file);
+        Snackbar.Add("Objects' defaults loaded: objects added from now on are born with them", Severity.Success);
+    });
+
+    private async Task LoadObjectDefaultsFileAsync(IBrowserFile? file)
+    {
+        if (await ReadAsync(file) is { } text)
+        {
+            await LoadObjectDefaultsAsync(text);
+        }
+    }
+
+    private Task ExportObjectDefaultsAsync() => RunAsync(async () =>
+    {
+        var name = $"object-defaults-{DateTime.Now:yyyyMMdd-HHmm}.json";
+        await Files.SaveAsync(name, await Files.ExportObjectDefaultsAsync());
+        Snackbar.Add($"Objects' defaults exported as {name}", Severity.Success);
+    });
+
+    private Task ResetObjectDefaultsAsync() => RunAsync(async () =>
+    {
+        _status = await Files.ResetObjectDefaultsAsync();
+        Snackbar.Add("The release's objects' defaults are the base again; your changes stay over it", Severity.Success);
+    });
+
+    private async Task ClearChangesAsync()
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Drop your changes?",
+                $"Drop the {_status!.ObjectDefaults.Changes} kinds you changed and use the base alone? They are backed up first.",
+                yesText: "Drop", cancelText: "Cancel") != true)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            _status = await Files.ClearChangesAsync();
+            Snackbar.Add("Your changes dropped: the base alone is in use", Severity.Success);
+        });
+    }
+
+    private Task SettleAsync(IReadOnlyList<DashboardConflict> conflicts, bool keepMine) => RunAsync(async () =>
+    {
+        _status = await Files.SettleConflictsAsync([.. conflicts.Select(conflict => new DashboardConflictChoice(conflict.View, conflict.Type, keepMine))]);
+        Snackbar.Add(keepMine ? "Your changes kept" : "The new defaults taken", Severity.Success);
+    });
+
+    private Task LoadReleaseViewAsync(string view) => ChangeDashboardAsync(
+        () => Files.LoadViewsAsync([view], ""), $"{Title(view)}: the release's view is in your dashboard");
+
+    private Task ResetViewAsync(string view) => ChangeDashboardAsync(
+        () => Files.ResetViewsAsync([view]), $"{Title(view)}: back to the default");
+
+    private Task ResetDefaultViewAsync(string view) => ChangeDashboardAsync(
+        () => Files.ResetDefaultViewsAsync([view]), $"{Title(view)}: the default is the release's again");
+
+    private async Task ResetAllAsync()
+    {
+        if (await Dialogs.ShowMessageBoxAsync("Back to the release?",
+                $"Put every view of your dashboard back as the release v{_status!.Dashboard.ReleaseVersion} has it? The dashboard you have now stays in the history.",
+                yesText: "Back to the release", cancelText: "Cancel") != true)
+        {
+            return;
+        }
+
+        await ChangeDashboardAsync(() => Files.ResetAllAsync(), "Your dashboard is the release's again");
+    }
+
+    private Task RestoreAsync(DashboardRevisionInfo revision) => ChangeDashboardAsync(
+        () => Files.RestoreAsync(revision.Id), $"Back to v{revision.Version}.{revision.Revision}");
+
+    /// <summary>A change to the dashboard, then the status and the history read again; the dashboard shows it when it opens.</summary>
+    private Task ChangeDashboardAsync(Func<Task<DashboardFilesStatus>> change, string done) => RunAsync(async () =>
+    {
+        _status = await change();
+        _history = await Files.HistoryAsync();
+        Snackbar.Add($"{done}. The dashboard shows it when it opens.", Severity.Success);
+    });
+
+    /// <summary>A dashboard file checked first, then offered view by view.</summary>
+    private async Task ChooseDashboardFileAsync(IBrowserFile? file, PendingMode mode)
+    {
+        if (await ReadAsync(file) is not { } text)
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            var info = await Files.InspectAsync(text);
+            if (!info.IsDashboard)
+            {
+                Snackbar.Add($"{file!.Name} holds the objects' defaults, not a dashboard: Load from file under Objects' defaults takes it.", Severity.Warning);
+                return;
+            }
+
+            if (info.Refusal.Length > 0)
+            {
+                Snackbar.Add(info.Refusal, Severity.Warning);
+                return;
+            }
+
+            var from = info.From.Length > 0 ? $", v{info.Version}.{info.Revision} from {info.From}" : $", v{info.Version}";
+            _pending = new PendingDashboard(mode, text, $"{file!.Name}{from}", info.Views, [.. info.Views]);
+        });
+    }
+
+    /// <summary>The choice of views of a file on its way, in the card of its mode: the views, ticked, and the verb that applies them.</summary>
+    private RenderFragment PendingPanel(PendingMode mode) => @<text>
+        @if (_pending is { } pending && pending.Mode == mode)
+        {
+            <MudPaper Outlined="true" Class="pa-3 mt-2">
+                <MudText Typo="Typo.body2" Class="mb-1">
+                    @pending.Label: @(mode == PendingMode.LoadViews
+                        ? "the views ticked replace yours; the rest of your dashboard stays as it is."
+                        : "the views ticked become this installation's default; your own dashboard is not touched.")
+                </MudText>
+                @foreach (var view in pending.Views)
+                {
+                    <MudCheckBox T="bool" Value="@pending.Chosen.Contains(view)" ValueChanged="@(on => Tick(pending.Chosen, view, on))"
+                                 Label="@Title(view)" Dense="true" Size="Size.Small" />
+                }
+                <MudStack Row="true" Spacing="2" Class="mt-2">
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_busy || pending.Chosen.Count == 0)"
+                               OnClick="ApplyPendingAsync">@(mode == PendingMode.LoadViews ? "Load views" : "Make default")</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Disabled="_busy" OnClick="@(() => _pending = null)">Cancel</MudButton>
+                </MudStack>
+            </MudPaper>
+        }
+    </text>;
+
+    private Task ApplyPendingAsync()
+    {
+        var pending = _pending!;
+        _pending = null;
+        return pending.Mode == PendingMode.LoadViews
+            ? ChangeDashboardAsync(() => Files.LoadViewsAsync(pending.Chosen, pending.Text), "Views loaded")
+            : ChangeDashboardAsync(() => Files.LoadDefaultViewsAsync(pending.Chosen, pending.Text), "Views made this installation's default");
+    }
+
+    private Task ExportViewsAsync() => RunAsync(async () =>
+    {
+        var name = $"dashboard-{DateTime.Now:yyyyMMdd-HHmm}.json";
+        await Files.SaveAsync(name, await Files.ExportViewsAsync(_export));
+        Snackbar.Add($"Dashboard exported as {name}", Severity.Success);
+    });
+
+    /// <summary>A file's text, or null with the reason shown.</summary>
+    private async Task<string?> ReadAsync(IBrowserFile? file)
+    {
+        if (file is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var reader = new StreamReader(file.OpenReadStream(MaxFileBytes));
+            return await reader.ReadToEndAsync();
+        }
+        catch (IOException ex)
+        {
+            Snackbar.Add($"{file.Name} could not be read: {ex.Message}", Severity.Error);
+            return null;
+        }
+    }
+
+    /// <summary>One request at a time; a refusal shows its reason.</summary>
+    private async Task RunAsync(Func<Task> call)
+    {
+        _busy = true;
+        try
+        {
+            await call();
+        }
+        catch (DashboardFilesException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

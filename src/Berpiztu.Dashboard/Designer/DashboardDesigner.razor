@@ -106,7 +106,7 @@
         {
             @if (Toolbox)
             {
-                <Toolbox Entries="Entries" Carrying="@(_carried is not null)" Anchor="@(() => _frame)" OnTake="TakeAsync" OnCarry="Carry" OnRelease="DropAsync" Header="@(Framed ? CanvasSize : null)" />
+                <Toolbox Entries="Entries" Carrying="@(_carried is not null)" Anchor="@(() => _frame)" OnTake="TakeAsync" OnCarry="Carry" OnRelease="DropAsync" Header="ToolboxTop" />
             }
             <PropertiesWindow Document="_document" Defaults="Defaults" View="@View" />
         }
@@ -250,6 +250,9 @@
 
     /// <summary>The toolbox is offered in design; false on a board whose objects are all there already (the board of every object's default).</summary>
     [Parameter] public bool Toolbox { get; set; } = true;
+
+    /// <summary>What the host puts at the top of the toolbox, over the canvas size: a verb of its own, such as designing how the objects are born.</summary>
+    [Parameter] public RenderFragment? ToolboxHeader { get; set; }
 
     /// <summary>How each kind is born (<see cref="IObjectDefaults"/>): an object dropped takes it and Reset brings it back; none, and each is born as its descriptor says.</summary>
     [Parameter] public IObjectDefaults? Defaults { get; set; }
@@ -822,6 +825,11 @@
     /// a size under one cell, the field emptied on the way to another number,
     /// is let pass.
     /// </summary>
+    /// <summary>The top of the toolbox: the host's verbs, then the canvas size on a framed dashboard; nothing when neither is.</summary>
+    private RenderFragment? ToolboxTop => ToolboxHeader is null && !Framed ? null : ToolboxTopContent;
+
+    private RenderFragment ToolboxTopContent => @<text>@ToolboxHeader@(Framed ? CanvasSize : null)</text>;
+
     private RenderFragment CanvasSize => @<div class="bz-dash-props bz-dash-canvas-size-fields">
         <MudText Typo="Typo.caption" Class="mud-text-secondary bz-dash-prop-wide">Canvas size</MudText>
         <TextField T="int" Value="Extent.Columns" ValueChanged="@(width => _document.SetCanvasSizeAsync(width, Extent.Rows))" Label="Cols"

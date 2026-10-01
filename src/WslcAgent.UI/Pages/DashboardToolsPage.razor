@@ -1,0 +1,48 @@
+@page "/dashboard/tools"
+@* The dashboard's Tools, a step aside from the dashboard (its Tools verb):
+   Berpiztu.Dashboard's own screen (DashboardTools), over the agent's files
+   (AgentDashboardFiles), in the application's frame. *@
+@using Berpiztu.Dashboard.Tools
+@using WslcAgent.UI.Dashboard
+@inject NavigationManager Navigation
+
+<PageShell Title="Dashboard tools">
+    <Verbs>
+        <VerbFab StartIcon="@Icons.Material.Filled.Dashboard" Label="Dashboard" OnClick="@(() => Navigation.NavigateTo(BackToDashboard))"
+                 Title="Back to the dashboard" />
+    </Verbs>
+    <ChildContent>
+        <div class="wslc-fill-scroll">
+            <div class="wslc-settings-grid">
+                <DashboardTools />
+            </div>
+        </div>
+    </ChildContent>
+</PageShell>
+
+@code {
+    /// <summary>The dashboard's page the tools were opened from (<c>user</c>); none for the main one.</summary>
+    [SupplyParameterFromQuery(Name = "page")] public string? PageQuery { get; set; }
+
+    /// <summary>Whether the dashboard was being designed, which Back returns to.</summary>
+    [SupplyParameterFromQuery(Name = DesignVerb.Query)] public string? Design { get; set; }
+
+    private string BackToDashboard
+    {
+        get
+        {
+            var query = new List<string>();
+            if (PageQuery is { Length: > 0 } page)
+            {
+                query.Add($"page={Uri.EscapeDataString(page)}");
+            }
+
+            if (DesignVerb.Says(Design))
+            {
+                query.Add($"{DesignVerb.Query}=1");
+            }
+
+            return query.Count > 0 ? "?" + string.Join('&', query) : "./";
+        }
+    }
+}

@@ -119,6 +119,7 @@ public static class UiServiceCollectionExtensions
         services.AddScoped<DashboardPlace>();
         services.AddScoped<DashboardMeasures>();
         services.AddScoped<AgentObjectDefaults>();
+        services.AddScoped<Berpiztu.Dashboard.Storage.IDashboardFiles, AgentDashboardFiles>();
         return services;
     }
 }
