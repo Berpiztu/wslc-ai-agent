@@ -15,7 +15,8 @@ isolated from yours, and erased when it closes.
 | The Windows client, the tray icon, installing and uninstalling the MSIs | |
 
 The full test with WSLC runs on a virtual machine or a second computer.
-Every push is also built on a clean machine by CI (`.github/workflows/ci.yml`),
+Every push is also built on a clean machine by CI (`.github/workflows/ci.yml`,
+without the MAUI client; `client.yml` builds the client when it changes),
 through the same scripts.
 
 ## Enable Windows Sandbox (once)
