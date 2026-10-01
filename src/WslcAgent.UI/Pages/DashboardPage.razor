@@ -104,14 +104,11 @@
         }
         else
         {
-            @* How each object is born, designed on the board of every object,
-               on a development agent alone, which ships it; offered in design
-               and out of it, so it is never out of reach. *@
-            @if (Defaults.Writable)
-            {
-                <VerbFab StartIcon="@Icons.Material.Filled.Widgets" Label="Objects" OnClick="@(() => Navigation.NavigateTo("dashboard/objects"))"
-                         Title="How each object is born, in the landscape view and the portrait one" />
-            }
+            @* The dashboard's files: the objects' defaults and the default
+               dashboard loaded, reset and exported, and this dashboard's views
+               carried to another agent; in design and out of it. *@
+            <VerbFab StartIcon="@Icons.Material.Filled.Build" Label="Tools" OnClick="@(() => Navigation.NavigateTo(ToolsAddress))"
+                     Title="The dashboard's files: load, export and reset the objects' defaults and the dashboard's views" />
             @if (Designing)
             {
                 @* Nothing reaches where the dashboard is kept without Save:
@@ -130,13 +127,16 @@
                 <VerbFab StartIcon="@Icons.Material.Filled.NotificationsActive" Label="Status alarms" OnClick="@(() => _designer?.ShowStatusAlarmsAsync() ?? Task.CompletedTask)"
                          Title="Choose which of this view's alarms the status bar shows, on every screen" />
                 <ViewVerb Portrait="@(_view == BoardView.Portrait)" />
-                @* The server's dashboard made the one a user with none is given,
-                   on a development agent alone,
-                   which writes it back to the repository for the installer. *@
-                @if (Defaults.Writable && Place.Scope == DashboardScope.User)
+                @* The server's dashboard made the one a user with none is given:
+                   on a development agent written back to the repository for the
+                   installer; on an installed one, this agent's own default,
+                   over the shipped one (the dashboard's Tools undo it). *@
+                @if (Place.Scope == DashboardScope.User)
                 {
                     <VerbFab StartIcon="@Icons.Material.Filled.Inventory2" Label="Save as default" OnClick="SaveAsDefaultAsync"
-                             Title="@($"Ship this {PageName(PageKey)} {_view} view in the dashboard a user with none is given, the rest of it left as it is; what reads one of this machine's containers, images, volumes or networks is left out")" />
+                             Title="@(Defaults.Writable
+                                        ? $"Ship this {PageName(PageKey)} {_view} view in the dashboard a user with none is given, the rest of it left as it is; what reads one of this machine's containers, images, volumes or networks is left out"
+                                        : $"Make this {PageName(PageKey)} {_view} view this agent's default: what a user with none is given and Reset puts back; the release's stays under it")" />
                 }
                 @* The view designed given to the other, to start one from the
                    other: for every user. *@
@@ -188,7 +188,7 @@
                    previous place's dashboard, the server's User page blank
                    after coming back from the device. *@
                 <DashboardDesigner @key="_store" @ref="_designer" Store="_store" Draft="_draft" Framed="true" Fitting="_fitting" CardElevation="Style.Applied.CardElevation" DraftChanged="@(() => StateHasChanged())" Designing="Designing" View="@(_view!)" Defaults="Defaults" Measures="Measures"
-                                   SelectionChanged="OnSelectionChanged" />
+                                   SelectionChanged="OnSelectionChanged" ToolboxHeader="DesignObjectsButton" />
             }
         </div>
         @* Not modal, moved by its title, over the dashboard's top-left corner
@@ -504,9 +504,9 @@
     /// <summary>
     /// The page and the view being designed, as the server keeps them, written
     /// into the default the agent ships, after asking, without what reads one
-    /// of this machine's resources (ShippedDashboard); the default's other
-    /// page and view left as they are, as Copy does. A release agent refuses
-    /// it, and says so.
+    /// of this machine's resources (ShippedDashboard) on a development agent,
+    /// which ships it; on an installed agent, as it is, as that agent's own
+    /// default. The default's other page and view left as they are, as Copy does.
     /// </summary>
     private async Task SaveAsDefaultAsync()
     {
@@ -523,7 +523,10 @@
         }
 
         if (!await DialogFlow.ConfirmAsync(Dialogs, "Save as default",
-                $"Ship this {what} view as the one a user with none is given? The default's {what} view is written over; the rest of the default is left as it is.", "Save", destructive: true))
+                Defaults.Writable
+                    ? $"Ship this {what} view as the one a user with none is given? The default's {what} view is written over; the rest of the default is left as it is."
+                    : $"Make this {what} view this agent's default? A user with none is given it, and Reset puts it back; the release's default stays under it, and the dashboard's Tools bring it back.",
+                "Save", destructive: true))
         {
             return;
         }
@@ -532,8 +535,10 @@
         {
             var shipped = await Api.GetDefaultDashboardV2Async();
             var page = DashboardPages.Read(shipped, PageKey);
-            await Api.SetDefaultDashboardV2Async(DashboardPages.Write(shipped, PageKey, DashboardViews.Write(page, view, ShippedDashboard.Of(mine))));
-            Snackbar.Add($"The {what} view saved in the default dashboard; the next installer ships it.", Severity.Success);
+            await Api.SetDefaultDashboardV2Async(DashboardPages.Write(shipped, PageKey, DashboardViews.Write(page, view, Defaults.Writable ? ShippedDashboard.Of(mine) : mine)));
+            Snackbar.Add(Defaults.Writable
+                ? $"The {what} view saved in the default dashboard; the next installer ships it."
+                : $"The {what} view is this agent's default now.", Severity.Success);
         }
         catch (Exception failure) when (failure is AgentApiException or HttpRequestException)
         {
@@ -542,6 +547,52 @@
     }
 
     private void OnSelectionChanged(DashboardSelection selection) => _selection = selection;
+
+    /// <summary>
+    /// At the top of the toolbox: the board of every object, where how each
+    /// kind is born is designed, opened in the view being designed here, on
+    /// any agent (docs/dashboard-defaults.md). It brings the user back to this
+    /// page and view.
+    /// </summary>
+    private RenderFragment DesignObjectsButton => @<MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Widgets"
+                                                              FullWidth="true" Class="mb-1" OnClick="DesignObjects"
+                                                              title="@($"How each object is born in the {_view} view: their size, type, colours and parts")">Design objects</MudButton>;
+
+    /// <summary>The dashboard's tools, which Back returns from to this page, in design when it was.</summary>
+    private string ToolsAddress
+    {
+        get
+        {
+            var query = new List<string>();
+            if (PageKey is { } page)
+            {
+                query.Add($"{PageQueryName}={page}");
+            }
+
+            if (Designing)
+            {
+                query.Add($"{DesignVerb.Query}=1");
+            }
+
+            return "dashboard/tools" + (query.Count > 0 ? "?" + string.Join('&', query) : "");
+        }
+    }
+
+    private void DesignObjects()
+    {
+        var query = new List<string>();
+        if (_view == BoardView.Portrait)
+        {
+            query.Add($"{ViewVerb.Query}={BoardView.Portrait}");
+        }
+
+        if (PageKey is { } page)
+        {
+            query.Add($"{PageQueryName}={page}");
+        }
+
+        Navigation.NavigateTo("dashboard/objects" + (query.Count > 0 ? "?" + string.Join('&', query) : ""));
+    }
 
     /// <summary>
     /// The fitting this device keeps for this page and view

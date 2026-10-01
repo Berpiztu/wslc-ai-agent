@@ -4,8 +4,10 @@
    change made to one kept as
    its kind's default in that view (ObjectDefaultsBoard). A board for designing the objects, not a
    dashboard: nothing is dropped on it and nothing of it is kept but the
-   defaults. Only a development agent writes them, so only there is it
-   offered. It is always designed (it exists to give the objects their
+   defaults. Opened from the toolbox's Design objects, on any agent: a
+   development agent writes them back to its repository, which the installer
+   ships; an installed one keeps them as its own, kept through updates and
+   exported from Settings → Update (docs/dashboard-defaults.md). It is always designed (it exists to give the objects their
    defaults, and is never only looked at); the view is in the address, so
    Back goes from one to the other. Nothing is written without Save, as in
    the dashboard's views: each change is kept in a draft on this device, one per view, which
@@ -31,10 +33,11 @@
 
 <PageShell Title="@($"Objects' defaults: {ViewVerb.Name(Portrait)}")">
     <Verbs>
-        @* Back to the dashboard it was opened from, in design, where Objects is
-           offered: the board is a step aside from it, not a place of its own. *@
+        @* Back to the dashboard it was opened from, in design, on its page and
+           in this view: the board is a step aside from it, opened from the
+           toolbox's Design objects, not a place of its own. *@
         <VerbFab StartIcon="@Icons.Material.Filled.Dashboard" Label="Dashboard"
-                 OnClick="@(() => Navigation.NavigateTo($"?{DesignVerb.Query}=1"))"
+                 OnClick="@(() => Navigation.NavigateTo(BackToDashboard))"
                  Title="Back to the dashboard, in design" />
         <ViewVerb Portrait="Portrait" />
         @* Nothing is written without Save: until then what is designed is a
@@ -53,12 +56,6 @@
         @if (_board is null)
         {
             <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
-        }
-        else if (!Defaults.Writable)
-        {
-            <MudAlert Severity="Severity.Info" Dense="true" Class="ma-2">
-                How each object is born is designed on a development agent, which ships it; this agent only reads it.
-            </MudAlert>
         }
         else
         {
@@ -85,7 +82,30 @@
 
     [SupplyParameterFromQuery(Name = ViewVerb.Query)] public string? ViewQuery { get; set; }
 
+    /// <summary>The dashboard's page the board was opened from (<c>user</c>), which Back returns to; none for the main one.</summary>
+    [SupplyParameterFromQuery(Name = "page")] public string? PageQuery { get; set; }
+
     private string View => ViewVerb.Of(ViewQuery);
+
+    /// <summary>The dashboard in design, on the page it was opened from and in the view this board shows.</summary>
+    private string BackToDashboard
+    {
+        get
+        {
+            var query = new List<string> { $"{DesignVerb.Query}=1" };
+            if (Portrait)
+            {
+                query.Add($"{ViewVerb.Query}={BoardView.Portrait}");
+            }
+
+            if (PageQuery is { Length: > 0 } page)
+            {
+                query.Add($"page={Uri.EscapeDataString(page)}");
+            }
+
+            return "?" + string.Join('&', query);
+        }
+    }
 
     private bool Portrait => View == BoardView.Portrait;
 

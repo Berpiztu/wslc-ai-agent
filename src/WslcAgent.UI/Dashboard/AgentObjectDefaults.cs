@@ -19,6 +19,13 @@ public sealed class AgentObjectDefaults(WslcAgentApi api) : IObjectDefaults
 
     public Task LoadAsync(CancellationToken cancellationToken = default) => _loading ??= ReadAsync(cancellationToken);
 
+    /// <summary>Read again from the agent: after other defaults were loaded from a file, or the shipped ones put back.</summary>
+    public Task ReloadAsync(CancellationToken cancellationToken = default)
+    {
+        _views.Clear();
+        return _loading = ReadAsync(cancellationToken);
+    }
+
     public ObjectDefault? For(string view, string type) => _views.GetValueOrDefault(view)?.GetValueOrDefault(type);
 
     public async Task<bool> SetAsync(string view, string type, ObjectDefault value, CancellationToken cancellationToken = default)
