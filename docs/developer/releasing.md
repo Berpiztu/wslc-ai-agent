@@ -13,11 +13,18 @@ the installers at exactly those versions, and publishes them.
 
 ## One command
 
-From the root of the repository, with nothing uncommitted:
+From the root of the repository, with nothing uncommitted, on any branch:
 
 ```powershell
 .\deploy-release.ps1
 ```
+
+It goes to `main` and brings it up to date first. Then it takes each open
+pull request into `main` in turn: it waits for its checks, and asks whether
+to merge it into this release (`y` merges it, squashed, and deletes its
+branch; anything else leaves it open). One whose checks fail is reported and
+left out. `main` is brought up to date again, so the release carries what was
+merged.
 
 It takes the agent and the client to the next patch above the higher of the
 release's version and `private\version.props`, and the versionCode one above
