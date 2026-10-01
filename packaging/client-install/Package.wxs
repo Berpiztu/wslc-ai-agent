@@ -16,9 +16,11 @@
         Comments="$(var.MsiVersion)"
         Manufacturer="Berpiztu" />
     <!-- Every other version of the client is replaced, older or newer: an older
-         installer is a way back, not a mistake to refuse; the stock wizard has no page of ours to say so on. -->
+         installer is a way back, not a mistake to refuse; the stock wizard has no page of ours to say so on.
+         An equal one is replaced too: Windows Installer reads three parts, and
+         the local builds of one release differ only in the fourth. -->
     <Upgrade Id="04a8671a-730a-40d6-8446-9b104fb169c4">
-      <UpgradeVersion Minimum="0.0.0" Maximum="$(var.MsiVersion)" IncludeMinimum="yes" IncludeMaximum="no" MigrateFeatures="yes" Property="WIX_UPGRADE_DETECTED" />
+      <UpgradeVersion Minimum="0.0.0" Maximum="$(var.MsiVersion)" IncludeMinimum="yes" IncludeMaximum="yes" MigrateFeatures="yes" Property="WIX_UPGRADE_DETECTED" />
       <UpgradeVersion Minimum="$(var.MsiVersion)" IncludeMinimum="no" MigrateFeatures="yes" Property="NEWERVERSIONDETECTED" />
     </Upgrade>
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />

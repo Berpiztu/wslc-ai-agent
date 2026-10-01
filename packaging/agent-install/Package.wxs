@@ -22,9 +22,11 @@
     <!-- Every other version of the agent is replaced, older or newer: an older
          installer is a way back, not a mistake to refuse. A newer one on the PC is said on the welcome page, with its number
          when it left one (Version under the agent's key, written by this installer
-         and by the agent itself at every start). -->
+         and by the agent itself at every start). An equal one is replaced
+         too: Windows Installer reads three parts, and the local builds of one
+         release differ only in the fourth (1.0.27.2, 1.0.27.3). -->
     <Upgrade Id="94bb9fe5-4005-46ba-aab1-bddb047aed08">
-      <UpgradeVersion Minimum="0.0.0" Maximum="$(var.MsiVersion)" IncludeMinimum="yes" IncludeMaximum="no" MigrateFeatures="yes" Property="WIX_UPGRADE_DETECTED" />
+      <UpgradeVersion Minimum="0.0.0" Maximum="$(var.MsiVersion)" IncludeMinimum="yes" IncludeMaximum="yes" MigrateFeatures="yes" Property="WIX_UPGRADE_DETECTED" />
       <UpgradeVersion Minimum="$(var.MsiVersion)" IncludeMinimum="no" MigrateFeatures="yes" Property="NEWERVERSIONDETECTED" />
     </Upgrade>
     <Property Id="INSTALLEDVERSION">

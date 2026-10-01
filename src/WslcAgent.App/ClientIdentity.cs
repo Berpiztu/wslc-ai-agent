@@ -7,8 +7,9 @@ namespace WslcAgent.App;
 /// Installed display version and build of this client, the same values the
 /// agent reads from the installer it advertises. On unpackaged Windows,
 /// <see cref="AppInfo"/> reports a leftover package identity, so the EXE's
-/// version resource is read instead: ProductVersion is the display version
-/// and FileVersion's last part the build.
+/// version resource is read instead: ProductVersion is the display version,
+/// a local build's with its fourth part, and the whole identity there, as
+/// the MSI's ProductVersion is: on Windows there is no build apart from it.
 /// </summary>
 internal static class ClientIdentity
 {
@@ -32,13 +33,10 @@ internal static class ClientIdentity
     private static int ReadBuild()
     {
 #if WINDOWS
-        var info = ExecutableInfo();
-        if (info is not null)
-        {
-            return info.FilePrivatePart > 0 ? info.FilePrivatePart : info.FileBuildPart;
-        }
-#endif
+        return 0;
+#else
         return int.TryParse(AppInfo.Current.BuildString, out var build) ? build : 0;
+#endif
     }
 
     private static FileVersionInfo? ExecutableInfo()

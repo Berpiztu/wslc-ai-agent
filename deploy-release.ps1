@@ -7,8 +7,8 @@
 .DESCRIPTION
     The version in the repository is the last release's (Directory.Build.props
     for the agent, the client's csproj for the client and its Android
-    versionCode); everyday builds raise only this checkout's own, in
-    private\version.props. A release raises the repository's above both:
+    versionCode); everyday builds only count themselves, as a fourth part of
+    it in private\version.props. A release raises the repository's:
 
       1. Takes what this checkout holds: goes to main, from whatever branch
          it was run on (one with commits of its own has to be merged or
@@ -21,8 +21,10 @@
          is reported and left alone. main is brought up to date again with
          what was merged, so the release carries it.
       3. Writes the new versions: the agent's and the client's next patch
-         above the higher of the release's and private\version.props, or
-         -Version for both; the versionCode one above the higher of the two.
+         after the last release's, or -Version for both, however many local
+         builds were made (theirs carry a fourth part, 1.0.27.3, below
+         1.0.28); the versionCode is the client's version as one number
+         (1.0.18 is 100018000).
       4. Commits the two files, tags v<agent version> and pushes both.
       5. GitHub Actions sees the tag and builds the agent installer
          (-Release), the Windows client installer and the APK at exactly the
@@ -133,18 +135,18 @@ foreach ($line in $open) {
 }
 if ($open.Count -gt 0) { Sync-Main }
 
-# 3. The new versions, above the release's and every local build's.
-$builtHere = Read-WslcAgentLocalVersions
-$agentNow = Get-WslcAgentHigherVersion (Get-WslcAgentTrackedValue $Props "Version") $builtHere["WslcLocalAgentVersion"]
-$clientNow = Get-WslcAgentHigherVersion (Get-WslcAgentTrackedValue $Csproj "ApplicationDisplayVersion") $builtHere["WslcLocalClientVersion"]
-$localBuild = if ($builtHere["WslcLocalClientBuild"]) { [int]$builtHere["WslcLocalClientBuild"] } else { 0 }
-$codeNow = [Math]::Max([int](Get-WslcAgentTrackedValue $Csproj "ApplicationVersion"), $localBuild)
+# 3. The new versions: the next after the last release's, however many local
+# builds were made since (they carry its number with a fourth part, 1.0.27.3,
+# so 1.0.28 is above them all). The versionCode is the version as one number.
+$agentNow = Get-WslcAgentTrackedValue $Props "Version"
+$clientNow = Get-WslcAgentTrackedValue $Csproj "ApplicationDisplayVersion"
+$codeNow = [int](Get-WslcAgentTrackedValue $Csproj "ApplicationVersion")
 
 if ($Version) {
-    $release = ConvertTo-WixProductVersion $Version
+    $release = Get-WslcAgentReleasePart $Version
     foreach ($current in @($agentNow, $clientNow)) {
-        if ([version]$release -le [version](ConvertTo-WixProductVersion $current)) {
-            throw "-Version $release is not above $current, the version already built; choose a higher one."
+        if ([version]$release -le [version](Get-WslcAgentReleasePart $current)) {
+            throw "-Version $release is not above $current, the last release; choose a higher one."
         }
     }
     $agentVersion = $release
@@ -153,7 +155,10 @@ if ($Version) {
     $agentVersion = Get-NextPatchVersion $agentNow
     $clientVersion = Get-NextPatchVersion $clientNow
 }
-$clientCode = $codeNow + 1
+$clientCode = Get-WslcAgentVersionCode $clientVersion
+if ($clientCode -le $codeNow) {
+    throw "The versionCode $clientCode of $clientVersion is not above the last release's, $codeNow."
+}
 $tag = "v$agentVersion"
 if (git tag --list $tag) {
     throw "The tag $tag exists already; choose another version with -Version."

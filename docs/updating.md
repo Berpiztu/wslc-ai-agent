@@ -93,10 +93,12 @@ agent installed from an installer you built looks for its updates there. So
 building a newer agent installer **is** deploying it: with Auto update on,
 the installed agent picks it up and updates itself.
 
-- `build-agent-installer.ps1` raises the version each time, which is what
-  makes the installer newer. It writes it to `private\version.props`, never
-  tracked, so building changes nothing in git. `-NoBump` builds the same
-  version again, which the agent does not take as an update.
+- `build-agent-installer.ps1` counts each build as a fourth part of the last
+  release's version (`1.0.27.1`, `1.0.27.2`…), which is what makes the
+  installer newer; the next release, `1.0.28`, is newer than all of them. It
+  writes it to `private\version.props`, never tracked, so building changes
+  nothing in git. `-NoBump` builds the same version again, which the agent
+  does not take as an update.
 - **To keep your installed agent from updating itself while you build**, turn
   **Auto update** off in Settings → Update. It then updates only when you
   press **Update now**. Or point its package folder somewhere else.

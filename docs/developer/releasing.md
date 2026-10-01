@@ -4,12 +4,16 @@ The version in the repository is the last release's: `<Version>` in
 `Directory.Build.props` for the agent, and `<ApplicationDisplayVersion>` and
 `<ApplicationVersion>` (the Android versionCode) in
 `src/WslcAgent.App/WslcAgent.App.csproj` for the client. Everyday builds never
-change them: each installer build raises this checkout's own versions in
-`private\version.props`, which git does not track
+change them, nor take a number of their own: each installer build carries the
+last release's version with its build number as a fourth part (`1.0.27.3`),
+written to `private\version.props`, which git does not track
 ([updating.md](../updating.md)).
 
-A release raises the repository's versions above every build so far, builds
-the installers at exactly those versions, and publishes them.
+A release takes the next version after the last one (`1.0.28`, above every
+`1.0.27.x` build, however many there were), builds the installers at exactly
+that version, and publishes them. The Android versionCode is the client's
+version as one number (`1.0.18` is `100018000`; its local builds are
+`100018001`, `100018002`…), so it rises with each release too.
 
 ## One command
 
@@ -28,9 +32,9 @@ branch; anything else leaves it open). One whose checks fail is reported and
 left out. `main` is brought up to date again, so the release carries what was
 merged.
 
-It takes the agent and the client to the next patch above the higher of the
-release's version and `private\version.props`, and the versionCode one above
-both. To choose the version yourself, above every current one:
+It takes the agent and the client to the next patch after the last release,
+and the versionCode to that version as one number. To choose the version
+yourself, above the last release:
 
 ```powershell
 .\deploy-release.ps1 -Version 0.3.0

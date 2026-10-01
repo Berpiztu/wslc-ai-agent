@@ -27,7 +27,10 @@
     <!-- Client version of the release, independent of the agent's and changed
          only when one is published: Display is the Windows EXE ProductVersion
          and the Android versionName; ApplicationVersion is the Android
-         versionCode. The packaging scripts bump this checkout's own in
+         versionCode, the version as one number (1.0.18 is 100018000). A
+         local build carries the release's with its own number as a fourth
+         part (1.0.17.3, versionCode 100017003): the packaging scripts write
+         this checkout's in
          private\version.props (Directory.Build.props imports it), taken
          below when above these. -->
     <ApplicationDisplayVersion>1.0.17</ApplicationDisplayVersion>
@@ -35,8 +38,15 @@
     <ApplicationDisplayVersion Condition="'$(WslcLocalClientVersion)' != '' And $([MSBuild]::VersionGreaterThan('$(WslcLocalClientVersion)', '$(ApplicationDisplayVersion)'))">$(WslcLocalClientVersion)</ApplicationDisplayVersion>
     <ApplicationVersion Condition="'$(WslcLocalClientBuild)' != '' And $(WslcLocalClientBuild) &gt; $(ApplicationVersion)">$(WslcLocalClientBuild)</ApplicationVersion>
     <Version>$(ApplicationDisplayVersion)</Version>
-    <FileVersion>$(ApplicationDisplayVersion).$(ApplicationVersion)</FileVersion>
+    <FileVersion>$(ApplicationDisplayVersion)</FileVersion>
     <InformationalVersion>$(ApplicationDisplayVersion)</InformationalVersion>
+    <!-- Windows: the EXE keeps the whole version above (its ProductVersion is
+         what the client and the agent compare), and the app manifest MAUI
+         writes takes it split as it wants it, three parts and a number up to
+         65535: the local build's (1.0.17 and 3), 0 for a release. MAUI
+         refuses a four-part display version beside a number of its own. -->
+    <ApplicationVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">$([System.Math]::Max(0, $([System.Version]::Parse('$(ApplicationDisplayVersion)').Revision)))</ApplicationVersion>
+    <ApplicationDisplayVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">$([System.Version]::Parse('$(ApplicationDisplayVersion)').ToString(3))</ApplicationDisplayVersion>
 
     <!-- Unpackaged Windows app: no MSIX, the WiX installer wraps the publish output. -->
     <WindowsPackageType>None</WindowsPackageType>

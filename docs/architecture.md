@@ -107,12 +107,14 @@ records.
 Two independent versions, both bumped by the packaging scripts:
 
 - Agent: the single `<Version>` in `Directory.Build.props`, reported in
-  `/api/v1/health`, in the MCP `serverInfo` and in the UI. `build-agent-installer.ps1`
-  bumps the patch.
+  `/api/v1/health`, in the MCP `serverInfo` and in the UI. A local build of
+  `build-agent-installer.ps1` carries it with its build number as a fourth
+  part (`1.0.27.3`); only a release raises it.
 - Client: `ApplicationDisplayVersion` (Windows ProductVersion, Android
-  versionName) and `ApplicationVersion` (Android versionCode) in
-  `src/WslcAgent.App`. `build-client-installer.ps1` and `build-client-apk.ps1`
-  bump both.
+  versionName) and `ApplicationVersion` (Android versionCode, the version as
+  one number: `1.0.18` is `100018000`) in `src/WslcAgent.App`.
+  `build-client-installer.ps1` and `build-client-apk.ps1` add the build number
+  the same way (`1.0.17.3`, `100017003`).
 
 ## Diagrams
 
