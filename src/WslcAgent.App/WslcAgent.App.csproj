@@ -30,8 +30,8 @@
          versionCode. The packaging scripts bump this checkout's own in
          private\version.props (Directory.Build.props imports it), taken
          below when above these. -->
-    <ApplicationDisplayVersion>1.0.6</ApplicationDisplayVersion>
-    <ApplicationVersion>243</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0.7</ApplicationDisplayVersion>
+    <ApplicationVersion>244</ApplicationVersion>
     <ApplicationDisplayVersion Condition="'$(WslcLocalClientVersion)' != '' And $([MSBuild]::VersionGreaterThan('$(WslcLocalClientVersion)', '$(ApplicationDisplayVersion)'))">$(WslcLocalClientVersion)</ApplicationDisplayVersion>
     <ApplicationVersion Condition="'$(WslcLocalClientBuild)' != '' And $(WslcLocalClientBuild) &gt; $(ApplicationVersion)">$(WslcLocalClientBuild)</ApplicationVersion>
     <Version>$(ApplicationDisplayVersion)</Version>
