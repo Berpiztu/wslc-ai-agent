@@ -30,13 +30,15 @@ Set-Location $RepoRoot
 # The whole solution; without the client, the projects that are everything
 # else: the tests (and through them the agent, its web UI and the dashboard),
 # and the tray with its toasts.
-$Targets = if ($NoClient) {
+# Wrapped in @(): a single target or none would otherwise come back as a bare
+# string or as nothing at all.
+$Targets = @(if ($NoClient) {
     @("tests\WslcAgent.Server.Tests\WslcAgent.Server.Tests.csproj", "src\WslcAgent.Tray\WslcAgent.Tray.csproj") |
         ForEach-Object { Join-Path $RepoRoot $_ }
 } else {
-    @(Join-Path $RepoRoot "WslcAgent.slnx")
-}
-$Scope = if ($NoClient) { @() } else { @(Get-WslcAgentSolutionScope) }
+    Join-Path $RepoRoot "WslcAgent.slnx"
+})
+$Scope = @(if (-not $NoClient) { Get-WslcAgentSolutionScope })
 
 foreach ($target in $Targets) {
     $name = Split-Path -Leaf $target
