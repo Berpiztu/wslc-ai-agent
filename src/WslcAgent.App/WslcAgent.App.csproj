@@ -33,8 +33,8 @@
          this checkout's in
          private\version.props (Directory.Build.props imports it), taken
          below when above these. -->
-    <ApplicationDisplayVersion>1.0.17</ApplicationDisplayVersion>
-    <ApplicationVersion>254</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0.18</ApplicationDisplayVersion>
+    <ApplicationVersion>100018000</ApplicationVersion>
     <ApplicationDisplayVersion Condition="'$(WslcLocalClientVersion)' != '' And $([MSBuild]::VersionGreaterThan('$(WslcLocalClientVersion)', '$(ApplicationDisplayVersion)'))">$(WslcLocalClientVersion)</ApplicationDisplayVersion>
     <ApplicationVersion Condition="'$(WslcLocalClientBuild)' != '' And $(WslcLocalClientBuild) &gt; $(ApplicationVersion)">$(WslcLocalClientBuild)</ApplicationVersion>
     <Version>$(ApplicationDisplayVersion)</Version>
