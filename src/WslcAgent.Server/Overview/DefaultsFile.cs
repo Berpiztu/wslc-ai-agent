@@ -15,7 +15,8 @@ namespace WslcAgent.Server.Overview;
 /// <param name="Kind"><see cref="DefaultsKinds.ObjectDefaults"/> or <see cref="DefaultsKinds.Dashboard"/>.</param>
 /// <param name="From">The agent that exported it; empty for a file as released.</param>
 /// <param name="Created">When it was written, ISO 8601; empty when it does not say.</param>
-public sealed record DefaultsFile(string Kind, int Version, string MinAgentVersion, string From, string Created, JsonObject Content, int Revision = 0)
+/// <param name="Sources">An exported dashboard's resources by uid, each with its kind and name (<see cref="DashboardSources"/>); null when it names none.</param>
+public sealed record DefaultsFile(string Kind, int Version, string MinAgentVersion, string From, string Created, JsonObject Content, int Revision = 0, JsonObject? Sources = null)
 {
     /// <summary>The name a kind's file has in the package folder and beside the installers of a release.</summary>
     public static string FileName(string kind) => kind == DefaultsKinds.Dashboard ? "wslc-dashboard-default.json" : "wslc-object-defaults.json";
@@ -47,7 +48,7 @@ public sealed record DefaultsFile(string Kind, int Version, string MinAgentVersi
             }
 
             return new DefaultsFile(kind, version, Text(file["minAgentVersion"]), Text(file["from"]), Text(file["created"]), content,
-                Number(file["revision"]) ?? 0);
+                Number(file["revision"]) ?? 0, file["sources"] as JsonObject);
         }
         catch (Exception exception) when (exception is JsonException or InvalidOperationException or FormatException)
         {
@@ -71,6 +72,11 @@ public sealed record DefaultsFile(string Kind, int Version, string MinAgentVersi
         file["minAgentVersion"] = MinAgentVersion;
         file["from"] = From;
         file["created"] = Created;
+        if (Sources is { Count: > 0 })
+        {
+            file["sources"] = Sources.DeepClone();
+        }
+
         file["content"] = Content.DeepClone();
         return file.ToJsonString(Indented);
     }

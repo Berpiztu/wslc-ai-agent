@@ -212,8 +212,8 @@
     /// <summary>What a choice of views from a file is for: your dashboard, or this installation's default.</summary>
     private enum PendingMode { LoadViews, LoadDefault }
 
-    /// <summary>A choice of views of a file on its way: what for, the file, which views, which ticked.</summary>
-    private sealed record PendingDashboard(PendingMode Mode, string Text, string Label, IReadOnlyList<string> Views, HashSet<string> Chosen);
+    /// <summary>A choice of views of a file on its way: what for, the file, which views, which ticked, and the sources it reads that are not here.</summary>
+    private sealed record PendingDashboard(PendingMode Mode, string Text, string Label, IReadOnlyList<string> Views, HashSet<string> Chosen, IReadOnlyList<string> Missing);
 
     /// <summary>The largest file read from the device; a dashboard is a few dozen kilobytes.</summary>
     private const long MaxFileBytes = 4 * 1024 * 1024;
@@ -397,7 +397,7 @@
             }
 
             var from = info.From.Length > 0 ? $", v{info.Version}.{info.Revision} from {info.From}" : $", v{info.Version}";
-            _pending = new PendingDashboard(mode, text, $"{file!.Name}{from}", info.Views, [.. info.Views]);
+            _pending = new PendingDashboard(mode, text, $"{file!.Name}{from}", info.Views, [.. info.Views], info.Missing);
         });
     }
 
@@ -415,6 +415,12 @@
                 {
                     <MudCheckBox T="bool" Value="@pending.Chosen.Contains(view)" ValueChanged="@(on => Tick(pending.Chosen, view, on))"
                                  Label="@Title(view)" Dense="true" Size="Size.Small" />
+                }
+                @if (pending.Missing.Count > 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-warning-text mt-1">
+                        Not on this installation: @string.Join(", ", pending.Missing). Their objects are loaded without one, for you to choose.
+                    </MudText>
                 }
                 <MudStack Row="true" Spacing="2" Class="mt-2">
                     <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_busy || pending.Chosen.Count == 0)"

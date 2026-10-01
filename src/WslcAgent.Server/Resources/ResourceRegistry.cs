@@ -124,6 +124,15 @@ public sealed class ResourceRegistry
         }
     }
 
+    /// <summary>A resource by its uid, in the selected session: its kind and its name; null when it is not known.</summary>
+    public (string Kind, string Name)? Describe(int uid)
+    {
+        lock (_gate)
+        {
+            return _stored.Entries.FirstOrDefault(e => e.Uid == uid && e.Session == _session.Name) is { } entry ? (entry.Kind, entry.Name) : null;
+        }
+    }
+
     /// <summary>The uid of one resource, by its WSLC id (either may be the short or the full form) or, failing that, its name; 0 when it is not known.</summary>
     public int UidOf(string kind, string wslcId, string name)
     {
