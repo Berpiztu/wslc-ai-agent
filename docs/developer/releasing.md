@@ -27,21 +27,47 @@ both. To choose the version yourself, above every current one:
 .\deploy-release.ps1 -Version 0.3.0
 ```
 
-Then it:
+Then it commits the two version files, tags `v<agent version>` and pushes
+the commit and the tag; nothing is built or uploaded from this machine.
+**GitHub Actions** sees the tag (`.github/workflows/release.yml`) and, in
+about 20 minutes:
 
 1. Builds `wslc-ai-agent.msi` (with `-Release`: its wizard offers
    `C:\Berpiztu\wslc-ai-agent` as the package folder), `wslc-ai-client.msi`
-   and `wslc-ai-client.apk` into `dist\`, at exactly the release's versions.
-2. Only when all three built: commits the two version files, tags
-   `v<agent version>` and pushes the commit and the tag. When a build fails,
-   the two files are put back and nothing is committed.
-3. Says which three files to upload to the GitHub release.
+   and `wslc-ai-client.apk`, at exactly the versions the tag's commit carries.
+2. Creates the GitHub release with the three installers and the two defaults
+   files, its notes listing the pull requests merged since the last one.
 
-To also create the GitHub release and upload the installers (the GitHub CLI,
-`gh`, signed in):
+A failed build leaves the tag without a release: fix what failed, then run
+the workflow again on the tag (Actions → Release → Run workflow, the tag as
+the branch).
+
+### The repository's secrets
+
+The APK is signed on GitHub with the same key as every earlier one, and
+carries the Firebase configuration that gives it notifications. Both come
+from three repository secrets (Settings → Secrets and variables → Actions),
+set once from `private\` with the GitHub CLI:
 
 ```powershell
-.\deploy-release.ps1 -Publish
+gh secret set ANDROID_KEYSTORE_BASE64 --body ([Convert]::ToBase64String([IO.File]::ReadAllBytes("private\android.keystore")))
+gh secret set ANDROID_KEYSTORE_PASS --body (Get-Content private\android.keystore.pass -Raw).Trim()
+gh secret set GOOGLE_SERVICES_JSON_BASE64 --body ([Convert]::ToBase64String([IO.File]::ReadAllBytes("private\google-services.json")))
+```
+
+Without them the workflow stops before building: with no key it would sign
+with a new one, which no installed app accepts.
+
+### Building here instead
+
+`-Local` builds the three installers on this machine first, as before the
+workflow existed (a failure puts the versions back and commits nothing),
+then commits, tags and pushes; its tag says it was built locally, and the
+workflow leaves it alone. `-Publish` also creates the release and uploads
+the files from here (the GitHub CLI, `gh`, signed in):
+
+```powershell
+.\deploy-release.ps1 -Local -Publish
 ```
 
 ## Before releasing

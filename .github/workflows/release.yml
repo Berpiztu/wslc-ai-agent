@@ -1,0 +1,98 @@
+name: Release
+
+# A release tag (v1.2.3), pushed by deploy-release.ps1, built and published
+# here instead of from a home connection: the agent installer, the Windows
+# client installer and the APK, at exactly the versions the tag's commit
+# carries, and the two defaults files beside them. A tag marked "built
+# locally" (deploy-release.ps1 -Local) is left alone. Run by hand on a tag to
+# build it again after a failure.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Built locally?
+        id: tag
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ("${{ github.ref_type }}" -ne "tag") { throw "Run this on a release tag (v1.2.3), not on $tag." }
+          git fetch --force origin "refs/tags/${tag}:refs/tags/${tag}"
+          $message = git tag -l --format='%(contents)' $tag
+          "local=$(if ($message -match 'built locally') { 'true' } else { 'false' })" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/setup-dotnet@v4
+        if: steps.tag.outputs.local != 'true'
+        with:
+          global-json-file: global.json
+
+      - uses: actions/cache@v4
+        if: steps.tag.outputs.local != 'true'
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('global.json', 'Directory.Packages.props', '**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Install workloads
+        if: steps.tag.outputs.local != 'true'
+        run: dotnet workload restore WslcAgent.slnx
+
+      # The same signing key as every earlier APK, or Android refuses the
+      # update: with no key the build would make a new one, so it stops
+      # instead. The Firebase configuration gives the APK its notifications.
+      - name: Signing key and Firebase configuration
+        if: steps.tag.outputs.local != 'true'
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          GOOGLE_SERVICES: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          if (-not $env:KEYSTORE -or -not $env:KEYSTORE_PASS -or -not $env:GOOGLE_SERVICES) {
+            throw "The repository secrets ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASS and GOOGLE_SERVICES_JSON_BASE64 are needed (docs/developer/releasing.md)."
+          }
+          $folder = Join-Path $env:RUNNER_TEMP "signing"
+          New-Item -ItemType Directory -Force -Path $folder | Out-Null
+          [IO.File]::WriteAllBytes((Join-Path $folder "android.keystore"), [Convert]::FromBase64String($env:KEYSTORE))
+          [IO.File]::WriteAllBytes((Join-Path $folder "google-services.json"), [Convert]::FromBase64String($env:GOOGLE_SERVICES))
+          "WSLC_AGENT_KEYSTORE=$(Join-Path $folder 'android.keystore')" >> $env:GITHUB_ENV
+          "WSLC_AGENT_KEYSTORE_PASS=$env:KEYSTORE_PASS" >> $env:GITHUB_ENV
+          "WSLC_AGENT_GOOGLE_SERVICES=$(Join-Path $folder 'google-services.json')" >> $env:GITHUB_ENV
+
+      - name: Build the installers
+        if: steps.tag.outputs.local != 'true'
+        run: |
+          .\build-agent-installer.ps1 -NoBump -Release
+          .\build-client-installer.ps1 -NoBump
+          .\build-client-apk.ps1 -NoBump
+
+      - name: Publish the release
+        if: steps.tag.outputs.local != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          . .\packaging\Packaging.ps1
+          $tag = "${{ github.ref_name }}"
+          $files = @("wslc-ai-agent.msi", "wslc-ai-client.msi", "wslc-ai-client.apk") | ForEach-Object { Join-Path "dist" $_ }
+          $files += Write-WslcAgentDefaultsFiles -Destination (Join-Path $PWD "dist")
+          gh release view $tag 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag @files --clobber
+          } else {
+            gh release create $tag @files --title "WSLC AI Agent $($tag.TrimStart('v'))" --generate-notes
+          }
+          if ($LASTEXITCODE -ne 0) { throw "Publishing $tag failed with exit code $LASTEXITCODE" }
