@@ -36,6 +36,9 @@
     <!-- The dashboard a user with none is given, designed on the server's
          dashboard on a development agent. -->
     <EmbeddedResource Include="Overview\dashboard-v2.5.default.json" LogicalName="dashboard-v2.5.default.json" />
+    <!-- The version of the two files above and the oldest agent that loads
+         them, raised by hand when either changes (docs/dashboard-defaults.md). -->
+    <EmbeddedResource Include="Overview\defaults-versions.json" LogicalName="defaults-versions.json" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(Configuration)' == 'Debug'">
@@ -45,6 +48,7 @@
          what the installer publishes, carries no path and writes no default. -->
     <AssemblyMetadata Include="ObjectDefaultsSource" Value="$(MSBuildProjectDirectory)\Overview\object-defaults.json" />
     <AssemblyMetadata Include="DashboardV2DefaultSource" Value="$(MSBuildProjectDirectory)\Overview\dashboard-v2.5.default.json" />
+    <AssemblyMetadata Include="DefaultsVersionsSource" Value="$(MSBuildProjectDirectory)\Overview\defaults-versions.json" />
   </ItemGroup>
 
 </Project>
