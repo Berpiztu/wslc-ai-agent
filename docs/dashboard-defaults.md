@@ -1,7 +1,80 @@
 # Dashboard defaults, their updates and exporting a dashboard
 
-Status: **specification, not built yet** (agreed 1 October 2026). Where the
-files are published is still open: see [Open points](#open-points).
+Status: **built, not released yet** (agreed and written 1 October 2026).
+Where the files are published between releases is still open: see
+[Open points](#open-points); for now they ride on the latest release.
+
+## How it is built
+
+| Piece | Where |
+|---|---|
+| The file format (`kind`, `version`, `minAgentVersion`, `from`, `created`, `content`) | `src/WslcAgent.Server/Overview/DefaultsFile.cs` |
+| The shipped versions, raised by hand when a file changes | `src/WslcAgent.Server/Overview/defaults-versions.json`, embedded |
+| Status, loading, reset, import and export | `DashboardDefaults.cs`, endpoints in `HomeEndpoints.cs` ([api-v1.md](api-v1.md)) |
+| Files loaded, kept through updates | `%LOCALAPPDATA%\WSLC-AI-Agent\data\loaded-defaults\` |
+| Every state the dashboard was saved in | `%LOCALAPPDATA%\WSLC-AI-Agent\data\dashboard-history\`, one file each, all kept (`DashboardHistory.cs`) |
+| What differs, JSON against JSON | `DashboardDiff.cs` |
+| The dashboard's **Tools** verb | page `/dashboard/tools`: Berpiztu.Dashboard's `Tools/DashboardTools.razor` over `IDashboardFiles`, which `WslcAgent.UI/Dashboard/AgentDashboardFiles.cs` implements with the agent's API: load, export and reset |
+| Designing how objects are born | **Design objects**, at the top of the toolbox in design, on any agent: opens `/dashboard/objects` in the view being designed; Save writes the repository on a development agent, the agent's own file on an installed one |
+| A release carries both files | `deploy-release.ps1` (`Write-WslcAgentDefaultsFiles` in `packaging/Packaging.ps1`) |
+| Publishing them between releases | `publish-defaults.ps1`: uploads the files whose version went up to the latest release |
+| The update line | `install.ps1` puts a newer file in the package folder, even when the agent is up to date |
+
+A file is the content the agent keeps today wrapped, never changed, so
+nothing that reads the dashboard or the objects' defaults changes:
+
+```json
+{
+  "kind": "wslc-dashboard",
+  "version": 3,
+  "minAgentVersion": "1.0.12",
+  "from": "",
+  "created": "2026-10-01T09:00:00-05:00",
+  "content": { "...": "dashboard-v2.5.default.json as it is" }
+}
+```
+
+**Two numbers, the origin and the revision.** The default dashboard has one
+version (`defaults-versions.json`), which Save as default on a development
+agent raises by itself. Every state the user's dashboard is saved in is kept
+(`dashboard-history/`, all of them for now) with its origin — that version,
+given by the installation or by a file imported — and the user's revision
+within it: v2.0 is version 2 as it came, v2.3 the third save since. Loading
+from the release or a file starts a new origin at revision 0; Restore brings
+any state back under its own name.
+
+**JSON against JSON.** Tools compares each of the four views of the user's
+dashboard with the release's (the installation's, or the package folder's
+when newer) and with the agent's own default, object by object and card by
+card: added, removed, and changed with each property before and after
+(`size: small → large`). The user's own edits show as differences too; that
+is the point. **Load the release's** puts the release's view in, **Reset to
+the default** the agent's own (else the release's), **Back to the release**
+every view at once.
+
+**Save as default works on any agent.** On a development agent it writes
+the repository, as before. On an installed one it makes the view the
+agent's own default (`loaded-defaults/dashboard-default.own.json`), view by
+view over the shipped one, which it never touches: what a user with none is
+given, what a blank view shows and what Reset puts back. Each own view
+records the shipped version it was based on, so a newer shipped or waiting
+view is offered there too. Tools has, for any of the four views: **Load**
+views into your dashboard (a file, or the newest default), **Reset** your
+views to the default the agent has, **Load from file** into the agent's
+default, and **Back to release** for the agent's own default views.
+
+A development agent keeps reading its repository's objects' defaults, so
+what is designed on it is what it shows and ships; it refuses to load a file.
+An installed agent keeps what is designed on it apart, as the user's
+changes (`loaded-defaults/object-defaults.changes.json`): only the kinds
+changed, each with the base's value it replaced, over the base — the
+shipped defaults or an official file loaded. A newer base, from an update or
+a file, brings its new and improved kinds and leaves the user's as they are;
+a kind changed by both is a conflict, which Tools lists to settle kind by
+kind (keep mine, take new). **Shipped base** puts the shipped defaults back
+under the changes; **Drop my changes** removes them. Whatever is replaced or
+removed is backed up first (`loaded-defaults/backups/`, all kept for now). Export
+carries the base with the changes over it.
 
 Three pieces, one file format:
 
@@ -24,13 +97,14 @@ leaves `data\` in place, so a reinstalled agent opens the dashboard it had.
 
 ## 1. Version and minimum agent version
 
-Both shipped files, and every exported dashboard, carry two fields at the top:
+Both shipped files, and every exported dashboard, carry two fields at the top,
+around the content (the format above):
 
 ```json
 {
   "version": 5,
   "minAgentVersion": "1.0.12",
-  "...": "the content as today"
+  "content": { "...": "the content as today" }
 }
 ```
 
@@ -71,9 +145,9 @@ two files beside the installers:
 When a downloaded file needs a newer agent than the one installed, the line
 says so; the installer it downloads in the same run usually is that agent.
 
-### Loading in Settings
+### Loading in Tools
 
-Settings shows, for each of the two files, the version in use and the one in
+Tools shows, for each of the two files, the version in use and the one in
 the package folder:
 
 | Case | Shown |
@@ -91,7 +165,7 @@ Loading is the user's choice; nothing changes on its own.
   below); the dashboard in use is backed up first.
 
 A loaded file keeps winning over the embedded one after an update, as the
-user's dashboard does; Settings shows when the installed agent ships a newer
+user's dashboard does; Tools shows when the installed agent ships a newer
 version, and **Load** or **Reset to shipped** takes it.
 
 ## 3. Export and import a dashboard
@@ -101,7 +175,7 @@ another installation.
 
 ### Export
 
-Settings → **Export dashboard**: the user ticks any of the four views,
+Tools → **Export**: the user ticks any of the four views,
 
 - System landscape
 - System portrait
@@ -121,7 +195,7 @@ another machine they show nothing until their source is chosen again.
 
 ### Import
 
-Settings → **Load dashboard**, from a file:
+Tools → **Load from file**, from a file:
 
 1. The file is checked: a dashboard file, and `minAgentVersion` not above this
    agent's version. Otherwise nothing is loaded and the reason is shown.
@@ -138,5 +212,8 @@ same **Load** reads both.
   installers; a file published between releases needs a place the update
   line reads without a release, for example a `defaults/` folder served by
   GitHub Pages, as `install.ps1` is. To be decided with the repositories.
-- **Backups of the dashboard**: how many are kept, and whether Settings can
+- **Backups of the dashboard**: how many are kept, and whether Tools can
   restore one.
+- **The User page and the server shown**: the User page depends on which
+  agent the client is connected to, or which server it shows. To analyse once
+  Tools is tested (the owner, 1 October 2026).

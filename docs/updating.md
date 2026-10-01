@@ -9,6 +9,13 @@ follows.
 | `wslc-ai-agent.msi` | The agent itself |
 | `wslc-ai-client.msi` | The Windows client |
 | `wslc-ai-client.apk` | The Android client |
+| `wslc-object-defaults.json` | Offered in the dashboard's Tools: how each kind of dashboard object is born |
+| `wslc-dashboard-default.json` | Offered in the dashboard's Tools: the default dashboard, view by view |
+
+The two JSON files are never loaded on their own: each carries its version
+and the oldest agent that loads it, and the dashboard's **Tools** verb
+loads a newer one only when you choose
+([dashboard-defaults.md](dashboard-defaults.md)).
 
 ## In one line
 
