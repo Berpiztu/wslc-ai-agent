@@ -50,6 +50,35 @@ param([switch]$Client)
         "http://${bindHost}:$($key.Port)"
     }
 
+    # The objects' defaults and the default dashboard travel beside the
+    # installers, each with a version of its own (docs/dashboard-defaults.md):
+    # one newer than the package folder's goes there, and Settings > Update
+    # offers to load it. Nothing is loaded here. A release without them has
+    # nothing to download.
+    function SyncDefaults([string]$folder) {
+        foreach ($file in @("wslc-object-defaults.json", "wslc-dashboard-default.json")) {
+            $temp = Join-Path $env:TEMP $file
+            try {
+                Invoke-WebRequest -Uri "https://github.com/Berpiztu/wslc-ai-agent/releases/latest/download/$file" -OutFile $temp -UseBasicParsing
+                $published = [IO.File]::ReadAllText($temp) | ConvertFrom-Json
+            } catch {
+                continue
+            }
+            $target = Join-Path $folder $file
+            $current = 0
+            if (Test-Path -LiteralPath $target) {
+                try { $current = [int]([IO.File]::ReadAllText($target) | ConvertFrom-Json).version } catch { $current = 0 }
+            }
+            if ([int]$published.version -gt $current) {
+                Move-Item -LiteralPath $temp -Destination $target -Force
+                $needs = if ($published.minAgentVersion) { " (it needs agent $($published.minAgentVersion) or later)" } else { "" }
+                Write-Host "$file v$($published.version) is in the package folder: the dashboard's Tools offers to load it$needs." -ForegroundColor Green
+            } else {
+                Remove-Item -LiteralPath $temp -Force
+            }
+        }
+    }
+
     $name = if ($Client) { "wslc-ai-client.msi" } else { "wslc-ai-agent.msi" }
     $product = if ($Client) { "WSLC AI Client" } else { "WSLC AI Agent" }
     $url = "https://github.com/Berpiztu/wslc-ai-agent/releases/latest/download/$name"
@@ -80,12 +109,15 @@ param([switch]$Client)
         if ($status) {
             $running = [version](($status.version -split '[^0-9.]')[0])
             $latest = [version](Invoke-RestMethod -Uri "https://api.github.com/repos/Berpiztu/wslc-ai-agent/releases/latest" -TimeoutSec 30).tag_name.TrimStart("v")
+            New-Item -ItemType Directory -Force -Path $status.packageFolder | Out-Null
+            # The defaults change between releases too, so they are looked at
+            # even when the agent is up to date.
+            SyncDefaults $status.packageFolder
             if ($latest -le $running) {
                 Write-Host "WSLC AI Agent $running is installed: the latest release. Nothing to update." -ForegroundColor Green
                 return
             }
             Write-Host "Updating WSLC AI Agent $running to $latest..." -ForegroundColor Cyan
-            New-Item -ItemType Directory -Force -Path $status.packageFolder | Out-Null
             foreach ($package in @("wslc-ai-agent.msi", "wslc-ai-client.msi", "wslc-ai-client.apk")) {
                 Write-Host "Downloading $package into the agent's package folder..." -ForegroundColor Cyan
                 Invoke-WebRequest -Uri "https://github.com/Berpiztu/wslc-ai-agent/releases/latest/download/$package" -OutFile (Join-Path $status.packageFolder $package) -UseBasicParsing
@@ -145,6 +177,7 @@ param([switch]$Client)
             Invoke-WebRequest -Uri "https://github.com/Berpiztu/wslc-ai-agent/releases/latest/download/$package" -OutFile (Join-Path $folder $package) -UseBasicParsing
         }
         Write-Host "The Windows and Android clients can now be downloaded from the agent's web page ($folder)." -ForegroundColor Green
+        SyncDefaults $folder
 
         # Downloaded by PowerShell, the client's installer opens with no
         # SmartScreen warning; it connects to this machine's agent by default.
