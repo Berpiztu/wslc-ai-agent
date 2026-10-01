@@ -159,6 +159,40 @@ function Copy-WslcAgentNotices {
     Get-ChildItem -LiteralPath (Join-Path $root "packaging\licenses") -File | Copy-Item -Destination $licenses -Force
 }
 
+function Write-WslcAgentDefaultsFiles {
+    <#
+    The objects' defaults and the default dashboard as they travel beside the
+    installers (docs/dashboard-defaults.md): each repository file wrapped with
+    its version and the oldest agent that loads it, from
+    src\WslcAgent.Server\Overview\defaults-versions.json. Written into
+    Destination; returns their paths.
+    #>
+    param([Parameter(Mandatory = $true)][string]$Destination)
+    $overview = Join-Path (Get-WslcAgentRepoRoot) "src\WslcAgent.Server\Overview"
+    $versions = [IO.File]::ReadAllText((Join-Path $overview "defaults-versions.json")) | ConvertFrom-Json
+    $created = (Get-Date).ToString("yyyy-MM-ddTHH:mm:sszzz")
+    New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+    $files = @(
+        @{ Kind = "object-defaults"; Entry = $versions.objectDefaults; Source = "object-defaults.json"; Name = "wslc-object-defaults.json" },
+        @{ Kind = "dashboard"; Entry = $versions.dashboard; Source = "dashboard-v2.5.default.json"; Name = "wslc-dashboard-default.json" }
+    )
+    foreach ($file in $files) {
+        # The content goes in as it is, untouched: ConvertTo-Json would reorder
+        # and re-escape what the agent and the clients read.
+        $content = [IO.File]::ReadAllText((Join-Path $overview $file.Source)).Trim()
+        $text = "{`n" +
+            "  ""kind"": ""wslc-$($file.Kind)"",`n" +
+            "  ""version"": $([int]$file.Entry.version),`n" +
+            "  ""minAgentVersion"": ""$($file.Entry.minAgentVersion)"",`n" +
+            "  ""from"": """",`n" +
+            "  ""created"": ""$created"",`n" +
+            "  ""content"": $content`n}`n"
+        $path = Join-Path $Destination $file.Name
+        [IO.File]::WriteAllText($path, $text, (New-Object System.Text.UTF8Encoding $false))
+        $path
+    }
+}
+
 function Clear-WslcAgentIconCache {
     <#
     MAUI's resizetizer caches generated icons and splash images under

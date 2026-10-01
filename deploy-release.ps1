@@ -20,7 +20,10 @@
          version> and pushes both. When a build fails, the two files are put
          back and nothing is committed.
       5. With -Publish, creates the GitHub release with gh and uploads the
-         three installers; without it, says which files to upload.
+         three installers and the two defaults files (the objects' defaults
+         and the default dashboard, each with its version); without it, says
+         which files to upload. Between releases, publish-defaults.ps1
+         replaces those two alone.
 
     The APK is signed with private\android.keystore (see
     docs\developer\private-files.md): a release signed with another key cannot
@@ -108,12 +111,15 @@ git push origin $tag
 if ($LASTEXITCODE -ne 0) { throw "git push of $tag failed with exit code $LASTEXITCODE" }
 
 $installers = @("wslc-ai-agent.msi", "wslc-ai-client.msi", "wslc-ai-client.apk") | ForEach-Object { Join-Path $RepoRoot "dist\$_" }
+# Beside them, the objects' defaults and the default dashboard the agent
+# installer ships, each with its version (docs/dashboard-defaults.md).
+$installers += Write-WslcAgentDefaultsFiles -Destination (Join-Path $RepoRoot "dist")
 
 # 5. The GitHub release, when asked.
 if ($Publish) {
     gh release create $tag @installers --title "WSLC AI Agent $agentVersion" --generate-notes
     if ($LASTEXITCODE -ne 0) { throw "gh release create failed with exit code $LASTEXITCODE; the tag $tag is pushed, create the release by hand." }
-    Write-Host "Release $tag published with its three installers." -ForegroundColor Green
+    Write-Host "Release $tag published with its three installers and the two defaults files." -ForegroundColor Green
 } else {
     Write-Host ""
     Write-Host "Release $tag committed, tagged and pushed. Upload these to its GitHub release:" -ForegroundColor Green
