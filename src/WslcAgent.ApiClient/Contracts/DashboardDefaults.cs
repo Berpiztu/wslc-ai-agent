@@ -84,6 +84,7 @@ public sealed record DashboardRevision(int Id, int Version, int Revision, string
 /// <param name="Created">When it was written, ISO 8601; empty when it does not say.</param>
 /// <param name="Views">A dashboard's views that hold objects (<see cref="DashboardViewNames"/>); empty for object defaults.</param>
 /// <param name="Refusal">Why this agent cannot load it; empty when it can.</param>
+/// <param name="Missing">The resources its objects read that this agent does not have ("container wslc-published"): those objects are loaded without one.</param>
 public sealed record DefaultsFileInfo(
     string Kind,
     int Version,
@@ -92,7 +93,8 @@ public sealed record DefaultsFileInfo(
     string From,
     string Created,
     IReadOnlyList<string> Views,
-    string Refusal);
+    string Refusal,
+    IReadOnlyList<string> Missing);
 
 /// <summary>A kind the user changed whose base has changed since: in which view, and the object type.</summary>
 public sealed record ObjectDefaultConflict(string View, string Type);

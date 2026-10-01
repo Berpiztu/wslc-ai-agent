@@ -25,7 +25,7 @@ public sealed class AgentDashboardFiles(WslcAgentApi api, AgentObjectDefaults ob
         {
             var info = await api.InspectDefaultsFileAsync(file, cancellationToken);
             return new DashboardFileInfo(info.Kind == DefaultsKinds.Dashboard, info.Version, info.Revision, info.MinAgentVersion,
-                info.From, info.Created, info.Views, info.Refusal);
+                info.From, info.Created, info.Views, info.Refusal, info.Missing);
         });
 
     public Task<DashboardFilesStatus> LoadObjectDefaultsAsync(string file, CancellationToken cancellationToken = default) =>

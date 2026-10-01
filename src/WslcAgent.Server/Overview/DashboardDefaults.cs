@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using WslcAgent.ApiClient.Contracts;
 using WslcAgent.Mcp;
 using WslcAgent.Server.ClientPackages;
+using WslcAgent.Server.Resources;
 
 namespace WslcAgent.Server.Overview;
 
@@ -23,6 +24,7 @@ public sealed class DashboardDefaults(
     DashboardV2Store dashboard,
     DashboardHistory history,
     PackageFolders folders,
+    ResourceRegistry resources,
     IAgentInfo info,
     ILogger<DashboardDefaults> logger)
 {
@@ -40,7 +42,8 @@ public sealed class DashboardDefaults(
         var file = DefaultsFile.Parse(text)
             ?? throw new DefaultsRefusedException("This is not a defaults file: it has no kind, version and content.");
         IReadOnlyList<string> views = file.Kind == DefaultsKinds.Dashboard ? StoredDashboardViews.Present(file.Content) : [];
-        return new DefaultsFileInfo(file.Kind, file.Version, file.Revision, file.MinAgentVersion, file.From, file.Created, views, Refusal(file, file.Kind));
+        return new DefaultsFileInfo(file.Kind, file.Version, file.Revision, file.MinAgentVersion, file.From, file.Created, views, Refusal(file, file.Kind),
+            DashboardSources.Missing(file.Content, file.Sources, LocalUid));
     }
 
     /// <summary>
@@ -116,7 +119,7 @@ public sealed class DashboardDefaults(
         else
         {
             var file = Checked(text, DefaultsKinds.Dashboard);
-            content = file.Content;
+            content = Here(file);
             origin = new DashboardOrigin(file.Version, DashboardHistory.Import, Named(file));
         }
 
@@ -192,7 +195,7 @@ public sealed class DashboardDefaults(
         {
             var file = Checked(text, DefaultsKinds.Dashboard);
             RequireViews(views, file.Content, "the file holds");
-            dashboard.SetOwnDefault(file.Content, views, file.Version);
+            dashboard.SetOwnDefault(Here(file), views, file.Version);
         }
 
         logger.LogInformation("default dashboard views of this agent loaded: {Views}", string.Join(", ", views));
@@ -219,8 +222,14 @@ public sealed class DashboardDefaults(
 
         var revision = history.Current();
         return new DefaultsFile(DefaultsKinds.Dashboard, revision?.Version ?? dashboard.ShippedVersion, AgentVersion, Environment.MachineName,
-            Now(), extract, revision?.Revision ?? 0).Write();
+            Now(), extract, revision?.Revision ?? 0, DashboardSources.Describe(extract, resources.Describe)).Write();
     }
+
+    /// <summary>A dashboard file's content with its resources' uids changed for this agent's own (<see cref="DashboardSources"/>).</summary>
+    private JsonObject Here(DefaultsFile file) => DashboardSources.Remap(file.Content, file.Sources, LocalUid);
+
+    /// <summary>This agent's uid of a resource, by its kind and name; 0 when it does not have it.</summary>
+    private int LocalUid(string kind, string name) => resources.UidOf(kind, "", name);
 
     /// <summary>The user's dashboard against the release and this agent's own default, view by view.</summary>
     private DashboardState Dashboard()

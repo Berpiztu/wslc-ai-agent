@@ -132,7 +132,13 @@ public sealed record DashboardDifference(string Object, string Change, string De
 /// <summary>A state the dashboard was saved in: its id, its origin (version, from the installation or an import, its name), its revision within it, when, and why.</summary>
 public sealed record DashboardRevisionInfo(int Id, int Version, int Revision, string Source, string Name, string Saved, string Note);
 
-/// <summary>What a file holds: a dashboard (else the objects' defaults), its version and revision, the oldest application it needs, where and when it was made, its views, and why it cannot be loaded here (empty when it can).</summary>
+/// <summary>
+/// What a file holds: a dashboard (else the objects' defaults), its version and
+/// revision, the oldest application it needs, where and when it was made, its
+/// views, why it cannot be loaded here (empty when it can), and the sources its
+/// objects read that this installation does not have — those objects are
+/// loaded without one, for the user to choose.
+/// </summary>
 public sealed record DashboardFileInfo(
     bool IsDashboard,
     int Version,
@@ -141,7 +147,8 @@ public sealed record DashboardFileInfo(
     string From,
     string Created,
     IReadOnlyList<string> Views,
-    string Refusal);
+    string Refusal,
+    IReadOnlyList<string> Missing);
 
 /// <summary>A request about the dashboard's files that failed or was refused, with the reason the user is shown.</summary>
 public sealed class DashboardFilesException(string message, Exception? inner = null) : Exception(message, inner);

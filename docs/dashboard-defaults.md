@@ -43,6 +43,17 @@ within it: v2.0 is version 2 as it came, v2.3 the third save since. Loading
 from the release or a file starts a new origin at revision 0; Restore brings
 any state back under its own name.
 
+**The resources travel by name.** An object keeps only its resource's uid,
+a number each agent gives its containers, images, volumes and networks in
+its own order: the same container is 25 on one machine and 1 on the next. An
+exported dashboard carries what each uid is (`sources`: `"25": { "kind":
+"container", "name": "wslc-published" }`), and loading it changes each uid
+for this agent's own resource of the same kind and name. An object whose
+resource this agent does not have is loaded without a source, for the user to
+choose; Tools names those resources before anything is loaded. Without this,
+the dashboard read the unknown uid as a resource that had been deleted and
+took its objects off.
+
 **JSON against JSON.** Tools compares each of the four views of the user's
 dashboard with the release's (the installation's, or the package folder's
 when newer) and with the agent's own default, object by object and card by
