@@ -69,10 +69,10 @@ if ($dirty.Count -gt 0) {
 }
 
 # 2. The new versions, above the release's and every local build's.
-$local = Read-WslcAgentLocalVersions
-$agentNow = Get-WslcAgentHigherVersion (Get-WslcAgentTrackedValue $Props "Version") $local["WslcLocalAgentVersion"]
-$clientNow = Get-WslcAgentHigherVersion (Get-WslcAgentTrackedValue $Csproj "ApplicationDisplayVersion") $local["WslcLocalClientVersion"]
-$localBuild = if ($local["WslcLocalClientBuild"]) { [int]$local["WslcLocalClientBuild"] } else { 0 }
+$builtHere = Read-WslcAgentLocalVersions
+$agentNow = Get-WslcAgentHigherVersion (Get-WslcAgentTrackedValue $Props "Version") $builtHere["WslcLocalAgentVersion"]
+$clientNow = Get-WslcAgentHigherVersion (Get-WslcAgentTrackedValue $Csproj "ApplicationDisplayVersion") $builtHere["WslcLocalClientVersion"]
+$localBuild = if ($builtHere["WslcLocalClientBuild"]) { [int]$builtHere["WslcLocalClientBuild"] } else { 0 }
 $codeNow = [Math]::Max([int](Get-WslcAgentTrackedValue $Csproj "ApplicationVersion"), $localBuild)
 
 if ($Version) {
