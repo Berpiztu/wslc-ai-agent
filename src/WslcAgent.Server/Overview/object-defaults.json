@@ -259,9 +259,20 @@
       "size": "small"
     },
     "wslc.host-networks": {
-      "w": 5,
-      "h": 4,
-      "size": "small"
+      "w": 9,
+      "h": 5,
+      "size": "large",
+      "parts": {
+        "label": {
+          "size": "small",
+          "isDesign": false
+        },
+        "value": {
+          "size": "small",
+          "isDesign": false
+        }
+      },
+      "marginX": 9
     },
     "wslc.host-volumes": {
       "w": 5,
@@ -292,9 +303,9 @@
     },
     "wslc.system-windows": {
       "w": 6,
-      "h": 3,
+      "h": 4,
       "size": "medium",
-      "x": 18,
+      "x": 26,
       "y": 0
     },
     "wslc.system-kernel": {
@@ -302,7 +313,7 @@
       "h": 3,
       "size": "medium",
       "x": 18,
-      "y": 3
+      "y": 4
     },
     "wslc.host-cpu-dial": {
       "w": 6,
@@ -391,6 +402,20 @@
       "size": "medium",
       "x": 12,
       "y": 0
+    },
+    "wslc.system-session": {
+      "w": 8,
+      "h": 4,
+      "size": "medium",
+      "x": 18,
+      "y": 0
+    },
+    "wslc.system-events": {
+      "w": 6,
+      "h": 4,
+      "size": "medium",
+      "x": 26,
+      "y": 4
     }
   },
   "portrait": {
@@ -471,7 +496,7 @@
       "y": 12
     },
     "wslc.charts-card.wslc.host-cpu-activity": {
-      "w": 5,
+      "w": 6,
       "h": 2,
       "size": "small",
       "parts": {
@@ -492,14 +517,14 @@
       "y": 2
     },
     "wslc.charts-card.wslc.host-cpu-legend": {
-      "w": 7,
+      "w": 6,
       "h": 2,
       "size": "small",
-      "x": 5,
+      "x": 6,
       "y": 2
     },
     "wslc.charts-card.wslc.host-memory-activity": {
-      "w": 3,
+      "w": 4,
       "h": 2,
       "size": "small",
       "parts": {
@@ -520,10 +545,10 @@
       "y": 2
     },
     "wslc.charts-card.wslc.host-memory-legend": {
-      "w": 9,
+      "w": 8,
       "h": 2,
       "size": "small",
-      "x": 15,
+      "x": 16,
       "y": 2
     },
     "wslc.charts-card.wslc.host-memory-chart": {
@@ -699,12 +724,12 @@
       "y": 0
     },
     "wslc.host-cpu-dial": {
-      "w": 6,
-      "h": 6,
+      "w": 5,
+      "h": 5,
       "size": "medium",
       "background": "primaryTint",
-      "x": 0,
-      "y": 4,
+      "x": 6,
+      "y": 5,
       "elevation": 5
     },
     "wslc.host-memory-dial": {
@@ -744,6 +769,11 @@
       "size": "small",
       "x": 19,
       "y": 0
+    },
+    "berpiztu.text": {
+      "w": 13,
+      "h": 2,
+      "size": "medium"
     }
   }
 }
