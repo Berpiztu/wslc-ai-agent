@@ -8,7 +8,7 @@
 <MudDialogProvider />
 <Toasts />
 
-<div class="wslc-bare pa-2">
+<div class="wslc-bare pa-2 @(_darkMode ? "wslc-dark" : null)">
     @* The sign-in screen lives here too, so it gets the same panel: this is
        exactly where a client that cannot reach its agent ends up. *@
     <ErrorBoundary @ref="_errors">

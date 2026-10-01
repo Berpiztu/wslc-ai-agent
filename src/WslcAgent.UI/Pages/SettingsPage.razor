@@ -29,7 +29,7 @@
        carry on; Save is what makes this device open that way tomorrow. The tab
        is in the address, so Back returns to the one left. *@
     <MudTabs Elevation="Style.Applied.TabsElevation" Rounded="Style.Applied.TabsRounded" Border="Style.Applied.TabsBorder"
-             Centered="Style.Applied.TabsCentered" Color="Style.Applied.TabsColor"
+             Centered="Style.Applied.TabsCentered"
              MinimumTabWidth="@($"{Style.Applied.TabsMinWidth}px")"
              TabPanelsClass="wslc-tab-panels" Class="wslc-fill" ActivePanelIndex="_tab" ActivePanelIndexChanged="OnTabChanged">
         <MudTabPanel Text="Security">
@@ -403,6 +403,29 @@
                     </Control>
                 </LayoutRow>
 
+                <LayoutRow Title="Table header row" Fixed="The column titles of every list page at once" Changed="StateHasChanged" Reset="ResetHeader">
+                    <Properties>
+                        <PropSelect T="Color" Label="Background colour" @bind-Value="Style.Draft.GridHeadColor" />
+                        <PropSelect T="Color" Label="Text colour" @bind-Value="Style.Draft.GridHeadTextColor" />
+                        <PropNumber Label="Elevation" Min="0" Max="24" @bind-Value="Style.Draft.GridHeadElevation" />
+                    </Properties>
+                    <Control>
+                        <div class="wslc-fill" style="@DraftVars">
+                            <MudSimpleTable Dense="Style.Draft.GridDense" Striped="Style.Draft.GridStriped" Bordered="Style.Draft.GridBordered" Outlined="Style.Draft.GridOutlined" Elevation="0" Class="mud-table">
+                                <thead class="mud-table-head">
+                                    <tr class="mud-table-row"><th class="mud-table-cell">Name</th><th class="mud-table-cell">Image</th></tr>
+                                </thead>
+                                <tbody class="mud-table-body">
+                                    @foreach (var row in SampleRows)
+                                    {
+                                        <tr class="mud-table-row"><td class="mud-table-cell">@row.Name</td><td class="mud-table-cell">@row.Image</td></tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        </div>
+                    </Control>
+                </LayoutRow>
+
                 <LayoutRow Title="Buttons in a bar" Fixed="Size.Small · Variant.Filled · the page toolbars and the title bar" Changed="StateHasChanged" Reset="ResetButtons">
                     <Properties>
                         <PropNumber Label="Height (px)" Min="18" Max="48" @bind-Value="Style.Draft.ButtonHeight" />
@@ -482,17 +505,18 @@
                 <LayoutRow Title="Tabs" Fixed="A details screen's tabs: Logs, Inspect, Files, Exec, Stats" Changed="StateHasChanged" Reset="ResetTabs">
                     <Properties>
                         <PropNumber Label="Height (px)" Min="18" Max="56" @bind-Value="Style.Draft.TabHeight" />
-                        <PropSelect T="Color" Label="Color" @bind-Value="Style.Draft.TabsColor" />
+                        <PropSelect T="Color" Label="Bar colour" @bind-Value="Style.Draft.TabsBarColor" />
+                        <PropSelect T="Color" Label="Text colour" @bind-Value="Style.Draft.TabsTextColor" />
                         <PropToggle Label="Rounded" @bind-Value="Style.Draft.TabsRounded" />
                         <PropToggle Label="Border" @bind-Value="Style.Draft.TabsBorder" />
                         <PropToggle Label="Centered" @bind-Value="Style.Draft.TabsCentered" />
-                        <PropNumber Label="Elevation (also the lists' header row)" Min="0" Max="24" @bind-Value="Style.Draft.TabsElevation" />
+                        <PropNumber Label="Elevation" Min="0" Max="24" @bind-Value="Style.Draft.TabsElevation" />
                         <PropNumber Label="Narrowest tab (px)" Min="0" Max="200" @bind-Value="Style.Draft.TabsMinWidth" />
                     </Properties>
                     <Control>
                         <div style="@DraftVars">
                             <MudTabs Elevation="Style.Draft.TabsElevation" Rounded="Style.Draft.TabsRounded" Border="Style.Draft.TabsBorder"
-                                     Centered="Style.Draft.TabsCentered" Color="Style.Draft.TabsColor" Class="wslc-fill" MinimumTabWidth="0">
+                                     Centered="Style.Draft.TabsCentered" Class="wslc-fill" MinimumTabWidth="@($"{Style.Draft.TabsMinWidth}px")">
                                 <MudTabPanel Text="Logs" />
                                 <MudTabPanel Text="Inspect" />
                                 <MudTabPanel Text="Files" />
@@ -626,8 +650,19 @@
         + $"--wslc-bar-icon: {Style.Draft.BarIconSize}px; "
         + $"--wslc-bar-gap: {Style.Draft.BarGap}px; "
         + $"--wslc-tab-h: {Style.Draft.TabHeight}px; "
-        + $"--wslc-head-shadow: {(Style.Draft.TabsElevation > 0 ? $"var(--mud-elevation-{Style.Draft.TabsElevation})" : "none")}; "
+        + $"--wslc-head-shadow: {(Style.Draft.GridHeadElevation > 0 ? $"var(--mud-elevation-{Style.Draft.GridHeadElevation})" : "none")}; "
+        + DraftColorVar("--wslc-grid-head", Style.Draft.GridHeadColor, "var(--wslc-header-tone)")
+        + DraftColorVar("--wslc-grid-head-text", Style.Draft.GridHeadTextColor, "var(--mud-palette-text-primary)")
+        + DraftColorVar("--wslc-tabs-bar", Style.Draft.TabsBarColor, "var(--wslc-header-tone)")
+        + DraftColorVar("--wslc-tabs-text", Style.Draft.TabsTextColor, "var(--mud-palette-text-secondary)")
         + DraftTypeVars;
+
+    /// <summary>
+    /// A colour for the samples. Default is written out as the stylesheet's own
+    /// value: the sample has to show it even while the screens carry another.
+    /// </summary>
+    private static string DraftColorVar(string name, Color color, string stylesheetOwn) =>
+        $"{name}: {UiStyle.PaletteColor(color) ?? stylesheetOwn}; ";
 
     /// <summary>
     /// The four roles as CSS, for the samples: each role's own MudBlazor
@@ -687,6 +722,13 @@
         Style.Draft.ActionPadding = Ships.ActionPadding;
     }
 
+    private void ResetHeader()
+    {
+        Style.Draft.GridHeadColor = Ships.GridHeadColor;
+        Style.Draft.GridHeadTextColor = Ships.GridHeadTextColor;
+        Style.Draft.GridHeadElevation = Ships.GridHeadElevation;
+    }
+
     private void ResetButtons()
     {
         Style.Draft.ButtonHeight = Ships.ButtonHeight;
@@ -715,7 +757,8 @@
     private void ResetTabs()
     {
         Style.Draft.TabHeight = Ships.TabHeight;
-        Style.Draft.TabsColor = Ships.TabsColor;
+        Style.Draft.TabsBarColor = Ships.TabsBarColor;
+        Style.Draft.TabsTextColor = Ships.TabsTextColor;
         Style.Draft.TabsRounded = Ships.TabsRounded;
         Style.Draft.TabsBorder = Ships.TabsBorder;
         Style.Draft.TabsCentered = Ships.TabsCentered;

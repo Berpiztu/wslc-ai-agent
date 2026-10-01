@@ -211,9 +211,13 @@ public sealed class UiStyle(IJSRuntime js)
             ["--wslc-tab-h"] = Px(Applied.TabHeight),
             // MudBlazor ships one variable per step (--mud-elevation-1..24), so
             // the header takes the theme's own shadow, not one written here.
-            ["--wslc-head-shadow"] = Applied.TabsElevation > 0
-                ? "var(--mud-elevation-" + Applied.TabsElevation.ToString(CultureInfo.InvariantCulture) + ")"
+            ["--wslc-head-shadow"] = Applied.GridHeadElevation > 0
+                ? "var(--mud-elevation-" + Applied.GridHeadElevation.ToString(CultureInfo.InvariantCulture) + ")"
                 : "none",
+            ["--wslc-grid-head"] = PaletteColor(Applied.GridHeadColor) ?? "",
+            ["--wslc-grid-head-text"] = PaletteColor(Applied.GridHeadTextColor) ?? "",
+            ["--wslc-tabs-bar"] = PaletteColor(Applied.TabsBarColor) ?? "",
+            ["--wslc-tabs-text"] = PaletteColor(Applied.TabsTextColor) ?? "",
         };
 
         AddTypeRoles(values);
@@ -234,6 +238,19 @@ public sealed class UiStyle(IJSRuntime js)
                 Applied.GridHover ? "hover" : "still",
                 Applied.GridOutlined ? "outlined" : "flat",
             }),
+    };
+
+    /// <summary>
+    /// A MudBlazor colour as the CSS the stylesheet takes: the theme's own
+    /// palette variable, so it follows the light and the dark theme; null for
+    /// Default, which leaves the stylesheet its own.
+    /// </summary>
+    public static string? PaletteColor(Color color) => color switch
+    {
+        Color.Default => null,
+        Color.Transparent => "transparent",
+        Color.Inherit => "inherit",
+        _ => "var(--mud-palette-" + color.ToString().ToLowerInvariant() + ")",
     };
 
     private static string Px(int value) => value.ToString(CultureInfo.InvariantCulture) + "px";

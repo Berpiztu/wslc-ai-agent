@@ -47,7 +47,7 @@
 
             @* The tabs: Logs, Inspect (View & edit), Bind mounts, Exec, Files, Stats. *@
             <MudTabs Elevation="Style.Applied.TabsElevation" Rounded="Style.Applied.TabsRounded" Border="Style.Applied.TabsBorder"
-                     Centered="Style.Applied.TabsCentered" Color="Style.Applied.TabsColor"
+                     Centered="Style.Applied.TabsCentered"
                      TabPanelsClass="wslc-tab-panels" Class="wslc-fill" MinimumTabWidth="@($"{Style.Applied.TabsMinWidth}px")" ActivePanelIndex="_tab" ActivePanelIndexChanged="OnTabChanged">
                 <MudTabPanel Text="Logs">
                     <LogsView Container="@Id" />
