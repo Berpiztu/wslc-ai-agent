@@ -1,7 +1,9 @@
 <#
 .SYNOPSIS
     Publish a release: raise the release version above every build so far,
-    build the three installers at it, and commit, tag and push it.
+    and commit, tag and push it; GitHub Actions builds the installers and
+    publishes the release (.github/workflows/release.yml). -Local builds and
+    uploads them from this machine instead.
 .DESCRIPTION
     The version in the repository is the last release's (Directory.Build.props
     for the agent, the client's csproj for the client and its Android
@@ -12,35 +14,43 @@
       2. Writes the new versions: the agent's and the client's next patch
          above the higher of the release's and private\version.props, or
          -Version for both; the versionCode one above the higher of the two.
-      3. Builds the agent installer (-Release: it offers
-         C:\Berpiztu\wslc-ai-agent as the package folder), the Windows client
-         installer and the APK, all with -NoBump, so they carry exactly the
-         release's version.
-      4. Only when all three built: commits the two files, tags v<agent
-         version> and pushes both. When a build fails, the two files are put
-         back and nothing is committed.
-      5. With -Publish, creates the GitHub release with gh and uploads the
-         three installers and the two defaults files (the objects' defaults
-         and the default dashboard, each with its version); without it, says
-         which files to upload. Between releases, publish-defaults.ps1
-         replaces those two alone.
+      3. Commits the two files, tags v<agent version> and pushes both.
+      4. GitHub Actions sees the tag and builds the agent installer
+         (-Release), the Windows client installer and the APK at exactly the
+         release's versions, then creates the GitHub release with the three
+         installers and the two defaults files. Nothing is uploaded from this
+         machine. A failed build leaves the tag without a release: fix it and
+         run the workflow again on the tag.
 
-    The APK is signed with private\android.keystore (see
-    docs\developer\private-files.md): a release signed with another key cannot
+    With -Local, as before the workflow existed: builds the three here first
+    (a failure puts the versions back and commits nothing), then commits,
+    tags (marked built locally, so the workflow leaves it alone) and pushes;
+    with -Publish it creates the release and uploads the files from here.
+    Between releases, publish-defaults.ps1 replaces the two defaults files
+    alone.
+
+    The APK is signed with the same key everywhere (see
+    docs\developer\private-files.md): here private\android.keystore, on
+    GitHub the repository's secrets; a release signed with another key cannot
     update the installed app.
 .PARAMETER Version
     The release's version for the agent and the client, x.y.z; it has to be
     above the agent's and the client's current ones.
+.PARAMETER Local
+    Build the installers here and leave GitHub Actions out of it.
 .PARAMETER Publish
-    Also create the GitHub release (gh must be signed in) and upload the
-    installers to it.
+    With -Local, also create the GitHub release (gh must be signed in) and
+    upload the installers to it. Without -Local the workflow always does.
 .EXAMPLE
     .\deploy-release.ps1
 .EXAMPLE
-    .\deploy-release.ps1 -Version 0.3.0 -Publish
+    .\deploy-release.ps1 -Version 0.3.0
+.EXAMPLE
+    .\deploy-release.ps1 -Local -Publish
 #>
 param(
     [string]$Version,
+    [switch]$Local,
     [switch]$Publish
 )
 
@@ -89,26 +99,38 @@ Set-WslcAgentTrackedValue $Props "Version" $agentVersion
 Set-WslcAgentTrackedValue $Csproj "ApplicationDisplayVersion" $clientVersion
 Set-WslcAgentTrackedValue $Csproj "ApplicationVersion" "$clientCode"
 
-# 3. The three installers at exactly those versions; any failure puts the files back.
-try {
-    & (Join-Path $RepoRoot "build-agent-installer.ps1") -NoBump -Release
-    & (Join-Path $RepoRoot "build-client-installer.ps1") -NoBump
-    & (Join-Path $RepoRoot "build-client-apk.ps1") -NoBump
-} catch {
-    git checkout -- $Props $Csproj
-    throw "The release was not made, and the versions were put back: $($_.Exception.Message)"
+# 3. Built here only with -Local, at exactly those versions; any failure puts the files back.
+if ($Local) {
+    try {
+        & (Join-Path $RepoRoot "build-agent-installer.ps1") -NoBump -Release
+        & (Join-Path $RepoRoot "build-client-installer.ps1") -NoBump
+        & (Join-Path $RepoRoot "build-client-apk.ps1") -NoBump
+    } catch {
+        git checkout -- $Props $Csproj
+        throw "The release was not made, and the versions were put back: $($_.Exception.Message)"
+    }
 }
 
-# 4. The versions committed, tagged and pushed.
+# 4. The versions committed, tagged and pushed. The tag of a release built here
+# says so: the release workflow leaves it alone.
 git add -- $Props $Csproj
 git commit -m "Release $agentVersion (client $clientVersion, versionCode $clientCode)"
 if ($LASTEXITCODE -ne 0) { throw "git commit failed with exit code $LASTEXITCODE" }
-git tag -a $tag -m "Release $agentVersion"
+$tagMessage = if ($Local) { "Release $agentVersion (built locally)" } else { "Release $agentVersion" }
+git tag -a $tag -m $tagMessage
 if ($LASTEXITCODE -ne 0) { throw "git tag failed with exit code $LASTEXITCODE" }
 git push
 if ($LASTEXITCODE -ne 0) { throw "git push failed with exit code $LASTEXITCODE" }
 git push origin $tag
 if ($LASTEXITCODE -ne 0) { throw "git push of $tag failed with exit code $LASTEXITCODE" }
+
+if (-not $Local) {
+    $repository = (gh repo view --json nameWithOwner --jq .nameWithOwner 2>$null)
+    Write-Host ""
+    Write-Host "Release $tag committed, tagged and pushed. GitHub Actions builds the installers and publishes the release (about 20 minutes):" -ForegroundColor Green
+    Write-Host "  https://github.com/$repository/actions/workflows/release.yml"
+    return
+}
 
 $installers = @("wslc-ai-agent.msi", "wslc-ai-client.msi", "wslc-ai-client.apk") | ForEach-Object { Join-Path $RepoRoot "dist\$_" }
 # Beside them, the objects' defaults and the default dashboard the agent
