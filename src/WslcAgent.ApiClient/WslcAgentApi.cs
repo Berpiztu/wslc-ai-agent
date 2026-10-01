@@ -58,9 +58,9 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     }
 
     /// <summary>
-    /// The dashboard's default, the one a user with none is given, written
-    /// back to the repository by a development agent while it is being
-    /// designed; a release agent refuses it (409).
+    /// The dashboard's default, the one a user with none is given (Save as
+    /// default): written back to the repository by a development agent; on an
+    /// installed one, the views it changes become the agent's own default.
     /// </summary>
     public Task SetDefaultDashboardV2Async(string layout, CancellationToken cancellationToken = default) =>
         PutTextAsync("api/v1/dashboard-v2/default", layout, cancellationToken);
@@ -71,11 +71,93 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
 
     /// <summary>
     /// How one kind of dashboard object is born in one view (desktop, mobile),
-    /// merged by a development agent into the rest and written back to its
-    /// repository; a release agent refuses it (409).
+    /// merged into the rest: written back to its repository by a development
+    /// agent, kept as its own by an installed one.
     /// </summary>
     public Task SetObjectDefaultAsync(string view, string type, string value, CancellationToken cancellationToken = default) =>
         PutTextAsync($"api/v1/dashboard/object-defaults/{Uri.EscapeDataString(view)}/{Uri.EscapeDataString(type)}", value, cancellationToken);
+
+    /// <summary>The two shipped files, the objects' defaults and the default dashboard: shipped, loaded and waiting in the package folder.</summary>
+    public Task<DashboardDefaultsStatus> GetDashboardDefaultsAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<DashboardDefaultsStatus>("api/v1/dashboard/defaults", cancellationToken);
+
+    /// <summary>What a defaults file holds, and whether this agent can load it.</summary>
+    public Task<DefaultsFileInfo> InspectDefaultsFileAsync(string file, CancellationToken cancellationToken = default) =>
+        PostTextAsync<DefaultsFileInfo>("api/v1/dashboard/defaults/inspect", file, cancellationToken);
+
+    /// <summary>The objects' defaults of a file, or of the package folder's when <paramref name="file"/> is empty, used from now on.</summary>
+    public Task<DashboardDefaultsStatus> LoadObjectDefaultsAsync(string file = "", CancellationToken cancellationToken = default) =>
+        PostTextAsync<DashboardDefaultsStatus>("api/v1/dashboard/defaults/object-defaults", file, cancellationToken);
+
+    /// <summary>The objects' defaults in use, as a file another agent loads.</summary>
+    public async Task<string> ExportObjectDefaultsAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await http.GetAsync("api/v1/dashboard/defaults/object-defaults/export", cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadAsStringAsync(cancellationToken);
+    }
+
+    /// <summary>Every change the user made to the objects' defaults on this agent dropped (the agent backs them up first).</summary>
+    public Task<DashboardDefaultsStatus> ClearObjectDefaultChangesAsync(CancellationToken cancellationToken = default) =>
+        DeleteAsync<DashboardDefaultsStatus>("api/v1/dashboard/defaults/object-defaults/changes", cancellationToken);
+
+    /// <summary>Conflicts between the user's changes and a newer base settled, kind by kind.</summary>
+    public Task<DashboardDefaultsStatus> SettleObjectDefaultConflictsAsync(IEnumerable<ObjectDefaultChoice> choices, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<ObjectDefaultChoice[], DashboardDefaultsStatus>("api/v1/dashboard/defaults/object-defaults/conflicts", [.. choices], cancellationToken);
+
+    /// <summary>The objects' defaults the agent ships, the base again; the user's changes stay over it.</summary>
+    public Task<DashboardDefaultsStatus> ResetObjectDefaultsAsync(CancellationToken cancellationToken = default) =>
+        DeleteAsync<DashboardDefaultsStatus>("api/v1/dashboard/defaults/object-defaults", cancellationToken);
+
+    /// <summary>
+    /// The views named of a dashboard file, or of the package folder's when
+    /// <paramref name="file"/> is empty, in place of the user's same views; the
+    /// agent backs the dashboard up first.
+    /// </summary>
+    public Task<DashboardDefaultsStatus> ImportUserDashboardV2Async(IEnumerable<string> views, string file = "", CancellationToken cancellationToken = default) =>
+        PostTextAsync<DashboardDefaultsStatus>($"api/v1/me/dashboard-v2/import?views={Escape(string.Join(',', views))}", file, cancellationToken);
+
+    /// <summary>The views named of the user's dashboard put back to the default the agent has, after a backup.</summary>
+    public Task<DashboardDefaultsStatus> ResetUserDashboardV2ViewsAsync(IEnumerable<string> views, CancellationToken cancellationToken = default) =>
+        PostTextAsync<DashboardDefaultsStatus>($"api/v1/me/dashboard-v2/reset?views={Escape(string.Join(',', views))}", "", cancellationToken);
+
+    /// <summary>Every state the user's dashboard was saved in, with its origin and revision (v2.3), the newest first.</summary>
+    public Task<IReadOnlyList<DashboardRevision>> GetUserDashboardV2HistoryAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<IReadOnlyList<DashboardRevision>>("api/v1/me/dashboard-v2/history", cancellationToken);
+
+    /// <summary>A state the user's dashboard was saved in brought back, as it was.</summary>
+    public Task<DashboardDefaultsStatus> RestoreUserDashboardV2RevisionAsync(int id, CancellationToken cancellationToken = default) =>
+        PostTextAsync<DashboardDefaultsStatus>($"api/v1/me/dashboard-v2/history/{id}/restore", "", cancellationToken);
+
+    /// <summary>The whole user's dashboard back to the release, every view at once.</summary>
+    public Task<DashboardDefaultsStatus> ResetUserDashboardV2ToReleaseAsync(CancellationToken cancellationToken = default) =>
+        PostTextAsync<DashboardDefaultsStatus>("api/v1/me/dashboard-v2/reset-all", "", cancellationToken);
+
+    /// <summary>The views named made the agent's own default, from a file, or the newest shipped or waiting when <paramref name="file"/> is empty.</summary>
+    public Task<DashboardDefaultsStatus> LoadDefaultDashboardV2ViewsAsync(IEnumerable<string> views, string file = "", CancellationToken cancellationToken = default) =>
+        PostTextAsync<DashboardDefaultsStatus>($"api/v1/dashboard-v2/default/views?views={Escape(string.Join(',', views))}", file, cancellationToken);
+
+    /// <summary>The views named of the agent's default back to the shipped ones.</summary>
+    public Task<DashboardDefaultsStatus> ResetDefaultDashboardV2ViewsAsync(IEnumerable<string> views, CancellationToken cancellationToken = default) =>
+        DeleteAsync<DashboardDefaultsStatus>($"api/v1/dashboard-v2/default/views?views={Escape(string.Join(',', views))}", cancellationToken);
+
+    /// <summary>The views named of the user's dashboard, as a file another agent loads.</summary>
+    public async Task<string> ExportUserDashboardV2Async(IEnumerable<string> views, CancellationToken cancellationToken = default)
+    {
+        using var response = await http.GetAsync($"api/v1/me/dashboard-v2/export?views={Escape(string.Join(',', views))}", cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadAsStringAsync(cancellationToken);
+    }
+
+    /// <summary>A body that is the client's own text, with an answer; a problem-details error becomes an <see cref="AgentApiException"/>.</summary>
+    private async Task<TResult> PostTextAsync<TResult>(string path, string text, CancellationToken cancellationToken)
+    {
+        using var content = new StringContent(text, System.Text.Encoding.UTF8, "application/json");
+        using var response = await http.PostAsync(path, content, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<TResult>(cancellationToken)
+            ?? throw new AgentApiException((int)response.StatusCode, "Empty answer");
+    }
 
     /// <summary>A body that is the client's own text, sent as it is.</summary>
     private async Task PutTextAsync(string path, string text, CancellationToken cancellationToken)

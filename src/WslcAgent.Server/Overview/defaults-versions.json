@@ -1,0 +1,10 @@
+{
+  "objectDefaults": {
+    "version": 1,
+    "minAgentVersion": "1.0.12"
+  },
+  "dashboard": {
+    "version": 2,
+    "minAgentVersion": "1.0.12"
+  }
+}
