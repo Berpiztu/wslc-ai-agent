@@ -13,6 +13,9 @@
    copy is how two headers end up a shade apart. */
 :root {
     --wslc-header-tone: color-mix(in srgb, var(--mud-palette-primary) 18%, var(--mud-palette-surface));
+    /* The title bar and the dialogs' frames: the same mix, softer (the owner's
+       request of 1 October 2026), so a large surface is not pastel. */
+    --wslc-appbar-tone: color-mix(in srgb, var(--mud-palette-primary) 8%, var(--mud-palette-surface));
 
     /* The fifth type size, the one below the theme's overline (docs/RULES.md,
        step 5): a dashboard part's Small where its text already stands at
@@ -704,16 +707,22 @@
 .wslc-fill > .mud-table.mud-table-sticky-header .mud-table-root .mud-table-head .mud-table-cell.sticky-right,
 .wslc-fill > .mud-table .mud-table-head .mud-table-cell.sticky-left,
 .wslc-fill > .mud-table .mud-table-head .mud-table-cell.sticky-right {
-    background-color: var(--wslc-header-tone);
+    background-color: var(--wslc-grid-head, var(--wslc-header-tone));
 }
 
 /* Header and pager rows in a distinct tone: the primary colour mixed into the
    surface. The selectors outrank MudBlazor's sticky-header rule, which paints
    header cells with the plain surface colour. */
-.wslc-fill > .mud-table .mud-table-head .mud-table-cell,
-.wslc-fill > .mud-table.mud-table-sticky-header * table thead * th,
 .wslc-fill > .mud-table .mud-table-pagination {
     background-color: var(--wslc-header-tone);
+}
+
+/* The header row's colours are Layout's "Table header row"; left at Default
+   it keeps the pager's tone and the theme's text. */
+.wslc-fill > .mud-table .mud-table-head .mud-table-cell,
+.wslc-fill > .mud-table.mud-table-sticky-header * table thead * th {
+    background-color: var(--wslc-grid-head, var(--wslc-header-tone));
+    color: var(--wslc-grid-head-text, var(--mud-palette-text-primary));
 }
 
 .wslc-fill > .mud-table .mud-table-pagination {
@@ -1621,7 +1630,7 @@
     text-transform: none;
     font-size: var(--mud-typography-body2-size);
     font-weight: 500;
-    color: var(--mud-palette-text-secondary);
+    color: var(--wslc-tabs-text, var(--mud-palette-text-secondary));
     border-radius: 4px 4px 0 0;
 }
 
@@ -2057,13 +2066,20 @@
     min-height: 0;
 }
 
-/* The tabs block is one card: a border around the tab bar
-   and the panel, the panel on the surface tone with its own padding. */
+/* The tabs block is one card: the panel on the surface tone with its own
+   padding. Its outline and its round corners are Layout's Border and Rounded
+   (MudBlazor marks them on the tab bar); the application ships with both. */
 .wslc-fill.mud-tabs {
-    border: 1px solid var(--mud-palette-lines-default);
-    border-radius: var(--mud-default-borderradius);
     background-color: var(--mud-palette-surface);
     overflow: hidden;
+}
+
+.wslc-fill.mud-tabs:has(> .mud-tabs-tabbar[class*="mud-tabs-border-"]) {
+    border: 1px solid var(--mud-palette-lines-default);
+}
+
+.wslc-fill.mud-tabs:has(> .mud-tabs-tabbar.mud-tabs-rounded) {
+    border-radius: var(--mud-default-borderradius);
 }
 
 .wslc-fill.mud-tabs > .mud-tabs-tabbar {
@@ -2273,6 +2289,94 @@
 
 .mud-dialog .wslc-dialog-action > * {
     min-height: 0;
+}
+
+/* Every dialog reads as a frame and what it holds, as Logs and Exec always did
+   (the owner's request of 1 October 2026): the title, the edges round the
+   content and the rail keep the dialog's surface, and the content sits on the
+   page tone inside them. Logs and the terminal already bring their own box; a
+   dialog with no rail takes the tone on its whole content. Each zone of a
+   dialog is a variable of its own, so one can change without the others: the
+   frame (title and edges, the title bar's tone), the content box,
+   the fields and list lines, and the rail. */
+.mud-dialog-container .mud-dialog {
+    --wslc-dialog-frame: var(--wslc-appbar-tone);
+    --wslc-dialog-content: var(--mud-palette-background);
+    --wslc-dialog-field: var(--mud-palette-surface);
+    --wslc-dialog-rail: var(--wslc-dialog-frame);
+    background-color: var(--wslc-dialog-frame);
+}
+
+/* The light theme keeps the dark one's order, not its palette names: there
+   the content is the dark page tone and the fields the lighter surface; here
+   the surface is white, so the content takes it and the fields the page tone,
+   and a field still stands off its box. The dialogs sit outside MudLayout, so
+   the theme is read from wherever wslc-dark is (MainLayout, BareLayout). */
+:root:not(:has(.wslc-dark)) .mud-dialog-container .mud-dialog {
+    --wslc-dialog-content: var(--mud-palette-surface);
+    --wslc-dialog-field: var(--mud-palette-background);
+}
+
+.mud-dialog .wslc-action-main:not(.wslc-terminal):not(:has(> .wslc-logs-output)),
+.mud-dialog .mud-dialog-content:not(.wslc-dialog-full):not(:has(.wslc-action-main)) {
+    background-color: var(--wslc-dialog-content);
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borderradius);
+}
+
+.mud-dialog .wslc-action-main:not(.wslc-terminal):not(:has(> .wslc-logs-output)) {
+    padding: 8px 0 8px 8px;
+}
+
+.mud-dialog .mud-dialog-content:not(.wslc-dialog-full):not(:has(.wslc-action-main)) {
+    margin: 0 16px 16px;
+}
+
+/* MudBlazor's filled field is black at 9 %, which vanishes on the page tone:
+   inside a dialog's content box a field takes the dialog's field tone, so
+   it stands off the box in both themes, and hovering lights it a step. */
+.mud-dialog .mud-input.mud-input-filled,
+.mud-dialog .mud-input.mud-input-filled.mud-focused {
+    background-color: var(--wslc-dialog-field);
+}
+
+.mud-dialog .mud-input.mud-input-filled:hover {
+    background-color: color-mix(in srgb, var(--mud-palette-text-primary) 6%, var(--wslc-dialog-field));
+}
+
+/* A dialog's list: the box holding it takes the content's tone, and so do its
+   lines, a gap apart; the selected line is the one raised, on the dialog's
+   field tone. MudBlazor's own tint is a translucent colour set !important; a
+   gradient is painted over a background colour, so the field tone covers it
+   without fighting it. */
+.mud-dialog .mud-paper.wslc-picker-list,
+.mud-dialog .mud-paper:has(> .wslc-picker-list) {
+    background-color: transparent;
+}
+
+.mud-dialog .mud-paper:has(> .wslc-picker-list) {
+    padding: 4px;
+}
+
+.mud-dialog .wslc-picker-list .mud-list-item {
+    margin-bottom: 2px;
+    border-radius: var(--wslc-form-radius, var(--mud-default-borderradius));
+}
+
+.mud-dialog .wslc-picker-list .mud-list-item.mud-selected-item {
+    background-image: linear-gradient(var(--wslc-dialog-field), var(--wslc-dialog-field));
+}
+
+.mud-dialog .wslc-picker-list .mud-list-item:not(.mud-selected-item):hover {
+    background-color: color-mix(in srgb, var(--mud-palette-text-primary) 6%, var(--wslc-dialog-content));
+}
+
+/* In a dialog the rail has its own tone and stands off the content box
+   by a gap instead of a line of its own. */
+.mud-dialog .wslc-action-rail {
+    background-color: var(--wslc-dialog-rail);
+    border-left: 0;
+    margin-left: 6px;
 }
 
 .wslc-action-search {
@@ -2760,7 +2864,8 @@
     z-index: 1;
     text-align: left;
     padding: 0.45rem 0.55rem;
-    background-color: var(--wslc-header-tone);
+    background-color: var(--wslc-grid-head, var(--wslc-header-tone));
+    color: var(--wslc-grid-head-text, var(--mud-palette-text-primary));
     border-bottom: 1px solid var(--mud-palette-lines-default);
     color: var(--mud-palette-text-secondary);
     font-weight: 600;
@@ -3061,7 +3166,7 @@
    gives its inner row a fixed 48px and the bar 5.6px of padding on top, so a
    33px tab sat inside 54px of chrome. */
 .wslc-fill.mud-tabs .mud-tabs-tabbar {
-    background-color: var(--wslc-header-tone);
+    background-color: var(--wslc-tabs-bar, var(--wslc-header-tone));
     border-bottom: 1px solid var(--mud-palette-lines-default);
     padding: 0;
 }
@@ -4834,13 +4939,13 @@
     align-self: center;
 }
 
-/* The title bar takes the tone the tables' header rows take: one chrome tone
-   for the whole application (--wslc-header-tone, the primary mixed into the
-   surface), so the bar, the list headers and the pager read as the same
-   furniture instead of three shades. The theme's own appbar colour is what
-   this replaces; everything on the bar keeps its colours. */
+/* The title bar takes the primary mixed into the surface, as the tables'
+   header rows do, but softer (--wslc-appbar-tone, shared with the dialogs'
+   frames): at the headers' 18 % a surface this large read pastel. The
+   theme's own appbar colour is what this replaces; everything on the bar
+   keeps its colours. */
 .mud-layout .mud-appbar {
-    background-color: var(--wslc-header-tone);
+    background-color: var(--wslc-appbar-tone);
 }
 
 /* The list had to let a frozen column go (wslc-agent-ui.js measured the block
@@ -4969,9 +5074,8 @@ html[data-wslc-rows~="outlined"] .wslc-files-table {
     padding-inline-end: var(--wslc-row-pad-end, 10px);
 }
 
-/* The header row of a list stands over what scrolls under it, like the tabs of
-   a details screen, so it takes the elevation chosen for them: one decision,
-   one shadow.
+/* The header row of a list stands over what scrolls under it, on the
+   elevation Layout's "Table header row" gives it.
 
    It is carried by the header cells, because a table row cannot carry a shadow
    and a line drawn under the head is painted over by the rows. What made a
@@ -4980,7 +5084,7 @@ html[data-wslc-rows~="outlined"] .wslc-files-table {
    only what falls below it show), so the cells join into one band. */
 .wslc-fill > .mud-table .mud-table-head .mud-table-cell,
 .wslc-fill > .mud-table.mud-table-sticky-header .mud-table-root .mud-table-head .mud-table-cell {
-    box-shadow: var(--wslc-head-shadow, var(--mud-elevation-4));
+    box-shadow: var(--wslc-head-shadow, var(--mud-elevation-2));
     clip-path: inset(0 0 -16px 0);
 }
 

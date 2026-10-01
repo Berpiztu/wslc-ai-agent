@@ -33,6 +33,15 @@ public sealed class UiStyleValues
     /// <summary>The shadow a list stands on; the application ships flat but for one step.</summary>
     public int GridElevation { get; set; } = 1;
 
+    /// <summary>The header row of every list: its background (Default keeps the chrome tone), its words, and its shadow.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public Color GridHeadColor { get; set; } = Color.Default;
+
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public Color GridHeadTextColor { get; set; } = Color.Default;
+
+    public int GridHeadElevation { get; set; } = 2;
+
     /// <summary>What a cell keeps to its left and to its right, in pixels (MudBlazor's own are 16 and 24).</summary>
     public int RowPadStart { get; set; } = 7;
 
@@ -78,17 +87,26 @@ public sealed class UiStyleValues
     /// <summary>The tabs of a details screen, in pixels.</summary>
     public int TabHeight { get; set; } = 26;
 
-    /// <summary>And the rest of what a set of tabs takes: they are the details screens' own.</summary>
-    public bool TabsRounded { get; set; }
+    /// <summary>
+    /// And the rest of what a set of tabs takes: they are the details screens'
+    /// own. Rounded rounds the block's corners and Border draws its outline; the
+    /// application ships with both.
+    /// </summary>
+    public bool TabsRounded { get; set; } = true;
 
-    public bool TabsBorder { get; set; }
+    public bool TabsBorder { get; set; } = true;
 
     public bool TabsCentered { get; set; }
 
-    public int TabsElevation { get; set; } = 4;
+    public int TabsElevation { get; set; } = 2;
 
+    /// <summary>The tab bar's background: Default keeps the chrome tone of the table headers.</summary>
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public Color TabsColor { get; set; } = Color.Primary;
+    public Color TabsBarColor { get; set; } = Color.Default;
+
+    /// <summary>The words of the tabs not chosen: Default keeps the secondary text colour; the chosen one stays green.</summary>
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public Color TabsTextColor { get; set; } = Color.Default;
 
     /// <summary>The narrowest a tab may be, in pixels: 0 lets a tab be as wide as its word and no wider.</summary>
     public int TabsMinWidth { get; set; }
@@ -151,6 +169,9 @@ public sealed class UiStyleValues
         && GridOutlined == other.GridOutlined
         && GridFixedHeader == other.GridFixedHeader
         && GridElevation == other.GridElevation
+        && GridHeadColor == other.GridHeadColor
+        && GridHeadTextColor == other.GridHeadTextColor
+        && GridHeadElevation == other.GridHeadElevation
         && RowPadStart == other.RowPadStart
         && RowPadEnd == other.RowPadEnd
         && ActionIconSize == other.ActionIconSize
@@ -171,7 +192,8 @@ public sealed class UiStyleValues
         && TabsBorder == other.TabsBorder
         && TabsCentered == other.TabsCentered
         && TabsElevation == other.TabsElevation
-        && TabsColor == other.TabsColor
+        && TabsBarColor == other.TabsBarColor
+        && TabsTextColor == other.TabsTextColor
         && TabsMinWidth == other.TabsMinWidth
         && ToggleSize == other.ToggleSize
         && ToggleColor == other.ToggleColor
