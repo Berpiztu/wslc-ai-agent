@@ -1,0 +1,71 @@
+name: Client
+
+# The MAUI client, Windows and Android, which needs the MAUI workloads (about
+# seven minutes to install on a clean machine): built when the client or how
+# everything is built changes, and by hand from the Actions tab before a
+# release. Every other push is covered by the quick build (ci.yml).
+on:
+  push:
+    branches: [main]
+    paths:
+      - src/WslcAgent.App/**
+      - global.json
+      - Directory.Build.props
+      - Directory.Packages.props
+      - build.ps1
+      - check-prereqs.ps1
+      - packaging/Packaging.ps1
+      - .github/workflows/client.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - src/WslcAgent.App/**
+      - global.json
+      - Directory.Build.props
+      - Directory.Packages.props
+      - build.ps1
+      - check-prereqs.ps1
+      - packaging/Packaging.ps1
+      - .github/workflows/client.yml
+  workflow_dispatch:
+
+concurrency:
+  group: client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  client:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('global.json', 'Directory.Packages.props', '**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Install workloads
+        run: dotnet workload restore WslcAgent.slnx
+
+      # The Quick start's prerequisites check, workloads included.
+      - name: Check prerequisites
+        run: .\check-prereqs.ps1
+
+      - name: Check private files
+        run: .\check-private.ps1
+
+      - name: Build and test
+        run: .\build.ps1 -Configuration Release
+
+      - name: Nothing tracked changed
+        run: |
+          $changed = git status --porcelain --untracked-files=no
+          if ($changed) { $changed; throw "The build changed tracked files." }

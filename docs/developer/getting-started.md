@@ -130,7 +130,11 @@ same steps CI runs. The first run downloads the packages and takes a few
 minutes. You should see `Restoring`, `Building`, `Testing`, the test summary
 with no failure, and **Done.** in green.
 
-`.\build.ps1 -Configuration Release` matches CI exactly.
+`.\build.ps1 -Configuration Release` matches CI exactly. CI builds in two
+parts: every push runs `-NoClient` (everything but the MAUI client, with no
+workloads to install, in a few minutes; `ci.yml`), and the client is built
+when it, or how everything is built, changes, and by hand from the Actions
+tab before a release (`client.yml`).
 
 ## 6. Run the agent
 
