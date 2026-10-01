@@ -11,11 +11,16 @@
     private\version.props. A release raises the repository's above both:
 
       1. Stops when the working tree has uncommitted changes.
-      2. Writes the new versions: the agent's and the client's next patch
+      2. Goes to main and brings it up to date, from whatever branch it was
+         run on. Then, for each open pull request into main, waits for its
+         checks and asks whether to merge it (squash); one whose checks fail
+         is reported and left alone. main is brought up to date again with
+         what was merged, so the release carries it.
+      3. Writes the new versions: the agent's and the client's next patch
          above the higher of the release's and private\version.props, or
          -Version for both; the versionCode one above the higher of the two.
-      3. Commits the two files, tags v<agent version> and pushes both.
-      4. GitHub Actions sees the tag and builds the agent installer
+      4. Commits the two files, tags v<agent version> and pushes both.
+      5. GitHub Actions sees the tag and builds the agent installer
          (-Release), the Windows client installer and the APK at exactly the
          release's versions, then creates the GitHub release with the three
          installers and the two defaults files. Nothing is uploaded from this
@@ -68,7 +73,36 @@ if ($dirty.Count -gt 0) {
     throw "Commit or discard these changes first; a release commits its versions alone:`n$($dirty -join "`n")"
 }
 
-# 2. The new versions, above the release's and every local build's.
+# 2. The release is made from main as GitHub has it, with the open pull
+# requests the person chooses merged into it first.
+function Sync-Main {
+    git switch main
+    if ($LASTEXITCODE -ne 0) { throw "Could not switch to main." }
+    git pull --ff-only
+    if ($LASTEXITCODE -ne 0) { throw "main could not be brought up to date (git pull --ff-only); sort it out and run this again." }
+}
+
+Sync-Main
+$open = @(gh pr list --base main --state open --json number,title --jq '.[] | "\(.number)\t\(.title)"')
+if ($LASTEXITCODE -ne 0) { throw "gh could not list the open pull requests; is it signed in (gh auth status)?" }
+foreach ($line in $open) {
+    $number, $title = $line -split "`t", 2
+    Write-Host ""
+    Write-Host "Pull request #$number - $title" -ForegroundColor Cyan
+    Write-Host "Waiting for its checks..."
+    gh pr checks $number --watch --fail-fast | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Its checks did not pass: it is left out of this release." -ForegroundColor Yellow
+        continue
+    }
+    $answer = Read-Host "Its checks passed. Merge #$number into this release? (y/n)"
+    if ($answer -notmatch '^(y|yes|s|si)$') { continue }
+    gh pr merge $number --squash --delete-branch
+    if ($LASTEXITCODE -ne 0) { throw "#$number could not be merged; merge it on GitHub and run this again." }
+}
+if ($open.Count -gt 0) { Sync-Main }
+
+# 3. The new versions, above the release's and every local build's.
 $builtHere = Read-WslcAgentLocalVersions
 $agentNow = Get-WslcAgentHigherVersion (Get-WslcAgentTrackedValue $Props "Version") $builtHere["WslcLocalAgentVersion"]
 $clientNow = Get-WslcAgentHigherVersion (Get-WslcAgentTrackedValue $Csproj "ApplicationDisplayVersion") $builtHere["WslcLocalClientVersion"]
@@ -99,7 +133,7 @@ Set-WslcAgentTrackedValue $Props "Version" $agentVersion
 Set-WslcAgentTrackedValue $Csproj "ApplicationDisplayVersion" $clientVersion
 Set-WslcAgentTrackedValue $Csproj "ApplicationVersion" "$clientCode"
 
-# 3. Built here only with -Local, at exactly those versions; any failure puts the files back.
+# 4. Built here only with -Local, at exactly those versions; any failure puts the files back.
 if ($Local) {
     try {
         & (Join-Path $RepoRoot "build-agent-installer.ps1") -NoBump -Release
@@ -111,7 +145,7 @@ if ($Local) {
     }
 }
 
-# 4. The versions committed, tagged and pushed. The tag of a release built here
+# 5. The versions committed, tagged and pushed. The tag of a release built here
 # says so: the release workflow leaves it alone.
 git add -- $Props $Csproj
 git commit -m "Release $agentVersion (client $clientVersion, versionCode $clientCode)"
@@ -137,7 +171,7 @@ $installers = @("wslc-ai-agent.msi", "wslc-ai-client.msi", "wslc-ai-client.apk")
 # installer ships, each with its version (docs/dashboard-defaults.md).
 $installers += Write-WslcAgentDefaultsFiles -Destination (Join-Path $RepoRoot "dist")
 
-# 5. The GitHub release, when asked.
+# 6. The GitHub release, when asked.
 if ($Publish) {
     gh release create $tag @installers --title "WSLC AI Agent $agentVersion" --generate-notes
     if ($LASTEXITCODE -ne 0) { throw "gh release create failed with exit code $LASTEXITCODE; the tag $tag is pushed, create the release by hand." }
