@@ -8,3 +8,8 @@ public sealed record RegistryLoginRequest(string Server = "", string Username = 
 /// <summary>Body of <c>POST /api/v1/registry/logout</c>.</summary>
 /// <param name="Server">The registry; empty for the session's default.</param>
 public sealed record RegistryLogoutRequest(string Server = "");
+
+/// <summary>A registry this agent logged in to, from <c>GET /api/v1/registry/logins</c>. Never the password.</summary>
+/// <param name="Server">The registry, lowercase; empty for the session's default.</param>
+/// <param name="Since">When the login succeeded.</param>
+public sealed record RegistryLogin(string Server, string Username, DateTimeOffset Since);

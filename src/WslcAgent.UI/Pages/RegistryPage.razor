@@ -4,9 +4,42 @@
 
 <PageShell Title="Registry">
     <MudPaper Elevation="1" Class="pa-3 mb-2">
+        <MudText Typo="Typo.h6" Class="mb-1">Logged in</MudText>
+        @if (_logins is null)
+        {
+            <MudProgressLinear Indeterminate="true" />
+        }
+        else if (_logins.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">No registry logged in from this agent.</MudText>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Bordered="true" Striped="true">
+                <thead><tr><th>Server</th><th>Username</th><th>Since</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var login in _logins)
+                    {
+                        <tr @key="login.Server">
+                            <td>@ServerName(login.Server)</td>
+                            <td>@login.Username</td>
+                            <td>@login.Since.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                            <td class="text-nowrap">
+                                <MudIconButton Icon="@Icons.Material.Filled.Logout" Size="Size.Small" Color="Color.Error" title="Log out of this registry" Disabled="_busy"
+                                               OnClick="@(() => RunAsync("logout", ct => Api.RegistryLogoutAsync(login.Server, ct)))" />
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">The logins made from this page; one typed at the console with wslc login is not listed.</MudText>
+    </MudPaper>
+
+    <MudPaper Elevation="1" Class="pa-3 mb-2">
         <MudText Typo="Typo.h6" Class="mb-1">Log in to a registry</MudText>
         <MudStack Spacing="1">
-            <MudTextField T="string" @bind-Value="_server" Label="Server" Placeholder="registry.example.com" Variant="Variant.Filled" Margin="Margin.Dense" Immediate="true" />
+            <MudTextField T="string" @bind-Value="_server" Label="Server" Placeholder="ghcr.io" Variant="Variant.Filled" Margin="Margin.Dense" Immediate="true" />
             <MudTextField T="string" @bind-Value="_username" Label="Username" Variant="Variant.Filled" Margin="Margin.Dense" Immediate="true"
                           autocapitalize="none" autocorrect="off" spellcheck="false" />
             <PasswordField @bind-Value="_password" />
@@ -28,11 +61,15 @@
 </PageShell>
 
 @code {
-    private string _server = "";
+    private IReadOnlyList<RegistryLogin>? _logins;
+    /// <summary>GitHub Container Registry, where this agent's images are published, unless another is typed.</summary>
+    private string _server = "ghcr.io";
     private string _username = "";
     private string _password = "";
     private string _logoutServer = "";
     private bool _busy;
+
+    protected override Task OnInitializedAsync() => LoadLoginsAsync();
 
     /// <summary>The password is not kept once it has been sent, whatever the answer.</summary>
     private async Task LoginAsync()
@@ -60,5 +97,22 @@
         {
             _busy = false;
         }
+
+        await LoadLoginsAsync();
     }
+
+    private async Task LoadLoginsAsync()
+    {
+        try
+        {
+            _logins = await Api.GetRegistryLoginsAsync();
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _logins = [];
+            Snackbar.Add($"Registry: could not read the logins. {ex.Message}", Severity.Error);
+        }
+    }
+
+    private static string ServerName(string server) => server.Length == 0 ? "(default)" : server;
 }

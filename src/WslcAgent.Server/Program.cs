@@ -104,7 +104,10 @@ builder.Services.AddSingleton(services => new ApprovalGate(
 builder.Services.AddSingleton<IImageService, ImageService>();
 builder.Services.AddSingleton<ImageBuilds>();
 builder.Services.AddSingleton<ImagePulls>();
+builder.Services.AddSingleton<ImagePushes>();
+builder.Services.AddSingleton<ImagePublisher>();
 builder.Services.AddSingleton<ContainerLaunches>();
+builder.Services.AddSingleton<ContainerImageUpdates>();
 builder.Services.AddSingleton<ImageArchives>();
 builder.Services.AddSingleton<IVolumeService, VolumeService>();
 builder.Services.AddSingleton<INetworkService, NetworkService>();
@@ -118,6 +121,7 @@ builder.Services.AddSingleton<NetworkTopologyReader>();
 builder.Services.AddSingleton<ISessionService, SessionService>();
 builder.Services.AddSingleton<ISystemService, SystemService>();
 builder.Services.AddSingleton<IHomeService, HomeService>();
+builder.Services.AddSingleton<RegistryLogins>();
 builder.Services.AddSingleton<RegistryService>();
 builder.Services.AddSingleton<TerminalJobs>();
 builder.Services.AddSingleton<PackageFolders>();

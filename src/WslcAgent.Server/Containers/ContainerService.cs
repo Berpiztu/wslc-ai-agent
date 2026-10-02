@@ -261,11 +261,12 @@ public sealed partial class ContainerService(
         return registry.UidOf(Resources.ResourceRegistry.Container, inspection.Id, inspection.Name);
     }
 
-    public async Task<ContainerLogs> LogsAsync(string container, int tail, bool timestamps, CancellationToken cancellationToken = default)
+    public async Task<ContainerLogs> LogsAsync(string container, int tail, bool timestamps, CancellationToken cancellationToken = default, string since = "")
     {
         var args = new List<string> { "container", "logs" }
             .Option("--tail", tail > 0 ? tail.ToString() : "")
-            .Flag("--timestamps", timestamps);
+            .Flag("--timestamps", timestamps)
+            .Option("--since", since);
         args.Add(WslcArgs.Require(container, "container"));
         var result = await wslc.RunAsync(args, cancellationToken: cancellationToken);
         var text = result.Stderr.Length > 0 ? result.Stderr.TrimEnd() + "\n" + result.Stdout : result.Stdout;

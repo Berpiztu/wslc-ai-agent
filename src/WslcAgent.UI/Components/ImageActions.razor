@@ -37,6 +37,7 @@
             <MudMenuItem Icon="@Icons.Material.Filled.Download" OnClick="PullAsync">Pull</MudMenuItem>
         }
         <MudMenuItem Icon="@Icons.Material.Filled.Upload" OnClick="PushAsync">Push</MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Filled.Publish" OnClick="PublishAsync">Publish version</MudMenuItem>
         <MudMenuItem Icon="@Icons.Material.Filled.Save" OnClick="SaveAsync">Save</MudMenuItem>
         <MudMenuItem Icon="@Icons.Material.Filled.Sell" OnClick="TagAsync">Tag</MudMenuItem>
     </MudMenu>
@@ -132,6 +133,24 @@
                 Snackbar.Remove(pushing);
             }
         }
+    }
+
+    /// <summary>Tagged as a version in a registry and pushed; the push console follows it, and the new tags join the list.</summary>
+    private async Task PublishAsync()
+    {
+        string? published = null;
+        var parameters = new DialogParameters<PublishImageDialog>
+        {
+            { d => d.Source, Image.Reference },
+            { d => d.Published, (Action<string>)(target => published = target) },
+        };
+        if (!await DialogFlow.ShowAsync<PublishImageDialog>(Dialogs, "Publish version", parameters) || published is null)
+        {
+            return;
+        }
+
+        await Changed.InvokeAsync();
+        await PullFlow.ShowPushLogAsync(Dialogs, published);
     }
 
     /// <summary>Asks for the archive path, named after the image; the archive is written on the agent's machine.</summary>

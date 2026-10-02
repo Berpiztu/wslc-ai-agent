@@ -321,6 +321,9 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
 
     // Registry
 
+    public Task<IReadOnlyList<RegistryLogin>> GetRegistryLoginsAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<IReadOnlyList<RegistryLogin>>("api/v1/registry/logins", cancellationToken);
+
     public Task RegistryLoginAsync(RegistryLoginRequest request, CancellationToken cancellationToken = default) =>
         PostJsonAsync("api/v1/registry/login", request, cancellationToken);
 
@@ -476,14 +479,19 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<ContainerCreated> RecreateContainerAsync(string container, ContainerLaunchRequest request, CancellationToken cancellationToken = default) =>
         PostJsonAsync<ContainerLaunchRequest, ContainerCreated>($"api/v1/containers/{Escape(container)}/recreate", request, cancellationToken);
 
+    /// <summary>Starts moving the container to another image: the pull started (its console follows it), then a recreate the agent runs on its own.</summary>
+    public Task<ImagePullState> UpdateContainerImageAsync(string container, string image, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<UpdateContainerImageRequest, ImagePullState>($"api/v1/containers/{Escape(container)}/update-image", new UpdateContainerImageRequest(image), cancellationToken);
+
     public Task KillContainerAsync(string container, CancellationToken cancellationToken = default) =>
         PostAsync($"api/v1/containers/{Escape(container)}/kill", cancellationToken);
 
     public Task<ContainerDetails> GetContainerDetailsAsync(string container, CancellationToken cancellationToken = default) =>
         GetAsync<ContainerDetails>($"api/v1/containers/{Escape(container)}/details", cancellationToken);
 
-    public async Task<string> GetContainerLogsAsync(string container, int tail = 200, bool timestamps = false, CancellationToken cancellationToken = default) =>
-        (await GetAsync<ContainerLogs>($"api/v1/containers/{Escape(container)}/logs?tail={tail}&timestamps={Flag(timestamps)}", cancellationToken)).Text;
+    /// <summary>The container's last <paramref name="tail"/> lines; with <paramref name="since"/> (RFC 3339, the container's own clock) only those from that moment on.</summary>
+    public async Task<string> GetContainerLogsAsync(string container, int tail = 200, bool timestamps = false, CancellationToken cancellationToken = default, string since = "") =>
+        (await GetAsync<ContainerLogs>($"api/v1/containers/{Escape(container)}/logs?tail={tail}&timestamps={Flag(timestamps)}&since={Escape(since)}", cancellationToken)).Text;
 
     public Task<ContainerStats> GetContainerStatsAsync(string container, CancellationToken cancellationToken = default) =>
         GetAsync<ContainerStats>($"api/v1/containers/{Escape(container)}/stats", cancellationToken);
@@ -724,6 +732,19 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
 
     public Task PushImageAsync(string reference, bool allTags = false, CancellationToken cancellationToken = default) =>
         PostJsonAsync("api/v1/images/push", new PushImageRequest(reference, allTags), cancellationToken);
+
+    /// <summary>Tags the image as a version in a registry and starts its push (and <c>latest</c>'s); returns the pushes started.</summary>
+    public Task<IReadOnlyList<ImagePullState>> PublishImageAsync(PublishImageRequest request, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<PublishImageRequest, IReadOnlyList<ImagePullState>>("api/v1/images/publish", request, cancellationToken);
+
+    public Task<IReadOnlyList<ImagePullState>> GetImagePushesAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<IReadOnlyList<ImagePullState>>("api/v1/images/pushes", cancellationToken);
+
+    public Task<ImagePullLog> GetImagePushLogAsync(string image, CancellationToken cancellationToken = default) =>
+        GetAsync<ImagePullLog>($"api/v1/images/pushes/log?image={Escape(image)}", cancellationToken);
+
+    public Task<CancelImagePullResult> CancelImagePushAsync(string image, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<PushImageRequest, CancelImagePullResult>("api/v1/images/pushes/cancel", new PushImageRequest(image), cancellationToken);
 
     /// <summary>A tar archive written on the agent's machine; a bare name goes to that user's Downloads.</summary>
     public Task<SavedImage> SaveImageAsync(string reference, string output, CancellationToken cancellationToken = default) =>

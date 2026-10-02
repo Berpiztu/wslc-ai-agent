@@ -7,18 +7,25 @@ namespace WslcAgent.Server.Registries;
 /// <c>wslc login</c> and <c>wslc logout</c>.
 /// The password goes through
 /// <c>--password-stdin</c>, so it never shows in the command line that CLI
-/// Activity and the agent log record.
+/// Activity and the agent log record. A login or logout that succeeds is
+/// written to <see cref="RegistryLogins"/>, which is what lists them.
 /// </summary>
-public sealed class RegistryService(IWslcRunner wslc)
+public sealed class RegistryService(IWslcRunner wslc, RegistryLogins logins)
 {
-    public Task LoginAsync(RegistryLoginRequest request, CancellationToken cancellationToken = default)
+    public IReadOnlyList<RegistryLogin> Logins() => logins.List();
+
+    public async Task LoginAsync(RegistryLoginRequest request, CancellationToken cancellationToken = default)
     {
         var (args, password) = LoginArgs(request);
-        return wslc.RunAsync(args, cancellationToken: cancellationToken, standardInput: password);
+        await wslc.RunAsync(args, cancellationToken: cancellationToken, standardInput: password);
+        logins.Record(request.Server, request.Username);
     }
 
-    public Task LogoutAsync(RegistryLogoutRequest request, CancellationToken cancellationToken = default) =>
-        wslc.RunAsync(WithServer(["logout"], request.Server), cancellationToken: cancellationToken);
+    public async Task LogoutAsync(RegistryLogoutRequest request, CancellationToken cancellationToken = default)
+    {
+        await wslc.RunAsync(WithServer(["logout"], request.Server), cancellationToken: cancellationToken);
+        logins.Forget(request.Server);
+    }
 
     /// <summary><c>login [--username U] [--password-stdin] [SERVER]</c> and what to write to stdin (null without a password).</summary>
     internal static (List<string> Args, string? Password) LoginArgs(RegistryLoginRequest request)

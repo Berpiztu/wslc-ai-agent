@@ -1,0 +1,85 @@
+@* Publish an image as a version in a registry: tagged there and pushed, and
+   latest with it when asked. The agent runs the push; the dialog closes and the
+   push console opens on it. The registry and the owner come from the logins
+   on the Registry page, so the usual case is only the version to type. *@
+@using WslcAgent.ApiClient
+@inject WslcAgentApi Api
+
+<FormDialog SubmitText="Publish" BusyText="Starting…" OnSubmit="PublishAsync">
+    <MudTextField T="string" Value="Source" Label="Image" ReadOnly="true" Variant="Variant.Filled" Margin="Margin.Dense" />
+    <MudTextField T="string" @bind-Value="_registry" Label="Registry" Placeholder="ghcr.io" Immediate="true"
+                  HelperText="@_loggedIn" HelperTextOnFocus="true"
+                  autocapitalize="none" autocorrect="off" spellcheck="false"
+                  Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+    <MudTextField T="string" Value="_repository" ValueChanged="@(text => _repository = ImageReference.Normalize(text ?? ""))" Label="Repository" Placeholder="owner/app" Immediate="true"
+                  Required="true" RequiredError="A repository is required"
+                  autocapitalize="none" autocorrect="off" spellcheck="false"
+                  Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+    <MudTextField T="string" @bind-Value="_version" Label="Version" Placeholder="1.4" Immediate="true"
+                  Required="true" RequiredError="A version is required" Validation="@(new Func<string, string?>(VersionError))"
+                  autocapitalize="none" autocorrect="off" spellcheck="false"
+                  Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+    <SquareCheckBox @bind-Value="_latest" Label="Also publish as latest"
+                    title="Tag and push latest too, so a machine that pulls without a version gets this one" />
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1 wslc-mono">@Target</MudText>
+</FormDialog>
+
+@code {
+    private string _registry = "";
+    private string _repository = "";
+    private string _version = "";
+    private bool _latest = true;
+    private string _loggedIn = "";
+
+    /// <summary>The local image to publish.</summary>
+    [Parameter, EditorRequired] public string Source { get; set; } = "";
+
+    /// <summary>Told the reference published, once its push has started.</summary>
+    [Parameter, EditorRequired] public Action<string> Published { get; set; } = default!;
+
+    /// <summary>
+    /// The first registry logged in to and its user as the owner, the image's own name
+    /// after it; the image's tag as the version unless it is latest, which is no version.
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        var (repository, tag) = ImageReference.Split(Source);
+        var name = repository[(repository.LastIndexOf('/') + 1)..];
+        _repository = name;
+        _version = tag == ImageReference.Latest ? "" : tag;
+        try
+        {
+            var logins = await Api.GetRegistryLoginsAsync();
+            if (logins.FirstOrDefault(login => login.Server.Length > 0) is { } login)
+            {
+                _registry = login.Server;
+                _repository = login.Username.Length > 0 ? ImageReference.Normalize($"{login.Username}/{name}") : name;
+            }
+
+            _loggedIn = logins.Count == 0
+                ? "No registry logged in: log in on the Registry page first."
+                : "Logged in: " + string.Join(", ", logins.Select(l => $"{(l.Server.Length > 0 ? l.Server : "(default)")} as {l.Username}"));
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _loggedIn = "Could not read the registry logins.";
+        }
+    }
+
+    /// <summary>The reference the version goes to in the registry.</summary>
+    private string Target =>
+        $"{(_registry.Trim().Length > 0 ? _registry.Trim().TrimEnd('/') + "/" : "")}{_repository}:{_version.Trim()}";
+
+    /// <summary>A tag is letters, digits, '.', '_' and '-', not starting with '.' or '-', at most 128 characters.</summary>
+    private static string? VersionError(string version) =>
+        System.Text.RegularExpressions.Regex.IsMatch(version.Trim(), @"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
+            ? null
+            : "Letters, digits, '.', '_' and '-'; it cannot start with '.' or '-'";
+
+    private async Task PublishAsync()
+    {
+        var target = Target;
+        await Api.PublishImageAsync(new PublishImageRequest(Source, target, _latest));
+        Published(ImageReference.Normalize(target));
+    }
+}

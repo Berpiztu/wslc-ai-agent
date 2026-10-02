@@ -62,6 +62,10 @@ public static class ContainerEndpoints
                 containers.RecreateAsync(container, request, ct))
             .WithName("RecreateContainer");
 
+        group.MapPost("/{container}/update-image", (string container, UpdateContainerImageRequest request, ContainerImageUpdates updates, CancellationToken ct) =>
+                updates.StartAsync(container, request, ct))
+            .WithName("UpdateContainerImage");
+
         MapLifecycle(group, "start", (s, id, ct) => s.StartAsync(id, ct));
         MapLifecycle(group, "stop", (s, id, ct) => s.StopAsync(id, ct));
         MapLifecycle(group, "restart", (s, id, ct) => s.RestartAsync(id, ct));
@@ -70,8 +74,8 @@ public static class ContainerEndpoints
         group.MapGet("/{container}/details", (string container, IContainerService containers, CancellationToken ct) => containers.DetailsAsync(container, ct))
             .WithName("ContainerDetails");
 
-        group.MapGet("/{container}/logs", (string container, IContainerService containers, int tail = 200, bool timestamps = false, CancellationToken ct = default) =>
-                containers.LogsAsync(container, tail, timestamps, ct))
+        group.MapGet("/{container}/logs", (string container, IContainerService containers, int tail = 200, bool timestamps = false, string since = "", CancellationToken ct = default) =>
+                containers.LogsAsync(container, tail, timestamps, ct, since))
             .WithName("ContainerLogs");
 
         group.MapGet("/{container}/stats", (string container, IContainerService containers, CancellationToken ct) => containers.StatsAsync(container, ct))

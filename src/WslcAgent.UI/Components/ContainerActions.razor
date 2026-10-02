@@ -11,9 +11,9 @@
 @inject HttpClient Http
 @inject SimulatedRemote Simulated
 
-@* A card has room a table row has not, so it leads with the six verbs most
-   reached for — details, edit, exec, files, browser, its sessions,
-   logs — and keeps
+@* A card has room a table row has not, so it leads with the verbs most
+   reached for — details, edit, update image, exec, files, browser, its
+   sessions, logs — and keeps
    the row's own verbs (start or stop, the menu, remove) at the far end. They
    stay in the menu as well, which is the whole list; a table row draws that
    group alone. The dashboard's objects draw each group alone (ShortcutsAlone,
@@ -26,6 +26,7 @@
         <MudIconButton Icon="@Icons.Material.Filled.Article" Size="Size.Small" title="View details" Disabled="Locked"
                        OnClick="@(() => Navigation.NavigateTo($"containers/{Container.Id}"))" />
         <MudIconButton Icon="@Icons.Material.Filled.EditNote" Size="Size.Small" title="View &amp; edit" Disabled="Locked" OnClick="EditAsync" />
+        <MudIconButton Icon="@Icons.Material.Filled.Update" Size="Size.Small" title="Update image" Disabled="Locked" OnClick="UpdateImageAsync" />
         <MudIconButton Icon="@Icons.Material.Filled.Terminal" Size="Size.Small" title="Exec" Disabled="Locked" OnClick="ExecAsync" />
         <MudIconButton Icon="@Icons.Material.Filled.Folder" Size="Size.Small" title="View files" Disabled="Locked" OnClick="FilesAsync" />
         <MudIconButton Icon="@Icons.Material.Filled.OpenInBrowser" Size="Size.Small" title="Open with browser" Disabled="Locked" OnClick="OpenWithBrowserAsync" />
@@ -61,6 +62,10 @@
             <MudMenuItem Icon="@Icons.Material.Filled.Article" OnClick="@(() => Navigation.NavigateTo($"containers/{Container.Id}"))">View details</MudMenuItem>
             <MudDivider />
             <MudMenuItem Icon="@Icons.Material.Filled.EditNote" OnClick="EditAsync">View &amp; edit</MudMenuItem>
+        }
+        @if (!Shortcuts)
+        {
+            <MudMenuItem Icon="@Icons.Material.Filled.Update" OnClick="UpdateImageAsync">Update image</MudMenuItem>
         }
         <MudMenuItem Icon="@Icons.Material.Filled.Security" OnClick="ViewImagePackagesAsync">View image packages and CVEs</MudMenuItem>
         <MudMenuItem Icon="@Icons.Material.Filled.ContentCopy" OnClick="@(() => CopyRunAsync(false))">Copy run command</MudMenuItem>
@@ -140,6 +145,26 @@
         {
             await Changed.InvokeAsync();
         }
+    }
+
+    /// <summary>Another version of its image: the agent pulls it and recreates the container; the pull console follows it here.</summary>
+    private async Task UpdateImageAsync()
+    {
+        string? pulling = null;
+        var parameters = new DialogParameters<Dialogs.UpdateImageDialog>
+        {
+            { d => d.Container, Container.Id },
+            { d => d.Current, Container.Image },
+            { d => d.Started, (Action<string>)(image => pulling = image) },
+        };
+        if (!await DialogFlow.ShowAsync<Dialogs.UpdateImageDialog>(Dialogs, $"Update image — {Container.Name}", parameters) || pulling is null)
+        {
+            return;
+        }
+
+        Snackbar.Add($"{Container.Name}: updating to {pulling}. The container is recreated once the pull ends.", Severity.Info);
+        await PullFlow.ShowLogAsync(Dialogs, pulling);
+        await Changed.InvokeAsync();
     }
 
     /// <summary>The raw image inspect JSON under this name, until a real package and CVE view exists.</summary>
