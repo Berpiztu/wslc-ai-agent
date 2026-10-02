@@ -4,12 +4,15 @@ using WslcAgent.Server.Registries;
 
 namespace WslcAgent.Server.Endpoints;
 
-/// <summary><c>/api/v1/registry</c>: log in and out of a container registry. See docs/api-v1.md.</summary>
+/// <summary><c>/api/v1/registry</c>: log in and out of a container registry, and the logins made. See docs/api-v1.md.</summary>
 public static class RegistryEndpoints
 {
     public static RouteGroupBuilder MapRegistryEndpoints(this RouteGroupBuilder api)
     {
         var group = api.MapGroup("/registry");
+
+        group.MapGet("/logins", (RegistryService registry) => registry.Logins())
+            .WithName("RegistryLogins");
 
         group.MapPost("/login", async Task<NoContent> (RegistryLoginRequest request, RegistryService registry, CancellationToken ct) =>
             {

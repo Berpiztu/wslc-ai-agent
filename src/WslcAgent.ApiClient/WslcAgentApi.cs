@@ -321,6 +321,9 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
 
     // Registry
 
+    public Task<IReadOnlyList<RegistryLogin>> GetRegistryLoginsAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<IReadOnlyList<RegistryLogin>>("api/v1/registry/logins", cancellationToken);
+
     public Task RegistryLoginAsync(RegistryLoginRequest request, CancellationToken cancellationToken = default) =>
         PostJsonAsync("api/v1/registry/login", request, cancellationToken);
 

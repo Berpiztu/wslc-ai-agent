@@ -118,6 +118,7 @@ builder.Services.AddSingleton<NetworkTopologyReader>();
 builder.Services.AddSingleton<ISessionService, SessionService>();
 builder.Services.AddSingleton<ISystemService, SystemService>();
 builder.Services.AddSingleton<IHomeService, HomeService>();
+builder.Services.AddSingleton<RegistryLogins>();
 builder.Services.AddSingleton<RegistryService>();
 builder.Services.AddSingleton<TerminalJobs>();
 builder.Services.AddSingleton<PackageFolders>();

@@ -162,6 +162,8 @@ publishing and cleaning up need them on.
 - **Files of an image**, browsed through a temporary container.
 - Which containers use an image; run or create a container from it.
 - **Prune** dangling images; Docker Hub one click away to find images.
+- **Registry**: log in and out of a registry (the password goes to `wslc`
+  only) and see which registries this agent is logged in to, and as whom.
 
 ### Volumes
 

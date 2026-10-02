@@ -192,8 +192,9 @@ ends every session) and the API token.
 | GET | `/logs/text?tail=500` | the same entries as plain text, or `No logs yet.` | none |
 | POST | `/logs/delete` `{ entryIds }` | `{ deleted }`: the entries are removed from the files they came from | none |
 | DELETE | `/logs` | `{ deleted }`: every file emptied, the entries past the tail included (the Logs page's Delete all) | none |
-| POST | `/registry/login` `RegistryLoginRequest { server, username, password }` (all optional) | 204 | `login [--username U] [--password-stdin] [SERVER]`, the password written to the command's standard input so it never appears in the agent log |
-| POST | `/registry/logout` `{ server }` | 204 | `logout [SERVER]` |
+| GET | `/registry/logins` | `RegistryLogin[] { server, username, since }`, by server: the logins this agent made that have not been logged out, kept in `registry-logins.json` in its data folder — never the password, which only `wslc` keeps. `wslc` cannot list its own, so a login typed at the console is not here; `server` is lowercase, empty for the session's default | none |
+| POST | `/registry/login` `RegistryLoginRequest { server, username, password }` (all optional) | 204; once it succeeds, the server and the user are listed by `/registry/logins` (a second login to the same server replaces the first) | `login [--username U] [--password-stdin] [SERVER]`, the password written to the command's standard input so it never appears in the agent log |
+| POST | `/registry/logout` `{ server }` | 204; the server leaves `/registry/logins` | `logout [SERVER]` |
 | GET | `/terminal/status` | `TerminalStatus { mode, label, serverLocal }` (`mode` always `local`; `serverLocal` when the caller sits at the agent's machine) | none |
 | GET | `/terminal/stream` | WebSocket, the host shell (`%ComSpec%`, else `System32\cmd.exe`) in the exec stream's protocol and limits; `ready` carries `label: "local host shell"`. Not a `wslc` command, so not in the agent log as one | none |
 | POST | `/terminal/open-native` `OpenTerminalRequest { command }` | `NativeTerminalResult { command, window }`: the host shell (or `command`) in a window on the agent's desktop; 403 for a client that is not that machine | none |
