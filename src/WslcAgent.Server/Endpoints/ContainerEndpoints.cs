@@ -62,6 +62,10 @@ public static class ContainerEndpoints
                 containers.RecreateAsync(container, request, ct))
             .WithName("RecreateContainer");
 
+        group.MapPost("/{container}/update-image", (string container, UpdateContainerImageRequest request, ContainerImageUpdates updates, CancellationToken ct) =>
+                updates.StartAsync(container, request, ct))
+            .WithName("UpdateContainerImage");
+
         MapLifecycle(group, "start", (s, id, ct) => s.StartAsync(id, ct));
         MapLifecycle(group, "stop", (s, id, ct) => s.StopAsync(id, ct));
         MapLifecycle(group, "restart", (s, id, ct) => s.RestartAsync(id, ct));

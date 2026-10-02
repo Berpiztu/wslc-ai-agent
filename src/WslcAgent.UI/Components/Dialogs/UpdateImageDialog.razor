@@ -1,0 +1,43 @@
+@* Move a container to another version of its image: the repository it runs
+   and the version to go to. The agent pulls it, then recreates the container
+   with everything else it has; the dialog closes and the pull console opens. *@
+@using WslcAgent.ApiClient
+@inject WslcAgentApi Api
+
+<FormDialog SubmitText="Update" BusyText="Starting…" OnSubmit="UpdateAsync">
+    <MudTextField T="string" Value="Current" Label="Current image" ReadOnly="true" Variant="Variant.Filled" Margin="Margin.Dense" />
+    <MudTextField T="string" Value="_repository" ValueChanged="@(text => _repository = ImageReference.Normalize(text ?? ""))" Label="Repository" Immediate="true"
+                  Required="true" RequiredError="A repository is required"
+                  autocapitalize="none" autocorrect="off" spellcheck="false"
+                  Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+    <MudTextField T="string" @bind-Value="_version" Label="Version" Placeholder="1.5" Immediate="true"
+                  Required="true" RequiredError="A version is required"
+                  autocapitalize="none" autocorrect="off" spellcheck="false"
+                  Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
+        The image is pulled, then the container is recreated with its ports, mounts, environment and name. If the new version does not start, the previous container stays as it was.
+        Leave latest for the version published last, or type one (1.4) to go to that one, or back to it.
+    </MudText>
+</FormDialog>
+
+@code {
+    private string _repository = "";
+    /// <summary>latest unless another is typed: the version published last, which is what an update usually wants.</summary>
+    private string _version = ImageReference.Latest;
+
+    [Parameter, EditorRequired] public string Container { get; set; } = "";
+
+    /// <summary>The image the container runs now.</summary>
+    [Parameter, EditorRequired] public string Current { get; set; } = "";
+
+    /// <summary>Told the image being pulled, once the update has started.</summary>
+    [Parameter, EditorRequired] public Action<string> Started { get; set; } = default!;
+
+    protected override void OnInitialized() => _repository = ImageReference.RepositoryOf(ImageReference.Normalize(Current));
+
+    private async Task UpdateAsync()
+    {
+        var pull = await Api.UpdateContainerImageAsync(Container, $"{_repository}:{_version.Trim()}");
+        Started(pull.Image);
+    }
+}

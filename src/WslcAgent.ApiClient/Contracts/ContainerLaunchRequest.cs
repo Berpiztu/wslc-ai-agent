@@ -99,6 +99,10 @@ public sealed record RestartPolicyInfo(string Policy, string Desired, bool Enrol
     public static bool IsKnown(string policy) => policy is No or UnlessStopped or Always;
 }
 
+/// <summary>Body of <c>POST /api/v1/containers/{id}/update-image</c>.</summary>
+/// <param name="Image">The new image with its version: <c>ghcr.io/owner/app:1.5</c>.</param>
+public sealed record UpdateContainerImageRequest(string Image);
+
 /// <summary>Body of <c>PUT /api/v1/containers/{id}/restart-policy</c>.</summary>
 public sealed record SetRestartPolicyRequest(string Policy);
 

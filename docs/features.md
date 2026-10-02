@@ -142,6 +142,10 @@ publishing and cleaning up need them on.
 - **View and edit** an existing container: saving recreates it with the new
   settings, rehearsed first under another name; if anything fails, the old one
   is restored.
+- **Update image**: a container moved to another version of its image, say
+  one published from another machine: the version is pulled with its console,
+  then the container is recreated with everything else it had, and the old one
+  stays if the new version does not start.
 - **Actions**: start, stop, restart, kill, remove; logs; live stats; files;
   a shell; copy the run command; export JSON; back up.
 - **Details page**: logs, the editable form, the raw inspect JSON, bind

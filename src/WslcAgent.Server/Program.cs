@@ -107,6 +107,7 @@ builder.Services.AddSingleton<ImagePulls>();
 builder.Services.AddSingleton<ImagePushes>();
 builder.Services.AddSingleton<ImagePublisher>();
 builder.Services.AddSingleton<ContainerLaunches>();
+builder.Services.AddSingleton<ContainerImageUpdates>();
 builder.Services.AddSingleton<ImageArchives>();
 builder.Services.AddSingleton<IVolumeService, VolumeService>();
 builder.Services.AddSingleton<INetworkService, NetworkService>();

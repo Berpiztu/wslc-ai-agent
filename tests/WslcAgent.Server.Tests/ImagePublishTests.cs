@@ -38,6 +38,18 @@ public sealed class ImagePublishTests(WebApplicationFactory<Program> factory)
     }
 
     [Fact]
+    public async Task An_image_update_of_a_container_that_is_not_there_pulls_nothing()
+    {
+        var client = factory.ClientWith(new FakeWslcRunner());
+
+        var response = await client.PostAsJsonAsync("/api/v1/containers/ghost/update-image", new UpdateContainerImageRequest("ghcr.io/me/app:1.5"));
+        var pulls = await client.GetFromJsonAsync<List<ImagePullState>>("/api/v1/images/pulls");
+
+        Assert.False(response.IsSuccessStatusCode);
+        Assert.Empty(pulls!);
+    }
+
+    [Fact]
     public async Task Publish_without_a_version_is_refused_before_anything_runs()
     {
         var runner = new FakeWslcRunner();
