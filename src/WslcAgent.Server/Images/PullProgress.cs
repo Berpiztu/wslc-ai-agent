@@ -7,7 +7,9 @@ namespace WslcAgent.Server.Images;
 /// What a <c>wslc image pull</c> terminal output says:
 /// the layers seen and how far each got (downloading is the first half,
 /// extracting the second), a status line to show, the error worth repeating,
-/// and the log as text without terminal codes.
+/// and the log as text without terminal codes. A push draws the same layer
+/// lines and is failed and logged alike; <see cref="PushProgress"/> reads its
+/// steps with the helpers left internal here.
 /// </summary>
 public static partial class PullProgress
 {
@@ -119,14 +121,14 @@ public static partial class PullProgress
     /// not with line breaks: a cursor move or an erase is where one update ends, as a
     /// carriage return is. Other codes (colours) are only removed; blank lines dropped.
     /// </summary>
-    private static IEnumerable<string> Lines(string output) =>
+    internal static IEnumerable<string> Lines(string output) =>
         Escape().Replace(CursorMove().Replace(output, "\n"), "")
             .Replace('\r', '\n')
             .Split('\n')
             .Select(line => line.Trim())
             .Where(line => line.Length > 0);
 
-    private static (double Current, double Total)? Sizes(string message)
+    internal static (double Current, double Total)? Sizes(string message)
     {
         var match = SizeProgress().Match(message);
         if (!match.Success)
@@ -139,7 +141,7 @@ public static partial class PullProgress
         return total > 0 ? (current, total) : null;
     }
 
-    private static void Set(Dictionary<string, double> progress, string layer, double value)
+    internal static void Set(Dictionary<string, double> progress, string layer, double value)
     {
         if (layer.Length > 0)
         {
@@ -147,7 +149,7 @@ public static partial class PullProgress
         }
     }
 
-    private static void Raise(Dictionary<string, double> progress, string layer, double value)
+    internal static void Raise(Dictionary<string, double> progress, string layer, double value)
     {
         if (layer.Length > 0)
         {
@@ -162,7 +164,7 @@ public static partial class PullProgress
     private static partial Regex Escape();
 
     [GeneratedRegex(@"([0-9a-f]{12}):\s*(.*)", RegexOptions.IgnoreCase)]
-    private static partial Regex LayerLine();
+    internal static partial Regex LayerLine();
 
     [GeneratedRegex(@"([0-9]+(?:\.[0-9]+)?)\s*(B|KB|MB|GB|TB)\s*/\s*([0-9]+(?:\.[0-9]+)?)\s*(B|KB|MB|GB|TB)", RegexOptions.IgnoreCase)]
     private static partial Regex SizeProgress();

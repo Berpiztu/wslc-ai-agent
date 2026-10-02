@@ -146,6 +146,12 @@ ends every session) and the API token.
 | DELETE | `/images/pulls?image=` | 204: a failed or cancelled pull is forgotten before its 5 min are up, so its row goes for every client (the row's cross); 409 while it is still running, 204 when it was already gone | none |
 | POST | `/images/tag` `{ source, target }` | 204 | `image tag SOURCE TARGET` |
 | POST | `/images/push` `{ reference, allTags }` | 204 | `image push [--all-tags] REFERENCE` (30 min) |
+| POST | `/images/publish` `PublishImageRequest { source, target, latest }` | `ImagePullState[]`, the pushes started: `target` (a version is required, else 400 before anything runs; lowercased as an image name is) and, with `latest`, the same repository's `latest` | `image tag SOURCE TARGET` (and `… REPOSITORY:latest`), then each pushed as `/images/pushes` does |
+| GET | `/images/pushes` | `ImagePullState[]`: the pushes the agent runs, as its pulls — running, or ended a moment ago (success 5 s, failed or cancelled 5 min) | none |
+| POST | `/images/pushes` `{ reference, allTags }` | `ImagePullState`, at once; one already running is joined. The end raises a `Push finished` or `Push failed` notification | `image push [--all-tags] REFERENCE` behind a pseudo console, its progress read from what it draws (each layer uploading, already in the registry or mounted from another repository) |
+| GET | `/images/pushes/log?image=` | `ImagePullLog`: the push's console, as a pull's | none |
+| POST | `/images/pushes/cancel` `{ reference }` | `{ cancelled }`, false when no push of it was running | none (the process is killed) |
+| DELETE | `/images/pushes?image=` | 204; 409 while it still runs | none |
 | POST | `/images/save` `{ reference, output }` | `SavedImage { reference, path }`: the archive on the agent's machine; a bare file name goes to the Downloads folder of the user the agent runs as | `image save --output PATH REFERENCE` (30 min) |
 | POST | `/images/files-session` `{ reference }` | `FilesSession { container, root }`: a helper container (`wslc-agent-files-…`, hidden from the lists) that only sleeps; browse it with the container files endpoints from `root` (`/`). Never pulls: a missing image answers "Image … is no longer available" | `container run --detach --name NAME --entrypoint sleep --pull never IMAGE infinity` |
 | DELETE | `/images/files-session/{container}` | 204; 400 for a container that is not a files helper | `container inspect ID`, then `container rm --force ID` |

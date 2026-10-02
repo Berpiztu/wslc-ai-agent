@@ -1,5 +1,5 @@
-@* The pull console: the live wslc pull output, its progress and
-   status. Close leaves the pull running; Cancel stops it, after asking. *@
+@* The console of a pull or a push the agent runs: its live wslc output, its progress and
+   status. Close leaves it running; Cancel stops it, after asking. *@
 @implements IDisposable
 @inject WslcAgentApi Api
 @inject IDialogService Dialogs
@@ -8,7 +8,7 @@
 
 <MudDialog ContentClass="wslc-dialog-action">
     <TitleContent>
-        <DialogTitle Title="Pull progress">
+        <DialogTitle Title="@($"{Verb} progress")">
             <Info>
                 <MudChip T="string" Size="Size.Small" Class="my-0">@Image</MudChip>
             </Info>
@@ -29,7 +29,7 @@
         <div class="d-flex align-center flex-shrink-0 my-1">
             <MudText Typo="Typo.body2" Class="flex-grow-1" role="status">@_status</MudText>
             <div class="wslc-action-rail wslc-action-row" role="toolbar">
-                <FollowRing Follow="_follow" Held="Held" Title="@FollowRing.TitleFor("the pull output", _follow, Held)" FollowChanged="ToggleFollowAsync" />
+                <FollowRing Follow="_follow" Held="Held" Title="@FollowRing.TitleFor($"the {Noun} output", _follow, Held)" FollowChanged="ToggleFollowAsync" />
             </div>
         </div>
         <pre id="@_outputId" class="wslc-logs-output wslc-logs-pre wslc-logs-wrap"
@@ -42,7 +42,7 @@
     private static readonly TimeSpan PollEvery = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan StartWait = TimeSpan.FromSeconds(45);
 
-    private readonly string _outputId = "pull-log-" + Guid.NewGuid().ToString("N");
+    private readonly string _outputId = "image-job-log-" + Guid.NewGuid().ToString("N");
     private readonly CancellationTokenSource _stop = new();
     private readonly DateTimeOffset _openedAt = DateTimeOffset.UtcNow;
     private bool _seenActive;
@@ -51,8 +51,8 @@
     private bool _pointerOn;
     private bool _fingerOn;
     private int _pct;
-    private string _status = "Waiting for wslc pull…";
-    private string _log = "Waiting for wslc pull output…";
+    private string _status = "";
+    private string _log = "";
 
     [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
 
@@ -61,8 +61,17 @@
     /// <summary>Opened from a row that already knows the pull has ended: its output is painted at once, and there is nothing to cancel.</summary>
     [Parameter] public bool Finished { get; set; }
 
+    /// <summary>The push of <see cref="Image"/>, not its pull.</summary>
+    [Parameter] public bool Push { get; set; }
+
+    private string Verb => Push ? "Push" : "Pull";
+
+    private string Noun => Verb.ToLowerInvariant();
+
     protected override void OnInitialized()
     {
+        _status = $"Waiting for wslc {Noun}…";
+        _log = $"Waiting for wslc {Noun} output…";
         _seenActive = Finished;
         _showCancel = !Finished;
         _ = PollAsync(_stop.Token);
@@ -79,7 +88,7 @@
         {
             do
             {
-                var state = await Api.GetImagePullLogAsync(Image, cancellationToken);
+                var state = await (Push ? Api.GetImagePushLogAsync(Image, cancellationToken) : Api.GetImagePullLogAsync(Image, cancellationToken));
                 _seenActive |= state.Active;
                 if (!state.Active && !_seenActive && DateTimeOffset.UtcNow - _openedAt < StartWait)
                 {
@@ -87,8 +96,8 @@
                 }
 
                 _pct = Math.Clamp(state.Pct, 0, 100);
-                _status = state.Status.Length > 0 ? state.Status : state.Active ? "Pulling..." : "Pull finished";
-                _log = (state.Truncated ? "… earlier output trimmed …\n" : "") + (state.Log.Length > 0 ? state.Log : "Waiting for wslc pull output…");
+                _status = state.Status.Length > 0 ? state.Status : state.Active ? $"{Verb}ing..." : $"{Verb} finished";
+                _log = (state.Truncated ? "… earlier output trimmed …\n" : "") + (state.Log.Length > 0 ? state.Log : $"Waiting for wslc {Noun} output…");
                 _showCancel = state.Active;
                 await InvokeAsync(Repaint);
                 if (_follow && !Held)
@@ -109,14 +118,14 @@
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
         {
-            _status = ex.Message.Length > 0 ? ex.Message : "Could not read pull output";
+            _status = ex.Message.Length > 0 ? ex.Message : $"Could not read {Noun} output";
             await InvokeAsync(Repaint);
         }
     }
 
     private async Task CancelAsync()
     {
-        if (await PullFlow.CancelAsync(Dialogs, Api, Snackbar, Image))
+        if (await PullFlow.CancelAsync(Dialogs, Api, Snackbar, Image, Push))
         {
             Dialog.Close();
         }

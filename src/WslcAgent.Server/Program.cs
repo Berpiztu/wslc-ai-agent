@@ -104,6 +104,8 @@ builder.Services.AddSingleton(services => new ApprovalGate(
 builder.Services.AddSingleton<IImageService, ImageService>();
 builder.Services.AddSingleton<ImageBuilds>();
 builder.Services.AddSingleton<ImagePulls>();
+builder.Services.AddSingleton<ImagePushes>();
+builder.Services.AddSingleton<ImagePublisher>();
 builder.Services.AddSingleton<ContainerLaunches>();
 builder.Services.AddSingleton<ImageArchives>();
 builder.Services.AddSingleton<IVolumeService, VolumeService>();

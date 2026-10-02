@@ -5,24 +5,29 @@ using WslcAgent.UI.Components.Dialogs;
 
 namespace WslcAgent.UI.Components;
 
-/// <summary>What the Images and Containers pages share about a pull the agent runs: its console, cancelling it, forgetting it, and matching it to a row.</summary>
+/// <summary>What the Images and Containers pages share about a pull the agent runs — its console, cancelling it, forgetting it, matching it to a row — and the console of a push, which is the same one.</summary>
 public static class PullFlow
 {
     /// <summary>The pull's console; <paramref name="finished"/> when the row already knows the pull has ended, so the console paints at once instead of waiting for it to start.</summary>
     public static Task<bool> ShowLogAsync(IDialogService dialogs, string image, bool finished = false) =>
         DialogFlow.ShowAsync<PullLogDialog>(dialogs, "Pull progress", new DialogParameters<PullLogDialog> { { d => d.Image, image }, { d => d.Finished, finished } }, large: true);
 
-    /// <summary>Asks, then stops the pull; true when it was running and is stopping.</summary>
-    public static async Task<bool> CancelAsync(IDialogService dialogs, WslcAgentApi api, ISnackbar snackbar, string image)
+    /// <summary>The console of a push the agent runs (a publish), the pull's own with the push's output.</summary>
+    public static Task<bool> ShowPushLogAsync(IDialogService dialogs, string image) =>
+        DialogFlow.ShowAsync<PullLogDialog>(dialogs, "Push progress", new DialogParameters<PullLogDialog> { { d => d.Image, image }, { d => d.Push, true } }, large: true);
+
+    /// <summary>Asks, then stops the pull (or the push); true when it was running and is stopping.</summary>
+    public static async Task<bool> CancelAsync(IDialogService dialogs, WslcAgentApi api, ISnackbar snackbar, string image, bool push = false)
     {
-        if (!await DialogFlow.ConfirmAsync(dialogs, "Cancel pull", "Are you sure you want to cancel this pull?", "Cancel pull", destructive: true))
+        var noun = push ? "push" : "pull";
+        if (!await DialogFlow.ConfirmAsync(dialogs, $"Cancel {noun}", $"Are you sure you want to cancel this {noun}?", $"Cancel {noun}", destructive: true))
         {
             return false;
         }
 
         try
         {
-            return (await api.CancelImagePullAsync(image)).Cancelled;
+            return (await (push ? api.CancelImagePushAsync(image) : api.CancelImagePullAsync(image))).Cancelled;
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
         {

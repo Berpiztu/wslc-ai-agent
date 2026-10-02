@@ -55,6 +55,29 @@ public static class ImageEndpoints
             })
             .WithName("PushImage");
 
+        group.MapPost("/publish", (PublishImageRequest request, ImagePublisher publisher, CancellationToken ct) => publisher.PublishAsync(request, ct))
+            .WithName("PublishImage");
+
+        // The pushes the agent owns, as its pulls: what the push console follows.
+        group.MapGet("/pushes", (ImagePushes pushes) => pushes.List())
+            .WithName("ImagePushes");
+
+        group.MapPost("/pushes", (PushImageRequest request, ImagePushes pushes) => pushes.Start(request.Reference, request.AllTags))
+            .WithName("StartImagePush");
+
+        group.MapGet("/pushes/log", (string image, ImagePushes pushes) => pushes.Log(image))
+            .WithName("ImagePushLog");
+
+        group.MapPost("/pushes/cancel", (PushImageRequest request, ImagePushes pushes) => new CancelImagePullResult(pushes.Cancel(request.Reference)))
+            .WithName("CancelImagePush");
+
+        group.MapDelete("/pushes", NoContent (string image, ImagePushes pushes) =>
+            {
+                pushes.Dismiss(image);
+                return TypedResults.NoContent();
+            })
+            .WithName("DismissImagePush");
+
         group.MapPost("/save", (SaveImageRequest request, IImageService images, CancellationToken ct) => images.SaveAsync(request.Reference, request.Output, ct))
             .WithName("SaveImage");
 

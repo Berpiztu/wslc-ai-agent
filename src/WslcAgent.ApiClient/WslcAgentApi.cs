@@ -728,6 +728,19 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task PushImageAsync(string reference, bool allTags = false, CancellationToken cancellationToken = default) =>
         PostJsonAsync("api/v1/images/push", new PushImageRequest(reference, allTags), cancellationToken);
 
+    /// <summary>Tags the image as a version in a registry and starts its push (and <c>latest</c>'s); returns the pushes started.</summary>
+    public Task<IReadOnlyList<ImagePullState>> PublishImageAsync(PublishImageRequest request, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<PublishImageRequest, IReadOnlyList<ImagePullState>>("api/v1/images/publish", request, cancellationToken);
+
+    public Task<IReadOnlyList<ImagePullState>> GetImagePushesAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<IReadOnlyList<ImagePullState>>("api/v1/images/pushes", cancellationToken);
+
+    public Task<ImagePullLog> GetImagePushLogAsync(string image, CancellationToken cancellationToken = default) =>
+        GetAsync<ImagePullLog>($"api/v1/images/pushes/log?image={Escape(image)}", cancellationToken);
+
+    public Task<CancelImagePullResult> CancelImagePushAsync(string image, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<PushImageRequest, CancelImagePullResult>("api/v1/images/pushes/cancel", new PushImageRequest(image), cancellationToken);
+
     /// <summary>A tar archive written on the agent's machine; a bare name goes to that user's Downloads.</summary>
     public Task<SavedImage> SaveImageAsync(string reference, string output, CancellationToken cancellationToken = default) =>
         PostJsonAsync<SaveImageRequest, SavedImage>("api/v1/images/save", new SaveImageRequest(reference, output), cancellationToken);

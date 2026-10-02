@@ -48,6 +48,12 @@ public sealed record TagImageRequest(string Source, string Target);
 /// <summary>Body of <c>POST /api/v1/images/push</c>: <c>wslc image push [--all-tags] REFERENCE</c>.</summary>
 public sealed record PushImageRequest(string Reference, bool AllTags = false);
 
+/// <summary>Body of <c>POST /api/v1/images/publish</c>: a local image tagged as a version in a registry and pushed there.</summary>
+/// <param name="Source">The local image, as listed.</param>
+/// <param name="Target">The reference in the registry, with its version: <c>ghcr.io/owner/app:1.4</c>.</param>
+/// <param name="Latest">Also tag and push <c>latest</c> of the same repository.</param>
+public sealed record PublishImageRequest(string Source, string Target, bool Latest = false);
+
 /// <summary>
 /// Body of <c>POST /api/v1/images/save</c>: <c>wslc image save --output PATH REFERENCE</c>.
 /// A bare file name lands in the Downloads folder of the user the agent runs as.
