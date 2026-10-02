@@ -43,9 +43,22 @@
             {
                 <div class="wslc-log-line wslc-log-empty">@(_viewCleared ? "Logs cleared." : "No logs.")</div>
             }
+            @* A line with a time or a level is drawn as the Logs page draws an entry — time,
+               level, source and message each its colour (wslc-log-entry); any other keeps
+               its level's colour whole. *@
             @foreach (var line in _lines.Where(l => l.Matches(_query, _level)))
             {
-                <div class="wslc-log-line @(line.Level.Length > 0 ? "log-level-" + line.Level : "")">@(line.Text.Length == 0 ? " " : line.Text)</div>
+                <div class="wslc-log-line @(line.Parts.Count > 0 ? "wslc-log-entry" : "") @(line.Level.Length > 0 ? "log-level-" + line.Level : "")">@if (line.Parts.Count == 0)
+                    {
+                        @(line.Text.Length == 0 ? " " : line.Text)
+                    }
+                    else
+                    {
+                        @foreach (var part in line.Parts)
+                        {
+                            <span class="@part.Class">@part.Text</span>
+                        }
+                    }</div>
             }
         </div>
     </div>
