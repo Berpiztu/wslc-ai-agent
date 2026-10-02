@@ -208,12 +208,33 @@ window.wslcAgent = {
         }
     },
 
-    // What the stylesheet reads: one custom property per value, on the document,
-    // so applying a look is one write and no screen has to be drawn again.
-    // A file out of the browser, for the one thing the application has no other
-    // way to hand over: a look, so it can be carried to another machine.
-    download(name, text, type) {
+    // A file the application writes out of the browser: a look, a dashboard
+    // exported, so it can be carried to another machine. Asked for the way
+    // pickFiles asks for one to send, for the same reason: Chromium's own
+    // chooser, the one a download opens, stops answering — Save is pressed
+    // again and again and nothing is written (the owner, 1 October 2026, as
+    // Open did before). showSaveFilePicker does not go through it, and opens
+    // where it was left. The download stays for a page that is not a secure
+    // context, for Firefox, and for anything the API refuses.
+    async download(name, text, type) {
         const blob = new Blob([text], { type: type || 'application/json' });
+        if (window.showSaveFilePicker) {
+            try {
+                const handle = await window.showSaveFilePicker({ suggestedName: name, id: 'wslcAgentSave' });
+                const writable = await handle.createWritable();
+                await writable.write(blob);
+                await writable.close();
+                return;
+            } catch (failure) {
+                if (failure && failure.name === 'AbortError') {
+                    // Closed with nothing chosen, which is an answer.
+                    return;
+                }
+                // A browser that has the API and will not use it here (a page
+                // the user has not touched for a while): the download instead.
+            }
+        }
+
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -264,6 +285,8 @@ window.wslcAgent = {
         }
     },
 
+    // What the stylesheet reads: one custom property per value, on the document,
+    // so applying a look is one write and no screen has to be drawn again.
     styleVars(values) {
         for (const [name, value] of Object.entries(values || {})) {
             if (value === '') {

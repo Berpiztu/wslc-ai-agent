@@ -41,7 +41,11 @@ agent raises by itself. Every state the user's dashboard is saved in is kept
 given by the installation or by a file imported — and the user's revision
 within it: v2.0 is version 2 as it came, v2.3 the third save since. Loading
 from the release or a file starts a new origin at revision 0; Restore brings
-any state back under its own name.
+any state back under its own name. Nothing is replaced unrecorded: before a
+reset, a load, a restore or a save, the dashboard it replaces is recorded
+first ("Kept before: …") whenever the history does not already hold it as
+its newest state — one saved before the history existed, above all. A reset
+to the release once wrote over a whole dashboard that was nowhere else.
 
 **The resources travel by name.** An object keeps only its resource's uid,
 a number each agent gives its containers, images, volumes and networks in

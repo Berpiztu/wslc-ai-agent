@@ -696,84 +696,135 @@
       "size": "medium"
     },
     "wslc.system-agent": {
-      "w": 6,
-      "h": 4,
-      "size": "medium",
-      "x": 0,
-      "y": 0
+      "w": 4,
+      "h": 2,
+      "size": "small",
+      "parts": {
+        "label": {
+          "size": "small",
+          "isDesign": false
+        }
+      },
+      "x": 1,
+      "y": 1
     },
     "wslc.system-client": {
-      "w": 7,
-      "h": 4,
-      "size": "medium",
-      "x": 6,
-      "y": 0
+      "w": 4,
+      "h": 2,
+      "size": "small",
+      "x": 5,
+      "y": 1
     },
     "wslc.system-wslc": {
-      "w": 6,
-      "h": 4,
-      "size": "medium",
-      "x": 13,
-      "y": 0
+      "w": 4,
+      "h": 2,
+      "size": "small",
+      "horizontal": "left",
+      "parts": {
+        "label": {
+          "size": "small",
+          "isDesign": false
+        }
+      },
+      "x": 9,
+      "y": 1
     },
     "wslc.system-kernel": {
-      "w": 6,
-      "h": 4,
-      "size": "medium",
-      "x": 25,
-      "y": 0
+      "w": 4,
+      "h": 2,
+      "size": "small",
+      "parts": {
+        "label": {
+          "size": "small",
+          "isDesign": false
+        }
+      },
+      "x": 17,
+      "y": 1
     },
     "wslc.host-cpu-dial": {
-      "w": 5,
-      "h": 5,
-      "size": "medium",
+      "w": 4,
+      "h": 4,
+      "size": "small",
       "background": "primaryTint",
-      "x": 6,
-      "y": 5,
+      "parts": {
+        "ring": {
+          "size": "small",
+          "isDesign": false
+        }
+      },
+      "x": 9,
+      "y": 3,
       "elevation": 5
     },
     "wslc.host-memory-dial": {
-      "w": 6,
-      "h": 6,
-      "size": "medium",
+      "w": 4,
+      "h": 4,
+      "size": "small",
       "background": "primaryTint",
-      "x": 11,
-      "y": 4,
+      "parts": {
+        "ring": {
+          "size": "small",
+          "isDesign": false
+        }
+      },
+      "x": 13,
+      "y": 3,
       "elevation": 5
     },
     "wslc.host-disk-dial": {
-      "w": 6,
-      "h": 6,
-      "size": "medium",
+      "w": 4,
+      "h": 4,
+      "size": "small",
       "background": "primaryTint",
-      "x": 19,
-      "y": 4,
+      "parts": {
+        "ring": {
+          "size": "small",
+          "isDesign": false
+        }
+      },
+      "x": 17,
+      "y": 3,
       "elevation": 5
     },
     "wslc.system-events": {
-      "w": 6,
-      "h": 4,
-      "size": "medium",
-      "x": 25,
-      "y": 4
+      "w": 4,
+      "h": 2,
+      "size": "small",
+      "horizontal": "left",
+      "x": 17,
+      "y": 1
     },
     "wslc.system-card": {
-      "w": 32,
-      "h": 10,
+      "w": 22,
+      "h": 8,
       "size": "medium",
       "background": "primaryTint"
     },
     "wslc.system-windows": {
-      "w": 6,
-      "h": 4,
+      "w": 4,
+      "h": 2,
       "size": "small",
-      "x": 19,
-      "y": 0
+      "parts": {
+        "label": {
+          "size": "small",
+          "isDesign": false
+        }
+      },
+      "x": 13,
+      "y": 1
     },
     "berpiztu.text": {
       "w": 13,
       "h": 2,
       "size": "medium"
+    },
+    "wslc.system-session": {
+      "w": 8,
+      "h": 4,
+      "size": "medium",
+      "x": 1,
+      "y": 3
     }
   }
 }

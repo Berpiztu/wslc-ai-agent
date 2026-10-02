@@ -48,6 +48,16 @@ public sealed class DashboardHistory(IOptions<WslcOptions> options)
         }
     }
 
+    /// <summary>Whether the newest revision is this dashboard: false before anything was recorded.</summary>
+    public bool NewestIs(string layout)
+    {
+        lock (_gate)
+        {
+            return Files().LastOrDefault() is { } newest && Read(newest) is { } entry
+                && JsonNode.DeepEquals(entry.Content, JsonNode.Parse(layout));
+        }
+    }
+
     /// <summary>A revision's dashboard; null for one that is not kept.</summary>
     public string? Content(int id)
     {

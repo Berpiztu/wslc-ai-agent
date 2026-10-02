@@ -71,6 +71,7 @@ public sealed class DashboardV2Store
     {
         lock (_gate)
         {
+            KeepWhatIsReplaced(note);
             _layout = string.IsNullOrWhiteSpace(layout) ? null : layout;
             if (_layout is null)
             {
@@ -80,6 +81,29 @@ public sealed class DashboardV2Store
 
             ShippedFile.WriteFile(_path, _layout);
             _history.Record(_layout, origin, note, revision);
+        }
+    }
+
+    /// <summary>
+    /// The dashboard about to be replaced recorded first, when the history
+    /// does not hold it as its newest: one saved before the history was kept,
+    /// or written by hand. Nothing the user had is lost to a reset, a restore
+    /// or a load (a reset to the release once wrote over a whole dashboard
+    /// that was nowhere else); Restore brings it back.
+    /// </summary>
+    private void KeepWhatIsReplaced(string note)
+    {
+        try
+        {
+            if (_layout is { } replaced && !_history.NewestIs(replaced))
+            {
+                _history.Record(replaced, null, $"Kept before: {note}");
+            }
+        }
+        catch (JsonException)
+        {
+            // Text that is not a dashboard (a file broken by hand) shows nothing
+            // and cannot be brought back; the change goes on without it.
         }
     }
 
