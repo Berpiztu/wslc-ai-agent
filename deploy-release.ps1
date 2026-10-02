@@ -11,8 +11,8 @@
     it in private\version.props. A release raises the repository's:
 
       1. Takes what this checkout holds: goes to main, from whatever branch
-         it was run on (one with commits of its own has to be merged or
-         offered as a pull request first), and commits the changes not
+         it was run on (one with commits of its own has to be pushed and in
+         a pull request, open or merged, first), and commits the changes not
          committed yet, with a message it writes itself; new files are
          listed and taken only when the person says so.
       2. Brings main up to date (rebasing that commit on top). Then, for
@@ -80,7 +80,19 @@ $branch = (git branch --show-current)
 if ($branch -ne "main") {
     $ahead = [int](git rev-list --count "main..HEAD")
     if ($ahead -gt 0) {
-        throw "The branch $branch has $ahead commit(s) main does not; push it and open a pull request (this script then offers it), or merge it into main, and run this again."
+        # Commits of its own are safe to leave behind once GitHub has them in a pull
+        # request: an open one is offered below, a merged one comes with main.
+        # A merged one may have had its branch deleted by GitHub; an open one has
+        # to hold every commit made here.
+        $state = gh pr view $branch --json state --jq .state 2>$null
+        if ($state -eq "OPEN") {
+            git fetch --quiet origin $branch 2>$null
+            if ($LASTEXITCODE -ne 0 -or [int](git rev-list --count "origin/$branch..HEAD") -gt 0) { $state = "" }
+        }
+        if ($state -notin @("OPEN", "MERGED")) {
+            throw "The branch $branch has $ahead commit(s) main does not, and no pull request on GitHub holds them; push it and open a pull request (this script then offers it), or merge it into main, and run this again."
+        }
+        Write-Host "The branch $branch is pull request ($state) on GitHub: the release is made on main." -ForegroundColor Cyan
     }
     git switch main
     if ($LASTEXITCODE -ne 0) { throw "Could not switch to main with these changes; commit or put them aside and run this again." }
