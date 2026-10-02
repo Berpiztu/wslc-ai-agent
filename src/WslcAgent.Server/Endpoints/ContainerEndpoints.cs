@@ -74,8 +74,8 @@ public static class ContainerEndpoints
         group.MapGet("/{container}/details", (string container, IContainerService containers, CancellationToken ct) => containers.DetailsAsync(container, ct))
             .WithName("ContainerDetails");
 
-        group.MapGet("/{container}/logs", (string container, IContainerService containers, int tail = 200, bool timestamps = false, CancellationToken ct = default) =>
-                containers.LogsAsync(container, tail, timestamps, ct))
+        group.MapGet("/{container}/logs", (string container, IContainerService containers, int tail = 200, bool timestamps = false, string since = "", CancellationToken ct = default) =>
+                containers.LogsAsync(container, tail, timestamps, ct, since))
             .WithName("ContainerLogs");
 
         group.MapGet("/{container}/stats", (string container, IContainerService containers, CancellationToken ct) => containers.StatsAsync(container, ct))

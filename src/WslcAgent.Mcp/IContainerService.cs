@@ -35,8 +35,8 @@ public interface IContainerService
     /// <summary>Header, mounts, the launch form the container was created with, its restart policy and the raw inspect JSON.</summary>
     Task<ContainerDetails> DetailsAsync(string container, CancellationToken cancellationToken = default);
 
-    /// <summary><c>wslc container logs [--tail N] [--timestamps]</c>: stderr (lifecycle) first, then stdout.</summary>
-    Task<ContainerLogs> LogsAsync(string container, int tail, bool timestamps, CancellationToken cancellationToken = default);
+    /// <summary><c>wslc container logs [--tail N] [--timestamps] [--since T]</c>: stderr (lifecycle) first, then stdout. <paramref name="since"/> (RFC 3339) keeps only the lines from that moment on.</summary>
+    Task<ContainerLogs> LogsAsync(string container, int tail, bool timestamps, CancellationToken cancellationToken = default, string since = "");
 
     /// <summary>One <c>wslc container stats</c> sample of the container, as numbers.</summary>
     Task<ContainerStats> StatsAsync(string container, CancellationToken cancellationToken = default);

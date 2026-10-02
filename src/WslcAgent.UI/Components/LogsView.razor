@@ -6,6 +6,7 @@
    or finger on it, when the lines stay as they are and the ring stands still,
    and the box catches up on the first tick after they leave. Nothing moves
    under a reader, and nothing scrolls when nothing new arrived. *@
+@using System.Globalization
 @using WslcAgent.ApiClient
 @inject WslcAgentApi Api
 @inject IJSRuntime Js
@@ -71,7 +72,6 @@
 
 @code {
     private static readonly TimeSpan RefreshEvery = TimeSpan.FromSeconds(2);
-    private const int SyncWindow = 12;
     private readonly string _outputId = "logs-" + Guid.NewGuid().ToString("N");
     private List<LogLine> _lines = [];
     private string _query = "";
@@ -84,7 +84,8 @@
     private bool _loading;
     private bool _viewCleared;
     private bool _scrollPending;
-    private List<string>? _clearedTail;
+    /// <summary>After a view clear, the stamp of the last line cleared (the container's clock): only what came after is shown.</summary>
+    private DateTimeOffset? _clearedAt;
     private string? _error;
     private PeriodicTimer? _timer;
     private CancellationTokenSource? _stop;
@@ -135,7 +136,7 @@
         }
     }
 
-    /// <summary>The snapshot; after a view clear only the lines past the cleared ones.</summary>
+    /// <summary>The snapshot; after a view clear only the lines written since.</summary>
     private async Task RefreshAsync()
     {
         if (_loading)
@@ -146,8 +147,10 @@
         _loading = true;
         try
         {
-            var lines = LogLines.Split(await Api.GetContainerLogsAsync(Container, Tail, false));
-            var shown = _clearedTail is null ? lines : LinesAfter(lines, _clearedTail);
+            var text = _clearedAt is { } cleared
+                ? LinesAfter(await Api.GetContainerLogsAsync(Container, Tail, true, since: Rfc3339(cleared)), cleared)
+                : await Api.GetContainerLogsAsync(Container, Tail, false);
+            var shown = LogLines.Split(text);
             // The end is sought only when something new arrived: a box that jumps to
             // where it already is still jumps.
             _scrollPending = _follow && !shown.Select(l => l.Text).SequenceEqual(_lines.Select(l => l.Text));
@@ -166,24 +169,10 @@
         }
     }
 
-    /// <summary>The lines after the last occurrence of <paramref name="tail"/> (a sliding window, so repeated lines do not break the sync); everything when it is not there.</summary>
-    private static List<LogLine> LinesAfter(List<LogLine> lines, List<string> tail)
-    {
-        for (var start = lines.Count - tail.Count; start >= 0; start--)
-        {
-            if (Enumerable.Range(0, tail.Count).All(i => lines[start + i].Text == tail[i]))
-            {
-                return lines.Skip(start + tail.Count).ToList();
-            }
-        }
-
-        return lines;
-    }
-
     private async Task ReloadAsync()
     {
         _viewCleared = false;
-        _clearedTail = null;
+        _clearedAt = null;
         await RefreshAsync();
     }
 
@@ -242,11 +231,58 @@
             return;
         }
 
-        _clearedTail = _lines.TakeLast(SyncWindow).Select(l => l.Text).ToList();
+        try
+        {
+            _clearedAt = await LastLineStampAsync();
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"Could not clear the logs: {ex.Message}", Severity.Error);
+            return;
+        }
+
         _lines = [];
         _viewCleared = true;
         Snackbar.Add("Logs cleared — Refresh reloads history", Severity.Success);
     }
+
+    /// <summary>
+    /// The stamp of the container's last line, from its own timestamps: the container's
+    /// clock, not this device's, which may be minutes apart (a phone). The latest of the
+    /// two streams, which the agent sends one after the other. Matching the last lines
+    /// shown instead found nothing once they had changed and brought the whole history
+    /// back, so the clear seemed to do nothing.
+    /// </summary>
+    private async Task<DateTimeOffset> LastLineStampAsync()
+    {
+        var stamps = Stamped(await Api.GetContainerLogsAsync(Container, 1, true)).Select(line => line.Stamp).ToList();
+        return stamps.Count > 0 ? stamps.Max() : DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>
+    /// The lines stamped after <paramref name="cleared"/>, their stamps taken off. wslc's
+    /// --since only tells seconds apart, so the lines of the cleared one's own second come
+    /// back too and are dropped here.
+    /// </summary>
+    private static string LinesAfter(string stamped, DateTimeOffset cleared) =>
+        string.Join('\n', Stamped(stamped).Where(line => line.Stamp > cleared).Select(line => line.Text));
+
+    /// <summary>Each line of a <c>--timestamps</c> output as its RFC 3339 stamp and its text; a line without one is left out.</summary>
+    private static IEnumerable<(DateTimeOffset Stamp, string Text)> Stamped(string output)
+    {
+        foreach (var line in output.Split('\n'))
+        {
+            var parts = line.TrimEnd('\r').Split(' ', 2);
+            if (DateTimeOffset.TryParse(parts[0], CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var stamp))
+            {
+                yield return (stamp, parts.Length > 1 ? parts[1] : "");
+            }
+        }
+    }
+
+    /// <summary>A moment as wslc's --since takes it.</summary>
+    private static string Rfc3339(DateTimeOffset moment) =>
+        moment.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ", CultureInfo.InvariantCulture);
 
     public void Dispose()
     {

@@ -489,8 +489,9 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<ContainerDetails> GetContainerDetailsAsync(string container, CancellationToken cancellationToken = default) =>
         GetAsync<ContainerDetails>($"api/v1/containers/{Escape(container)}/details", cancellationToken);
 
-    public async Task<string> GetContainerLogsAsync(string container, int tail = 200, bool timestamps = false, CancellationToken cancellationToken = default) =>
-        (await GetAsync<ContainerLogs>($"api/v1/containers/{Escape(container)}/logs?tail={tail}&timestamps={Flag(timestamps)}", cancellationToken)).Text;
+    /// <summary>The container's last <paramref name="tail"/> lines; with <paramref name="since"/> (RFC 3339, the container's own clock) only those from that moment on.</summary>
+    public async Task<string> GetContainerLogsAsync(string container, int tail = 200, bool timestamps = false, CancellationToken cancellationToken = default, string since = "") =>
+        (await GetAsync<ContainerLogs>($"api/v1/containers/{Escape(container)}/logs?tail={tail}&timestamps={Flag(timestamps)}&since={Escape(since)}", cancellationToken)).Text;
 
     public Task<ContainerStats> GetContainerStatsAsync(string container, CancellationToken cancellationToken = default) =>
         GetAsync<ContainerStats>($"api/v1/containers/{Escape(container)}/stats", cancellationToken);
