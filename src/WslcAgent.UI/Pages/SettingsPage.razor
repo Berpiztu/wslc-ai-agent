@@ -90,10 +90,9 @@
             </div>
         </MudTabPanel>
         <MudTabPanel Text="Publish">
-            <div class="wslc-fill-scroll">
-        <div class="wslc-settings-grid">
-            <PublishingCard />
-        </div>
+            @* One frame over the whole tab: the published names take the height the fields leave. *@
+            <div class="wslc-fill-scroll wslc-frame-page">
+                <PublishingCard />
             </div>
         </MudTabPanel>
         <MudTabPanel Text="MCP">

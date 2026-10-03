@@ -13,7 +13,7 @@ public sealed class PublishingSettingsStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     private static readonly PublishingSettings Defaults = new(
-        "example.com", "-home", "wslc-published", "published", @"C:\wslc\published.conf");
+        "example.com", "-home", "wslc-published", "published", @"C:\wslc\published");
 
     private readonly string _path;
     private readonly Lock _gate = new();
@@ -23,6 +23,11 @@ public sealed class PublishingSettingsStore
     {
         _path = Path.Combine(options.Value.DataDirectory, "publishing.json");
         _settings = Read() ?? Defaults;
+        // A file of the time the agent wrote nginx's map has a map file and no data folder.
+        if (string.IsNullOrWhiteSpace(_settings.DataFolder))
+        {
+            _settings = _settings with { DataFolder = Defaults.DataFolder };
+        }
     }
 
     public PublishingSettings Get()
@@ -40,7 +45,7 @@ public sealed class PublishingSettingsStore
             settings.NameSuffix.Trim().ToLowerInvariant(),
             Require(settings.ProxyContainer, "proxy container"),
             Require(settings.Network, "network"),
-            Require(settings.MapFile, "map file"));
+            Require(settings.DataFolder, "data folder"));
         lock (_gate)
         {
             _settings = cleaned;

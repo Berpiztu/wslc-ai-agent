@@ -1,0 +1,39 @@
+@* Who the proxy lets in at a published name, as one icon in its tone: the application's
+   own login, or the proxy's login with the name's users — beside it how many — none yet
+   meaning the address still waits for its first administrator. The words are its title
+   and the legend over the table (Legend), so a column of them is not "login" on every
+   line. The proxy's last check follows the words in the title. *@
+
+<span class="wslc-access-icon" title="@($"{Text}. {Publication.AccessNote}")">
+    <MudIcon Icon="@Kind.Icon" Color="@Kind.Tone" Size="Size.Small" />
+    @* The count has its slot on every line, empty or not, so the icons stand in one column. *@
+    <span class="wslc-access-count">@(Kind == WithUsers ? (int?)Users : null)</span>
+</span>
+
+@code {
+    /// <summary>One kind of access as the table shows it: its icon, its tone, its words and the
+    /// few the upright view's legend has room for.</summary>
+    public sealed record AccessKind(string Icon, Color Tone, string Text, string Short);
+
+    private static readonly AccessKind Own = new(Icons.Material.Filled.VerifiedUser, Color.Success, "Own login", "Own");
+    private static readonly AccessKind WithUsers = new(Icons.Material.Filled.Lock, Color.Success, "Proxy login, with users", "Users");
+    private static readonly AccessKind Waiting = new(Icons.Material.Filled.Lock, Color.Warning, "Proxy login, no administrator yet", "No admin");
+    private static readonly AccessKind Down = new(Icons.Material.Filled.CloudOff, Color.Error, "Proxy not answering", "Offline");
+
+    /// <summary>Every kind, in the order the legend over the table names them.</summary>
+    public static IReadOnlyList<AccessKind> Legend { get; } = [Own, WithUsers, Waiting, Down];
+
+    [Parameter, EditorRequired] public Publication Publication { get; set; } = default!;
+
+    private int Users => Publication.UserCount ?? 0;
+
+    private AccessKind Kind => Publication.Access switch
+    {
+        "own" => Own,
+        "login" when Users > 0 => WithUsers,
+        "login" => Waiting,
+        _ => Down,
+    };
+
+    private string Text => Kind == WithUsers ? (Users == 1 ? "Proxy login, 1 user" : $"Proxy login, {Users} users") : Kind.Text;
+}

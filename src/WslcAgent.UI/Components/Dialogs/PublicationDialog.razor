@@ -8,8 +8,9 @@
 
 <FormDialog SubmitText="Publish" BusyText="Publishing…" OnSubmit="SubmitAsync">
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
-        A published port opens from anywhere at its own https name, with no login of the agent's in front of it:
-        publish only what asks for its own password. One name reaches one port.
+        A published port opens from anywhere at its own https name. If its application asks for a login of its own it is
+        let through; otherwise the proxy's login comes first, and its first administrator is created at the address with
+        the name's code (Users and passwords). One name reaches one port.
     </MudText>
     <div class="wslc-field-pick has-note">
         <MudTextField T="string" @bind-Value="_container" Label="Container" Immediate="true" Required="true" RequiredError="A container is required"

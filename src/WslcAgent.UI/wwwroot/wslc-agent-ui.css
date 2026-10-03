@@ -2299,7 +2299,8 @@
    dialog is a variable of its own, so one can change without the others: the
    frame (title and edges, the title bar's tone), the content box,
    the fields and list lines, and the rail. */
-.mud-dialog-container .mud-dialog {
+.mud-dialog-container .mud-dialog,
+.wslc-frame {
     --wslc-dialog-frame: var(--wslc-appbar-tone);
     --wslc-dialog-content: var(--mud-palette-background);
     --wslc-dialog-field: var(--mud-palette-surface);
@@ -2312,19 +2313,22 @@
    the surface is white, so the content takes it and the fields the page tone,
    and a field still stands off its box. The dialogs sit outside MudLayout, so
    the theme is read from wherever wslc-dark is (MainLayout, BareLayout). */
-:root:not(:has(.wslc-dark)) .mud-dialog-container .mud-dialog {
+:root:not(:has(.wslc-dark)) .mud-dialog-container .mud-dialog,
+:root:not(:has(.wslc-dark)) .wslc-frame {
     --wslc-dialog-content: var(--mud-palette-surface);
     --wslc-dialog-field: var(--mud-palette-background);
 }
 
 .mud-dialog .wslc-action-main:not(.wslc-terminal):not(:has(> .wslc-logs-output)),
+.wslc-frame .wslc-action-main,
 .mud-dialog .mud-dialog-content:not(.wslc-dialog-full):not(:has(.wslc-action-main)) {
     background-color: var(--wslc-dialog-content);
     border: 1px solid var(--mud-palette-lines-default);
     border-radius: var(--mud-default-borderradius);
 }
 
-.mud-dialog .wslc-action-main:not(.wslc-terminal):not(:has(> .wslc-logs-output)) {
+.mud-dialog .wslc-action-main:not(.wslc-terminal):not(:has(> .wslc-logs-output)),
+.wslc-frame .wslc-action-main {
     padding: 8px 0 8px 8px;
 }
 
@@ -2336,11 +2340,14 @@
    inside a dialog's content box a field takes the dialog's field tone, so
    it stands off the box in both themes, and hovering lights it a step. */
 .mud-dialog .mud-input.mud-input-filled,
-.mud-dialog .mud-input.mud-input-filled.mud-focused {
+.mud-dialog .mud-input.mud-input-filled.mud-focused,
+.wslc-frame .mud-input.mud-input-filled,
+.wslc-frame .mud-input.mud-input-filled.mud-focused {
     background-color: var(--wslc-dialog-field);
 }
 
-.mud-dialog .mud-input.mud-input-filled:hover {
+.mud-dialog .mud-input.mud-input-filled:hover,
+.wslc-frame .mud-input.mud-input-filled:hover {
     background-color: color-mix(in srgb, var(--mud-palette-text-primary) 6%, var(--wslc-dialog-field));
 }
 
@@ -2373,10 +2380,123 @@
 
 /* In a dialog the rail has its own tone and stands off the content box
    by a gap instead of a line of its own. */
-.mud-dialog .wslc-action-rail {
+.mud-dialog .wslc-action-rail,
+.wslc-frame .wslc-action-rail {
     background-color: var(--wslc-dialog-rail);
     border-left: 0;
     margin-left: 6px;
+}
+
+/* A dialog's look on a page (Settings → Publish): a frame in the dialog's
+   tones — its title on the frame, its edges round the content, the content
+   box on the page tone, the rail on the frame — sharing the dialog's rules
+   above, so one change of a tone changes both. It fills the height it is
+   given: the content box takes what the title leaves, and in it the list grid
+   what the fields leave, so only the grid's rows scroll. */
+.wslc-frame {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 22rem;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borderradius);
+    padding: 0 12px 12px;
+}
+
+.wslc-frame-title {
+    flex: 0 0 auto;
+    padding: 10px 4px 8px;
+}
+
+.wslc-frame > .wslc-action-body {
+    flex: 1 1 auto;
+}
+
+.wslc-frame .wslc-action-main > * {
+    flex: 0 0 auto;
+    padding-right: 8px;
+}
+
+.wslc-frame .wslc-action-main > .wslc-card-grid {
+    flex: 1 1 auto;
+    min-height: 9rem;
+    display: flex;
+    flex-direction: column;
+}
+
+/* A page that is one frame: the frame takes the whole tab. */
+.wslc-fill-scroll.wslc-frame-page {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Fields on one line at any width, each narrowing with the window and none
+   wrapping to a second line, so the grid under them keeps the height. */
+.wslc-form-grid.wslc-form-line {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 0 8px;
+}
+
+/* Publishing's four fields, each as wide as what it holds and not one width for
+   all: a domain (example.com, 15 characters), a suffix (-home, seven at most),
+   the proxy container (wslc-published, 14, and its picker) and the network
+   (published, 9, and its picker). The shares are those widths, measured, with a
+   field's padding and a picker's button added. */
+.wslc-form-grid.wslc-form-line.wslc-publish-fields {
+    grid-template-columns: minmax(0, 13fr) minmax(0, 7fr) minmax(0, 18fr) minmax(0, 15fr);
+}
+
+/* A grid's name with its legend: two views, as the dashboard has, the window's
+   orientation choosing (the owner's request of 3 October 2026). Lying down, the
+   legend in full words on the name's line; standing up, on a line of its own, a
+   word each. Neither ever wraps. */
+.wslc-grid-caption {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2px 12px;
+    margin-bottom: 4px;
+    white-space: nowrap;
+}
+
+.wslc-access-legend {
+    display: flex;
+    gap: 10px;
+    overflow: hidden;
+    font-size: var(--mud-typography-caption-size);
+    color: var(--mud-palette-text-secondary);
+}
+
+.wslc-access-legend > span,
+.wslc-access-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.wslc-access-count {
+    min-width: 1.2ch;
+}
+
+.wslc-legend-short {
+    display: none;
+}
+
+@media (orientation: portrait) {
+    .wslc-grid-caption {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .wslc-legend-long {
+        display: none;
+    }
+
+    .wslc-legend-short {
+        display: inline;
+    }
 }
 
 .wslc-action-search {

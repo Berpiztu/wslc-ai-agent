@@ -1,101 +1,154 @@
-@* Settings → Publish: the values this machine
-   publishes a port with — the domain, the name suffix, the nginx container,
-   the network, the map file, all five in the open — and, under them, the
-   maintenance of publications.json as the Saved logins card is for its file:
-   every name with its container and port, open, remove, add. The launch
-   form's Ports popup is the other way in; both end in the same store. *@
+@* Settings → Publish: the values this machine publishes a port with — the domain,
+   the name suffix, the proxy container, the network and its data folder — as a form
+   with its verbs in the rail at its right (save, set up, add a name, the proxy's
+   users and passwords), and under it the published names in the application's
+   table: each name a link that opens it, its container and port, who may open it,
+   the forced login screen, its check and its unpublish. The launch form's Ports
+   popup is the other way in; both end in the same store. *@
 @inject WslcAgentApi Api
 @inject IDialogService Dialogs
 @inject ISnackbar Snackbar
-@inject IJSRuntime Js
-@inject WslcAgent.UI.Links.IClientLinks Links
 
-<MudPaper Outlined="true" Class="@($"pa-4 {Class}")">
-    <MudText Typo="Typo.h6">Publishing</MudText>
-    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
-        A container port on a public name, open from anywhere: <span class="wslc-mono">https://open-webui@(_settings?.NameSuffix).@(_settings?.Domain)/</span>.
-        The nginx container on this machine reads the names from the map file and reaches each container by name on the
-        network; every name under the domain arrives through the tunnel. Nothing of the agent's stands in front of a
-        published port, so publish only what asks for its own password.
-    </MudText>
+@* A dialog's look on the page: the title on the frame, the form and the table in the
+   content box, the verbs in the rail beside it, the whole height of the tab and no more. *@
+<div class="@($"wslc-frame {Class}")">
+    <div class="wslc-frame-title">
+        <MudText Typo="Typo.h6">Publishing</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            A container port on a public name: <span class="wslc-mono">https://open-webui@(_settings?.NameSuffix).@(_settings?.Domain)/</span>.
+            The wslc-published proxy reaches each container on the network; an application without a login of its own gets the
+            proxy's, with its users under Users and passwords.
+        </MudText>
+    </div>
     @if (_settings is null)
     {
         <MudProgressLinear Indeterminate="true" />
     }
     else
     {
-        <MudTextField T="string" @bind-Value="_domain" Label="Domain" Immediate="true" Variant="Variant.Filled" Margin="Margin.Dense"
-                      HelperTextOnFocus="true" HelperText="Example: example.com — a wildcard certificate and DNS cover every name under it" autocapitalize="none" autocorrect="off" spellcheck="false" />
-        <MudTextField T="string" @bind-Value="_suffix" Label="Name suffix" Immediate="true" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2"
-                      HelperTextOnFocus="true" HelperText="Example: -home — added to a container's name, so this machine's names do not collide with another's" autocapitalize="none" autocorrect="off" spellcheck="false" />
-        @* The container and the network are picked, not typed: the same pickers the
-           launch form uses, their button inside the field (RULES.md). *@
-        <div class="wslc-field-pick has-note mt-2">
-            <MudTextField T="string" @bind-Value="_proxy" Label="nginx container" Immediate="true" Variant="Variant.Filled" Margin="Margin.Dense"
-                          HelperTextOnFocus="true" HelperText="Example: wslc-published — restarted after every change so it reads the map" autocapitalize="none" autocorrect="off" spellcheck="false" />
-            <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick a container" OnClick="PickProxyAsync" />
+        @* The launch form's fields and rail, the buttons in the application's verb colours;
+           the four fields share one line at any width, so the table keeps the height. The data
+           folder is not among them: Set up mounts it once, and the container is where it changes. *@
+        <div class="wslc-action-body">
+            <div class="wslc-action-main">
+                @if (_proxyImage is { } image && !image.StartsWith(ProxyRepository, StringComparison.OrdinalIgnoreCase))
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">
+                        The proxy runs @image, which is not the wslc-published plugin: nothing can be published until Set up replaces it with @ProxyRepository.
+                    </MudAlert>
+                }
+                <div class="wslc-form-grid wslc-form-line wslc-publish-fields">
+                    <MudTextField Margin="Margin.Dense" T="string" @bind-Value="_domain" Label="Domain" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled"
+                                  HelperText="Example: example.com. A wildcard certificate and DNS cover every name under it; localhost tries it on this PC." autocapitalize="none" autocorrect="off" spellcheck="false" />
+                    <MudTextField Margin="Margin.Dense" T="string" @bind-Value="_suffix" Label="Name suffix" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled"
+                                  HelperText="Example: -home. Added to a container's name, so this machine's names do not collide with another's." autocapitalize="none" autocorrect="off" spellcheck="false" />
+                    @* The container and the network are picked, not typed: the same pickers the
+                       launch form uses, their button inside the field (RULES.md). *@
+                    <div class="wslc-field-pick has-note">
+                        <MudTextField Margin="Margin.Dense" T="string" @bind-Value="_proxy" Label="Proxy container" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled"
+                                      HelperText="Example: wslc-published. The plugin: nginx and the login in front of the names." autocapitalize="none" autocorrect="off" spellcheck="false" />
+                        <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick a container" OnClick="PickProxyAsync" />
+                    </div>
+                    <div class="wslc-field-pick has-note">
+                        <MudTextField Margin="Margin.Dense" T="string" @bind-Value="_network" Label="Network" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled"
+                                      HelperText="Example: published. A user-defined network; a published container has to be on it." autocapitalize="none" autocorrect="off" spellcheck="false" />
+                        <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick a network" OnClick="PickNetworkAsync" />
+                    </div>
+                </div>
+                @* The access column is one icon a line; its words are said once, here: in full on
+                   the line of the title when the window lies down, a word each on a line of
+                   their own when it stands up. *@
+                <div class="wslc-grid-caption">
+                    <MudText Typo="Typo.body1">Published names</MudText>
+                    <div class="wslc-access-legend">
+                        @foreach (var kind in PublicationAccessIcon.Legend)
+                        {
+                            <span title="@kind.Text"><MudIcon Icon="@kind.Icon" Color="@kind.Tone" Size="Size.Small" /><span class="wslc-legend-long">@kind.Text</span><span class="wslc-legend-short">@kind.Short</span></span>
+                        }
+                    </div>
+                </div>
+                @* The application's table in a box of its own height: only its rows scroll, its
+                   header and its pager stay where they are. *@
+                <div class="wslc-card-grid">
+                    <ListGrid TItem="Publication" Items="@(_publications ?? [])" Loading="@(_publications is null)"
+                              EmptyText="No port is published yet. A container's View & edit has Reverse proxy in its Ports popup; Add name is the other way.">
+                        <Columns>
+                            @* The name is the link: a tap opens the published address. Name and Container share
+                               the room the window has over the rest, so the narrow columns stay together by Actions. *@
+                            <PropertyColumn T="Publication" TProperty="string" Property="p => p.Hostname" Title="Name" StickyLeft="true" HeaderClass="@GridColumn.Stretch(24)" CellClass="@GridColumn.Stretch(24)">
+                                <CellTemplate>
+                                    <a class="wslc-ports-link wslc-mono" href="@context.Item.Url" target="_blank" rel="noopener" title="@($"Open {context.Item.Url}")">@context.Item.Hostname</a>
+                                </CellTemplate>
+                            </PropertyColumn>
+                            <PropertyColumn T="Publication" TProperty="string" Property="p => p.Container" Title="Container" HeaderClass="@GridColumn.Stretch(20)" CellClass="@($"{GridColumn.Stretch(20)} wslc-mono")" />
+                            <PropertyColumn T="Publication" TProperty="int" Property="p => p.ContainerPort" Title="Port" HeaderClass="@GridColumn.Number(5)" CellClass="@($"{GridColumn.Number(5)} wslc-mono")" />
+                            <TemplateColumn T="Publication" Title="Access" Sortable="false" HeaderClass="@GridColumn.Width(7)" CellClass="@GridColumn.Width(7)">
+                                <CellTemplate>
+                                    <PublicationAccessIcon Publication="context.Item" />
+                                </CellTemplate>
+                            </TemplateColumn>
+                            @* The proxy's login in front even of an application with its own: two logins. *@
+                            <TemplateColumn T="Publication" Title="Force login" Sortable="false" HeaderClass="@GridColumn.Width(11)" CellClass="@GridColumn.Width(11)">
+                                <CellTemplate>
+                                    <SquareCheckBox Value="@(context.Item.ForceLogin == true)" ValueChanged="@(force => ForceLoginAsync(context.Item, force))"
+                                                    Disabled="@(_busy || context.Item.Access is null)"
+                                                    title="Put the proxy's login screen in front even when the application has a login of its own" />
+                                </CellTemplate>
+                            </TemplateColumn>
+                        </Columns>
+                        <Actions>
+                            <TemplateColumn T="Publication" Title="Actions" Sortable="false" Resizable="false" DragAndDropEnabled="false" StickyRight="true" HeaderClass="@GridColumn.Actions" CellClass="@GridColumn.Actions">
+                                <CellTemplate>
+                                    <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center">
+                                        <MudIconButton Icon="@Icons.Material.Filled.FactCheck" Size="Size.Small" Color="Color.Primary" title="Check again whether the application asks for a login of its own"
+                                                       Disabled="_busy" OnClick="@(() => CheckAsync(context.Item))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="Unpublish" Disabled="_busy" OnClick="@(() => UnpublishAsync(context.Item))" />
+                                    </MudStack>
+                                </CellTemplate>
+                            </TemplateColumn>
+                        </Actions>
+                    </ListGrid>
+                </div>
+            </div>
+            <div class="wslc-action-rail wslc-files-rail" role="toolbar">
+                <MudIconButton Color="Color.Primary" Icon="@Icons.Material.Filled.Save" Size="Size.Small" Variant="Variant.Filled"
+                               title="Save publishing" Disabled="@(_busy || !Changed)" OnClick="SaveAsync" />
+                @* The first use: the network and the proxy container made from these values,
+                   once, as the checklist did by hand. What is there already is left alone. *@
+                <MudIconButton Color="Color.Success" Icon="@Icons.Material.Filled.Build" Size="Size.Small" Variant="Variant.Filled"
+                               title="@(Changed ? "Set up: save the values first" : "Set up: create the network and run the proxy container from these values, once")"
+                               Disabled="@(_busy || Changed)" OnClick="SetUpAsync" />
+                <MudIconButton Color="Color.Primary" Icon="@Icons.Material.Filled.Add" Size="Size.Small" Variant="Variant.Filled"
+                               title="Add name: publish a container's port" Disabled="_busy" OnClick="AddAsync" />
+                @* The proxy plugin's own page: who may open each name, its users and their
+                   passwords, the claim code that creates a name's first administrator. *@
+                <MudIconButton Color="Color.Info" Icon="@Icons.Material.Filled.People" Size="Size.Small" Variant="Variant.Filled"
+                               title="Users and passwords of every name" Disabled="_busy" OnClick="OpenPanelAsync" />
+                <MudIconButton Color="Color.Warning" Icon="@Icons.Material.Filled.Close" Size="Size.Small" Variant="Variant.Filled"
+                               title="Cancel the changes made in these fields" Disabled="@(_busy || !Changed)" OnClick="CancelChanges" />
+            </div>
         </div>
-        <div class="wslc-field-pick has-note mt-2">
-            <MudTextField T="string" @bind-Value="_network" Label="Network" Immediate="true" Variant="Variant.Filled" Margin="Margin.Dense"
-                          HelperTextOnFocus="true" HelperText="Example: published — a user-defined network, where names resolve; a published container has to be on it" autocapitalize="none" autocorrect="off" spellcheck="false" />
-            <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick a network" OnClick="PickNetworkAsync" />
-        </div>
-        <MudTextField T="string" @bind-Value="_mapFile" Label="Map file" Immediate="true" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2 wslc-mono"
-                      HelperTextOnFocus="true" HelperText="Example: C:\wslc\published.conf — the file the nginx container mounts; written whole on every change" autocapitalize="none" autocorrect="off" spellcheck="false" />
-        <MudStack Row="true" Spacing="2" Class="mt-3 mb-4">
-            <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Save" Disabled="@(_busy || !Changed)" OnClick="SaveAsync">Save publishing</MudButton>
-            @* The first use: the network and the nginx container made from these values,
-               once, as the checklist did by hand. What is there already is left alone. *@
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Build" Disabled="@(_busy || Changed)" OnClick="SetUpAsync"
-                       title="@(Changed ? "Save the values first" : "Create the network and run the nginx container from the values above, once")">Set up</MudButton>
-        </MudStack>
-
-        <MudText Typo="Typo.body1" Class="mb-1">Published names</MudText>
-        @if (_publications is null)
-        {
-            <MudProgressLinear Indeterminate="true" />
-        }
-        else if (_publications.Count == 0)
-        {
-            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">No port is published yet. A container's View &amp; edit has Reverse proxy in its Ports popup; Add name below is the other way.</MudText>
-        }
-        else
-        {
-            <MudSimpleTable Dense="true" Bordered="true" Striped="true" Class="mb-2">
-                <thead><tr><th>Name</th><th>Container</th><th>Port</th><th></th></tr></thead>
-                <tbody>
-                    @foreach (var publication in _publications)
-                    {
-                        <tr @key="publication.Hostname">
-                            <td class="wslc-mono">@publication.Hostname</td>
-                            <td class="wslc-mono">@publication.Container</td>
-                            <td class="wslc-mono">@publication.ContainerPort</td>
-                            <td class="text-nowrap">
-                                <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" title="@($"Open {publication.Url}")" OnClick="@(() => WslcAgent.UI.Links.ClientLink.OpenAsync(Links, Js, Snackbar, publication.Url))" />
-                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="Unpublish" Disabled="_busy" OnClick="@(() => UnpublishAsync(publication))" />
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </MudSimpleTable>
-        }
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" Disabled="_busy" OnClick="AddAsync">Add name</MudButton>
     }
-</MudPaper>
+</div>
 
 @code {
+    /// <summary>The proxy image with the login; one of another (plain nginx, before the login) is what Set up replaces.</summary>
+    private const string ProxyRepository = "ghcr.io/berpiztu/wslc-published";
+
     private PublishingSettings? _settings;
     private IReadOnlyList<Publication>? _publications;
+
+    /// <summary>The image the proxy container runs; null while unknown or when there is no proxy yet.</summary>
+    private string? _proxyImage;
     private string _domain = "";
     private string _suffix = "";
     private string _proxy = "";
     private string _network = "";
-    private string _mapFile = "";
     private bool _busy;
 
     [Parameter] public string Class { get; set; } = "";
 
-    private PublishingSettings Edited => new(_domain.Trim(), _suffix.Trim(), _proxy.Trim(), _network.Trim(), _mapFile.Trim());
+    private PublishingSettings Edited => new(_domain.Trim(), _suffix.Trim(), _proxy.Trim(), _network.Trim(), _settings?.DataFolder ?? "");
 
     private bool Changed => _settings is not null && Edited != _settings;
 
@@ -110,7 +163,7 @@
         try
         {
             _settings = await Api.GetPublishingSettingsAsync();
-            (_domain, _suffix, _proxy, _network, _mapFile) = (_settings.Domain, _settings.NameSuffix, _settings.ProxyContainer, _settings.Network, _settings.MapFile);
+            CancelChanges();
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
         {
@@ -128,6 +181,9 @@
         try
         {
             _publications = await Api.ListPublicationsAsync();
+            var proxy = _settings?.ProxyContainer ?? "";
+            _proxyImage = (await Api.GetContainersAsync(all: true)).Containers
+                .FirstOrDefault(c => c.Name.Equals(proxy, StringComparison.OrdinalIgnoreCase))?.Image;
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
         {
@@ -136,6 +192,15 @@
             {
                 Snackbar.Add($"Published names: {ex.Message}", Severity.Error);
             }
+        }
+    }
+
+    /// <summary>The fields back to the values saved.</summary>
+    private void CancelChanges()
+    {
+        if (_settings is not null)
+        {
+            (_domain, _suffix, _proxy, _network) = (_settings.Domain, _settings.NameSuffix, _settings.ProxyContainer, _settings.Network);
         }
     }
 
@@ -159,8 +224,9 @@
     private async Task SetUpAsync()
     {
         if (_settings is null || !await DialogFlow.ConfirmAsync(Dialogs, "Set up publishing",
-                $"Create the network '{_settings.Network}' if it is missing, write the map file at {_settings.MapFile} if it is missing, "
-                + $"and run the nginx container '{_settings.ProxyContainer}' (nginx:alpine, the map mounted read-only, port 8081 on this machine's loopback, restarted always, on that network) if it is missing?\n\n"
+                $"Create the network '{_settings.Network}' and the data folder {_settings.DataFolder} if they are missing, "
+                + $"and run the proxy container '{_settings.ProxyContainer}' ({ProxyRepository}: nginx, the login in front of the published names and its own page; its data folder mounted, port 8081 for the names and 8082 for its page on this machine's loopback, restarted always, on that network) if it is missing, or in place of a plain nginx one?\n\n"
+                + "Every published name is handed to it and checked for a login of its own. "
                 + "What is there already is left as it is. The tunnel and the VPS are not touched: docs/developer/remote-access.md.", "Set up"))
         {
             return;
@@ -170,7 +236,7 @@
         try
         {
             var result = await Api.SetUpPublishingAsync();
-            Snackbar.Add(string.Join(" ", result.Notes), result.NetworkCreated || result.ProxyCreated || result.MapWritten ? Severity.Success : Severity.Info);
+            Snackbar.Add(string.Join(" ", result.Notes), result.NetworkCreated || result.ProxyCreated || result.DataFolderCreated ? Severity.Success : Severity.Info);
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
         {
@@ -213,6 +279,56 @@
         {
             await LoadPublicationsAsync();
         }
+    }
+
+    /// <summary>The proxy plugin's own page over the whole window; the table reads the access again when it closes.</summary>
+    private async Task OpenPanelAsync()
+    {
+        await DialogFlow.ShowFullScreenAsync<Dialogs.PublishingPluginDialog>(Dialogs, "Published names",
+            new DialogParameters<Dialogs.PublishingPluginDialog> { { d => d.Source, Api.PublishingPluginUrl().ToString() } }, titled: true);
+        await LoadPublicationsAsync();
+    }
+
+    /// <summary>The proxy's login in front of the name even when its application has its own, or back to the check's choice.</summary>
+    private async Task ForceLoginAsync(Publication publication, bool force)
+    {
+        _busy = true;
+        try
+        {
+            await Api.SetPublicationForceLoginAsync(publication.Hostname, force);
+            Snackbar.Add(force ? $"{publication.Hostname}: the login screen comes first" : $"{publication.Hostname}: login screen as the check says", Severity.Success);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"{publication.Hostname}: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+
+        await LoadPublicationsAsync();
+    }
+
+    /// <summary>The application asked again whether it has a login of its own (after fixing it, say).</summary>
+    private async Task CheckAsync(Publication publication)
+    {
+        _busy = true;
+        try
+        {
+            var checkedNow = await Api.CheckPublicationAsync(publication.Hostname);
+            Snackbar.Add($"{publication.Hostname}: {checkedNow.AccessNote}", Severity.Info);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"{publication.Hostname}: check failed. {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+
+        await LoadPublicationsAsync();
     }
 
     /// <summary>One tap, no question: it only closes a door, and publishing again is one tap too.</summary>

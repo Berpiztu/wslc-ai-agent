@@ -7,10 +7,7 @@ namespace WslcAgent.Server.Containers;
 /// One <c>wslc container restart</c> (WSL 2.9.12). An older CLI has no such
 /// verb and answers <c>Unrecognized command</c>; the stop + start pair it
 /// replaced is the fallback, so the verb works on every WSL the agent
-/// supports. Either way the container ends running. Its own class because
-/// two callers need it: the Restart verb, and Publish restarting the proxy —
-/// and the container service cannot be the publishing service's dependency
-/// while the publishing service is its own.
+/// supports. Either way the container ends running.
 /// </summary>
 public sealed class ContainerRestarter(IWslcRunner wslc, RestartPolicyStore policies, ILogger<ContainerRestarter> logger)
 {

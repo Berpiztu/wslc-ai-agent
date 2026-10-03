@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title }} · Sign in</title>
+  <link rel="stylesheet" href="/__login/static/style.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="card">
+      <p class="eyebrow">{{ host }}</p>
+      <h1>{{ title }}</h1>
+      {% if user %}
+        <p>Signed in as <strong>{{ user.name }}</strong>{% if user.role == "admin" %} (administrator){% endif %}.</p>
+        {% if need_admin and user.role != "admin" %}
+          <p class="error">The administration is for this address's administrators.</p>
+        {% endif %}
+        <div class="actions">
+          <a class="button" href="{{ next_target }}">Continue</a>
+          {% if user.role == "admin" %}<a class="button ghost" href="/__admin">Users of this address</a>{% endif %}
+          <button id="logout" type="button" class="button ghost">Sign out</button>
+        </div>
+      {% elif claim %}
+        <p class="note">This address has no administrator yet. Create it with the code you were given with the address:
+          it manages who may sign in here.</p>
+        <form id="claim-form" autocomplete="on">
+          <input type="hidden" id="next" value="{{ next_target }}">
+          <label><span>Code</span>
+            <input id="code" type="text" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" required autofocus placeholder="ABCD-EFGH-JKLM">
+          </label>
+          <label><span>Administrator</span>
+            <input id="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+          </label>
+          <label><span>Password (8 or more characters)</span>
+            <input id="password" type="password" autocomplete="new-password" minlength="8" required>
+          </label>
+          <label><span>Repeat password</span>
+            <input id="confirm" type="password" autocomplete="new-password" minlength="8" required>
+          </label>
+          <div id="error" class="error" hidden></div>
+          <button id="submit" type="submit" class="button">Create administrator</button>
+          <p class="note">If you forget it, whoever published this address can see it or give you a new one.</p>
+        </form>
+      {% else %}
+        <form id="login-form" autocomplete="on">
+          <input type="hidden" id="next" value="{{ next_target }}">
+          <label><span>User</span>
+            <input id="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
+          </label>
+          <label><span>Password</span>
+            <input id="password" type="password" autocomplete="current-password" required>
+          </label>
+          <div id="error" class="error" hidden></div>
+          <button id="submit" type="submit" class="button">Sign in</button>
+        </form>
+      {% endif %}
+    </section>
+  </main>
+  <script src="/__login/static/login.js"></script>
+</body>
+</html>

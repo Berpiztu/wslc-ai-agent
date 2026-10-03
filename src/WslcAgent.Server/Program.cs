@@ -114,6 +114,7 @@ builder.Services.AddSingleton<INetworkService, NetworkService>();
 builder.Services.AddSingleton<ContainerRestarter>();
 builder.Services.AddSingleton<PublishingSettingsStore>();
 builder.Services.AddSingleton<PublicationStore>();
+builder.Services.AddSingleton<IPublishedPlugin>(services => new PublishedPlugin(new HttpClient { Timeout = TimeSpan.FromMinutes(1) }, services.GetRequiredService<PublishingSettingsStore>()));
 builder.Services.AddSingleton<PublishingService>();
 builder.Services.AddSingleton<IPublishingService>(services => services.GetRequiredService<PublishingService>());
 builder.Services.AddSingleton<IPublishingSetup, PublishingSetup>();

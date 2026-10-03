@@ -18,7 +18,7 @@ public static class PublishingTools
         publishing.ListAsync(cancellationToken);
 
     [McpServerTool(Name = "publish_container_port", Destructive = true)]
-    [Description("Publish one container port on a public name (one label under the agent's domain, e.g. webui-home.example.com): the name goes in the proxy's map and the proxy restarts. The container has to be on the publishing network already (connect_container_to_network); the agent never attaches it on its own. This puts the container on the internet with no login of the agent's in front of it, so the container has to ask for its own: the first call answers with a confirm token and the action to approve; call again with confirm=<token> after the user approved.")]
+    [Description("Publish one container port on a public name (one label under the agent's domain, e.g. webui-home.example.com): the proxy (the wslc-published plugin) serves it at once. The container has to be on the publishing network already (connect_container_to_network); the agent never attaches it on its own. This puts the container on the internet: an application that asks for a login of its own is let through, any other gets the proxy's login, whose first administrator is created at the address with the name's claim code (the user hands it over; no tool reads it). The first call answers with a confirm token and the action to approve; call again with confirm=<token> after the user approved.")]
     public static async Task<object> PublishContainerPort(
         IPublishingService publishing,
         ApprovalGate approvals,

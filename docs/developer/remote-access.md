@@ -14,7 +14,7 @@ This guide uses placeholders throughout. Replace them with your own values:
 | `-home` | The name suffix of this PC's published containers |
 | `published` | The user-defined network the proxy and the published containers share |
 | `wslc-published` | The proxy container (nginx) on the PC |
-| `C:\wslc\published.conf` | The map file the agent writes and the proxy reads |
+| `C:\wslc\published` | The proxy plugin's data folder |
 
 ## What you get
 
@@ -326,29 +326,30 @@ five values, kept in `publishing.json` in the agent's data folder:
 |---|---|---|
 | Domain | `example.com` | What every public name ends in; the wildcard DNS record and certificate cover it |
 | Name suffix | `-home` | Added to a name, so the containers of several PCs under one domain do not collide: `open-webui` becomes `open-webui-home.example.com` |
-| nginx container | `wslc-published` | The proxy that reads the map; restarted after every change |
+| nginx container | `wslc-published` | The proxy container, the wslc-published plugin |
 | Network | `published` | The user-defined network the proxy and the published containers share. Any user-defined network works; the default `bridge` does not resolve names |
-| Map file | `C:\wslc\published.conf` | Where the agent writes the map the proxy mounts |
+| Data folder | `C:\wslc\published` | The plugin's own folder, mounted at `/data`: its sites, their users, its keys and its admin token |
 
 Until you save the card, the fields show those examples. Fill in your own and
 press **Save publishing**.
 
 Then press **Set up**, once per machine. After asking for confirmation, the
-agent does three things, each **only if it is missing**; what is already
-there is left as it is, and the answer lists which was which:
+agent does these, each **only if it is missing**; what is already there is
+left as it is, and the answer lists which was which:
 
 1. Creates the network (`published`).
-2. Writes the map file, holding every name already published (none, the first
-   time), creating its folder if needed.
-3. Runs the proxy container: image `nginx:alpine`, named as the setting says,
-   port `127.0.0.1:8081:80` (loopback only; it is where the `published`
-   forward arrives), the map file mounted read-only at
-   `/etc/nginx/conf.d/default.conf`, connected to the network, with the agent's
-   restart policy `always`.
+2. Makes the data folder.
+3. Runs the proxy container: the wslc-published plugin
+   (`ghcr.io/berpiztu/wslc-published:latest`, built from `plugins/wslc-published`),
+   named as the setting says, port `127.0.0.1:8081:80` for the published names
+   (loopback only; it is where the `published` forward arrives) and
+   `127.0.0.1:8082:8082` for the plugin's own API and page, the data folder
+   mounted at `/data`, connected to the network, with the agent's restart
+   policy `always`. A proxy container of another image (plain nginx, made by
+   hand or by an older agent) is replaced.
+4. Hands every name already published to the plugin.
 
-Set up does not touch the tunnel or the VPS, and it does not change a proxy
-container that already exists: if yours was made by hand, make sure it is on
-the network and mounts the map file at that path.
+Set up does not touch the tunnel or the VPS.
 
 Check the proxy locally, before anything is public. The request goes to the
 PC's own port 8081, but carries a public name in `Host`, exactly as the VPS
@@ -361,71 +362,27 @@ curl.exe -s -o NUL -w "%{http_code}`n" -H "Host: nothing-home.example.com" http:
 Use `curl.exe`, not `curl`: in Windows PowerShell, `curl` is an alias of
 `Invoke-WebRequest`, which takes different arguments.
 
-### The map file the agent writes
+### The proxy plugin
 
-The agent writes the whole map file again on every publish and unpublish,
-from its own list of published names (`publications.json` in its data
-folder). With one published name, `webui-home.example.com` reaching port 8080
-of the container `open-webui`, it reads:
+The proxy is a plugin of its own, in `plugins/wslc-published` (its README says
+it whole): nginx and a Python program in one container. The agent keeps the
+list of published names (`publications.json`) and tells the plugin each
+change through the plugin's API on `127.0.0.1:8082`, with the admin token the
+plugin made in its data folder. The plugin then:
 
-```nginx
-map $host $wslc_upstream {
-    hostnames;
-    default                      "";
-    webui-home.example.com       http://open-webui:8080;
-}
+- **writes nginx's configuration** from its sites and reloads nginx in place:
+  a `map` from each name to the container's name and its **internal** port, a
+  `resolver 127.0.0.11` (the embedded DNS of a user-defined network, which
+  `proxy_pass` with a variable needs), `404` for a name nobody published,
+  `X-Forwarded-Proto https` (TLS ended at the VPS) and WebSocket upgrades with
+  one-hour timeouts;
+- **checks each application** for a login of its own, and puts its own login
+  page in front of any that has none (see [Security](#security));
+- **keeps each name's users**, its claim code and its page, which the agent
+  shows under Settings → Publishing → Users and passwords.
 
-server {
-    listen 80;
-    server_name ~^.+$;
-
-    resolver 127.0.0.11 valid=30s ipv6=off;
-
-    if ($wslc_upstream = "") {
-        return 404;
-    }
-
-    location / {
-        proxy_pass $wslc_upstream;
-        proxy_http_version 1.1;
-
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_read_timeout 3600s;
-        proxy_send_timeout 3600s;
-
-        client_max_body_size 64m;
-    }
-}
-```
-
-The file the agent writes also carries a header of comments explaining the
-same points; they are left out here.
-
-- **The `map`** turns the requested name into a destination: one line per
-  published name, the container's name and its **internal** port.
-- **`resolver 127.0.0.11`**: `proxy_pass` with a variable makes nginx resolve
-  the container's name at request time, and for that it needs a resolver of
-  its own. Without one, every request is a `502` with `no resolver defined`
-  in nginx's log, even with both containers on the network. `127.0.0.11` is
-  the embedded DNS a container on a user-defined network is given (it is the
-  `nameserver` in the container's `/etc/resolv.conf`).
-- **An unknown name is a `404`**, answered by the proxy itself.
-- **`X-Forwarded-Proto https`**: TLS ended at the VPS, so applications that
-  build absolute URLs build them as `https://`.
-- **`Upgrade` and `Connection`** carry WebSockets (chats, terminals), with
-  one-hour timeouts.
-
-A hand edit of this file lasts only until the next publish or unpublish,
-which writes it whole again. There is one exception: the first time the agent
-reads its list of names and finds it empty, it adopts the
-`name http://container:port;` lines of a map already at that path, so a map
-written by hand before the agent took over is not lost.
+Everything it keeps is in its data folder, so Update image on the proxy loses
+nothing.
 
 ### Publishing a container's port
 
@@ -451,9 +408,9 @@ row (the form `containerPort:name`, a port between 1 and 65535), that no other
 container holds the same name, and that the form shares a network with the
 proxy; a failure stops the save there. Once the container exists, the agent
 compares the ticked rows with the names it already had for that container,
-adds and removes the difference in `publications.json`, writes the map file
-whole, and restarts the proxy container so nginx reads it. When nothing
-changed, the proxy is not restarted.
+adds and removes the difference in `publications.json` and hands it to the
+proxy plugin, which reloads nginx in place. When nothing changed, nothing is
+sent.
 
 Saving View & edit recreates the container; its names are applied to the new
 one.
@@ -547,8 +504,9 @@ works the way it does:
 - **TLS ends here**, with the same wildcard certificate.
 - **`Host` passes through intact**, because the name is the only thing that
   carries the destination.
-- **No login gate here.** What is published either authenticates its own
-  callers or is not published (see [Security](#security)).
+- **No login gate here.** The PC's proxy is the gate: a published name is
+  served only when its application asks for a login of its own or the proxy's
+  login stands in front of it (see [Security](#security)).
 
 Enable it, test, reload, as for the agent's block:
 
@@ -653,21 +611,37 @@ phone off your network.
   `X-Forwarded-Proto`: they are what tells a request that came through the
   tunnel from one typed at the PC. Never point a proxy at the agent that
   strips them.
-- **A published name has nothing of the agent's in front of it.** Whoever
-  knows the name reaches the container directly. Publish only what asks for
-  its own password, and check it before publishing: open the container's page
-  in a private window at the PC. Some applications greet their first visitor
-  with a setup page that creates the administrator (Open WebUI does); create
-  the administrator yourself first, or the first stranger to open the name
-  becomes it.
-- **The proxy adds no password.** The map the agent writes has no
-  `auth_basic`, and a hand edit is overwritten by the next publish. A shared
-  Basic password would also conflict with applications that send their own
-  `Authorization: Bearer` header on every call, which nginx's Basic
-  authentication reads too. For something with no login of its own, do not
-  publish it: open it through the agent instead (below).
+- **Every published name has a login.** The proxy is the wslc-published
+  plugin (`plugins/wslc-published`, `ghcr.io/berpiztu/wslc-published`): nginx
+  and its own program in one container, which asks its login before every
+  request. When a name is published it asks the application, from inside the
+  proxy, what it answers a visitor with no session: a `401`/`403`, a redirect
+  to a sign-in page or a page with a password field is a login of its own, and
+  the name is let through with no second login. Any other application gets the
+  proxy's login page first.
+- **Each name has its own users**, never shared with another, even of the same
+  owner. While a name has no administrator, its login page creates one with the
+  name's **claim code**: Settings → Publishing → Users and passwords shows it,
+  and whoever publishes hands it over with the address, so nobody who merely
+  knows the name gets there first. That administrator manages the name's users
+  at `https://<name>/__admin`, and sees no other name.
+- **The root sees everything.** Users and passwords (the plugin's own page,
+  shown inside the agent and passed through it, behind its login, with the
+  plugin's admin token) lists every name, its users and their passwords, and
+  makes a new claim code or a new check. Passwords are kept as a PBKDF2 hash,
+  which is what signing in checks, and encrypted with the plugin's key so the
+  root can read them back.
+- **What the check cannot see.** An application that draws its login with
+  JavaScript after the page loads is taken as having none: the proxy's login
+  stands in front of it. Some applications greet their first visitor with a
+  setup page that creates the administrator (Open WebUI does); create the
+  administrator yourself first, at the PC.
+- **What the proxy keeps.** Its data folder (`C:\wslc\published`, mounted at
+  `/data`): its sites, their users, the key their passwords are encrypted
+  with, its session secret and its admin token. Update image on the proxy
+  keeps them all.
 - **Unpublishing is immediate**: the name answers `404` as soon as the proxy
-  has restarted.
+  has reloaded nginx, a moment later.
 - **The VPS sees everything in clear.** TLS ends there, so the VPS must be a
   machine you trust and keep up to date.
 

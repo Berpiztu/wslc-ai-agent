@@ -1,0 +1,23 @@
+@* The proxy plugin's own page inside the agent (plugins/wslc-published): every
+   published name, who may open it, its users and their passwords, the claim codes.
+   It is the plugin's page, not the agent's: the agent only passes it through, its
+   token added, so it is reached behind the agent's login. Over the whole window, in
+   an iframe with Close in the title row, as the Architecture window. *@
+
+<MudDialog ContentClass="wslc-dialog-full">
+    <TitleContent>
+        <DialogTitle Title="Published names">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Close(DialogResult.Ok(true)))">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <iframe class="wslc-architecture-frame" src="@Source" title="Published names"></iframe>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    /// <summary>The page through the agent: <see cref="WslcAgentApi.PublishingPluginUrl"/>.</summary>
+    [Parameter, EditorRequired] public string Source { get; set; } = "";
+}

@@ -63,7 +63,7 @@ public sealed partial class ContainerService(
         policies.SetDesired(container, RestartPolicyInfo.Stopped);
     }
 
-    /// <summary>The restart verb lives in <see cref="ContainerRestarter"/>, shared with Publish, which restarts the proxy.</summary>
+    /// <summary>The restart verb lives in <see cref="ContainerRestarter"/>.</summary>
     public Task RestartAsync(string container, CancellationToken cancellationToken = default) =>
         restarter.RestartAsync(container, cancellationToken);
 

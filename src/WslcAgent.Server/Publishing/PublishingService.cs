@@ -1,65 +1,102 @@
 using System.Text.RegularExpressions;
 using WslcAgent.ApiClient.Contracts;
 using WslcAgent.Mcp;
-using WslcAgent.Server.Containers;
 using WslcAgent.Server.Wslc;
 
 namespace WslcAgent.Server.Publishing;
 
 /// <summary>
-/// Publish and unpublish: the map is written whole from the store and the proxy container
-/// restarts so nginx reads it. The network is the user's, never the agent's:
-/// the proxy reaches a container by name only on a user-defined network they
-/// share, and the container is put on one through the form's Networks rows;
-/// a row with Reverse proxy ticked on a container that shares none with the
-/// proxy is an error, before anything is touched. Settings names a default
-/// network, the one the form offers to add. The store is the truth; a map
-/// written by hand before the agent took over is adopted once. The launch
-/// form's rows come through <see cref="ValidateRowsAsync"/> before a container
-/// is touched and <see cref="ApplyAsync"/> once it exists.
+/// Publish and unpublish: the agent keeps what is published (the store) and tells the
+/// wslc-published plugin, which writes and reloads nginx, checks whether each
+/// application asks for a login of its own and keeps each name's users
+/// (<see cref="IPublishedPlugin"/>). The network is the user's, never the agent's:
+/// the proxy reaches a container by name only on a user-defined network they share,
+/// and the container is put on one through the form's Networks rows; a row with
+/// Reverse proxy ticked on a container that shares none with the proxy is an error,
+/// before anything is touched. Settings names a default network, the one the form
+/// offers to add. The launch form's rows come through <see cref="ValidateRowsAsync"/>
+/// before a container is touched and <see cref="ApplyAsync"/> once it exists.
 /// </summary>
 public sealed partial class PublishingService(
     PublicationStore store,
     PublishingSettingsStore settings,
     INetworkService networks,
-    ContainerRestarter restarter,
+    IPublishedPlugin plugin,
     ILogger<PublishingService> logger) : IPublishingService
 {
-    public Task<IReadOnlyList<Publication>> ListAsync(CancellationToken cancellationToken = default)
+    /// <summary>Every published port, with who the proxy lets in when it answers; without, when it does not.</summary>
+    public async Task<IReadOnlyList<Publication>> ListAsync(CancellationToken cancellationToken = default)
     {
-        AdoptHandWrittenMap();
-        return Task.FromResult(store.All());
+        IReadOnlyList<PluginSite> sites;
+        try
+        {
+            sites = await plugin.SitesAsync(cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            logger.LogInformation("publications: the proxy did not say who it lets in: {Message}", ex.Message);
+            sites = [];
+        }
+
+        return store.All().Select(p => Describe(p, sites.FirstOrDefault(s => s.Host == p.Hostname))).ToList();
+    }
+
+    /// <summary>Asks the application again whether it has a login of its own (a button, after fixing it); the publication as it stands.</summary>
+    public async Task<Publication> CheckAsync(string hostname, CancellationToken cancellationToken = default)
+    {
+        var publication = store.Find(hostname.Trim().ToLowerInvariant()) ?? throw new KeyNotFoundException($"{hostname} is not published.");
+        return Describe(publication, await plugin.CheckAsync(publication.Hostname, cancellationToken));
+    }
+
+    /// <summary>The proxy's login in front of the name even when its application has its own (two logins), or back to the check's choice.</summary>
+    public async Task<Publication> SetForceLoginAsync(string hostname, bool force, CancellationToken cancellationToken = default)
+    {
+        var publication = store.Find(hostname.Trim().ToLowerInvariant()) ?? throw new KeyNotFoundException($"{hostname} is not published.");
+        var site = await plugin.ForceLoginAsync(publication.Hostname, force, cancellationToken);
+        logger.LogInformation("{Hostname}: proxy login forced={Force}", publication.Hostname, force);
+        return Describe(publication, site);
     }
 
     public async Task<Publication> PublishAsync(PublishRequest request, CancellationToken cancellationToken = default)
     {
         var current = settings.Get();
         var publication = Validate(request, current);
-        AdoptHandWrittenMap();
         RefuseIfTaken(publication);
         await RequireOnNetworkAsync(publication.Container, current.Network, cancellationToken);
+        await plugin.PutSiteAsync(publication, cancellationToken);
         store.Add(publication);
-        await WriteMapAndRestartAsync(current, cancellationToken);
         logger.LogInformation("published {Hostname} -> {Container}:{Port}", publication.Hostname, publication.Container, publication.ContainerPort);
         return publication;
     }
 
     public async Task UnpublishAsync(string hostname, CancellationToken cancellationToken = default)
     {
-        AdoptHandWrittenMap();
-        if (!store.Remove(hostname.Trim().ToLowerInvariant()))
+        var key = hostname.Trim().ToLowerInvariant();
+        if (store.Find(key) is null)
         {
             throw new KeyNotFoundException($"{hostname} is not published.");
         }
 
-        await WriteMapAndRestartAsync(settings.Get(), cancellationToken);
+        await plugin.RemoveSiteAsync(key, cancellationToken);
+        store.Remove(key);
         logger.LogInformation("unpublished {Hostname}", hostname);
+    }
+
+    /// <summary>Every published name handed to the plugin again: what Set up does for a proxy just made.</summary>
+    public async Task<int> SyncAsync(CancellationToken cancellationToken = default)
+    {
+        var all = store.All();
+        foreach (var publication in all)
+        {
+            await plugin.PutSiteAsync(publication, cancellationToken);
+        }
+
+        return all.Count;
     }
 
     /// <summary>The form's rows read back for a container: what View &amp; edit shows.</summary>
     public IReadOnlyList<string> RowsOf(string container)
     {
-        AdoptHandWrittenMap();
         var current = settings.Get();
         return store.ForContainer(container).Select(p => PublicNameRow.Format(p, current)).ToList();
     }
@@ -78,7 +115,6 @@ public sealed partial class PublishingService(
         }
 
         var current = settings.Get();
-        AdoptHandWrittenMap();
         foreach (var publication in Desired(container, request.PublicNames, current))
         {
             RefuseIfTaken(publication);
@@ -96,10 +132,43 @@ public sealed partial class PublishingService(
         }
 
         throw new InvalidOperationException(
-            $"Reverse proxy needs the container to share a user-defined network with the nginx container '{current.ProxyContainer}': "
+            $"Reverse proxy needs the container to share a user-defined network with the proxy container '{current.ProxyContainer}': "
             + "names resolve only there, never on the default bridge, and none of the form's networks has it. "
             + $"Add the network '{current.Network}' (Settings → Publish) in Networks, or untick Reverse proxy.");
     }
+
+    /// <summary>
+    /// After the container exists: the rows against its names in the store, the
+    /// difference handed to the plugin.
+    /// </summary>
+    public async Task ApplyAsync(string container, IReadOnlyList<string> rows, CancellationToken cancellationToken = default)
+    {
+        var desired = Desired(container, rows, settings.Get());
+        var existing = store.ForContainer(container);
+        var removed = existing.Where(e => !desired.Any(d => d.Hostname == e.Hostname && d.ContainerPort == e.ContainerPort)).ToList();
+        var added = desired.Where(d => !existing.Any(e => e.Hostname == d.Hostname && e.ContainerPort == d.ContainerPort)).ToList();
+        if (removed.Count == 0 && added.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var publication in removed)
+        {
+            await plugin.RemoveSiteAsync(publication.Hostname, cancellationToken);
+            store.Remove(publication.Hostname);
+        }
+
+        foreach (var publication in added)
+        {
+            await plugin.PutSiteAsync(publication, cancellationToken);
+            store.Add(publication);
+        }
+
+        logger.LogInformation("{Container}: {Added} name(s) published, {Removed} unpublished", container, added.Count, removed.Count);
+    }
+
+    private static Publication Describe(Publication publication, PluginSite? site) =>
+        site is null ? publication : publication with { Access = site.Access, UserCount = site.Users.Count, AccessNote = site.Check, ForceLogin = site.ForceLogin };
 
     /// <summary>Whether a container is on a network; a network that is not there has nobody on it.</summary>
     private async Task<bool> HasAsync(string network, string container, CancellationToken cancellationToken)
@@ -113,37 +182,6 @@ public sealed partial class PublishingService(
         {
             return false;
         }
-    }
-
-    /// <summary>
-    /// After the container exists: the rows against its names in the store, the
-    /// difference done; the proxy restarts only when the map changed.
-    /// </summary>
-    public async Task ApplyAsync(string container, IReadOnlyList<string> rows, CancellationToken cancellationToken = default)
-    {
-        var current = settings.Get();
-        AdoptHandWrittenMap();
-        var desired = Desired(container, rows, current);
-        var existing = store.ForContainer(container);
-        var removed = existing.Where(e => !desired.Any(d => d.Hostname == e.Hostname && d.ContainerPort == e.ContainerPort)).ToList();
-        var added = desired.Where(d => !existing.Any(e => e.Hostname == d.Hostname && e.ContainerPort == d.ContainerPort)).ToList();
-        if (removed.Count == 0 && added.Count == 0)
-        {
-            return;
-        }
-
-        foreach (var publication in removed)
-        {
-            store.Remove(publication.Hostname);
-        }
-
-        foreach (var publication in added)
-        {
-            store.Add(publication);
-        }
-
-        await WriteMapAndRestartAsync(current, cancellationToken);
-        logger.LogInformation("{Container}: {Added} name(s) published, {Removed} unpublished", container, added.Count, removed.Count);
     }
 
     private static List<Publication> Desired(string container, IReadOnlyList<string> rows, PublishingSettings current) =>
@@ -210,38 +248,7 @@ public sealed partial class PublishingService(
 
         if (!On(settings.Get().ProxyContainer))
         {
-            throw new InvalidOperationException($"The nginx container '{settings.Get().ProxyContainer}' is not on the network '{network}' (Settings → Publish), so it cannot reach {container} by name: connect it first.");
-        }
-    }
-
-    private async Task WriteMapAndRestartAsync(PublishingSettings current, CancellationToken cancellationToken)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(current.MapFile))!);
-        // In place, not through a temporary file: the proxy mounts this very file,
-        // and a bind mount follows the file, not the name.
-        await File.WriteAllTextAsync(current.MapFile, PublishedMap.Render(store.All()), cancellationToken);
-        await restarter.RestartAsync(current.ProxyContainer, cancellationToken);
-    }
-
-    /// <summary>Before the agent's first change, a map written by hand is what is published: keep it.</summary>
-    private void AdoptHandWrittenMap()
-    {
-        if (!store.IsEmpty)
-        {
-            return;
-        }
-
-        var path = settings.Get().MapFile;
-        try
-        {
-            if (File.Exists(path))
-            {
-                store.ImportIfEmpty(PublishedMap.Parse(File.ReadAllText(path)));
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            logger.LogWarning("publications: map at {Path} unreadable: {Message}", path, ex.Message);
+            throw new InvalidOperationException($"The proxy container '{settings.Get().ProxyContainer}' is not on the network '{network}' (Settings → Publish), so it cannot reach {container} by name: connect it first.");
         }
     }
 

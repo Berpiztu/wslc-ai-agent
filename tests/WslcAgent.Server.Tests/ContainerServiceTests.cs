@@ -21,7 +21,7 @@ public sealed class ContainerServiceTests
         var policies = new RestartPolicyStore(options, NullLogger<RestartPolicyStore>.Instance);
         var publications = new Publishing.PublicationStore(options, NullLogger<Publishing.PublicationStore>.Instance);
         var restarter = new ContainerRestarter(runner, policies, NullLogger<ContainerRestarter>.Instance);
-        var publishing = new Publishing.PublishingService(publications, new Publishing.PublishingSettingsStore(options), networks, restarter, NullLogger<Publishing.PublishingService>.Instance);
+        var publishing = new Publishing.PublishingService(publications, new Publishing.PublishingSettingsStore(options), networks, new FakePublishedPlugin(), NullLogger<Publishing.PublishingService>.Instance);
         return new ContainerService(runner, networks, policies, publications, publishing, restarter, registry, new ContainerRecreations(), new WslcEvents(), NullLogger<ContainerService>.Instance);
     }
 

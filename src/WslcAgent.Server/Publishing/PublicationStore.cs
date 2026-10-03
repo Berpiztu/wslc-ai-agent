@@ -7,7 +7,7 @@ namespace WslcAgent.Server.Publishing;
 
 /// <summary>
 /// The published ports, kept in <c>publications.json</c> in the agent's data
-/// folder: what the proxy's map is written from, and what the container rows
+/// folder: what the agent hands the proxy plugin, and what the container rows
 /// and details are annotated with. Keyed by hostname, one port each.
 /// </summary>
 public sealed class PublicationStore
@@ -30,17 +30,6 @@ public sealed class PublicationStore
         lock (_gate)
         {
             return _publications.OrderBy(p => p.Hostname, StringComparer.Ordinal).ToList();
-        }
-    }
-
-    public bool IsEmpty
-    {
-        get
-        {
-            lock (_gate)
-            {
-                return _publications.Count == 0;
-            }
         }
     }
 
@@ -86,25 +75,6 @@ public sealed class PublicationStore
             }
 
             return removed;
-        }
-    }
-
-    /// <summary>The first Publish on a machine set up by hand adopts the map it finds, instead of writing over it.</summary>
-    public void ImportIfEmpty(IEnumerable<Publication> found)
-    {
-        lock (_gate)
-        {
-            if (_publications.Count > 0)
-            {
-                return;
-            }
-
-            _publications.AddRange(found);
-            if (_publications.Count > 0)
-            {
-                _logger.LogInformation("publications: adopted {Count} name(s) from the map written by hand", _publications.Count);
-                Save();
-            }
         }
     }
 

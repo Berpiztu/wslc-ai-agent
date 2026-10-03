@@ -295,6 +295,17 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task UnpublishAsync(string hostname, CancellationToken cancellationToken = default) =>
         SendAsync(HttpMethod.Delete, $"api/v1/publications/{Escape(hostname)}", cancellationToken);
 
+    /// <summary>Asks the application again whether it has a login of its own; the publication with its access as it stands.</summary>
+    public Task<Publication> CheckPublicationAsync(string hostname, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<object, Publication>($"api/v1/publications/{Escape(hostname)}/check", new { }, cancellationToken);
+
+    /// <summary>The proxy's login in front of the name even when its application has its own, or not.</summary>
+    public Task<Publication> SetPublicationForceLoginAsync(string hostname, bool force, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<ForceLoginRequest, Publication>($"api/v1/publications/{Escape(hostname)}/force-login", new ForceLoginRequest(force), cancellationToken, HttpMethod.Put);
+
+    /// <summary>Where the proxy plugin's own page is shown, through the agent: every name, its users and their passwords.</summary>
+    public Uri PublishingPluginUrl() => new(http.BaseAddress!, "api/v1/publishing/plugin/");
+
     // Host terminal
 
     public Task<TerminalStatus> GetTerminalStatusAsync(CancellationToken cancellationToken = default) =>

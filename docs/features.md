@@ -251,7 +251,14 @@ too, their consoles and their web pages, and the way the world reaches them.
 [![A container's page: published through the public host and the nginx proxy by name, or opened with no setup through the host browser](images/architecture-networks.png)](https://berpiztu.github.io/wslc-ai-agent/architecture/wslc-networks.html)
 
 - **Publish a container's port** on a public HTTPS name from its form: the
-  agent writes the map of a built-in nginx proxy container and restarts it.
+  agent hands it to its proxy container, the wslc-published plugin (nginx and
+  a login in one container), which serves it at once.
+- **Every published name has a login.** The proxy plugin checks each
+  application: one with a login of its own is let through, any other gets the
+  proxy's login, with users of its own per name. A name's first administrator is
+  created at its address with its claim code, and manages that name's users;
+  the owner of the machine sees every name, user and password in the plugin's
+  own page, inside the agent.
 - **Set up** creates the network and the proxy in one step; publications are
   listed, opened and removed from Settings.
 - Every port offers its **local** address and, when published, its

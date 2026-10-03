@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% if root %}Published names{% else %}{{ host }} · Users{% endif %}</title>
+  <link rel="stylesheet" href="{{ static }}style.css">
+</head>
+<body class="wide">
+  <main class="shell wide">
+    <section class="card">
+      {% if root %}
+        <h1>Published names</h1>
+        <p class="note">Every published name, who may open it and its users. An application that asks for a login of its own
+          is let through; any other has this proxy's login, whose first administrator is created at the address with its code.</p>
+      {% else %}
+        <p class="eyebrow">{{ host }}</p>
+        <h1>Users of this address</h1>
+        <p class="note">Who may sign in here. Administrators also manage this list.</p>
+        <p><a class="button" href="/">Go to the page</a></p>
+      {% endif %}
+      <div id="error" class="error" hidden></div>
+      <div id="sites" data-root="{{ 'true' if root else 'false' }}"></div>
+    </section>
+  </main>
+  <template id="users-template">
+    <table class="users">
+      <thead><tr><th>User</th><th>Role</th><th class="password-col">Password</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <form class="add">
+      <input name="name" type="text" placeholder="User" autocapitalize="none" spellcheck="false" required>
+      <input name="password" type="password" placeholder="Password (8+)" autocomplete="new-password" minlength="8" required>
+      <select name="role"><option value="user">User</option><option value="admin">Administrator</option></select>
+      <button type="submit" class="button small">Add or change</button>
+    </form>
+  </template>
+  <script src="{{ static }}admin.js"></script>
+</body>
+</html>

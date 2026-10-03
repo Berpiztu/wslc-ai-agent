@@ -200,12 +200,15 @@ says no, or changes the target, do nothing and let the token die.
 - **A container port on a public name**: `list_publications` (what is
   published, with the https URL of each), `publish_container_port` (gated:
   the container joins the proxy's network, the name goes in the map, the
-  proxy restarts; the name is one label under the agent's domain, and the
-  container has to ask for its own password, since nothing of the agent's
-  stands in front of a published port), `unpublish_hostname` (the name
-  answers 404 from then on), `setup_publishing` (the first use on a
-  machine: the network, the map file and the nginx proxy container made
-  from the agent's settings when missing, left alone when there).
+  proxy serves it; the name is one label under the agent's domain. An
+  application that asks for a login of its own is let through; any other gets
+  the proxy's login, with users of its own, managed in the proxy's own page
+  (Settings → Publishing → Users and passwords), which no tool reaches:
+  passwords never go through you), `unpublish_hostname` (the name answers 404
+  from then on), `setup_publishing` (the first use on a machine: the network,
+  the data folder and the proxy container — the wslc-published plugin, nginx and
+  its login, ghcr.io/berpiztu/wslc-published — made from the agent's settings
+  when missing, or in place of a plain nginx one; left alone when there).
 - **Notifications**: `list_notifications` (what the agent raised lately — a
   container that stopped on its own, a disk filling up, a job that failed —
   with `after` set to the last id seen for only the new ones),

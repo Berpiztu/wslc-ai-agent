@@ -40,7 +40,8 @@
         <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
             One port pair per row; each row becomes a --publish flag. Reverse proxy publishes the container port at
             <span class="wslc-mono">https://name@(_suffix).@(_domain)/</span> (the suffix and the domain are Settings → Publishing's),
-            open from anywhere with no login of the agent's in front: tick it only for what asks for its own password.
+            open from anywhere: an application with a login of its own is let through, any other gets the proxy's login,
+            with its own users (Settings → Publishing → Users and passwords).
             The container has to be on the publishing network, in Networks below; Save refuses otherwise. Saving the
             form is what publishes.
         </MudText>
