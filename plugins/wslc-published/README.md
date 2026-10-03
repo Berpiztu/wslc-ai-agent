@@ -1,5 +1,7 @@
 # wslc-published
 
+**Image:** `ghcr.io/berpiztu/wslc-published` (`latest`, or a version such as `1.0`).
+
 The publishing proxy of WSLC AI Agent, as a plugin of its own: one container with
 nginx in front of the published names and its own Python program. It stands apart
 from the agent's code (`src/`): the agent only talks to it over HTTP, so this
@@ -63,8 +65,19 @@ wslc run -d --name wslc-published --network published `
   -v C:/wslc/published:/data ghcr.io/berpiztu/wslc-published:latest
 ```
 
-The agent's Settings → Publishing → Set up does the same. Every release tag builds
-and pushes the image (`.github/workflows/published-image.yml`).
+The agent's Settings → Publish → Set up does the same, from the published image:
+nothing has to be built or installed by hand.
+
+## Publish a new image
+
+By hand, and seldom: the image changes on its own clock, not the agent's releases.
+On GitHub, **Actions → Published proxy image → Run workflow**, with the version
+(`1.1`) and whether it is `latest` too (`.github/workflows/published-image.yml`).
+Then a proxy already running takes it with **Update image** on its container in
+the agent; its data folder stays.
+
+The package has to be **public** on GitHub (Berpiztu → Packages → wslc-published
+→ Package settings) for other machines to pull it without signing in.
 
 Debian, not Alpine: in a musl container `host.wslc.internal` does not resolve
 (https://github.com/microsoft/WSL/issues/41769).

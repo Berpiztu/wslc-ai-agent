@@ -23,8 +23,9 @@
     them; and offers to install
     the Windows client on this machine too. Then it offers to create the
     publishing container
-    (the network, the proxy's map and the nginx proxy that put a container on
-    a public HTTPS name): the agent's own Set up, which leaves alone what
+    (the network, the proxy's data folder and the proxy container,
+    ghcr.io/berpiztu/wslc-published: nginx and a login in front of every
+    container put on a public HTTPS name): the agent's own Set up, which leaves alone what
     exists. The domain and the rest are set afterwards in Settings > Publish.
     GitHub Pages serves this file (.github/workflows/pages.yml); the README's
     Quick start runs it.
@@ -197,7 +198,7 @@ param([switch]$Client)
     if (-not $hasWslc) { return }
     Write-Host ""
     Write-Host "Publishing puts a container on a public HTTPS name under your own domain,"
-    Write-Host "through an nginx proxy container this agent manages."
+    Write-Host "through a proxy container this agent manages (ghcr.io/berpiztu/wslc-published)."
     $answer = try { Read-Host "Create the publishing container now? [y/N]" } catch { "" }
     if ($answer -notmatch '^\s*(y|yes)\s*$') {
         Write-Host "Skipped. Settings > Publish > Set up creates it whenever you want." -ForegroundColor DarkGray
@@ -219,7 +220,7 @@ param([switch]$Client)
         return
     }
 
-    Write-Host "Creating the publishing container (the first time, WSLC downloads nginx)..." -ForegroundColor Cyan
+    Write-Host "Creating the publishing container (the first time, WSLC downloads ghcr.io/berpiztu/wslc-published)..." -ForegroundColor Cyan
     try {
         $setup = Invoke-RestMethod -Method Post -Uri "$agent/api/v1/publishing/setup" -TimeoutSec 600
     } catch {
@@ -228,7 +229,7 @@ param([switch]$Client)
         return
     }
     Write-Host "  network  $(if ($setup.networkCreated) { 'created' } else { 'already there' })"
-    Write-Host "  map      $(if ($setup.mapWritten) { 'written' } else { 'already there' })"
+    Write-Host "  data     $(if ($setup.dataFolderCreated) { 'created' } else { 'already there' })"
     Write-Host "  proxy    $(if ($setup.proxyCreated) { 'created' } else { 'already there' })"
     foreach ($note in @($setup.notes)) { if ($note) { Write-Host "  $note" -ForegroundColor DarkGray } }
     Write-Host ""

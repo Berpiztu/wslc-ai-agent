@@ -31,8 +31,10 @@ products are **WSLC AI Agent** (the agent, `wslc-ai-agent.exe`) and
   a phone or across the internet. Not only the WSLC machine but its
   containers: open a console on the
   host or in any container, open a container's web page even when it is not
-  published, and publish it on a public HTTPS name through a built-in nginx
-  proxy.
+  published, and publish it on a public HTTPS name through the agent's own
+  proxy, with a login of its own in front of any application that has none
+  ([wslc-published](plugins/wslc-published/README.md), image
+  `ghcr.io/berpiztu/wslc-published`).
 - **Files** inside containers, images and volumes, with transfers that keep
   running when you leave.
 - **Logs**: the agent's own, and every `wslc` command it ran.
@@ -158,8 +160,9 @@ If Windows warns that the installer is from an unknown publisher: **More info
 package folder (the agent's, and the Windows and Android clients', so anyone
 opening the agent's web page can download the clients from there); asks whether to install the Windows client on this
 machine too; and asks whether to create the publishing
-container, the nginx proxy that puts a container on a public HTTPS name
-(default: no); its domain is then set in **Settings → Publish**. Prefer the browser? Download it from the
+container, the proxy that puts a container on a public HTTPS name with a
+login in front (`ghcr.io/berpiztu/wslc-published`, downloaded by WSLC itself;
+default: no); its domain is then set in **Settings → Publish**. Prefer the browser? Download it from the
 [latest release](https://github.com/Berpiztu/wslc-ai-agent/releases/latest).
 
 **2. Open it.** The agent starts at once, and at every logon from then on;
