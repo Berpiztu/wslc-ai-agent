@@ -5,13 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Not available</title>
   <link rel="stylesheet" href="/__login/static/style.css">
+  <script src="/__login/static/icons.js"></script>
+  <script src="/__login/static/theme.js"></script>
 </head>
 <body>
-  <main class="shell">
-    <section class="card">
-      <p class="eyebrow">{{ host }}</p>
-      <h1>Not available</h1>
-      <p>This address is not served.</p>
+  <main class="page">
+    <section class="frame">
+      <header class="frame-title">
+        <button type="button" class="icon-button theme-toggle" data-theme-toggle></button>
+        <p class="eyebrow">{{ host }}</p>
+        <h1>Not available</h1>
+      </header>
+      <div class="content">
+        <p class="dialog-text">This address is not served.</p>
+      </div>
     </section>
   </main>
 </body>

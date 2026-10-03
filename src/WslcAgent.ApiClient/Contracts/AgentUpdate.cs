@@ -47,6 +47,19 @@ public sealed record AgentUpdateStatus(
     string PackageFolder,
     string AutomaticPackageFolder);
 
+/// <summary>
+/// Body of <c>GET /api/v1/agent/update/latest</c>: the latest release of the agent
+/// on GitHub, for Settings → Update to show beside the version running.
+/// </summary>
+/// <param name="Version">Its version, without the tag's <c>v</c>.</param>
+/// <param name="PublishedAt">When it was published, when GitHub says.</param>
+/// <param name="Url">Its page on GitHub.</param>
+public sealed record LatestRelease(string Version, DateTimeOffset? PublishedAt, string Url)
+{
+    /// <summary>The README's line that installs the latest release, or updates an agent already installed.</summary>
+    public const string InstallLine = "irm https://berpiztu.github.io/wslc-ai-agent/install.ps1 | iex";
+}
+
 /// <summary>Where an update stands.</summary>
 public static class AgentUpdateState
 {

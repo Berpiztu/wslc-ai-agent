@@ -274,6 +274,8 @@
                 else
                 {
                     <MudText Typo="Typo.body2" Class="mb-2">Now: <b>@UpdateStateText</b></MudText>
+                    @* The latest release on GitHub, and the README's own line to install it. *@
+                    <MudText Typo="Typo.body2" Class="mb-2">Latest on GitHub: <b>@LatestText</b></MudText>
                     <MudSwitch T="bool" Value="_update.Settings.AutoUpdate" ValueChanged="SaveUpdateAsync"
                                Label="Auto update" LabelPlacement="Placement.Start" Color="Color.Primary" Disabled="_updateBusy" />
                     @* Empty is the folder the agent was installed with, shown as the placeholder. *@
@@ -290,6 +292,9 @@
                         <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.SystemUpdateAlt"
                                    Disabled="@(_updateBusy || !_update.Installed || !_update.Newer || _update.State == AgentUpdateState.Installing)"
                                    OnClick="UpdateNowAsync">Update now</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Info" StartIcon="@Icons.Material.Filled.CloudDownload"
+                                   Disabled="@(_updateBusy || _latest is null || _update.State == AgentUpdateState.Installing)"
+                                   title="@LatestRelease.InstallLine" OnClick="InstallFromGitHubAsync">Install from GitHub</MudButton>
                         @if (_update.State is AgentUpdateState.Announced or AgentUpdateState.Waiting)
                         {
                             <MudButton Variant="Variant.Filled" Color="Color.Error" Disabled="_updateBusy" OnClick="CancelUpdateAsync">Cancel</MudButton>
@@ -902,6 +907,7 @@
         Changes.Start();
         await LoadAsync();
         await ReadUpdateAsync();
+        await ReadLatestReleaseAsync();
         await AskTheMachineAsync();
     }
 
@@ -1042,6 +1048,62 @@
     }
 
     private Task ReadUpdateAsync() => AskUpdateAsync(() => Api.GetAgentUpdateAsync(), done: null);
+
+    /// <summary>The latest release on GitHub; null while unknown.</summary>
+    private LatestRelease? _latest;
+
+    /// <summary>Why the latest release is unknown, when GitHub did not answer.</summary>
+    private string _latestError = "";
+
+    private string LatestText => _latest switch
+    {
+        { PublishedAt: { } at } => $"{_latest.Version}, published {at.ToLocalTime():d MMMM yyyy}",
+        { } => _latest.Version,
+        null => _latestError.Length > 0 ? $"unknown ({_latestError})" : "asking…",
+    };
+
+    private async Task ReadLatestReleaseAsync()
+    {
+        try
+        {
+            _latest = await Api.GetLatestAgentReleaseAsync();
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _latestError = ex.Message;
+        }
+    }
+
+    /// <summary>
+    /// The README's line, run by the agent on its machine as if pasted into a terminal:
+    /// with the agent installed it puts the latest installers in the package folder and
+    /// the agent installs its own, stopping for a minute or two.
+    /// </summary>
+    private async Task InstallFromGitHubAsync()
+    {
+        if (!await DialogFlow.ConfirmAsync(Dialogs, "Install from GitHub",
+                $"Run on the agent's machine the line the web page gives:\n\n{LatestRelease.InstallLine}\n\n"
+                + $"It downloads release {_latest?.Version}'s installers into the package folder, and the agent installs its own at once: "
+                + "it waits for any transfer, stops for a minute or two and starts again. A PowerShell window on that machine shows it.", "Install"))
+        {
+            return;
+        }
+
+        _updateBusy = true;
+        try
+        {
+            await Api.InstallAgentFromGitHubAsync();
+            Snackbar.Add("Install from GitHub started on the agent's machine", Severity.Success);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"Install from GitHub: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _updateBusy = false;
+        }
+    }
 
     private Task SaveUpdateAsync(bool on) =>
         AskUpdateAsync(() => Api.SetAgentUpdateSettingsAsync(_update!.Settings with { AutoUpdate = on }), on ? "Auto update on" : "Auto update off: only Update now installs");

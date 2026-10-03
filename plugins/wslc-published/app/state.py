@@ -195,22 +195,69 @@ class State:
             return user
 
     def put_user(self, host: str, name: str, password: str, role: str) -> dict:
+        """A user added, or replaced whole (password and role), by name."""
         with self._lock:
             site = self._require(host)
             user = self._put_user(site, name, password, role)
+            self._sync_claim(site)
             self._save()
             return user
 
-    def remove_user(self, host: str, name: str) -> bool:
+    def add_user(self, host: str, name: str, password: str, role: str) -> dict:
+        """A new user; refused when the name is taken, so an add never overwrites someone."""
         with self._lock:
             site = self._require(host)
-            before = len(site["users"])
-            site["users"] = [u for u in site["users"] if u["name"] != name]
-            if len(site["users"]) == before:
+            if self._find(site, name) is not None:
+                raise StateError(f"There is already a user called {name.strip()}.")
+            user = self._put_user(site, name, password, role)
+            self._sync_claim(site)
+            self._save()
+            return user
+
+    def change_user(self, host: str, name: str, password: str | None, role: str | None, keep_admin: bool) -> dict:
+        """
+        A user's password, role or both. keep_admin refuses taking the site's last
+        administrator away (a site's own administrators); the root may, and the
+        site then waits for a new one with a new code.
+        """
+        with self._lock:
+            site = self._require(host)
+            user = self._find(site, name)
+            if user is None:
+                raise StateError(f"There is no user called {name}.")
+            if role is not None:
+                if role not in (ADMIN, USER):
+                    raise StateError("The role is admin or user.")
+                if keep_admin and role != ADMIN and self._last_admin(site, user):
+                    raise StateError("This is the address's only administrator: make another one first.")
+                user["role"] = role
+            if password is not None:
+                self._set_password(user, password)
+            self._sync_claim(site)
+            self._save()
+            return user
+
+    def change_own_password(self, host: str, name: str, current: str, password: str) -> None:
+        """A user's own password, the current one asked first."""
+        with self._lock:
+            site = self._require(host)
+            user = self._find(site, name)
+            if user is None or not verify_password(current, user["hash"]):
+                raise StateError("The current password is not right.")
+            self._set_password(user, password)
+            self._save()
+
+    def remove_user(self, host: str, name: str, keep_admin: bool = False) -> bool:
+        """A user taken out; keep_admin as in change_user."""
+        with self._lock:
+            site = self._require(host)
+            user = self._find(site, name)
+            if user is None:
                 return False
-            if not any(u.get("role") == ADMIN for u in site["users"]) and not site.get("claimCode"):
-                # The last administrator gone: the page asks for a new one, with a new code.
-                site["claimCode"] = new_claim_code()
+            if keep_admin and self._last_admin(site, user):
+                raise StateError("This is the address's only administrator: make another one first.")
+            site["users"] = [u for u in site["users"] if u is not user]
+            self._sync_claim(site)
             self._save()
             return True
 
@@ -220,14 +267,38 @@ class State:
         name = name.strip()
         if not USER_NAME.match(name):
             raise StateError("A user name is 1 to 64 letters, digits, '.', '_', '@' or '-'.")
-        if len(password) < 8:
-            raise StateError("The password needs at least 8 characters.")
         if role not in (ADMIN, USER):
             raise StateError("The role is admin or user.")
-        user = {"name": name, "role": role, "hash": hash_password(password),
-                "secret": self._fernet.encrypt(password.encode()).decode()}
+        user = {"name": name, "role": role}
+        self._set_password(user, password)
         site["users"] = [u for u in site["users"] if u["name"].lower() != name.lower()] + [user]
         return user
+
+    def _set_password(self, user: dict, password: str) -> None:
+        if len(password) < 8:
+            raise StateError("The password needs at least 8 characters.")
+        user["hash"] = hash_password(password)
+        user["secret"] = self._fernet.encrypt(password.encode()).decode()
+
+    @staticmethod
+    def _find(site: dict, name: str) -> dict | None:
+        return next((u for u in site["users"] if u["name"].lower() == name.strip().lower()), None)
+
+    @staticmethod
+    def _last_admin(site: dict, user: dict) -> bool:
+        return user.get("role") == ADMIN and sum(1 for u in site["users"] if u.get("role") == ADMIN) == 1
+
+    @staticmethod
+    def _sync_claim(site: dict) -> None:
+        """
+        The claim code follows the administrators: one made by the root ends the code,
+        as a claim does; none left, and the login page asks for a new one with a new code.
+        """
+        has_admin = any(u.get("role") == ADMIN for u in site["users"])
+        if has_admin:
+            site["claimCode"] = ""
+        elif not site.get("claimCode"):
+            site["claimCode"] = new_claim_code()
 
     def _require(self, host: str) -> dict:
         site = self._sites.get(host.strip().lower())

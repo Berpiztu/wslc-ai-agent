@@ -108,6 +108,24 @@ def create(state, token: str) -> Flask:
         except StateError as error:
             return refused(error, 404)
 
+    @app.post("/api/sites/<host>/users")
+    def add_user(host: str):
+        data = request.get_json(silent=True) or {}
+        try:
+            state.add_user(host, str(data.get("name") or ""), str(data.get("password") or ""), str(data.get("role") or USER))
+        except StateError as error:
+            return refused(error)
+        return jsonify({"ok": True})
+
+    @app.patch("/api/sites/<host>/users/<name>")
+    def change_user(host: str, name: str):
+        data = request.get_json(silent=True) or {}
+        try:
+            state.change_user(host, name, data.get("password"), data.get("role"), keep_admin=False)
+        except StateError as error:
+            return refused(error)
+        return jsonify({"ok": True})
+
     @app.put("/api/sites/<host>/users/<name>")
     def put_user(host: str, name: str):
         data = request.get_json(silent=True) or {}

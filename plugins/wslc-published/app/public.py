@@ -7,8 +7,8 @@
   site's claim code (the agent shows it to whoever published the name); after
   that it signs in the site's users.
 - /admin (/__admin on every name): the site's own administration, for its
-  administrators: its users only,
-  never another site's.
+  administrators: its users only, never another site's, and never without an
+  administrator. Any signed-in user changes their own password there.
 
 A session is a signed cookie bound to the name and the user, checked against the
 site's users on every request, so a user taken out is out at once.
@@ -121,20 +121,46 @@ def create(state, secret: str) -> Flask:
                                    claim=not state.has_admin(host()), user=session_user(), need_admin=True)
         return render_template("admin.html", host=host(), root=False, static="/__login/static/")
 
+    def admins_only():
+        return refused(PermissionError("Administrators only."), 403)
+
     @app.get("/api/users")
     def users():
-        if site_admin() is None:
-            return refused(PermissionError("Administrators only."), 403)
+        me = site_admin()
+        if me is None:
+            return admins_only()
         site = state.site(host()) or {}
-        return jsonify([{"name": u["name"], "role": u["role"]} for u in site.get("users", [])])
+        return jsonify({"me": me["name"], "users": [{"name": u["name"], "role": u["role"]} for u in site.get("users", [])]})
+
+    @app.post("/api/users")
+    def add_user():
+        if site_admin() is None:
+            return admins_only()
+        data = request.get_json(silent=True) or {}
+        try:
+            state.add_user(host(), str(data.get("name") or ""), str(data.get("password") or ""), str(data.get("role") or USER))
+        except StateError as error:
+            return refused(error)
+        return jsonify({"ok": True})
 
     @app.put("/api/users/<name>")
     def put_user(name: str):
         if site_admin() is None:
-            return refused(PermissionError("Administrators only."), 403)
+            return admins_only()
         data = request.get_json(silent=True) or {}
         try:
             state.put_user(host(), name, str(data.get("password") or ""), str(data.get("role") or USER))
+        except StateError as error:
+            return refused(error)
+        return jsonify({"ok": True})
+
+    @app.patch("/api/users/<name>")
+    def change_user(name: str):
+        if site_admin() is None:
+            return admins_only()
+        data = request.get_json(silent=True) or {}
+        try:
+            state.change_user(host(), name, data.get("password"), data.get("role"), keep_admin=True)
         except StateError as error:
             return refused(error)
         return jsonify({"ok": True})
@@ -143,10 +169,27 @@ def create(state, secret: str) -> Flask:
     def remove_user(name: str):
         me = site_admin()
         if me is None:
-            return refused(PermissionError("Administrators only."), 403)
+            return admins_only()
         if name == me["name"]:
             return refused(StateError("You cannot take yourself out; another administrator can."))
-        state.remove_user(host(), name)
+        try:
+            state.remove_user(host(), name, keep_admin=True)
+        except StateError as error:
+            return refused(error)
+        return jsonify({"ok": True})
+
+    @app.post("/api/me/password")
+    def change_own_password():
+        me = session_user()
+        if me is None:
+            return refused(PermissionError("Sign in first."), 401)
+        data = request.get_json(silent=True) or {}
+        if data.get("confirm") is not None and data.get("confirm") != data.get("password"):
+            return refused(StateError("The two passwords are not the same."))
+        try:
+            state.change_own_password(host(), me["name"], str(data.get("current") or ""), str(data.get("password") or ""))
+        except StateError as error:
+            return refused(error)
         return jsonify({"ok": True})
 
     @app.get("/blocked")

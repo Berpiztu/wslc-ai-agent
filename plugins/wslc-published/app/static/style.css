@@ -1,100 +1,331 @@
+/*
+ * The proxy's pages in WSLC AI Agent's own look (src/WslcAgent.UI: WslcTheme.cs and
+ * wslc-agent-ui.css): its palette, its four type sizes, and its parts — a frame
+ * with the title on the frame's tone, a content box on the page's, a rail of filled
+ * icon buttons, filled fields, the grid with its header in the header tone. The
+ * values are the agent's, copied; nothing here is a look of its own.
+ *
+ * Light by default, dark when the system is (a published name's visitors), or as
+ * the agent is when the page sits inside it (admin.js sets data-theme).
+ */
+
 :root {
-  color-scheme: light dark;
-  --bg: #f4f5f7;
-  --card: #ffffff;
-  --text: #1f2933;
-  --muted: #61707d;
-  --accent: #2563eb;
-  --error: #c81e1e;
-  --line: #d5dae0;
+  color-scheme: light;
+  --primary: #4f46e5;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #0284c7;
+  --background: #f3f6fb;
+  --surface: #ffffff;
+  --text: #172033;
+  --text-secondary: #64748b;
+  --text-disabled: #94a3b8;
+  --lines: #dbe3ef;
+  --lines-inputs: #cbd5e1;
+  --disabled-background: #e2e8f0;
+  --hover: rgba(79, 70, 229, 0.08);
+  --striped: rgba(15, 23, 42, 0.025);
+  /* The light theme keeps the dark one's order, not its names: the content box is
+     the white surface and a field the page tone, so a field still stands off. */
+  --content: var(--surface);
+  --field: var(--background);
+  --radius: 8px;
+  --font: Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+  --size-title: 1.06rem;
+  --size-body: 0.82rem;
+  --size-small: 0.72rem;
+  --elevation: 0 2px 4px -1px rgba(0, 0, 0, 0.2), 0 4px 5px 0 rgba(0, 0, 0, 0.14), 0 1px 10px 0 rgba(0, 0, 0, 0.12);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #111418;
-    --card: #1b2027;
-    --text: #e6e9ed;
-    --muted: #9aa5b1;
-    --accent: #60a5fa;
-    --error: #f87171;
-    --line: #313a45;
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --info: #38bdf8;
+    --background: #0f172a;
+    --surface: #1e293b;
+    --text: #f8fafc;
+    --text-secondary: #94a3b8;
+    --text-disabled: #64748b;
+    --lines: #334155;
+    --lines-inputs: #475569;
+    --disabled-background: #1e293b;
+    --hover: rgba(79, 70, 229, 0.12);
+    --striped: rgba(255, 255, 255, 0.025);
+    --content: var(--background);
+    --field: var(--surface);
   }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --info: #38bdf8;
+  --background: #0f172a;
+  --surface: #1e293b;
+  --text: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-disabled: #64748b;
+  --lines: #334155;
+  --lines-inputs: #475569;
+  --disabled-background: #1e293b;
+  --hover: rgba(79, 70, 229, 0.12);
+  --striped: rgba(255, 255, 255, 0.025);
+  --content: var(--background);
+  --field: var(--surface);
+}
+
+/* The agent's tones made from the palette: the frame (its title bar's) and the grid's header. */
+:root {
+  --frame: color-mix(in srgb, var(--primary) 8%, var(--surface));
+  --header: color-mix(in srgb, var(--primary) 18%, var(--surface));
 }
 
 * { box-sizing: border-box; }
 
+html, body { height: 100%; }
+
 body {
   margin: 0;
-  min-height: 100vh;
+  background: var(--background);
+  color: var(--text);
+  font: var(--size-body)/1.45 var(--font);
+}
+
+/* A page holding one frame: centred, the sign-in pages narrow, the administration wide. */
+.page {
+  min-height: 100%;
   display: grid;
   place-items: center;
   padding: 16px;
-  background: var(--bg);
-  color: var(--text);
-  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
-.shell { width: 100%; max-width: 380px; }
+/* The administration fills the window and only its content scrolls, as the agent's pages. */
+.page.wide { height: 100%; place-items: stretch center; }
 
-.card {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 28px 24px;
-}
-
-.eyebrow { margin: 0; color: var(--muted); font-size: 13px; word-break: break-all; }
-h1 { margin: 4px 0 20px; font-size: 24px; }
-.note { color: var(--muted); font-size: 14px; }
-
-label { display: block; margin-bottom: 14px; }
-label span { display: block; margin-bottom: 4px; font-size: 14px; color: var(--muted); }
-
-input {
+/* The frame: the dialog's look on a page. */
+.frame {
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  background: var(--frame);
+  border: 1px solid var(--lines);
+  border-radius: var(--radius);
+  padding: 0 12px 12px;
+  box-shadow: var(--elevation);
+}
+
+.frame.wide { max-width: 1100px; height: 100%; min-height: 0; }
+.frame.wide .content { overflow: auto; }
+
+.frame-title { position: relative; padding: 12px 40px 10px 4px; }
+/* The light-dark toggle, at the title's end as the agent has it in its own bar. */
+.theme-toggle { position: absolute; top: 8px; right: 0; color: var(--text); }
+.frame-title h1 { margin: 0; font-size: var(--size-title); font-weight: 600; line-height: 1.3; }
+.eyebrow { margin: 0 0 2px; color: var(--text-secondary); font-size: var(--size-small); word-break: break-all; }
+.note { margin: 4px 0 0; color: var(--text-secondary); font-size: var(--size-small); }
+
+.frame-body { display: flex; flex: 1 1 auto; min-height: 0; gap: 6px; }
+
+.content {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--content);
+  border: 1px solid var(--lines);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+
+/* The rail: the verbs of the page, filled icon buttons in the agent's verb colours. */
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  flex: 0 0 auto;
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 5px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.icon-button .icon { width: 20px; height: 20px; fill: currentColor; }
+.icon-button:hover { background-color: var(--hover); }
+.icon-button:disabled { color: var(--text-disabled); cursor: default; background: transparent; }
+
+.icon-button.filled { color: #fff; box-shadow: var(--elevation); }
+.icon-button.filled:disabled { background: var(--disabled-background); color: var(--text-disabled); box-shadow: none; }
+.icon-button.filled.primary { background: var(--primary); }
+.icon-button.filled.success { background: var(--success); }
+.icon-button.filled.info { background: var(--info); }
+.icon-button.filled.warning { background: var(--warning); }
+.icon-button.filled.error { background: var(--error); }
+.icon-button.primary:not(.filled) { color: var(--primary); }
+.icon-button.error:not(.filled) { color: var(--error); }
+.icon-button.success:not(.filled) { color: var(--success); }
+/* After the tones, so a greyed button is grey whatever its tone. */
+.icon-button:disabled:not(.filled) { color: var(--text-disabled); }
+.icon-button.small { width: 26px; height: 26px; padding: 4px; }
+.icon-button.small .icon { width: 18px; height: 18px; }
+
+/* A filled field, as MudBlazor's dense one: its name small on top, the value under it. */
+.field {
+  position: relative;
+  display: block;
+  margin-bottom: 10px;
+  background: var(--field);
+  border-radius: 4px 4px 0 0;
+  border-bottom: 1px solid var(--lines-inputs);
+}
+
+.field:hover { background: color-mix(in srgb, var(--text) 6%, var(--field)); }
+.field:focus-within { border-bottom: 2px solid var(--success); }
+.field:focus-within > span { color: var(--success); }
+
+.field > span {
+  position: absolute;
+  top: 6px;
+  left: 12px;
+  font-size: var(--size-small);
+  font-weight: 600;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.field input,
+.field select {
+  width: 100%;
+  padding: 23px 12px 6px;
+  border: 0;
+  outline: 0;
   background: transparent;
   color: var(--text);
   font: inherit;
 }
 
+.field select option { background: var(--surface); color: var(--text); }
+
+/* A field's own button, inside it at its end, as a picker's in the agent. */
+.field.with-button input { padding-right: 44px; }
+.field > .icon-button { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); }
+
+/* Wide buttons, for the one thing a sign-in page is for. */
 .button {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   width: 100%;
-  padding: 10px 14px;
+  padding: 8px 16px;
   border: 0;
-  border-radius: 8px;
-  background: var(--accent);
+  border-radius: 4px;
+  background: var(--primary);
   color: #fff;
   font: inherit;
-  font-weight: 600;
-  text-align: center;
+  font-weight: 500;
   text-decoration: none;
   cursor: pointer;
+  box-shadow: var(--elevation);
 }
 
-.button:disabled { opacity: .6; cursor: default; }
-.button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); margin-top: 8px; }
-.actions { display: grid; gap: 4px; }
-.error { color: var(--error); margin: 0 0 12px; font-size: 14px; }
+.button .icon { width: 18px; height: 18px; fill: currentColor; }
+.button:disabled { background: var(--disabled-background); color: var(--text-disabled); box-shadow: none; cursor: default; }
+.button.text { background: transparent; color: var(--text); box-shadow: none; }
+.button.text:hover { background: var(--hover); }
+.button.error { background: var(--error); }
+.button.auto { width: auto; }
+.actions { display: grid; gap: 8px; margin-top: 4px; }
 
-/* The administration pages: wider, a table of users per site. */
-.shell.wide { max-width: 980px; }
-body.wide { place-items: start center; }
-h2 { font-size: 18px; margin: 0; }
-.muted { color: var(--muted); font-size: 14px; }
-.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 14px; }
-.site { border-top: 1px solid var(--line); padding: 16px 0; }
-.site-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0 10px; }
-.chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); }
-.chip.own { color: var(--accent); }
-.chip.login { color: var(--text); }
-table.users { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
-table.users th, table.users td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); font-size: 14px; }
-form.add { display: flex; gap: 8px; flex-wrap: wrap; }
-form.add input, form.add select { width: auto; flex: 1 1 140px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--text); font: inherit; }
-.button.small { width: auto; padding: 6px 10px; font-size: 13px; }
-.button.danger { background: var(--error); }
+.dialog-text { margin: 0 0 10px; white-space: pre-line; }
+.error { margin: 0 0 10px; color: var(--error); font-size: var(--size-small); }
+.muted { color: var(--text-secondary); }
+.mono { font-family: var(--mono); }
+
+/* The link that opens a site, as the agent's address links: green, underlined. */
+.site-link {
+  color: var(--success);
+  font-family: var(--mono);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* One published name in the root's page: its line, its first administrator's code, its users. */
+.site + .site { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--lines); }
+.site-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.site-head .grow { flex: 1 1 auto; }
+.site-head .mono { font-size: var(--size-small); }
+.site-head .access { display: inline-flex; align-items: center; gap: 4px; color: var(--text-secondary); font-size: var(--size-small); }
+.site-head .access .icon { width: 18px; height: 18px; fill: currentColor; }
+.access.own .icon, .access.users .icon { fill: var(--success); }
+.access.waiting .icon { fill: var(--warning); }
+.claim { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 8px; font-size: var(--size-small); }
+.claim .code { font-family: var(--mono); font-size: var(--size-body); font-weight: 600; }
+
+/* The grid, as ListGrid draws it: a box, the header in the header tone, dense rows. */
+.grid { border: 1px solid var(--lines); border-radius: var(--radius); overflow: auto; }
+.grid table { width: 100%; border-collapse: collapse; }
+.grid th {
+  position: sticky;
+  top: 0;
+  background: var(--header);
+  color: var(--text);
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--lines);
+}
+.grid td { padding: 4px 10px; height: 36px; border-bottom: 1px solid var(--lines); vertical-align: middle; }
+.grid tbody tr:nth-child(even) td { background: var(--striped); }
+.grid tbody tr:hover td { background: var(--hover); }
+.grid tbody tr:last-child td { border-bottom: 0; }
+.grid .actions-col { width: 1%; white-space: nowrap; text-align: right; }
+.grid .role { display: inline-flex; align-items: center; gap: 4px; }
+.grid .role .icon { width: 18px; height: 18px; fill: var(--text-secondary); }
+.grid .role.admin .icon { fill: var(--primary); }
+.password { display: inline-flex; align-items: center; gap: 2px; }
+.password .value { font-family: var(--mono); min-width: 9ch; }
+
+/* A dialog, as the agent's: the frame's tone, its title, its content box, its buttons. */
+dialog.dialog {
+  width: min(420px, calc(100vw - 32px));
+  padding: 0 12px 12px;
+  border: 1px solid var(--lines);
+  border-radius: var(--radius);
+  background: var(--frame);
+  color: var(--text);
+  box-shadow: var(--elevation);
+}
+
+dialog.dialog::backdrop { background: rgba(15, 23, 42, 0.55); }
+dialog.dialog .frame-title { padding: 12px 4px 10px; }
+dialog.dialog .content { padding: 12px 12px 2px; }
+dialog.dialog .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
+/* A message that comes and goes at the bottom, as the agent's snackbar. */
+.snackbar {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 32px);
+  padding: 8px 14px;
+  border-radius: 4px;
+  background: var(--success);
+  color: #fff;
+  box-shadow: var(--elevation);
+}
+
+.snackbar.error { background: var(--error); }

@@ -53,8 +53,21 @@ the image loses nothing:
 | POST | `/api/sites/{host}/check` | | the site, checked again now |
 | PUT | `/api/sites/{host}/force-login` | `{force}` | the site: the login screen in front even of an application with its own login, or not |
 | POST | `/api/sites/{host}/claim-code` | | `{claimCode}`, a new one |
+| POST | `/api/sites/{host}/users` | `{name, password, role}` | a new user; 400 when the name is taken |
 | PUT | `/api/sites/{host}/users/{name}` | `{password, role}` (`admin`/`user`) | the user added or changed |
+| PATCH | `/api/sites/{host}/users/{name}` | `{password?, role?}` | the password, the role or both; with no administrator left the address gets a new claim code |
 | DELETE | `/api/sites/{host}/users/{name}` | | the user taken out; their sessions end at once |
+
+## A name's own administration
+
+At `https://<name>/__admin`, for the name's administrators, through `/__login/api/`: `GET users`
+(`{me, users}`), `POST users`, `PATCH users/{name}`, `DELETE users/{name}`, and for any user signed
+in `POST me/password` (`{current, password, confirm}`). An address always keeps one administrator:
+nobody takes out or demotes the last, nor themselves. A claim code lasts while the name has no
+administrator: one made by the root ends it, as a claim does.
+
+The pages wear WSLC AI Agent's look (`app/static/style.css`: its palette, type, frame, rail and grid,
+light and dark; the agent's own Material icons in `app/static/icons.js`).
 
 ## Build and run by hand
 

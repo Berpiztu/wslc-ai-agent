@@ -5,36 +5,57 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% if root %}Published names{% else %}{{ host }} · Users{% endif %}</title>
   <link rel="stylesheet" href="{{ static }}style.css">
+  <script src="{{ static }}icons.js"></script>
+  <script src="{{ static }}theme.js"></script>
 </head>
-<body class="wide">
-  <main class="shell wide">
-    <section class="card">
-      {% if root %}
-        <h1>Published names</h1>
-        <p class="note">Every published name, who may open it and its users. An application that asks for a login of its own
-          is let through; any other has this proxy's login, whose first administrator is created at the address with its code.</p>
-      {% else %}
-        <p class="eyebrow">{{ host }}</p>
-        <h1>Users of this address</h1>
-        <p class="note">Who may sign in here. Administrators also manage this list.</p>
-        <p><a class="button" href="/">Go to the page</a></p>
-      {% endif %}
-      <div id="error" class="error" hidden></div>
-      <div id="sites" data-root="{{ 'true' if root else 'false' }}"></div>
+<body>
+  <main class="page wide">
+    <section class="frame wide">
+      <header class="frame-title">
+        <button type="button" class="icon-button theme-toggle" data-theme-toggle></button>
+        {% if root %}
+          <h1>Published names</h1>
+          <p class="note">Every published name with its users and their passwords. An application with a login of its own is let
+            through; any other gets this proxy's login, whose first administrator is created at the address with its code.</p>
+        {% else %}
+          <p class="eyebrow">{{ host }}</p>
+          <h1>Users of this address</h1>
+          <p class="note">Who may sign in here. Administrators also manage this list; an address always keeps one.</p>
+        {% endif %}
+      </header>
+      <div class="frame-body">
+        <div class="content">
+          <div id="sites" data-root="{{ 'true' if root else 'false' }}"></div>
+        </div>
+        <nav class="rail" role="toolbar">
+          {% if root %}
+            <button type="button" class="icon-button filled info" id="refresh" title="Read again" data-icon="Refresh"></button>
+          {% else %}
+            <button type="button" class="icon-button filled primary" id="add-user" title="Add a user" data-icon="PersonAdd"></button>
+            <button type="button" class="icon-button filled info" id="my-password" title="Change my password" data-icon="Key"></button>
+            <a class="icon-button filled success" href="/" title="Go to the page" data-icon="OpenInNew"></a>
+            <button type="button" class="icon-button filled warning" id="sign-out" title="Sign out" data-icon="Logout"></button>
+          {% endif %}
+        </nav>
+      </div>
     </section>
   </main>
-  <template id="users-template">
-    <table class="users">
-      <thead><tr><th>User</th><th>Role</th><th class="password-col">Password</th><th></th></tr></thead>
-      <tbody></tbody>
-    </table>
-    <form class="add">
-      <input name="name" type="text" placeholder="User" autocapitalize="none" spellcheck="false" required>
-      <input name="password" type="password" placeholder="Password (8+)" autocomplete="new-password" minlength="8" required>
-      <select name="role"><option value="user">User</option><option value="admin">Administrator</option></select>
-      <button type="submit" class="button small">Add or change</button>
+
+  <dialog id="dialog" class="dialog">
+    <form method="dialog">
+      <header class="frame-title"><h1 id="dialog-title"></h1></header>
+      <div class="content">
+        <p id="dialog-text" class="dialog-text" hidden></p>
+        <div id="dialog-fields"></div>
+        <div id="dialog-error" class="error" hidden></div>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="button text auto" id="dialog-cancel">Cancel</button>
+        <button type="submit" class="button auto" id="dialog-ok">OK</button>
+      </div>
     </form>
-  </template>
+  </dialog>
+
   <script src="{{ static }}admin.js"></script>
 </body>
 </html>

@@ -247,6 +247,14 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<AgentUpdateStatus> CancelAgentUpdateAsync(CancellationToken cancellationToken = default) =>
         ReadAsync<AgentUpdateStatus>(HttpMethod.Post, "api/v1/agent/update/cancel", cancellationToken);
 
+    /// <summary>The latest release of the agent on GitHub.</summary>
+    public Task<LatestRelease> GetLatestAgentReleaseAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<LatestRelease>("api/v1/agent/update/latest", cancellationToken);
+
+    /// <summary>Install from GitHub: the agent runs <see cref="LatestRelease.InstallLine"/> on its machine.</summary>
+    public Task InstallAgentFromGitHubAsync(CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Post, "api/v1/agent/update/from-github", cancellationToken);
+
     // MCP server (Settings → MCP server)
 
     /// <param name="address">How the machine that will run the install command reaches this agent; empty for the agent's own address.</param>
