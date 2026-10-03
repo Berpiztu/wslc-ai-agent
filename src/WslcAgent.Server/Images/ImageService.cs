@@ -1,4 +1,5 @@
 using System.Text.Json;
+using WslcAgent.ApiClient;
 using WslcAgent.ApiClient.Contracts;
 using WslcAgent.Mcp;
 using WslcAgent.Server.Containers;
@@ -43,11 +44,11 @@ public sealed class ImageService(IWslcRunner wslc, ContainerUsageScanner usage, 
     }
 
     public Task PullAsync(string reference, bool allTags = false, CancellationToken cancellationToken = default) =>
-        wslc.RunAsync(new List<string> { "image", "pull" }.Flag("--all-tags", allTags).Append(WslcArgs.Require(reference, "image reference")).ToList(), PullTimeout, cancellationToken);
+        wslc.RunAsync(new List<string> { "image", "pull" }.Flag("--all-tags", allTags).Append(ImageReference.Normalize(WslcArgs.Require(reference, "image reference"))).ToList(), PullTimeout, cancellationToken);
 
     /// <summary>Uploads can take as long as a pull.</summary>
     public Task PushAsync(string reference, bool allTags = false, CancellationToken cancellationToken = default) =>
-        wslc.RunAsync(new List<string> { "image", "push" }.Flag("--all-tags", allTags).Append(WslcArgs.Require(reference, "image reference")).ToList(), PullTimeout, cancellationToken);
+        wslc.RunAsync(new List<string> { "image", "push" }.Flag("--all-tags", allTags).Append(ImageReference.Normalize(WslcArgs.Require(reference, "image reference"))).ToList(), PullTimeout, cancellationToken);
 
     public async Task<SavedImage> SaveAsync(string reference, string output, CancellationToken cancellationToken = default)
     {

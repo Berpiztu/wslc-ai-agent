@@ -29,10 +29,14 @@ public static class ImageReference
     /// name is lower case by rule and wslc refuses any other, while a phone's
     /// keyboard capitalises the first letter typed.
     /// A tag keeps its case, which may be mixed; a digest is left as it is.
+    /// A pasted pull command (<c>docker pull ghcr.io/owner/app:latest</c>, as a
+    /// registry's page shows it) gives its last word: a reference has no spaces,
+    /// and the whole line passed on made wslc pull an image called "pull".
     /// </summary>
     public static string Normalize(string image)
     {
-        var (repository, tag, digest) = Parts(image.Trim());
+        var words = image.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        var (repository, tag, digest) = Parts(words.Length > 0 ? words[^1] : "");
         return repository.ToLowerInvariant() + (tag.Length > 0 ? ":" + tag : "") + digest;
     }
 
