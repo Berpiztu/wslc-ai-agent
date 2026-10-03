@@ -1,18 +1,21 @@
 # The publishing proxy's image (plugins/wslc-published: nginx and the login in
 # front of the published names), built and pushed to ghcr.io/berpiztu/wslc-published
-# at every release tag, as the agent's own version and latest; or by hand.
+# by hand only (Actions -> "Published proxy image" -> Run workflow, with its
+# version): the image changes seldom and on its own clock, not the agent's releases.
 # The agent's Set up runs it, and Update image on the proxy brings a newer one: what
 # it keeps (access.json, its session secret) is a folder of the host, not the image.
 name: Published proxy image
 
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to tag besides latest (e.g. 1.0.30)"
+        description: "Version to publish (e.g. 1.0)"
         required: true
+      latest:
+        description: "Publish it as latest too"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -26,16 +29,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Version
-        id: version
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "value=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-          fi
 
       - uses: docker/setup-buildx-action@v3
 
@@ -51,8 +44,8 @@ jobs:
           push: true
           provenance: false
           tags: |
-            ${{ env.IMAGE }}:${{ steps.version.outputs.value }}
-            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ inputs.version }}
+            ${{ inputs.latest && format('{0}:latest', env.IMAGE) || '' }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.description=WSLC AI Agent's publishing proxy: nginx and a login in front of the published names
