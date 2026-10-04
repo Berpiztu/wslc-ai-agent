@@ -78,6 +78,31 @@ public static class ContainerEndpoints
                 containers.LogsAsync(container, tail, timestamps, ct, since))
             .WithName("ContainerLogs");
 
+        // A viewer's clear, kept by the agent: wslc cannot empty a container's logs, so the
+        // viewers show only what came after, on every device and after a reopen.
+        group.MapGet("/{container}/logs/cleared", (string container, LogClearingStore clearings) =>
+                new ContainerLogsCleared(clearings.Get(container)))
+            .WithName("ContainerLogsCleared");
+
+        group.MapPut("/{container}/logs/cleared", (string container, ContainerLogsCleared body, LogClearingStore clearings) =>
+            {
+                if (body.ClearedAt is not { } at)
+                {
+                    return Results.Problem("clearedAt is required.", statusCode: StatusCodes.Status400BadRequest, title: "No moment to clear from");
+                }
+
+                clearings.Set(container, at);
+                return Results.Ok(new ContainerLogsCleared(at));
+            })
+            .WithName("ClearContainerLogs");
+
+        group.MapDelete("/{container}/logs/cleared", (string container, LogClearingStore clearings) =>
+            {
+                clearings.Remove(container);
+                return Results.NoContent();
+            })
+            .WithName("RestoreContainerLogs");
+
         group.MapGet("/{container}/stats", (string container, IContainerService containers, CancellationToken ct) => containers.StatsAsync(container, ct))
             .WithName("ContainerStats");
 

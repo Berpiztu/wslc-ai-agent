@@ -56,6 +56,7 @@ builder.Services.AddSingleton<WslcRunner>();
 builder.Services.AddSingleton<IWslcRunner>(services => ActivatorUtilities.CreateInstance<CachingWslcRunner>(services, services.GetRequiredService<WslcRunner>()));
 builder.Services.AddSingleton<ContainerUsageScanner>();
 builder.Services.AddSingleton<RestartPolicyStore>();
+builder.Services.AddSingleton<LogClearingStore>();
 builder.Services.AddSingleton<WslcAgent.Server.Resources.ResourceRegistry>();
 builder.Services.AddSingleton<WslcEvents>();
 builder.Services.AddSingleton<NotificationSettingsStore>();

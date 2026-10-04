@@ -79,7 +79,7 @@
         <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Info" Size="Size.Small" Variant="Variant.Filled"
                        title="Copy logs" OnClick="CopyAsync" />
         <MudIconButton Icon="@Icons.Material.Filled.ClearAll" Color="Color.Error" Size="Size.Small" Variant="Variant.Filled"
-                       title="Clear view — Refresh reloads history" OnClick="ClearAsync" />
+                       title="Clear logs, here and on every device — Refresh brings the history back" OnClick="ClearAsync" />
     </div>
 </div>
 
@@ -109,6 +109,17 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // A clear kept by the agent holds on reopening, and on every device
+        try
+        {
+            _clearedAt = await Api.GetContainerLogsClearedAsync(Container);
+            _viewCleared = _clearedAt is not null;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _clearedAt = null;
+        }
+
         await RefreshAsync();
         _stop = new CancellationTokenSource();
         _timer = new PeriodicTimer(RefreshEvery);
@@ -182,8 +193,22 @@
         }
     }
 
+    /// <summary>Refresh: the history whole again, here and in every viewer, the clear undone.</summary>
     private async Task ReloadAsync()
     {
+        if (_clearedAt is not null)
+        {
+            try
+            {
+                await Api.RestoreContainerLogsAsync(Container);
+            }
+            catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+            {
+                Snackbar.Add($"Could not bring the history back: {ex.Message}", Severity.Error);
+                return;
+            }
+        }
+
         _viewCleared = false;
         _clearedAt = null;
         await RefreshAsync();
@@ -229,7 +254,10 @@
         }
     }
 
-    /// <summary>A view clear, not a host truncation: Refresh reloads the history.</summary>
+    /// <summary>
+    /// Not a host truncation, which wslc cannot do: the agent keeps the moment, so the cleared
+    /// lines stay hidden on reopening and on every device until Refresh brings them back.
+    /// </summary>
     private async Task ClearAsync()
     {
         if (_lines.Count == 0)
@@ -239,14 +267,16 @@
         }
 
         if (!await DialogFlow.ConfirmAsync(Dialogs, "Clear logs",
-                "Clear the logs currently shown in this viewer? New lines still appear if autorefresh is on. Use Refresh to reload history.", "Clear"))
+                "Clear the logs shown here? They stay cleared when the logs are opened again, on any device; new lines still appear. Refresh brings the history back.", "Clear"))
         {
             return;
         }
 
         try
         {
-            _clearedAt = await LastLineStampAsync();
+            var clearedAt = await LastLineStampAsync();
+            await Api.ClearContainerLogsAsync(Container, clearedAt);
+            _clearedAt = clearedAt;
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
         {

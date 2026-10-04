@@ -129,6 +129,9 @@ public sealed record ContainerDetails(
 /// <summary>Body of <c>GET /api/v1/containers/{id}/logs</c>.</summary>
 public sealed record ContainerLogs(string Text);
 
+/// <summary>Body of <c>GET</c> and <c>PUT /api/v1/containers/{id}/logs/cleared</c>: the stamp of the last line cleared in a viewer (the container's clock), or null when the history shows whole.</summary>
+public sealed record ContainerLogsCleared(DateTimeOffset? ClearedAt);
+
 /// <summary>Body of <c>POST /api/v1/containers/launch-form</c>: an inspect JSON, or an exported launch request, as text.</summary>
 public sealed record LaunchFormSource(string Json);
 

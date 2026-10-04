@@ -512,6 +512,18 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public async Task<string> GetContainerLogsAsync(string container, int tail = 200, bool timestamps = false, CancellationToken cancellationToken = default, string since = "") =>
         (await GetAsync<ContainerLogs>($"api/v1/containers/{Escape(container)}/logs?tail={tail}&timestamps={Flag(timestamps)}&since={Escape(since)}", cancellationToken)).Text;
 
+    /// <summary>When the container's logs were cleared in a viewer (the container's clock), or null when the history shows whole.</summary>
+    public async Task<DateTimeOffset?> GetContainerLogsClearedAsync(string container, CancellationToken cancellationToken = default) =>
+        (await GetAsync<ContainerLogsCleared>($"api/v1/containers/{Escape(container)}/logs/cleared", cancellationToken)).ClearedAt;
+
+    /// <summary>Keeps a viewer's clear: the viewers show only the lines after <paramref name="clearedAt"/>.</summary>
+    public Task ClearContainerLogsAsync(string container, DateTimeOffset clearedAt, CancellationToken cancellationToken = default) =>
+        PutJsonAsync($"api/v1/containers/{Escape(container)}/logs/cleared", new ContainerLogsCleared(clearedAt), cancellationToken);
+
+    /// <summary>Undoes the clear: the viewers show the history whole again.</summary>
+    public Task RestoreContainerLogsAsync(string container, CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Delete, $"api/v1/containers/{Escape(container)}/logs/cleared", cancellationToken);
+
     public Task<ContainerStats> GetContainerStatsAsync(string container, CancellationToken cancellationToken = default) =>
         GetAsync<ContainerStats>($"api/v1/containers/{Escape(container)}/stats", cancellationToken);
 
