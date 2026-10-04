@@ -1,0 +1,67 @@
+# transcribe.cpp's libraries built with CUDA (plugins/transcribe-cuda), pushed to
+# ghcr.io/berpiztu/transcribe-cuda:<version>-sm<architecture> by hand only
+# (Actions -> "transcribe.cpp CUDA image" -> Run workflow): it is built once per
+# transcribe.cpp release and graphics card, and images of speech to text copy it.
+name: transcribe.cpp CUDA image
+
+on:
+  workflow_dispatch:
+    inputs:
+      transcribe_version:
+        description: "transcribe.cpp release (a tag of handy-computer/transcribe.cpp)"
+        default: "v0.3.1"
+        required: true
+      cuda_archs:
+        description: "GPU architectures, ';'-separated (86 = RTX 30xx, 89 = RTX 40xx, 120 = RTX 50xx)"
+        default: "86"
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/berpiztu/transcribe-cuda
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The CUDA build image does not fit the ~14 GB a runner has free ("no space left
+      # on device"): the tools this build does not use go first, about 30 GB.
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo docker image prune --all --force
+          df -h /
+
+      # 0.3.1-sm86 from v0.3.1 and 86; several architectures read 86-89 in the tag
+      - id: tag
+        run: |
+          version="${{ inputs.transcribe_version }}"
+          archs="${{ inputs.cuda_archs }}"
+          echo "tag=${version#v}-sm${archs//;/-}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: plugins/transcribe-cuda
+          push: true
+          provenance: false
+          build-args: |
+            TRANSCRIBE_VERSION=${{ inputs.transcribe_version }}
+            CUDA_ARCHS=${{ inputs.cuda_archs }}
+          tags: ${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=transcribe.cpp's libraries built with CUDA, to copy into an image of speech to text
