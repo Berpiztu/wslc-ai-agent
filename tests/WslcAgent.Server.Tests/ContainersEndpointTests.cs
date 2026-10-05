@@ -145,12 +145,14 @@ public sealed class ContainersEndpointTests(WebApplicationFactory<Program> facto
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(["container", "inspect", "web", "--format", "json"], runner.Calls[0]);
-        Assert.Equal(["container", "stop", "web"], runner.Calls[1]);
-        Assert.Equal(["container", "rm", "--force", rehearsal], runner.Calls[2]);
-        Assert.Equal(["container", "run", "--detach", "--name", rehearsal, "--env", "A=1", "nginx"], runner.Calls[3]);
-        Assert.Equal(["container", "rm", "--force", rehearsal], runner.Calls[4]);
-        Assert.Equal(["container", "rm", "--force", "web"], runner.Calls[5]);
-        Assert.Equal(["container", "run", "--detach", "--name", "web", "--env", "A=1", "nginx"], runner.Calls[6]);
+        // Inspect does not show --gpus: the snapshot reads it from the list row.
+        Assert.Equal(["container", "list", "--all", "--format", "json"], runner.Calls[1]);
+        Assert.Equal(["container", "stop", "web"], runner.Calls[2]);
+        Assert.Equal(["container", "rm", "--force", rehearsal], runner.Calls[3]);
+        Assert.Equal(["container", "run", "--detach", "--name", rehearsal, "--env", "A=1", "nginx"], runner.Calls[4]);
+        Assert.Equal(["container", "rm", "--force", rehearsal], runner.Calls[5]);
+        Assert.Equal(["container", "rm", "--force", "web"], runner.Calls[6]);
+        Assert.Equal(["container", "run", "--detach", "--name", "web", "--env", "A=1", "nginx"], runner.Calls[7]);
         Assert.Equal("cafecafecafe", (await response.Content.ReadFromJsonAsync<ContainerCreated>())!.Id);
     }
 
