@@ -8,7 +8,8 @@ namespace WslcAgent.Server.Notifications;
 /// <summary>
 /// The phones the agent's notifications are pushed to, kept in
 /// <c>notification-devices.json</c> in the agent's data folder with the
-/// Firebase token of each, which never leaves the agent. A device registers at
+/// Firebase token of each, which never leaves the agent, and the address the
+/// device knows this agent by, which every push carries back to it. A device registers at
 /// every start of the app; the same token again only refreshes it, and a token
 /// Firebase no longer knows is forgotten on the first push that finds out.
 /// </summary>
@@ -20,10 +21,10 @@ public sealed class NotificationDeviceStore(IOptions<WslcOptions> options, TimeP
     /// <summary>The devices, as the agent shows them: without their tokens.</summary>
     public IReadOnlyList<NotificationDevice> List() => [.. Get().Devices.Select(d => d.Shown())];
 
-    /// <summary>The Firebase tokens to push to.</summary>
-    public IReadOnlyList<string> Tokens() => [.. Get().Devices.Select(d => d.Token)];
+    /// <summary>The devices to push to, each with its token and the address it knows this agent by.</summary>
+    public IReadOnlyList<Device> Recipients() => Get().Devices;
 
-    /// <summary>A device registered, or registered again: a token already known keeps its id and its first date.</summary>
+    /// <summary>A device registered, or registered again: a token already known keeps its id and its first date, and takes the address it gave now.</summary>
     public NotificationDevice Register(RegisterDeviceRequest request)
     {
         var token = request.Token.Trim();
@@ -38,8 +39,8 @@ public sealed class NotificationDeviceStore(IOptions<WslcOptions> options, TimeP
             var devices = Get().Devices.ToList();
             var known = devices.FindIndex(d => d.Token == token);
             var device = known >= 0
-                ? devices[known] with { Name = request.Name, Platform = request.Platform, LastSeen = now }
-                : new Device(Guid.NewGuid().ToString("N")[..12], request.Name, request.Platform, token, now, now);
+                ? devices[known] with { Name = request.Name, Platform = request.Platform, LastSeen = now, Agent = request.Agent }
+                : new Device(Guid.NewGuid().ToString("N")[..12], request.Name, request.Platform, token, now, now, request.Agent);
             if (known >= 0)
             {
                 devices[known] = device;
@@ -78,8 +79,11 @@ public sealed class NotificationDeviceStore(IOptions<WslcOptions> options, TimeP
     /// <summary>The file: every device with its token.</summary>
     public sealed record Saved(IReadOnlyList<Device> Devices);
 
-    /// <summary>A device as kept, its token with it.</summary>
-    public sealed record Device(string Id, string Name, string Platform, string Token, DateTimeOffset Registered, DateTimeOffset LastSeen)
+    /// <summary>
+    /// A device as kept, its token with it, and the address it knows this agent
+    /// by: null for a device registered before it said one.
+    /// </summary>
+    public sealed record Device(string Id, string Name, string Platform, string Token, DateTimeOffset Registered, DateTimeOffset LastSeen, string? Agent = null)
     {
         /// <summary>As the agent shows it: without its token.</summary>
         public NotificationDevice Shown() => new(Id, Name, Platform, Registered, LastSeen);

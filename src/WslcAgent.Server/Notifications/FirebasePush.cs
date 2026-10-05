@@ -45,22 +45,22 @@ public sealed class FirebasePush(IOptions<WslcOptions> options, NotificationDevi
     /// <summary>Pushes a notification to every registered phone, in the background: the notification never waits for Google.</summary>
     public void Send(AgentNotification notification)
     {
-        if (devices.Tokens() is not { Count: > 0 } tokens || ReadKey() is not { } key)
+        if (devices.Recipients() is not { Count: > 0 } recipients || ReadKey() is not { } key)
         {
             return;
         }
 
-        _ = SendAsync(key, tokens, notification);
+        _ = SendAsync(key, recipients, notification);
     }
 
-    private async Task SendAsync(ServiceAccountKey key, IReadOnlyList<string> tokens, AgentNotification notification)
+    private async Task SendAsync(ServiceAccountKey key, IReadOnlyList<NotificationDeviceStore.Device> recipients, AgentNotification notification)
     {
         try
         {
             var access = await AccessAsync(key);
-            foreach (var token in tokens)
+            foreach (var recipient in recipients)
             {
-                await SendOneAsync(key, access, token, notification);
+                await SendOneAsync(key, access, recipient, notification);
             }
         }
         catch (Exception failed) when (failed is HttpRequestException or TaskCanceledException or JsonException or CryptographicException or ArgumentException or InvalidOperationException)
@@ -69,11 +69,11 @@ public sealed class FirebasePush(IOptions<WslcOptions> options, NotificationDevi
         }
     }
 
-    private async Task SendOneAsync(ServiceAccountKey key, string access, string token, AgentNotification notification)
+    private async Task SendOneAsync(ServiceAccountKey key, string access, NotificationDeviceStore.Device recipient, AgentNotification notification)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, $"https://fcm.googleapis.com/v1/projects/{Uri.EscapeDataString(key.ProjectId)}/messages:send")
         {
-            Content = JsonContent.Create(Message(token, notification)),
+            Content = JsonContent.Create(Message(recipient, notification)),
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", access);
         using var response = await _http.SendAsync(request);
@@ -83,10 +83,14 @@ public sealed class FirebasePush(IOptions<WslcOptions> options, NotificationDevi
         }
 
         var answer = await response.Content.ReadAsStringAsync();
-        if (response.StatusCode == HttpStatusCode.NotFound || answer.Contains("UNREGISTERED", StringComparison.Ordinal))
+        if (response.StatusCode == HttpStatusCode.NotFound
+            || answer.Contains("UNREGISTERED", StringComparison.Ordinal)
+            || answer.Contains("SENDER_ID_MISMATCH", StringComparison.Ordinal))
         {
-            // The app was uninstalled, or its data wiped: that token will never answer again.
-            devices.Forget(token);
+            // The app was uninstalled, or its data wiped, or the token belongs to
+            // another Firebase project than the key's (the app was rebuilt for a
+            // new one): that token will never answer again.
+            devices.Forget(recipient.Token);
             logger.LogInformation("notification push: a device Firebase no longer knows was forgotten");
             return;
         }
@@ -100,13 +104,14 @@ public sealed class FirebasePush(IOptions<WslcOptions> options, NotificationDevi
     /// Android draws one with a title of its own itself, and that one cannot
     /// carry a button (the update's Cancel).
     /// </summary>
-    private static object Message(string token, AgentNotification notification) => new
+    private static object Message(NotificationDeviceStore.Device recipient, AgentNotification notification) => new
     {
         message = new
         {
-            token,
+            token = recipient.Token,
             data = new Dictionary<string, string>
             {
+                [NotificationData.Agent] = recipient.Agent ?? "",
                 [NotificationData.Id] = notification.Id.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 [NotificationData.Kind] = notification.Kind,
                 [NotificationData.Severity] = notification.Severity,

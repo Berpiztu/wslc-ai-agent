@@ -5,7 +5,9 @@
    on every navigation and whenever the link to the agent comes back, until
    the agent took it — a client opens before its agent answers, and before its
    user signs in — and again whenever Firebase renews the token; a user who
-   said no to notifications is not asked again in this run. On a client that
+   said no to notifications is not asked again in this run. It gives the agent
+   the address it knows it by, which each push carries back: a phone signed in
+   to several agents tells their notifications apart. On a client that
    shows the agent's feed itself (Windows, its agent on another machine) it
    follows the feed while the client runs. Renders nothing. *@
 @namespace WslcAgent.UI.Notifications
@@ -14,6 +16,7 @@
 @implements IDisposable
 @inject IClientNotifications Client
 @inject WslcAgentApi Api
+@inject WslcAgent.UI.Access.IClientServers Servers
 @inject AgentChanges Changes
 @inject NavigationManager Navigation
 @inject AgentLink Link
@@ -116,7 +119,7 @@
 
             if (token != _registered)
             {
-                await Api.RegisterNotificationDeviceAsync(new RegisterDeviceRequest(Client.DeviceName, Client.Platform, token));
+                await Api.RegisterNotificationDeviceAsync(new RegisterDeviceRequest(Client.DeviceName, Client.Platform, token, Servers.Current));
                 _registered = token;
             }
         }

@@ -21,13 +21,14 @@ public sealed class NotificationActionReceiver : BroadcastReceiver
             return;
         }
 
+        var agent = intent.GetStringExtra(NotificationData.Agent);
         var id = intent.GetIntExtra(NotificationId, 0);
         var pending = GoAsync();
         _ = Task.Run(async () =>
         {
             try
             {
-                await AndroidClientNotifications.CancelUpdateAsync(context, id);
+                await AndroidClientNotifications.CancelUpdateAsync(context, agent, id);
             }
             finally
             {

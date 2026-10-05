@@ -19,6 +19,13 @@ namespace WslcAgent.App;
 /// brings it back, with the notification's page, which <see cref="MainActivity"/>
 /// hands here for the UI to open.
 /// <para>
+/// A phone can be signed in to several agents, one at a time: each push says
+/// which agent it comes from (<see cref="NotificationData.Agent"/>), so two
+/// agents' notifications of the same number do not replace each other, each
+/// is marked with its agent, a tap on another agent's switches the app to it,
+/// and its button acts on the agent it came from.
+/// </para>
+/// <para>
 /// Firebase's service and the activity are made by Android, not by the
 /// container, so what they report goes through the static side of this class
 /// to the one instance the UI holds.
@@ -102,15 +109,26 @@ internal sealed class AndroidClientNotifications(ILogger<AndroidClientNotificati
     /// <summary>
     /// A notification was tapped: its page waits for the UI, which may not be
     /// there yet when the tap started the app (<see cref="MainActivity"/>).
+    /// Another agent's switches the app to that agent first, the page with it.
     /// </summary>
     public static void Open(Intent? intent)
     {
-        if (intent?.GetStringExtra(NotificationData.Link) is { Length: > 0 } link)
+        if (intent?.GetStringExtra(NotificationData.Link) is not { Length: > 0 } link)
         {
-            _opened = link;
-            intent.RemoveExtra(NotificationData.Link);
-            Tapped?.Invoke();
+            return;
         }
+
+        var agent = intent.GetStringExtra(NotificationData.Agent);
+        intent.RemoveExtra(NotificationData.Link);
+        intent.RemoveExtra(NotificationData.Agent);
+        if (agent is { Length: > 0 } && !string.Equals(agent, AgentAddress.Current, StringComparison.OrdinalIgnoreCase))
+        {
+            new MauiClientServers().SwitchTo(agent, link);
+            return;
+        }
+
+        _opened = link;
+        Tapped?.Invoke();
     }
 
     /// <summary>
@@ -125,14 +143,17 @@ internal sealed class AndroidClientNotifications(ILogger<AndroidClientNotificati
         var title = data.TryGetValue(NotificationData.Title, out var saidTitle) ? saidTitle : "";
         var text = data.TryGetValue(NotificationData.Text, out var saidText) ? saidText : "";
         var severity = data.TryGetValue(NotificationData.Severity, out var said) ? said : NotificationSeverity.Warning;
+        var agent = data.TryGetValue(NotificationData.Agent, out var from) ? from : "";
+        var id = data.TryGetValue(NotificationData.Id, out var number) && int.TryParse(number, out var parsed) ? parsed : Environment.TickCount;
         var open = new Intent(context, typeof(MainActivity));
         open.AddFlags(ActivityFlags.SingleTop | ActivityFlags.ClearTop);
+        open.SetData(Identity(agent, id));
         if (data.TryGetValue(NotificationData.Link, out var link))
         {
             open.PutExtra(NotificationData.Link, link);
+            open.PutExtra(NotificationData.Agent, agent);
         }
 
-        var id = data.TryGetValue(NotificationData.Id, out var number) && int.TryParse(number, out var parsed) ? parsed : Environment.TickCount;
         var tap = PendingIntent.GetActivity(context, id, open, PendingIntentFlags.Immutable | PendingIntentFlags.UpdateCurrent);
         // One call each: the binding says every setter may return null, which
         // a chain would have to check at every step.
@@ -140,45 +161,62 @@ internal sealed class AndroidClientNotifications(ILogger<AndroidClientNotificati
         builder.SetSmallIcon(Resource.Drawable.notification_icon);
         builder.SetContentTitle(title);
         builder.SetContentText(text);
+        if (agent.Length > 0)
+        {
+            builder.SetSubText(Uri.TryCreate(agent, UriKind.Absolute, out var address) ? address.Authority : agent);
+        }
+
         builder.SetStyle(new NotificationCompat.BigTextStyle().BigText(text));
         builder.SetContentIntent(tap);
         builder.SetAutoCancel(true);
         if (data.TryGetValue(NotificationData.Action, out var action) && action == NotificationAction.CancelUpdate)
         {
             var press = new Intent(context, typeof(NotificationActionReceiver));
+            press.SetData(Identity(agent, id));
             press.PutExtra(NotificationData.Action, action);
+            press.PutExtra(NotificationData.Agent, agent);
             press.PutExtra(NotificationActionReceiver.NotificationId, id);
             builder.AddAction(0, NotificationAction.Label(action),
                 PendingIntent.GetBroadcast(context, id, press, PendingIntentFlags.Immutable | PendingIntentFlags.UpdateCurrent));
         }
 
-        NotificationManagerCompat.From(context)?.Notify(id, builder.Build());
+        NotificationManagerCompat.From(context)?.Notify(agent, id, builder.Build());
     }
 
     /// <summary>
-    /// The update cancelled from its notification's button, the app open or
-    /// not: the agent asked with the session this phone keeps, and the
-    /// notification taken down; one that could not reach the agent says why
-    /// in its place. The other devices hear it was cancelled from the agent.
+    /// What tells a notification's intents apart from another agent's of the
+    /// same number: Android takes two intents that differ only in their extras
+    /// for one, and the second would overwrite the first's page and agent.
     /// </summary>
-    public static async Task CancelUpdateAsync(Context context, int id)
+    private static Android.Net.Uri? Identity(string agent, int id) =>
+        Android.Net.Uri.Parse($"wslc-notification:{Uri.EscapeDataString(agent)}#{id}");
+
+    /// <summary>
+    /// The update cancelled from its notification's button, the app open or
+    /// not: the agent it came from asked with the session this phone keeps
+    /// for it, and the notification taken down; one that could not reach the
+    /// agent says why in its place. The other devices hear it was cancelled
+    /// from the agent. A notification that names no agent is the current one's.
+    /// </summary>
+    public static async Task CancelUpdateAsync(Context context, string? agent, int id)
     {
-        AgentAddress.Resolve();
-        var access = new AgentAccessToken { Value = new PreferencesTokenStore().Load() };
+        var address = agent is { Length: > 0 } ? agent : AgentAddress.Resolve();
+        var access = new AgentAccessToken { Value = PreferencesTokenStore.LoadFor(address) };
         using var http = new HttpClient(new AgentAccessHandler(access) { InnerHandler = new HttpClientHandler() })
         {
-            BaseAddress = new Uri(AgentAddress.Current),
+            BaseAddress = new Uri(address),
             Timeout = TimeSpan.FromSeconds(20),
         };
         try
         {
             await new WslcAgentApi(http).CancelAgentUpdateAsync();
-            NotificationManagerCompat.From(context)?.Cancel(id);
+            NotificationManagerCompat.From(context)?.Cancel(agent ?? "", id);
         }
         catch (Exception failed) when (failed is HttpRequestException or AgentApiException or TaskCanceledException)
         {
             Show(context, new Dictionary<string, string>
             {
+                [NotificationData.Agent] = agent ?? "",
                 [NotificationData.Id] = id.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 [NotificationData.Severity] = NotificationSeverity.Error,
                 [NotificationData.Title] = "Update not cancelled",

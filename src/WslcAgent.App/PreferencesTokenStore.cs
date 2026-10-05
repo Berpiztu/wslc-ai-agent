@@ -11,9 +11,14 @@ namespace WslcAgent.App;
 internal sealed class PreferencesTokenStore : IAgentTokenStore
 {
     /// <summary>One session per agent: switching agents in Settings does not send one agent's session to another.</summary>
-    private static string Key => "agent.session:" + AgentAddress.Current;
+    private static string Key => KeyOf(AgentAddress.Current);
 
     public string? Load() => Preferences.Default.Get<string?>(Key, null);
+
+    /// <summary>The session kept for another agent than the current one: a notification's button acts on the agent it came from.</summary>
+    public static string? LoadFor(string agent) => Preferences.Default.Get<string?>(KeyOf(agent), null);
+
+    private static string KeyOf(string agent) => "agent.session:" + agent;
 
     public void Save(string? token)
     {

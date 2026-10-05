@@ -82,8 +82,13 @@ public static class NotificationSeverity
 /// <param name="LastSeen">When it last registered again, which it does at every start.</param>
 public sealed record NotificationDevice(string Id, string Name, string Platform, DateTimeOffset Registered, DateTimeOffset LastSeen);
 
-/// <summary>Body of <c>POST /api/v1/notifications/devices</c>: a device, and the Firebase token its notifications go to.</summary>
-public sealed record RegisterDeviceRequest(string Name, string Platform, string Token);
+/// <summary>
+/// Body of <c>POST /api/v1/notifications/devices</c>: a device, the Firebase
+/// token its notifications go to, and the address it knows this agent by,
+/// which every push carries back so a phone signed in to several agents tells
+/// their notifications apart and opens the right one.
+/// </summary>
+public sealed record RegisterDeviceRequest(string Name, string Platform, string Token, string? Agent = null);
 
 /// <summary>
 /// Body of <c>GET /api/v1/notifications/devices</c>: whether the agent can
@@ -124,6 +129,13 @@ public static class NotificationLink
 /// <summary>The keys of what a pushed notification carries besides its title and text, for the app to act on a tap.</summary>
 public static class NotificationData
 {
+    /// <summary>
+    /// The agent it comes from, as the device gave its address when it
+    /// registered; empty from a device registered before it said one, which is
+    /// then taken for the agent the app is on.
+    /// </summary>
+    public const string Agent = "agent";
+
     public const string Id = "id";
     public const string Kind = "kind";
     public const string Severity = "severity";

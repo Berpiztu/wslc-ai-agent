@@ -57,17 +57,24 @@ internal sealed class MauiClientServers : IClientServers
         Store(Saved.Where(s => !string.Equals(s, address, StringComparison.OrdinalIgnoreCase)).ToList());
     }
 
-    public void SwitchTo(string address)
+    public void SwitchTo(string address) => SwitchTo(address, null);
+
+    /// <summary>Switches agents and, once the client is up on the new one, opens <paramref name="page"/>: a tapped notification of another agent.</summary>
+    public void SwitchTo(string address, string? page)
     {
         var normalized = Add(address);
         Preferences.Default.Set(AgentAddress.Preference, normalized);
-        Restart(normalized);
+        Restart(normalized, page);
     }
 
     private static void Store(IEnumerable<string> saved) => Preferences.Default.Set(SavedKey, string.Join('\n', saved));
 
-    /// <summary>A new process on Windows; on Android the launcher activity again in a fresh task, then this process ends.</summary>
-    private static void Restart(string address)
+    /// <summary>
+    /// A new process on Windows; on Android the launcher activity again in a
+    /// fresh task, carrying the page to open as a tapped notification does,
+    /// then this process ends.
+    /// </summary>
+    private static void Restart(string address, string? page)
     {
 #if WINDOWS
         if (Environment.ProcessPath is { } path)
@@ -85,6 +92,11 @@ internal sealed class MauiClientServers : IClientServers
         if (context.PackageManager?.GetLaunchIntentForPackage(context.PackageName!) is { } intent)
         {
             intent.AddFlags(Android.Content.ActivityFlags.NewTask | Android.Content.ActivityFlags.ClearTask);
+            if (page is { Length: > 0 })
+            {
+                intent.PutExtra(WslcAgent.ApiClient.Contracts.NotificationData.Link, page);
+            }
+
             context.StartActivity(intent);
         }
 
