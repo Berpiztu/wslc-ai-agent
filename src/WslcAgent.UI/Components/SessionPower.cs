@@ -183,12 +183,26 @@ public sealed class SessionPower(WslcAgentApi api, ISnackbar snackbar, SessionSt
     }
 
     /// <summary>
+    /// What a start or a stop is doing right now, said on the veil that covers
+    /// the whole screen while it lasts; empty when no verb is under way. A
+    /// session is the system every container lives in: nothing else is offered
+    /// while it goes down or comes up, and the user is told each step instead
+    /// of seeing a button that merely stays grey.
+    /// </summary>
+    public string Phase { get; private set; } = "";
+
+    /// <summary>
     /// The one power verb: stops the session shown as running
     /// — after <paramref name="confirmStop"/>, asked with what goes down with it,
     /// says yes — and starts it when it is stopped, which brings the containers
-    /// the restart policy holds back up.
+    /// the restart policy holds back up. The agent's answer is not taken on
+    /// trust: the sessions are read again and the session has to be where the
+    /// verb said it would be. A failure goes to <paramref name="reportFailure"/>
+    /// (title, message, explanation), a dialog that stays until it is closed:
+    /// a stop that did not stop once showed as a green "Stopped" and left the
+    /// machine with a session nobody could clear without a restart.
     /// </summary>
-    public async Task TogglePowerAsync(Func<string, Task<bool>> confirmStop)
+    public async Task TogglePowerAsync(Func<string, Task<bool>> confirmStop, Func<string, string, string, Task> reportFailure)
     {
         var stopping = IsActive;
         if (stopping && !await confirmStop(await StopQuestionAsync()))
@@ -196,24 +210,54 @@ public sealed class SessionPower(WslcAgentApi api, ISnackbar snackbar, SessionSt
             return;
         }
 
+        var label = Label;
+        var title = stopping ? $"{label} did not stop" : $"{label} did not start";
+        string? failure = null;
         Busy = true;
-        Changed?.Invoke();
         try
         {
-            var result = stopping ? await api.StopSessionAsync(Selected) : await api.StartSessionAsync(Selected);
-            Take(result.Sessions);
-            snackbar.Add(result.Message, result.Changed ? Severity.Success : Severity.Info);
+            SetPhase(stopping
+                ? $"Stopping {label}… This can take a couple of minutes."
+                : $"Starting {label}…");
+            var result = stopping ? await api.StopSessionAsync(label) : await api.StartSessionAsync(label);
+
+            SetPhase(stopping ? $"Checking that {label} has really stopped…" : $"Checking that {label} is running…");
+            Take(await api.GetSessionsAsync());
+            if (IsActive == stopping)
+            {
+                failure = stopping
+                    ? $"The agent answered \"{result.Message}\", but {label} is still listed as running."
+                    : $"The agent answered \"{result.Message}\", but {label} is not listed as running.";
+            }
+            else
+            {
+                snackbar.Add(stopping ? $"{label} stopped." : $"{label} started.", Severity.Success);
+            }
         }
-        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException or TaskCanceledException)
         {
-            snackbar.Add(ex.Message, Severity.Error);
+            failure = ex.Message;
+            SetPhase("Reading the sessions again…");
             await LoadAsync();
         }
         finally
         {
             Busy = false;
-            Changed?.Invoke();
+            SetPhase("");
         }
+
+        if (failure is not null)
+        {
+            await reportFailure(title, failure, stopping
+                ? "The session may be stuck, and its containers may not answer until it is cleared: wsl --shutdown, or a restart of Windows. The session line shows what wslc reports now."
+                : "The session line shows what wslc reports now. The agent's log has the wslc output.");
+        }
+    }
+
+    private void SetPhase(string phase)
+    {
+        Phase = phase;
+        Changed?.Invoke();
     }
 
     /// <summary>

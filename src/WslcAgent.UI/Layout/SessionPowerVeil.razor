@@ -1,0 +1,25 @@
+@* The veil over the whole application while a session starts or stops: a
+   session is the system every container lives in, so nothing else is offered
+   until it has gone down or come up, and the veil says which step is under
+   way. Rendered once, by the layout: the session panel it belongs to is shown
+   in the title bar and on Home's dashboard too. Under the veil that says
+   the agent cannot be reached, which is the worse news. *@
+@implements IDisposable
+@inject SessionPower Power
+
+<MudOverlay Visible="@(Power.Phase.Length > 0)" DarkBackground="true" AutoClose="false" ZIndex="1350">
+    <MudPaper Class="pa-4" Elevation="4">
+        <MudStack AlignItems="AlignItems.Center" Spacing="2">
+            <MudProgressCircular Color="Color.Info" Size="Size.Large" Indeterminate="true" />
+            <MudText Typo="Typo.subtitle1" role="status">@Power.Phase</MudText>
+        </MudStack>
+    </MudPaper>
+</MudOverlay>
+
+@code {
+    protected override void OnInitialized() => Power.Changed += OnChanged;
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Power.Changed -= OnChanged;
+}

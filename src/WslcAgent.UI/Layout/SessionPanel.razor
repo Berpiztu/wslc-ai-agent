@@ -55,7 +55,9 @@
     private static string SessionName(string? name) => name ?? "";
 
     private Task TogglePowerAsync() =>
-        Power.TogglePowerAsync(question => DialogFlow.ConfirmAsync(Dialogs, "Stop session", question, "Stop", destructive: true));
+        Power.TogglePowerAsync(
+            question => DialogFlow.ConfirmAsync(Dialogs, "Stop session", question, "Stop", destructive: true),
+            (title, message, explanation) => DialogFlow.ExplainAsync(Dialogs, title, message, explanation));
 
     private void OnChanged() => _ = InvokeAsync(StateHasChanged);
 

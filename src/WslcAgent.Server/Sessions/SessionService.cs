@@ -30,6 +30,17 @@ public sealed class SessionService(IWslcRunner wslc, ISelectedSession selected, 
     /// <summary>Opening a store by name has to answer quickly; it is a handshake, not work.</summary>
     private static readonly TimeSpan EnterTimeout = TimeSpan.FromSeconds(10);
 
+    /// <summary>
+    /// Taking a session down stops every container in it first, and that can last past
+    /// the default minute: cut at 60 s, the terminate was given up on while the session was
+    /// still going down, and the screen was never told it had not stopped.
+    /// </summary>
+    private static readonly TimeSpan TerminateTimeout = TimeSpan.FromMinutes(3);
+
+    /// <summary>After the terminate, how long the session may still be listed on its way down: 15 checks a second apart.</summary>
+    private const int StopCheckAttempts = 15;
+    private static readonly TimeSpan StopCheckInterval = TimeSpan.FromSeconds(1);
+
     public Task<SessionsResponse> ListAsync(CancellationToken cancellationToken = default) =>
         ListAsync(SessionStoreReader.Read(), cancellationToken);
 
@@ -56,16 +67,31 @@ public sealed class SessionService(IWslcRunner wslc, ISelectedSession selected, 
             return new SessionActionResult(false, $"{label} is not running.", before);
         }
 
-        stopped.Hold(target, before.Sessions.First(s => s.Active && s.Name == target).Id);
+        var id = before.Sessions.First(s => s.Active && s.Name == target).Id;
+        stopped.Hold(target, id);
         try
         {
-            await wslc.RunAsync(["system", "session", "terminate"], cancellationToken: cancellationToken, session: target);
+            await wslc.RunAsync(["system", "session", "terminate"], TerminateTimeout, cancellationToken, session: target);
         }
         catch
         {
             // Still running: holding it down would refuse every command in a live session.
             stopped.Release(target);
+            events.Publish(ChangeNotice.SessionChanged);
             throw;
+        }
+
+        // A terminate that answers is not yet a session down: wslc has answered success for
+        // one whose machine never stopped, and the screen said Stopped over a session that
+        // was neither working nor gone. Asked of wslc itself, not of the list, which shows a
+        // held session as stopped whatever wslc says.
+        if (!await GoneAsync(target, id, cancellationToken))
+        {
+            stopped.Release(target);
+            events.Publish(ChangeNotice.SessionChanged);
+            throw new InvalidOperationException(
+                $"{label} did not stop: wslc still reports it running after the terminate. It may be stuck; " +
+                "its containers may not answer until it is cleared (wsl --shutdown, or a restart of Windows).");
         }
 
         events.Publish(ChangeNotice.SessionChanged);
@@ -153,12 +179,13 @@ public sealed class SessionService(IWslcRunner wslc, ISelectedSession selected, 
 
     internal async Task<SessionsResponse> ListAsync(SessionStoreUsage stores, CancellationToken cancellationToken)
     {
-        var result = await wslc.RunAsync(["system", "info", "--format", "json"], cancellationToken: cancellationToken);
-        var running = WslcJson.ParseRows(result.Stdout).FirstOrDefault() is { ValueKind: JsonValueKind.Object } info
-            ? ParseSessions(info)
-            : [];
+        var running = await RunningAsync(cancellationToken);
         stopped.Observe(running.Select(s => (s.Name, s.Id)));
-        return new SessionsResponse(Merge(stores, running), selected.Name);
+        // A session held down reads as stopped even while wslc still lists it (a terminate
+        // it came back from under the same ID): listed as running, the panel offered only
+        // Stop while every command in it was refused, and Start, which lets it go, never.
+        var up = running.Where(s => !stopped.Holds(s.Name)).ToList();
+        return new SessionsResponse(Merge(stores, up), selected.Name);
     }
 
     /// <summary>
@@ -178,6 +205,35 @@ public sealed class SessionService(IWslcRunner wslc, ISelectedSession selected, 
         var known = rows.Select(r => r.Name).ToHashSet(StringComparer.Ordinal);
         rows.AddRange(running.Where(s => !known.Contains(s.Name) && !SessionStores.IsAdmin(s.Name)).Select(s => Row(s.Name, s.Id, true, "")));
         return rows.OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    /// <summary>
+    /// Whether the session <paramref name="id"/> has left wslc's list. A session going down
+    /// is still listed for a moment, so it is asked again for a while before it is taken
+    /// for one that did not stop.
+    /// </summary>
+    private async Task<bool> GoneAsync(string target, int id, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < StopCheckAttempts; attempt++)
+        {
+            if (!(await RunningAsync(cancellationToken)).Any(s => s.Name == target && s.Id == id))
+            {
+                return true;
+            }
+
+            await Task.Delay(StopCheckInterval, cancellationToken);
+        }
+
+        return false;
+    }
+
+    /// <summary>What wslc itself reports running, a held session included.</summary>
+    private async Task<IReadOnlyList<SessionInfo>> RunningAsync(CancellationToken cancellationToken)
+    {
+        var result = await wslc.RunAsync(["system", "info", "--format", "json"], cancellationToken: cancellationToken);
+        return WslcJson.ParseRows(result.Stdout).FirstOrDefault() is { ValueKind: JsonValueKind.Object } info
+            ? ParseSessions(info)
+            : [];
     }
 
     /// <summary>The sessions <c>wslc system info</c> reports under <c>Server.Sessions</c>; all of them run.</summary>
