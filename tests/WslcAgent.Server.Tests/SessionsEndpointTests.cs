@@ -50,9 +50,11 @@ public sealed class SessionsEndpointTests(WebApplicationFactory<Program> factory
     [Fact]
     public async Task Stopping_the_session_terminates_it_and_says_so()
     {
-        var runner = new FakeWslcRunner()
-            .Answer("system info --format json", SystemInfo)
-            .Answer("system session terminate", "");
+        var runner = new FakeWslcRunner().Answer("system info --format json", SystemInfo);
+        // The stop is only a stop once wslc stops listing the session: the terminate takes it off the list.
+        runner.AnswerWhen(
+            args => string.Join(' ', args) == "system session terminate",
+            _ => runner.Answer("system info --format json", """{"Server":{"Sessions":[]}}"""));
         var client = factory.ClientWith(runner);
 
         var response = await client.PostAsJsonAsync("/api/v1/sessions/stop", new SessionActionRequest("wslc-cli-user"));
