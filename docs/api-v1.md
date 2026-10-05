@@ -257,8 +257,10 @@ Notes
   (`name` or `name 172.19.0.2`, attached after creation), `user`,
   `restartPolicy` (`no`, `unless-stopped`, `always`; agent-owned, never a CLI
   flag), `stopTimeout`, `healthCmd`, `healthInterval`, `healthTimeout`,
-  `healthRetries`, `healthStartPeriod`, `noHealthcheck`, `start`. Flag order:
-  `--name --memory --cpus --publish… --volume… --workdir --env… --entrypoint
+  `healthRetries`, `healthStartPeriod`, `noHealthcheck`, `gpus` (`--gpus all`:
+  WSLC passes every GPU or none; inspect does not show it, so details and every
+  recreate read it from the list row's metadata label, `Flags` bit 2), `start`.
+  Flag order: `--name --memory --cpus --gpus --publish… --volume… --workdir --env… --entrypoint
   --network --ip --network-alias… --user --stop-timeout` then either
   `--no-healthcheck` or the `--health-*` flags, then the image and the command.
 - The restart policy lives in `<DataDirectory>/restart-policies.json`

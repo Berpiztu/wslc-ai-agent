@@ -116,7 +116,7 @@ public static class ContainerTools
         await checks.CheckAsync(request, source, cancellationToken);
 
     [McpServerTool(Name = "run_container")]
-    [Description("Create and start a container from an image (wslc container run --detach), pulling the image first when it is not local (minutes). Options mirror wslc run: name, command, ports, volumes, env, network, limits, health check, restart policy.")]
+    [Description("Create and start a container from an image (wslc container run --detach), pulling the image first when it is not local (minutes). Options mirror wslc run: name, command, ports, volumes, env, network, limits, GPUs (gpus: --gpus all), health check, restart policy.")]
     public static async Task<ContainerCreated> RunContainer(
         IContainerService containers,
         [Description("The launch settings; image is required.")] ContainerLaunchRequest request,

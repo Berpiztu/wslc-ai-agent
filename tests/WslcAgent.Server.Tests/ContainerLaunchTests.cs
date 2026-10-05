@@ -80,6 +80,25 @@ public sealed class ContainerLaunchTests
         Assert.Equal("", parse.Request.HealthCmd);
     }
 
+    /// <summary>
+    /// The GPU survives every way back to a launch: the line, the arguments and
+    /// the metadata label a recreate reads it from. Lost once, a speech model
+    /// came back without it and failed on start with no libcuda.
+    /// </summary>
+    [Fact]
+    public void A_container_with_the_gpus_keeps_them()
+    {
+        var request = new ContainerLaunchRequest { Image = "ia-voice:latest", Gpus = true };
+
+        var parse = RunCommandLine.Parse(RunCommandLine.Write(request));
+
+        Assert.True(parse.Request!.Gpus);
+        Assert.Empty(parse.Unsupported);
+        Assert.Contains("--gpus all", string.Join(' ', LaunchArgs.Run(request)));
+        Assert.True(ContainerService.HasGpus("""a=b,com.microsoft.wsl.container.metadata={"V1":{"Flags":2,"Ports":[]}}"""));
+        Assert.False(ContainerService.HasGpus("""com.microsoft.wsl.container.metadata={"V1":{"Flags":32,"Ports":[]}}"""));
+    }
+
     [Fact]
     public void Run_arguments_follow_a_fixed_order()
     {

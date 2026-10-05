@@ -72,6 +72,13 @@ public sealed record ContainerLaunchRequest
 
     public string HealthStartPeriod { get; init; } = "";
 
+    /// <summary>
+    /// Every GPU of the machine passed in (<c>--gpus all</c>): the only form
+    /// of the flag WSLC takes. Inspect does not show it; the agent reads it
+    /// from the container's metadata label, so a recreate keeps it.
+    /// </summary>
+    public bool Gpus { get; init; }
+
     /// <summary>Emit <c>--no-healthcheck</c> and drop every health field.</summary>
     public bool NoHealthcheck { get; init; }
 

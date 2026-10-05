@@ -367,7 +367,34 @@ public sealed partial class ContainerService(
     private async Task<ContainerInspection> InspectAsync(string container, CancellationToken cancellationToken)
     {
         var result = await wslc.RunAsync(["container", "inspect", container, "--format", "json"], cancellationToken: cancellationToken);
-        return ContainerInspection.Parse(result);
+        var inspection = ContainerInspection.Parse(result);
+        return inspection with { Form = inspection.Form with { Gpus = await HasGpusAsync(inspection.Id, cancellationToken) } };
+    }
+
+    /// <summary>
+    /// Whether the container was created with <c>--gpus all</c>. Inspect does
+    /// not say; only the list row's metadata label does, so the row is read
+    /// for it. A recreate built from inspect alone once brought a speech
+    /// model back without its GPU, and it failed on start with no libcuda.
+    /// </summary>
+    private async Task<bool> HasGpusAsync(string id, CancellationToken cancellationToken)
+    {
+        WslcResult list;
+        try
+        {
+            list = await wslc.RunAsync(Scoped(["container", "list"], all: true), cancellationToken: cancellationToken);
+        }
+        catch (WslcException ex)
+        {
+            logger.LogWarning("container {Id}: the list could not be read for its GPU flag: {Message}", id, ex.Message);
+            return false;
+        }
+
+        return WslcJson.ParseRows(list.Stdout)
+            .Where(row => FirstNonEmpty(row.GetString("ID"), row.GetString("Id")) is { Length: > 0 } rowId
+                && (rowId.StartsWith(id, StringComparison.OrdinalIgnoreCase) || id.StartsWith(rowId, StringComparison.OrdinalIgnoreCase)))
+            .Select(row => HasGpus(row.GetString("Labels")))
+            .FirstOrDefault();
     }
 
     /// <summary>The CLI prints the new id (or the name) on its last line.</summary>
@@ -512,6 +539,33 @@ public sealed partial class ContainerService(
         catch (JsonException)
         {
             return [];
+        }
+    }
+
+    /// <summary>The metadata label's <c>Flags</c> bit WSLC sets for <c>--gpus all</c>.</summary>
+    private const int GpusFlag = 2;
+
+    /// <summary>Whether the metadata label (<c>{"V1":{"Flags":…}}</c>) says the container has every GPU.</summary>
+    internal static bool HasGpus(string labels)
+    {
+        var start = labels.IndexOf(MetadataLabel, StringComparison.Ordinal);
+        var json = start < 0 ? null : ExtractJsonObject(labels, start + MetadataLabel.Length);
+        if (json is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.TryGetProperty("V1", out var v1)
+                && v1.TryGetProperty("Flags", out var flags)
+                && flags.ValueKind == JsonValueKind.Number
+                && (flags.GetInt32() & GpusFlag) != 0;
+        }
+        catch (JsonException)
+        {
+            return false;
         }
     }
 

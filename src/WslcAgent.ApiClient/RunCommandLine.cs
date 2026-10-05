@@ -37,14 +37,14 @@ public static partial class RunCommandLine
     private static readonly HashSet<string> UnsupportedSwitches = ["-i", "-t", "-it", "-ti", "--interactive", "--tty", "--rm", "-P", "--publish-all", "--privileged"];
 
     /// <summary>Flags known to take a value the form has no field for.</summary>
-    private static readonly HashSet<string> UnsupportedValueFlags = ["--hostname", "-h", "--dns", "--label", "-l", "--gpus"];
+    private static readonly HashSet<string> UnsupportedValueFlags = ["--hostname", "-h", "--dns", "--label", "-l"];
 
     /// <summary>Every flag the form fills from a value.</summary>
     private static readonly HashSet<string> ValueFlags =
     [
         "--name", "-w", "--workdir", "-m", "--memory", "--cpus", "--restart", "--stop-timeout", "--health-cmd", "--health-interval",
         "--health-timeout", "--health-retries", "--health-start-period", "--ip", "-p", "--publish", "-v", "--volume", "-e", "--env",
-        "--network", "--net", "--network-alias", "--entrypoint", "-u", "--user", "--public-name",
+        "--network", "--net", "--network-alias", "--entrypoint", "-u", "--user", "--public-name", "--gpus",
     ];
 
     public static RunCommandParse Parse(string text)
@@ -68,6 +68,7 @@ public static partial class RunCommandLine
         var aliases = new List<string>();
         var unsupported = new List<string>();
         var noHealthcheck = false;
+        var gpus = false;
         var command = new List<string>();
 
         for (var i = 0; i < words.Count; i++)
@@ -138,6 +139,9 @@ public static partial class RunCommandLine
                 case "-w" or "--workdir": workdir = value; break;
                 case "-m" or "--memory": memory = value; break;
                 case "--cpus": cpus = value; break;
+                // WSLC passes every GPU or none: a device list is named, not taken as all.
+                case "--gpus" when value == "all": gpus = true; break;
+                case "--gpus": unsupported.Add($"--gpus {value}"); break;
                 case "--restart" when RestartPolicyInfo.IsKnown(value): restart = value; break;
                 case "--restart": unsupported.Add($"{flag} {value}"); break;
                 case "--stop-timeout": stopTimeout = value; break;
@@ -194,6 +198,7 @@ public static partial class RunCommandLine
             HealthRetries = healthRetries,
             HealthStartPeriod = healthStartPeriod,
             NoHealthcheck = noHealthcheck,
+            Gpus = gpus,
         };
         return new RunCommandParse(request, unsupported, "", fromDocker);
     }
@@ -239,6 +244,7 @@ public static partial class RunCommandLine
         Flag("--entrypoint", request.Entrypoint);
         Flag("-m", request.Memory);
         Flag("--cpus", request.Cpus);
+        Flag("--gpus", request.Gpus ? "all" : "");
         Each("-p", request.Publish);
         Each("-v", request.Volumes);
         Flag("-w", request.Workdir);

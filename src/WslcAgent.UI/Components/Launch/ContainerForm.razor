@@ -111,6 +111,10 @@
         <MudTextField T="string" @bind-Value="Form.Cpus" Label="CPUs" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" Margin="Margin.Dense" HelperText="Example: 1.5"
                       Error="@Has(LaunchFields.Cpus)" ErrorText="@Error(LaunchFields.Cpus)" />
     </div>
+    @* Beside the memory and the CPUs it is given: what of the machine the container may use. *@
+    <div class="wslc-span2">
+        <SquareCheckBox @bind-Value="Form.Gpus" Label="GPU (all GPUs, --gpus all)" />
+    </div>
 
     @* Its health check: the switch, the command across the width, the four times two to a column. *@
     <div class="wslc-span2">

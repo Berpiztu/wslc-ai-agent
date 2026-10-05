@@ -105,6 +105,9 @@ public sealed class LaunchForm
 
     public bool NoHealthcheck { get; set; }
 
+    /// <summary>Every GPU of the machine passed in (<c>--gpus all</c>).</summary>
+    public bool Gpus { get; set; }
+
     public List<MountRow> Mounts { get; } = [];
 
     public List<NetworkRow> Networks { get; } = [];
@@ -144,6 +147,7 @@ public sealed class LaunchForm
         HealthRetries = other.HealthRetries;
         HealthStartPeriod = other.HealthStartPeriod;
         NoHealthcheck = other.NoHealthcheck;
+        Gpus = other.Gpus;
         Publish.Clear();
         Publish.AddRange(other.Publish);
         Env.Clear();
@@ -175,6 +179,7 @@ public sealed class LaunchForm
             HealthRetries = request.HealthRetries,
             HealthStartPeriod = request.HealthStartPeriod,
             NoHealthcheck = request.NoHealthcheck,
+            Gpus = request.Gpus,
             Start = request.Start,
         };
         (form.ImageName, form.ImageTag) = SplitImage(request.Image);
@@ -226,6 +231,7 @@ public sealed class LaunchForm
             HealthRetries = HealthRetries.Trim(),
             HealthStartPeriod = HealthStartPeriod.Trim(),
             NoHealthcheck = NoHealthcheck,
+            Gpus = Gpus,
             Start = Start,
         };
     }

@@ -28,7 +28,8 @@ public static class LaunchArgs
 
         args.Option("--name", request.Name)
             .Option("--memory", request.Memory)
-            .Option("--cpus", request.Cpus);
+            .Option("--cpus", request.Cpus)
+            .Option("--gpus", request.Gpus ? "all" : "");
         Repeat(args, "--publish", request.Publish);
         Repeat(args, "--volume", volumes);
         args.Option("--workdir", workdir);
