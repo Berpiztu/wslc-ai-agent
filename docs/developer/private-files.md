@@ -99,7 +99,7 @@ a Firebase project of your own; the free plan is enough.
 2. **Create a project** (any name, for example `wslc-ai-agent`). Google
    Analytics is not needed: you can switch it off.
 3. In the project's overview, **add an app** and choose **Android**.
-4. **Android package name**: `ai.berpiztu.wslcagent`, the client's application
+4. **Android package name**: `ai.berpiztu.wslcaiagent`, the client's application
    id. It has to match exactly, or the client gets no token. (If you publish
    the client under an id of your own, change `ApplicationId` in
    `src/WslcAgent.App/WslcAgent.App.csproj` and the activity name in
@@ -171,55 +171,41 @@ file: the scripts read it as data and never run it.
 
 ## In GitHub Actions
 
-A workflow that builds signed releases gets the same files from the
-repository's secrets (**Settings → Secrets and variables → Actions**) and
-writes them into `private\` before building. Binary files travel as base64.
+The release workflow (`.github/workflows/release.yml`) signs the APK and
+gives it notifications from three repository secrets (**Settings → Secrets
+and variables → Actions**), which it writes back into files before building.
+Binary files travel as base64; so does `google-services.json`.
 
-On your machine, each line below copies one file's content to the clipboard;
-paste it as a new repository secret with the name given above it.
+On your machine, each line below copies one value to the clipboard; paste it
+into the secret named above it. Do one at a time: the clipboard keeps only the
+last.
 
 `ANDROID_KEYSTORE_BASE64`:
 
 ```powershell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("private\android.keystore")) | Set-Clipboard
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("privatendroid.keystore")) | Set-Clipboard
 ```
 
 `ANDROID_KEYSTORE_PASS`:
 
 ```powershell
-Get-Content private\android.keystore.pass -Raw | Set-Clipboard
+Get-Content privatendroid.keystore.pass -Raw | Set-Clipboard
 ```
 
-`GOOGLE_SERVICES_JSON`:
+`GOOGLE_SERVICES_JSON_BASE64`:
 
 ```powershell
-Get-Content private\google-services.json -Raw | Set-Clipboard
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("private\google-services.json")) | Set-Clipboard
 ```
 
-`FIREBASE_SERVICE_ACCOUNT_JSON`:
+[Releasing](releasing.md#the-repositorys-secrets) sets the same three with the
+GitHub CLI in one go. Set them again whenever the key or the Firebase project
+changes, or the next release is signed and configured with the old ones.
 
-```powershell
-Get-Content private\firebase-service-account.json -Raw | Set-Clipboard
-```
-
-The workflow step that writes them back (this one is a file to paste into a
-workflow, not a command):
-
-```yaml
-- name: Private files
-  shell: pwsh
-  env:
-    ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-    ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
-    GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
-    FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-  run: |
-    New-Item -ItemType Directory -Force private | Out-Null
-    [IO.File]::WriteAllBytes("private/android.keystore", [Convert]::FromBase64String($env:ANDROID_KEYSTORE_BASE64))
-    Set-Content private/android.keystore.pass $env:ANDROID_KEYSTORE_PASS -NoNewline
-    Set-Content private/google-services.json $env:GOOGLE_SERVICES_JSON -NoNewline
-    Set-Content private/firebase-service-account.json $env:FIREBASE_SERVICE_ACCOUNT_JSON -NoNewline
-```
+There is no secret for `firebase-service-account.json`, on purpose: a release's
+agent installer never carries it, because whoever downloads the installer
+would get it. A released agent pushes once its user copies a key of their own
+into its data folder ([above](#3-the-service-account-key)).
 
 Pull requests from forks get no secrets, so their builds are unsigned and
 without push, exactly like a fresh clone.

@@ -22,7 +22,7 @@
     <MauiXamlInflator>SourceGen</MauiXamlInflator>
 
     <ApplicationTitle>WSLC AI Client</ApplicationTitle>
-    <ApplicationId>ai.berpiztu.wslcagent</ApplicationId>
+    <ApplicationId>ai.berpiztu.wslcaiagent</ApplicationId>
 
     <!-- Client version of the release, independent of the agent's and changed
          only when one is published: Display is the Windows EXE ProductVersion

@@ -36,7 +36,7 @@ Set-Location $RepoRoot
 
 $Csproj = Join-Path $RepoRoot "src\WslcAgent.App\WslcAgent.App.csproj"
 $Tfm = "net10.0-android"
-$PackageId = "ai.berpiztu.wslcagent"
+$PackageId = "ai.berpiztu.wslcaiagent"
 $Activity = "$PackageId/$PackageId.MainActivity"
 
 $sdk = Find-WslcAgentAndroidSdk

@@ -11,10 +11,10 @@ namespace WslcAgent.App;
 // OnNewIntent instead of a second instance), resizeable, and it survives
 // rotation, split screen and keyboard changes without being recreated.
 // A stable activity name so tooling can start the app explicitly:
-//   adb shell am start -n ai.berpiztu.wslcagent/ai.berpiztu.wslcagent.MainActivity --es agent_url http://10.0.2.2:8070/
+//   adb shell am start -n ai.berpiztu.wslcaiagent/ai.berpiztu.wslcaiagent.MainActivity --es agent_url http://10.0.2.2:8070/
 // The optional agent_url extra seeds the agent address (debug-android.ps1 uses it).
 [Activity(
-    Name = "ai.berpiztu.wslcagent.MainActivity",
+    Name = "ai.berpiztu.wslcaiagent.MainActivity",
     Theme = "@style/Maui.SplashTheme",
     MainLauncher = true,
     Exported = true,

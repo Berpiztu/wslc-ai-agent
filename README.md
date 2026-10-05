@@ -98,7 +98,7 @@ architecture button).
 | `WslcAgent.Server` | ASP.NET Core agent: runs `wslc`, exposes `/api/v1`, serves the UI, hosts the MCP endpoint. Ships as `wslc-ai-agent.exe`. |
 | `WslcAgent.UI` | The one user interface: Razor components on [MudBlazor](https://mudblazor.com/). |
 | `WslcAgent.Web` | Blazor WebAssembly host of the UI, served by the agent, installable as a PWA. |
-| `WslcAgent.App` | .NET MAUI Blazor Hybrid host of the UI for Windows and Android (`wslc-ai-client.exe`, `ai.berpiztu.wslcagent`). |
+| `WslcAgent.App` | .NET MAUI Blazor Hybrid host of the UI for Windows and Android (`wslc-ai-client.exe`, `ai.berpiztu.wslcaiagent`). |
 | `WslcAgent.ApiClient` | Contracts and typed client for `/api/v1`, shared by every host. |
 | `WslcAgent.Mcp` | MCP tools (official C# SDK), hosted by the server. |
 | `Berpiztu.Dashboard` | The dashboard and its designer, a Razor class library on MudBlazor that knows nothing of WSLC. |

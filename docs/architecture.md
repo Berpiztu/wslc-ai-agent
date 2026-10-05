@@ -18,7 +18,7 @@ src/
   WslcAgent.Server     ASP.NET Core host: wslc runner, /api/v1, static UI, /api/v1/mcp. Exe: wslc-ai-agent.exe
   WslcAgent.UI         The UI: Razor Class Library of MudBlazor components (layout, pages).
   WslcAgent.Web        Blazor WebAssembly host of UI, served by Server; PWA manifest + service worker.
-  WslcAgent.App        MAUI Blazor Hybrid host of UI: Windows (wslc-ai-client.exe) and Android (ai.berpiztu.wslcagent).
+  WslcAgent.App        MAUI Blazor Hybrid host of UI: Windows (wslc-ai-client.exe) and Android (ai.berpiztu.wslcaiagent).
   WslcAgent.Tray       The installed agent's icon beside the clock: a click opens the agent's own page in the browser. Exe: wslc-ai-agent-tray.exe
   WslcAgent.Toasts     The agent's notifications as Windows toasts, shared by App and Tray.
   WslcAgent.ApiClient  Contracts (records) and a typed HttpClient for /api/v1.
