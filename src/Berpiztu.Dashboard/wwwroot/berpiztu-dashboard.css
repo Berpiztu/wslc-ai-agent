@@ -286,6 +286,13 @@
     text-align: right;
 }
 
+/* Centred as the other two are aligned: the block in the middle and each of
+   its lines centred on its own, not three lines left inside a centred block. */
+.bz-dash-align-center {
+    align-items: center;
+    text-align: center;
+}
+
 .bz-dash-valign-top {
     justify-content: flex-start;
 }
