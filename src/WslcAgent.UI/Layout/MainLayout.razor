@@ -55,8 +55,8 @@ else
     - top bar row 1: at the left the application's name over the
       session line (selector, refresh, power, status), then the page title and
       its status slot; the page's search centred; then on the right the page's
-      nav slot (bulk actions), Styles, the page zoom, the theme toggle and Log
-      out (for a signed-in session);
+      nav slot (bulk actions), Styles, and a 2×2 of the agent connected to and
+      Log out over the page zoom and the theme toggle;
     - top bar row 2: the page's section actions, only when the page has some;
     - content: a viewport-high column so list pages fill it;
     - the navigation button at the bottom centre, coloured by the session —
@@ -104,17 +104,18 @@ else
                 {
                     <div class="@($"wslc-topnav mr-2{SessionOffClass}")" inert="@SessionOff">@Chrome.TopbarNav</div>
                 }
-                @* This client's own things as a 2×2 at the right edge: the theme toggle and Log out on the first
-                   line, the page zoom across the second, so the search keeps its
-                   room. *@
+                @* This client's own things as a 2×2 at the right edge: the agent it is
+                   connected to and Log out on the first line, the page zoom and the
+                   theme toggle on the second, so the search keeps its room. *@
                 <div class="wslc-appbar-client">
-                    <MudIconButton Icon="@(_darkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" Size="Size.Small" Color="Color.Inherit"
-                                   title="Theme" aria-label="Theme" OnClick="ToggleTheme" />
+                    <MudText Typo="Typo.caption" Class="wslc-appbar-server" title="Connected to">@ConnectedTo</MudText>
                     @* The doorway, always in sight, even
                        with no session to end: it then only goes to the sign-in screen.
                        The tooltip says it for anyone unsure of the glyph. *@
                     <MudIconButton Icon="@Icons.Material.Filled.Logout" Size="Size.Small" Color="Color.Inherit" OnClick="LogOutAsync" title="Log out" aria-label="Log out" />
                     <ZoomControl />
+                    <MudIconButton Icon="@(_darkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" Size="Size.Small" Color="Color.Inherit"
+                                   title="Theme" aria-label="Theme" OnClick="ToggleTheme" />
                 </div>
             </div>
         </div>
@@ -382,7 +383,13 @@ else
 
     private void OnChromeChanged() => InvokeAsync(StateHasChanged);
 
-    /// <summary>The theme toggle stands in the title bar, between the zoom and Log out.</summary>
+    /// <summary>
+    /// The agent this screen talks to, as host and port: the chosen one on a native
+    /// client, the one serving the page in a browser.
+    /// </summary>
+    private string ConnectedTo => new Uri(Servers.Supported && Servers.Current.Length > 0 ? Servers.Current : Navigation.BaseUri).Authority;
+
+    /// <summary>The theme toggle stands in the title bar, beside the zoom under Log out.</summary>
     private void ToggleTheme()
     {
         _darkMode = !_darkMode;

@@ -1090,30 +1090,21 @@
     min-width: 6rem;
 }
 
-/* The client's own controls at the right edge: the page zoom on the second
-   line — a magnifier, its box, a
-   magnifier — and on the first, over the box alone, split in two, the theme
-   toggle at the left and Log out at the right. Four columns: the two
-   magnifiers' 26px at the ends, the box's two halves between. A flex row
-   would lay the three side by side and take the search's room. */
+/* The client's own controls at the right edge, two by two in the order they
+   are written: the agent it is connected to and Log out on the first line,
+   the page zoom and the theme toggle on the second. A flex row would lay the
+   four side by side and take the search's room. */
 .wslc-appbar-client {
     flex: 0 0 auto;
     display: grid;
-    grid-template-columns: 26px 1fr 1fr 26px;
+    grid-template-columns: auto auto;
     align-items: center;
     justify-items: center;
 }
 
-.wslc-appbar-client > .mud-icon-button:nth-of-type(1) {
-    grid-area: 1 / 2;
-}
-
-.wslc-appbar-client > .mud-icon-button:nth-of-type(2) {
-    grid-area: 1 / 3;
-}
-
-.wslc-appbar-client > .wslc-zoom {
-    grid-area: 2 / 1 / 3 / 5;
+/* The agent's host and port on one line, as wide as the zoom under it or wider. */
+.wslc-appbar-client > .wslc-appbar-server {
+    white-space: nowrap;
 }
 
 /* The bar's verbs keep their words on one line (Log out never breaks in two). */
@@ -1368,9 +1359,9 @@
 
     /* The client's controls at the right a size down with them: the theme,
        Log out and the zoom's magnifiers from 20px glyphs to 16px, and the
-       percentage field lower, its number and its % at step 5 (docs/RULES.md). */
-    .wslc-appbar-client {
-        grid-template-columns: 22px 1fr 1fr 22px;
+       percentage field and the agent's address lower, at step 5 (docs/RULES.md). */
+    .wslc-appbar-client > .wslc-appbar-server {
+        font-size: var(--wslc-typography-tiny-size);
     }
 
     .wslc-appbar-client .mud-icon-button {
