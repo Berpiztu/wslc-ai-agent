@@ -1050,18 +1050,25 @@
 }
 
 /* The same session line as a part of the System card, an exception to the
-   label-over-value readings: a grid of its own,
-   five columns by two rows. The first row is the label across three columns,
-   then refresh and the power button a column each; the second row is the
-   selector across all five. Its wrappers (VerbTaps, the line's row and its
-   verbs) step aside (display: contents) so their pieces are the grid's own
-   cells, as the title bar does with its grid; VerbTaps still stops their
-   taps, since an element laid out as contents is still in the event's path. */
+   label-over-value readings, laid out as the title bar lays it: two columns
+   by two rows. The first column is the label over the selector, as wide as
+   the card leaves it, so the name fills it; the second holds refresh over the
+   power button. Its wrappers (VerbTaps, the line's row and its verbs) step
+   aside (display: contents) so their pieces are the grid's own cells, as the
+   title bar does with its grid; VerbTaps still stops their taps, since an
+   element laid out as contents is still in the event's path. */
 .wslc-system-session {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     column-gap: 4px;
+}
+
+/* The Session object fills its cells (Fills) and keeps its line in their middle. */
+.wslc-dash-session {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
 .wslc-system-session > .wslc-verb-taps,
@@ -1071,24 +1078,24 @@
 }
 
 .wslc-system-session > .wslc-summary-label {
-    grid-column: 1 / span 3;
+    grid-column: 1;
     grid-row: 1;
 }
 
 .wslc-system-session .wslc-session-verbs > .mud-icon-button:nth-child(1) {
-    grid-column: 4;
+    grid-column: 2;
     grid-row: 1;
     justify-self: center;
 }
 
 .wslc-system-session .wslc-session-verbs > .mud-icon-button:nth-child(2) {
-    grid-column: 5;
-    grid-row: 1;
+    grid-column: 2;
+    grid-row: 2;
     justify-self: center;
 }
 
 .wslc-system-session .wslc-session-pick {
-    grid-column: 1 / -1;
+    grid-column: 1;
     grid-row: 2;
     width: auto;
     min-width: 0;
@@ -1242,8 +1249,12 @@
    the default size on a phone), not body2: the name is as wide as the column,
    and body2 left a third of it empty (measured at 1400px: 11.52px shown where
    95.8px over 6.03em fit 15.9px). The session never reads larger than the
-   name. */
-.wslc-appbar-row .wslc-session-select .mud-input > .mud-input-slot.mud-input-root-filled.mud-input-root-margin-dense {
+   name. The System card's Session is the same field and takes the same cap,
+   so its name fills the card's width too (measured at Small: 11.52px shown
+   where 114px less the arrow over 6.03em fit 15.3px); its label and verbs
+   keep the object's type size. */
+.wslc-appbar-row .wslc-session-select .mud-input > .mud-input-slot.mud-input-root-filled.mud-input-root-margin-dense,
+.wslc-system-session .wslc-session-select .mud-input > .mud-input-slot.mud-input-root-filled.mud-input-root-margin-dense {
     font-size: min(
         var(--mud-typography-h6-size),
         calc((100cqi - 22px) / var(--wslc-session-ems, 8.4)));
