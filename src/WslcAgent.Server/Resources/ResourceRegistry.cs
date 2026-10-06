@@ -30,7 +30,8 @@ namespace WslcAgent.Server.Resources;
 /// other had entered — a container the other knew got a new uid, and the
 /// dashboard's cards lost it. Every change is made under a lock on the file
 /// that both take (<see cref="Change"/>), on the file as it is now, and a read
-/// takes the file again when another process has written it since.
+/// takes the file again when another process has written it since
+/// (<see cref="SharedDataFile"/>).
 /// </summary>
 public sealed class ResourceRegistry
 {
@@ -48,14 +49,7 @@ public sealed class ResourceRegistry
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
-    /// <summary>How long a change waits for another process to let go of the file before it goes on without the lock.</summary>
-    private static readonly TimeSpan LockWait = TimeSpan.FromSeconds(3);
-
-    private readonly string _path;
-    private readonly string _lockPath;
-
-    /// <summary>When the file read last was written: another process writing it since makes a read take it again.</summary>
-    private DateTime _readWritten;
+    private readonly SharedDataFile _file;
     private readonly ISelectedSession _session;
     private readonly ILogger<ResourceRegistry> _logger;
     private readonly Lock _gate = new();
@@ -66,8 +60,7 @@ public sealed class ResourceRegistry
     {
         _session = session;
         _logger = logger;
-        _path = Path.Combine(options.Value.DataDirectory, "resources.json");
-        _lockPath = _path + ".lock";
+        _file = new SharedDataFile(Path.Combine(options.Value.DataDirectory, "resources.json"), logger);
         _stored = Load();
     }
 
@@ -206,14 +199,14 @@ public sealed class ResourceRegistry
     /// every process takes, the file read again if another process wrote it
     /// since (<see cref="Refresh"/>), <paramref name="apply"/> run on
     /// it, and the file written when it says it changed something. A file
-    /// another process holds for longer than <see cref="LockWait"/> is not
-    /// waited for: the change is made on what this process knows, as before.
+    /// another process holds for too long is not waited for: the change is
+    /// made on what this process knows, as before.
     /// </summary>
     private void Change(Func<bool> apply)
     {
         lock (_gate)
         {
-            using var held = LockFile();
+            using var held = _file.Lock();
             Refresh();
             if (apply())
             {
@@ -225,44 +218,9 @@ public sealed class ResourceRegistry
     /// <summary>The file again, when another process has written it since it was read.</summary>
     private void Refresh()
     {
-        if (Written() != _readWritten)
+        if (_file.WrittenSinceRead)
         {
             _stored = Load();
-        }
-    }
-
-    private DateTime Written()
-    {
-        try
-        {
-            return File.Exists(_path) ? File.GetLastWriteTimeUtc(_path) : default;
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            return _readWritten;
-        }
-    }
-
-    /// <summary>The lock on the file every process takes to change it: a file opened by one alone, held until disposed; null when it could not be had in time.</summary>
-    private FileStream? LockFile()
-    {
-        var deadline = DateTime.UtcNow + LockWait;
-        while (true)
-        {
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(_lockPath)!);
-                return new FileStream(_lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-            }
-            catch (IOException) when (DateTime.UtcNow < deadline)
-            {
-                Thread.Sleep(20);
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-            {
-                _logger.LogWarning("resources.json could not be locked: {Message}", exception.Message);
-                return null;
-            }
         }
     }
 
@@ -291,13 +249,7 @@ public sealed class ResourceRegistry
     {
         try
         {
-            // Written beside it and put in its place whole: the other process
-            // reads it without the lock, and must never find it half-written.
-            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            var written = _path + ".tmp";
-            File.WriteAllText(written, JsonSerializer.Serialize(_stored, Json));
-            File.Move(written, _path, overwrite: true);
-            _readWritten = Written();
+            _file.Write(JsonSerializer.Serialize(_stored, Json));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -306,13 +258,17 @@ public sealed class ResourceRegistry
         }
     }
 
-    /// <summary>A file written by hand, or half-written, must not stop the agent: it starts again from uid 1, and the next read fills it.</summary>
+    /// <summary>
+    /// A file written by hand, or one another process holds at that moment,
+    /// must not stop the agent: what it knew stays — at the start, nothing,
+    /// from uid 1, and the next read fills it — and a file it could not open
+    /// is tried again at the next look.
+    /// </summary>
     private Stored Load()
     {
         try
         {
-            _readWritten = Written();
-            if (File.Exists(_path) && JsonSerializer.Deserialize<Stored>(File.ReadAllText(_path), Json) is { Entries: not null } stored)
+            if (_file.Read() is { } text && JsonSerializer.Deserialize<Stored>(text, Json) is { Entries: not null } stored)
             {
                 return stored with
                 {
@@ -326,7 +282,7 @@ public sealed class ResourceRegistry
             _logger.LogWarning("resources.json could not be read: {Message}", exception.Message);
         }
 
-        return new Stored(1, []);
+        return _stored ?? new Stored(1, []);
     }
 
     /// <summary>

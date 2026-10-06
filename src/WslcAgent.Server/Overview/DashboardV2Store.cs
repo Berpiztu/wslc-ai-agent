@@ -15,6 +15,13 @@ namespace WslcAgent.Server.Overview;
 /// to their file the first time it is asked for. Every state it is saved in is
 /// kept, with its origin and revision (<see cref="DashboardHistory"/>).
 /// <para>
+/// The file is shared with any other agent on the machine (an installed one
+/// and a development one): it is read again whenever another has written it,
+/// and changed under the lock they all take (<see cref="SharedDataFile"/>).
+/// Kept as it was read at the start, one agent served a dashboard hours old
+/// and wrote it back over what was saved through the other.
+/// </para>
+/// <para>
 /// A development build writes the default back to the repository, raising its
 /// version, so the next installer ships what was designed. An installed agent
 /// keeps a default of its own instead, view by view over the shipped one, which
@@ -24,20 +31,20 @@ namespace WslcAgent.Server.Overview;
 public sealed class DashboardV2Store
 {
     private readonly ShippedFile _default = new("dashboard-v2.5.default.json", "DashboardV2DefaultSource");
-    private readonly string _path;
+    private readonly SharedDataFile _file;
     private readonly Lock _gate = new();
     private readonly LoadedDefaults _loaded;
     private readonly DefaultsVersions _versions;
     private readonly DashboardHistory _history;
     private string? _layout;
 
-    public DashboardV2Store(IOptions<WslcOptions> options, LoadedDefaults loaded, DefaultsVersions versions, DashboardHistory history)
+    public DashboardV2Store(IOptions<WslcOptions> options, LoadedDefaults loaded, DefaultsVersions versions, DashboardHistory history, ILogger<DashboardV2Store> logger)
     {
         _loaded = loaded;
         _versions = versions;
         _history = history;
-        _path = Path.Combine(options.Value.DataDirectory, "dashboard-v2.5.json");
-        _layout = ShippedFile.ReadFile(_path);
+        _file = new SharedDataFile(Path.Combine(options.Value.DataDirectory, "dashboard-v2.5.json"), logger);
+        Refresh();
     }
 
     /// <summary>The version of the default dashboard this agent ships.</summary>
@@ -48,9 +55,19 @@ public sealed class DashboardV2Store
     {
         lock (_gate)
         {
-            if (_layout is null && Default() is { } fallback)
+            Refresh();
+            if (_layout is not null)
             {
-                ShippedFile.WriteFile(_path, fallback);
+                return _layout;
+            }
+
+            // Given the default only where there is truly no file: one that
+            // could not be read just now is not a user without a dashboard.
+            using var held = _file.Lock();
+            Refresh();
+            if (_layout is null && !_file.WrittenSinceRead && Default() is { } fallback)
+            {
+                _file.Write(fallback);
                 _layout = fallback;
                 _history.Record(fallback, new DashboardOrigin(ShippedVersion, DashboardHistory.Installation, ""), "Given the default");
             }
@@ -71,16 +88,41 @@ public sealed class DashboardV2Store
     {
         lock (_gate)
         {
+            using var held = _file.Lock();
+            Refresh();
             KeepWhatIsReplaced(note);
             _layout = string.IsNullOrWhiteSpace(layout) ? null : layout;
             if (_layout is null)
             {
-                File.Delete(_path);
+                _file.Delete();
                 return;
             }
 
-            ShippedFile.WriteFile(_path, _layout);
+            _file.Write(_layout);
             _history.Record(_layout, origin, note, revision);
+        }
+    }
+
+    /// <summary>
+    /// The file again, when another agent has written it since it was read. One
+    /// that cannot be opened at that moment leaves what was read before, and is
+    /// tried again at the next look: never taken for a dashboard that is not
+    /// there, which would give the user the default over their own.
+    /// </summary>
+    private void Refresh()
+    {
+        if (!_file.WrittenSinceRead)
+        {
+            return;
+        }
+
+        try
+        {
+            _layout = _file.Read() is { Length: > 0 } text ? text : null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // What was read before stays.
         }
     }
 
