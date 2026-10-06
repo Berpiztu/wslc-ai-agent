@@ -135,7 +135,7 @@ else
         </div>
     </MudAppBar>
 
-    <MudMainContent Class="wslc-main d-flex flex-column" inert="@LinkOff">
+    <MudMainContent Class="wslc-main d-flex flex-column" inert="@Veiled">
         @if (Chrome.SectionActions is not null)
         {
             <MudToolBar Dense="true" Class="@($"wslc-section-actions flex-shrink-0{SessionOffClass}")" inert="@SessionOff">
@@ -159,15 +159,19 @@ else
 
     <PageVerbsFab />
 
-    @* The agent stopped answering. The application is not made to work without
-       it, so the screen waits under this, deaf to pointer and keyboard, instead
-       of every page and every poll saying "Failed to fetch" on its own; the
-       layout asks for the agent's health until it answers, and then every page
-       reads again. The way out: a native client can go and
-       choose another agent — the sign-in screen, which has the chooser and its
-       own layout, so the veil goes with this one — or close itself; a browser
-       page can do neither, so it offers to reload. *@
-    <MudOverlay Visible="LinkOff" DarkBackground="true" AutoClose="false" ZIndex="1400">
+    @* The agent stopped answering, and has not come back within the grace a
+       silence is given (Veiled): a phone back from the background, its
+       connection asleep, is answered again in a second or two, and said on
+       the activity line meanwhile, "Reconnecting to the agent…", with no veil.
+       Past it the application, not made to work without the agent, waits
+       under this, deaf to pointer and keyboard, instead of every page and
+       every poll saying "Failed to fetch" on its own; the layout asks for the
+       agent's health until it answers, and then every page reads again. The
+       way out: a native client can go and choose another agent — the sign-in
+       screen, which has the chooser and its own layout, so the veil goes with
+       this one — or close itself; a browser page can do neither, so it offers
+       to reload. *@
+    <MudOverlay Visible="Veiled" DarkBackground="true" AutoClose="false" ZIndex="1400">
         <AgentUnreachable />
     </MudOverlay>
     <SessionPowerVeil />
@@ -335,18 +339,68 @@ else
 
     private static readonly TimeSpan ProbeEvery = TimeSpan.FromSeconds(2);
 
+    /// <summary>How long a silence is only said on the activity line before the veil comes: a phone's connection waking takes a second or two.</summary>
+    private static readonly TimeSpan ReconnectGrace = TimeSpan.FromSeconds(10);
+
     private bool _probing;
+
+    /// <summary>The silence outlived its grace: the veil is up until the agent answers.</summary>
+    private bool _graceOver;
+
+    /// <summary>"Reconnecting to the agent…" on the activity line while the grace lasts.</summary>
+    private ActivityWork? _reconnecting;
+
+    private CancellationTokenSource? _grace;
 
     /// <summary>The agent does not answer. The sign-in screen has a layout of its own, so this never covers the chooser of agents.</summary>
     private bool LinkOff => !Link.Online;
 
-    /// <summary>The link went: the screen waits and the agent is asked until it answers. Back: the screen wakes.</summary>
-    private void OnLinkChanged()
+    /// <summary>The agent has not answered for longer than the grace: the screen waits under the veil.</summary>
+    private bool Veiled => LinkOff && _graceOver;
+
+    /// <summary>
+    /// The link went: the activity line says it is reconnecting and the agent
+    /// is asked until it answers; the veil only once the grace is over. Back:
+    /// the line clears, the veil goes, the screen wakes.
+    /// </summary>
+    /// <remarks>On the renderer's own thread: a native client's calls fail on any thread.</remarks>
+    private void OnLinkChanged() => _ = InvokeAsync(() =>
     {
-        _ = InvokeAsync(StateHasChanged);
-        if (!Link.Online)
+        _grace?.Cancel();
+        if (Link.Online)
         {
+            _graceOver = false;
+            _reconnecting?.Dispose();
+            _reconnecting = null;
+        }
+        else
+        {
+            _reconnecting ??= Activity.Begin("Reconnecting to the agent");
+            _ = GraceAsync(_grace = new CancellationTokenSource());
             _ = ProbeAsync();
+        }
+
+        StateHasChanged();
+    });
+
+    /// <summary>The silence still there once the grace is over: the reconnecting line gives way to the veil.</summary>
+    private async Task GraceAsync(CancellationTokenSource grace)
+    {
+        try
+        {
+            await Task.Delay(ReconnectGrace, grace.Token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
+        if (LinkOff)
+        {
+            _graceOver = true;
+            _reconnecting?.Dispose();
+            _reconnecting = null;
+            await InvokeAsync(StateHasChanged);
         }
     }
 
@@ -417,6 +471,8 @@ else
         Activity.Changed -= OnChromeChanged;
         WslcSession.Changed -= OnChromeChanged;
         Link.Changed -= OnLinkChanged;
+        _grace?.Cancel();
+        _reconnecting?.Dispose();
         Errors.Reported -= OnUnhandled;
         Session.SignInRequired -= OnSignInRequired;
     }
