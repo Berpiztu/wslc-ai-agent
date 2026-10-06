@@ -363,6 +363,18 @@ function Test-WslcAgentVersionedFile {
     }
 }
 
+function Get-WslcAgentDotnetOutput {
+    <#
+    How much a script's dotnet commands say: quiet, or — when the script is
+    verbose (its default, unless -Quiet), a preference that reaches the
+    functions it calls —
+    MSBuild's whole log: detailed, every project, target and task with their
+    times and warnings, and without the terminal logger, which folds any
+    verbosity into a line per project (it is why normal showed next to nothing).
+    #>
+    if ($VerbosePreference -eq "Continue") { @("-v", "detailed", "--tl:off") } else { @("-v", "q") }
+}
+
 function Build-WslcAgentMsi {
     <#
     Build a WiX project and return the path of the produced .msi.
@@ -382,7 +394,9 @@ function Build-WslcAgentMsi {
     $extra = @($Properties.GetEnumerator() | ForEach-Object { "-p:$($_.Key)=$($_.Value)" })
     # Out-Host keeps the build output off the pipeline: this function's only
     # return value must be the .msi path.
-    & dotnet build $WixProj -c Release -nologo -v q -p:OutputPath="$outDir\" -p:MsiVersion=$Version @extra | Out-Host
+    $output = @(Get-WslcAgentDotnetOutput)
+    Write-Verbose "dotnet build $WixProj -c Release $output -p:OutputPath=$outDir\ -p:MsiVersion=$Version $extra"
+    & dotnet build $WixProj -c Release -nologo @output -p:OutputPath="$outDir\" -p:MsiVersion=$Version @extra | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "WiX build failed with exit code $LASTEXITCODE" }
     $msi = Get-ChildItem -LiteralPath $outDir -Filter *.msi -Recurse | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if (-not $msi) { throw "WiX build succeeded but no .msi was found under $outDir" }

@@ -10,11 +10,17 @@
     private\ when missing; see docs\developer\private-files.md.
     -NoBump rebuilds the current version.
 #>
+[CmdletBinding()]
 param(
     [switch]$NoBump,
     [switch]$Clean,
-    [switch]$Full
+    [switch]$Full,
+    [switch]$Quiet
 )
+
+# Verbose unless asked not to: every command and dotnet's whole log are what
+# the owner reads a build by (Get-WslcAgentDotnetOutput follows this).
+if (-not $Quiet) { $VerbosePreference = "Continue" }
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -34,7 +40,7 @@ Clear-WslcAgentIconCache
 New-Item -ItemType Directory -Force -Path (Join-Path $RepoRoot "dist") | Out-Null
 
 $publishArgs = @(
-    $Csproj, "-c", "Release", "-f", $Tfm, "-nologo", "-v", "q",
+    $Csproj, "-c", "Release", "-f", $Tfm, "-nologo") + @(Get-WslcAgentDotnetOutput) + @(
     "-p:AndroidPackageFormat=apk",
     "-p:AndroidKeyStore=true",
     "-p:AndroidSigningKeyStore=$($signing.Keystore)",
@@ -51,6 +57,8 @@ if ($Full) {
 }
 
 Write-Host "Publishing WSLC AI Client $($client.Display) for Android (Release APK, $abiLabel)..." -ForegroundColor Cyan
+# The command as it runs, the signing passwords hidden: they are secrets.
+Write-Verbose ("dotnet publish " + (($publishArgs | ForEach-Object { "$_" -replace '^(-p:AndroidSigning(StorePass|KeyPass))=.*$', '$1=***' }) -join " "))
 & dotnet publish @publishArgs
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE" }
 

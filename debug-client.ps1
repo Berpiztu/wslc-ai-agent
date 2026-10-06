@@ -12,12 +12,18 @@
 .EXAMPLE
     .\debug-client.ps1 -NoBuild -AgentUrl http://192.168.1.20:8070/
 #>
+[CmdletBinding()]
 param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Debug",
     [string]$AgentUrl = "http://127.0.0.1:8070/",
-    [switch]$NoBuild
+    [switch]$NoBuild,
+    [switch]$Quiet
 )
+
+# Verbose unless asked not to: every command and dotnet's whole log are what
+# the owner reads a build by (Get-WslcAgentDotnetOutput follows this).
+if (-not $Quiet) { $VerbosePreference = "Continue" }
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -31,7 +37,10 @@ if (-not $NoBuild) {
     Get-ChildItem -Path (Join-Path $RepoRoot "src\WslcAgent.App\obj") -Directory -Recurse -Filter resizetizer -ErrorAction SilentlyContinue |
         ForEach-Object { Remove-Item -Recurse -Force -LiteralPath $_.FullName }
     Write-Host "Building WSLC AI Client for Windows ($Configuration)..." -ForegroundColor Cyan
-    dotnet build $Csproj -c $Configuration -f $Tfm -nologo -v q
+    # MSBuild's whole log without the terminal logger's summary, unless -Quiet.
+    $Output = if ($VerbosePreference -eq "Continue") { @("-v", "detailed", "--tl:off") } else { @("-v", "q") }
+    Write-Verbose "dotnet build $Csproj -c $Configuration -f $Tfm $Output"
+    dotnet build $Csproj -c $Configuration -f $Tfm -nologo @Output
     if ($LASTEXITCODE -ne 0) { throw "dotnet build failed with exit code $LASTEXITCODE" }
 }
 

@@ -12,11 +12,17 @@
 .EXAMPLE
     .\debug-phone.ps1 -AgentUrl http://127.0.0.1:8069/ -NoBuild
 #>
+[CmdletBinding()]
 param(
     [string]$Device,
     [string]$AgentUrl = "http://127.0.0.1:8070/",
-    [switch]$NoBuild
+    [switch]$NoBuild,
+    [switch]$Quiet
 )
 
+# Verbose unless asked not to: every command and dotnet's whole log are what
+# the owner reads a build by (Get-WslcAgentDotnetOutput follows this).
+if (-not $Quiet) { $VerbosePreference = "Continue" }
+
 $ErrorActionPreference = "Stop"
-& (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "debug-android.ps1") -Phone -Device $Device -AgentUrl $AgentUrl -NoBuild:$NoBuild
+& (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "debug-android.ps1") -Phone -Device $Device -AgentUrl $AgentUrl -NoBuild:$NoBuild -Quiet:$Quiet

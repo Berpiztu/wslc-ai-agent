@@ -23,6 +23,14 @@ namespace WslcAgent.Server.Resources;
 /// longer there is dropped. The entries carry their kind, and the WSLC session
 /// they live in: the agent can be switched to another session, whose resources are
 /// others, and a read there must not take this session's uids away.
+///
+/// The file is not this process's alone: an installed agent and a development
+/// one on the same machine share the data folder, and each kept the copy it
+/// read when it started and wrote it back whole, so each took away what the
+/// other had entered — a container the other knew got a new uid, and the
+/// dashboard's cards lost it. Every change is made under a lock on the file
+/// that both take (<see cref="Change"/>), on the file as it is now, and a read
+/// takes the file again when another process has written it since.
 /// </summary>
 public sealed class ResourceRegistry
 {
@@ -40,7 +48,14 @@ public sealed class ResourceRegistry
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
+    /// <summary>How long a change waits for another process to let go of the file before it goes on without the lock.</summary>
+    private static readonly TimeSpan LockWait = TimeSpan.FromSeconds(3);
+
     private readonly string _path;
+    private readonly string _lockPath;
+
+    /// <summary>When the file read last was written: another process writing it since makes a read take it again.</summary>
+    private DateTime _readWritten;
     private readonly ISelectedSession _session;
     private readonly ILogger<ResourceRegistry> _logger;
     private readonly Lock _gate = new();
@@ -52,6 +67,7 @@ public sealed class ResourceRegistry
         _session = session;
         _logger = logger;
         _path = Path.Combine(options.Value.DataDirectory, "resources.json");
+        _lockPath = _path + ".lock";
         _stored = Load();
     }
 
@@ -69,11 +85,12 @@ public sealed class ResourceRegistry
     /// </summary>
     public IReadOnlyDictionary<string, int> Reconcile(string kind, IReadOnlyList<(string WslcId, string Name)> resources, bool complete)
     {
-        lock (_gate)
+        var uids = new Dictionary<string, int>(StringComparer.Ordinal);
+        Change(() =>
         {
+            uids.Clear();
             var changed = false;
             var seen = new HashSet<int>();
-            var uids = new Dictionary<string, int>(StringComparer.Ordinal);
             foreach (var (wslcId, name) in resources)
             {
                 var entry = Of(kind).FirstOrDefault(e => SameId(e.WslcId, wslcId))
@@ -100,13 +117,10 @@ public sealed class ResourceRegistry
                 changed |= _stored.Entries.RemoveAll(e => e.Kind == kind && e.Session == _session.Name && !seen.Contains(e.Uid) && !_held.Any(held => SameId(held, e.WslcId))) > 0;
             }
 
-            if (changed)
-            {
-                Save();
-            }
+            return changed;
+        });
 
-            return uids;
-        }
+        return uids;
     }
 
     /// <summary>
@@ -119,6 +133,7 @@ public sealed class ResourceRegistry
     {
         lock (_gate)
         {
+            Refresh();
             return (Of(kind).FirstOrDefault(e => SameId(e.WslcId, wslcIdOrName)) ?? Of(kind).FirstOrDefault(e => e.Name == wslcIdOrName))?.Name
                 is { Length: > 0 } name ? name : wslcIdOrName;
         }
@@ -129,6 +144,7 @@ public sealed class ResourceRegistry
     {
         lock (_gate)
         {
+            Refresh();
             return _stored.Entries.FirstOrDefault(e => e.Uid == uid && e.Session == _session.Name) is { } entry ? (entry.Kind, entry.Name) : null;
         }
     }
@@ -138,6 +154,7 @@ public sealed class ResourceRegistry
     {
         lock (_gate)
         {
+            Refresh();
             return (Of(kind).FirstOrDefault(e => SameId(e.WslcId, wslcId)) ?? Of(kind).FirstOrDefault(e => e.Name == name))?.Uid ?? 0;
         }
     }
@@ -166,30 +183,85 @@ public sealed class ResourceRegistry
     /// read that ran in between may have entered the new resource as a new one;
     /// that entry goes, so the resource keeps the uid it had.
     /// </summary>
-    public void Recreated(string kind, string oldId, string newId, string newName)
-    {
-        lock (_gate)
+    public void Recreated(string kind, string oldId, string newId, string newName) =>
+        Change(() =>
         {
             var entry = Of(kind).FirstOrDefault(e => SameId(e.WslcId, oldId));
             if (entry is null)
             {
-                return;
+                return false;
             }
 
             _stored.Entries.RemoveAll(e => e.Kind == kind && e.Session == _session.Name && e.Uid != entry.Uid && SameId(e.WslcId, newId));
             Replace(entry, entry with { WslcId = newId, Name = newName.Length > 0 ? newName : entry.Name });
-            Save();
-        }
-    }
+            return true;
+        });
 
     /// <summary>The agent removed the resource: its uid goes with it.</summary>
-    public void Removed(string kind, string wslcIdOrName)
+    public void Removed(string kind, string wslcIdOrName) =>
+        Change(() => _stored.Entries.RemoveAll(e => e.Kind == kind && e.Session == _session.Name && (SameId(e.WslcId, wslcIdOrName) || e.Name == wslcIdOrName)) > 0);
+
+    /// <summary>
+    /// One change, made on the file as it is now: under the lock on the file
+    /// every process takes, the file read again if another process wrote it
+    /// since (<see cref="Refresh"/>), <paramref name="apply"/> run on
+    /// it, and the file written when it says it changed something. A file
+    /// another process holds for longer than <see cref="LockWait"/> is not
+    /// waited for: the change is made on what this process knows, as before.
+    /// </summary>
+    private void Change(Func<bool> apply)
     {
         lock (_gate)
         {
-            if (_stored.Entries.RemoveAll(e => e.Kind == kind && e.Session == _session.Name && (SameId(e.WslcId, wslcIdOrName) || e.Name == wslcIdOrName)) > 0)
+            using var held = LockFile();
+            Refresh();
+            if (apply())
             {
                 Save();
+            }
+        }
+    }
+
+    /// <summary>The file again, when another process has written it since it was read.</summary>
+    private void Refresh()
+    {
+        if (Written() != _readWritten)
+        {
+            _stored = Load();
+        }
+    }
+
+    private DateTime Written()
+    {
+        try
+        {
+            return File.Exists(_path) ? File.GetLastWriteTimeUtc(_path) : default;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return _readWritten;
+        }
+    }
+
+    /// <summary>The lock on the file every process takes to change it: a file opened by one alone, held until disposed; null when it could not be had in time.</summary>
+    private FileStream? LockFile()
+    {
+        var deadline = DateTime.UtcNow + LockWait;
+        while (true)
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(_lockPath)!);
+                return new FileStream(_lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException) when (DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(20);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                _logger.LogWarning("resources.json could not be locked: {Message}", exception.Message);
+                return null;
             }
         }
     }
@@ -219,8 +291,13 @@ public sealed class ResourceRegistry
     {
         try
         {
+            // Written beside it and put in its place whole: the other process
+            // reads it without the lock, and must never find it half-written.
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            File.WriteAllText(_path, JsonSerializer.Serialize(_stored, Json));
+            var written = _path + ".tmp";
+            File.WriteAllText(written, JsonSerializer.Serialize(_stored, Json));
+            File.Move(written, _path, overwrite: true);
+            _readWritten = Written();
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -234,6 +311,7 @@ public sealed class ResourceRegistry
     {
         try
         {
+            _readWritten = Written();
             if (File.Exists(_path) && JsonSerializer.Deserialize<Stored>(File.ReadAllText(_path), Json) is { Entries: not null } stored)
             {
                 return stored with

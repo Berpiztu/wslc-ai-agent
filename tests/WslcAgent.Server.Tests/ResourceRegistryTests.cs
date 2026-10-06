@@ -19,6 +19,27 @@ public sealed class ResourceRegistryTests
         return new ResourceRegistry(options, session, NullLogger<ResourceRegistry>.Instance);
     }
 
+    /// <summary>
+    /// An installed agent and a development one share the data folder: each
+    /// kept the file it read at its start and wrote it back whole, so the
+    /// second gave another container the uid the first had given, and a card
+    /// pointing at it lost it. Each must see what the other entered.
+    /// </summary>
+    [Fact]
+    public void Two_agents_on_one_data_folder_keep_each_others_uids()
+    {
+        var options = Options.Create(new WslcOptions { DataDirectory = TestHost.TempDataDirectory() });
+        var installed = new ResourceRegistry(options, new SelectedSession(options), NullLogger<ResourceRegistry>.Instance);
+        var development = new ResourceRegistry(options, new SelectedSession(options), NullLogger<ResourceRegistry>.Instance);
+
+        var api = development.Reconcile(Kind, [("aaa111aaa111", "api")], complete: false)["aaa111aaa111"];
+        var web = installed.Reconcile(Kind, [("bbb222bbb222", "web")], complete: false)["bbb222bbb222"];
+
+        Assert.NotEqual(api, web);
+        Assert.Equal(api, installed.UidOf(Kind, "aaa111aaa111", "api"));
+        Assert.Equal(web, development.UidOf(Kind, "bbb222bbb222", "web"));
+    }
+
     [Fact]
     public void An_image_is_its_tag_and_a_tag_that_starts_like_another_is_another()
     {

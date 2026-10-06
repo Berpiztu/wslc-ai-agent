@@ -19,6 +19,7 @@
 .EXAMPLE
     .\debug-android.ps1 -Avd pixel_7_-_api_35 -AgentUrl http://10.0.2.2:8070/
 #>
+[CmdletBinding()]
 param(
     [string]$Avd,
     [string]$Device,
@@ -26,8 +27,13 @@ param(
     # device that is not an emulator (debug-phone.ps1).
     [switch]$Phone,
     [string]$AgentUrl = "http://10.0.2.2:8070/",
-    [switch]$NoBuild
+    [switch]$NoBuild,
+    [switch]$Quiet
 )
+
+# Verbose unless asked not to: every command and dotnet's whole log are what
+# the owner reads a build by (Get-WslcAgentDotnetOutput follows this).
+if (-not $Quiet) { $VerbosePreference = "Continue" }
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -103,7 +109,9 @@ if (-not $NoBuild) {
     Get-ChildItem -Path (Join-Path $RepoRoot "src\WslcAgent.App\obj") -Directory -Recurse -Filter resizetizer -ErrorAction SilentlyContinue |
         ForEach-Object { Remove-Item -Recurse -Force -LiteralPath $_.FullName }
     Write-Host "Building and deploying WSLC AI Client for Android (Debug, fast deployment)..." -ForegroundColor Cyan
-    dotnet build $Csproj -c Debug -f $Tfm -t:Install -nologo -v q -p:AdbTarget="-s $target"
+    $Output = @(Get-WslcAgentDotnetOutput)
+    Write-Verbose "dotnet build $Csproj -c Debug -f $Tfm -t:Install $Output -p:AdbTarget=-s $target"
+    dotnet build $Csproj -c Debug -f $Tfm -t:Install -nologo @Output -p:AdbTarget="-s $target"
     if ($LASTEXITCODE -ne 0) { throw "dotnet build -t:Install failed with exit code $LASTEXITCODE" }
 }
 

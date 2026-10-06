@@ -17,12 +17,21 @@
     itself from what is built here; -Release offers C:\Berpiztu\wslc-ai-agent,
     the folder of the published releases.
     -NoBump rebuilds the current version; -Clean deletes previous outputs.
+    It shows what it does: every command it runs, and dotnet's and WiX's
+    whole log (detailed, without the terminal logger's summary). -Quiet
+    keeps to a line per step.
 #>
+[CmdletBinding()]
 param(
     [switch]$NoBump,
     [switch]$Clean,
-    [switch]$Release
+    [switch]$Release,
+    [switch]$Quiet
 )
+
+# Verbose unless asked not to: the commands and dotnet's whole log are what
+# the owner reads a build by (Get-WslcAgentDotnetOutput follows this).
+if (-not $Quiet) { $VerbosePreference = "Continue" }
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -46,8 +55,11 @@ $version = Update-WslcAgentVersion -NoBump:$NoBump
 if (Test-Path -LiteralPath $Stage) { Remove-Item -Recurse -Force -LiteralPath $Stage }
 New-Item -ItemType Directory -Force -Path $Stage | Out-Null
 
+$Output = @(Get-WslcAgentDotnetOutput)
+
 Write-Host "Publishing WSLC AI Agent $version (self-contained win-x64)..." -ForegroundColor Cyan
-& dotnet publish $Project -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -nologo -v q -o $Stage
+Write-Verbose "dotnet publish $Project -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false $Output -o $Stage"
+& dotnet publish $Project -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -nologo @Output -o $Stage
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE" }
 if (-not (Test-Path -LiteralPath (Join-Path $Stage "wslc-ai-agent.exe"))) { throw "Publish produced no wslc-ai-agent.exe in $Stage" }
 
@@ -55,7 +67,8 @@ if (-not (Test-Path -LiteralPath (Join-Path $Stage "wslc-ai-agent.exe"))) { thro
 # Windows desktop runtime it needs is not the agent's.
 $Tray = Join-Path $RepoRoot "src\WslcAgent.Tray\WslcAgent.Tray.csproj"
 Write-Host "Publishing the agent's tray icon (self-contained win-x64)..." -ForegroundColor Cyan
-& dotnet publish $Tray -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -nologo -v q -o (Join-Path $Stage "tray")
+Write-Verbose "dotnet publish $Tray -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false $Output -o $(Join-Path $Stage "tray")"
+& dotnet publish $Tray -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -nologo @Output -o (Join-Path $Stage "tray")
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish of the tray icon failed with exit code $LASTEXITCODE" }
 if (-not (Test-Path -LiteralPath (Join-Path $Stage "tray\wslc-ai-agent-tray.exe"))) { throw "Publish produced no tray\wslc-ai-agent-tray.exe in $Stage" }
 
@@ -77,6 +90,7 @@ if ($Release) {
     Write-Host "No private\firebase-service-account.json: the agent will push no notifications to phones (docs/developer/private-files.md)." -ForegroundColor Yellow
 }
 
+Write-Verbose "Removing debug files, the browser debugging proxy, and adding the notices to $Stage"
 Remove-WslcAgentDebugFiles -Path $Stage
 # The WebAssembly.Server package publishes its browser debugging proxy; an
 # installed agent has no use for it.
@@ -84,6 +98,7 @@ $debugProxy = Join-Path $Stage "BlazorDebugProxy"
 if (Test-Path -LiteralPath $debugProxy) { Remove-Item -Recurse -Force -LiteralPath $debugProxy }
 Copy-WslcAgentNotices -Destination $Stage
 
+Write-Verbose "Listing the payload for WiX: packaging\agent-install\GeneratedFiles.wxs"
 Write-WslcAgentWixFileList -Stage $Stage -OutFile (Join-Path $RepoRoot "packaging\agent-install\GeneratedFiles.wxs")
 
 $msiVersion = ConvertTo-WixProductVersion $version

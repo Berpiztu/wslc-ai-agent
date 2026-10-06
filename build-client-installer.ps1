@@ -10,10 +10,16 @@
     http://127.0.0.1:8069/) and adds Desktop and Start Menu shortcuts.
     -NoBump rebuilds the current version; -Clean deletes previous outputs.
 #>
+[CmdletBinding()]
 param(
     [switch]$NoBump,
-    [switch]$Clean
+    [switch]$Clean,
+    [switch]$Quiet
 )
+
+# Verbose unless asked not to: every command and dotnet's whole log are what
+# the owner reads a build by (Get-WslcAgentDotnetOutput follows this).
+if (-not $Quiet) { $VerbosePreference = "Continue" }
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -41,8 +47,10 @@ New-Item -ItemType Directory -Force -Path $Stage | Out-Null
 
 # WslcAgentWindowsOnly keeps restore away from the Android target (see the csproj).
 Write-Host "Publishing WSLC AI Client $($client.Display) (unpackaged self-contained win-x64)..." -ForegroundColor Cyan
+$Output = @(Get-WslcAgentDotnetOutput)
+Write-Verbose "dotnet publish $Csproj -c Release -f $Tfm -r win-x64 --self-contained true -p:WslcAgentWindowsOnly=true -p:WindowsPackageType=None -p:PublishSingleFile=false $Output -o $Stage"
 & dotnet publish $Csproj -c Release -f $Tfm -r win-x64 --self-contained true `
-    -p:WslcAgentWindowsOnly=true -p:WindowsPackageType=None -p:PublishSingleFile=false -nologo -v q -o $Stage
+    -p:WslcAgentWindowsOnly=true -p:WindowsPackageType=None -p:PublishSingleFile=false -nologo @Output -o $Stage
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE" }
 if (-not (Test-Path -LiteralPath (Join-Path $Stage "wslc-ai-client.exe"))) { throw "Publish produced no wslc-ai-client.exe in $Stage" }
 

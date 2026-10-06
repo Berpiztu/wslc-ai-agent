@@ -20,7 +20,10 @@
     .\start-agent.ps1 -Watch      # dotnet watch: hot reload on save
 .EXAMPLE
     .\start-agent.ps1 -NoTray     # the agent alone, without its icon beside the clock
+.EXAMPLE
+    .\start-agent.ps1 -Quiet      # a line per step: no build log, the agent at its own log levels
 #>
+[CmdletBinding()]
 param(
     [string]$BindHost = "127.0.0.1",
     [int]$Port = 8070,
@@ -28,8 +31,13 @@ param(
     [string]$Configuration = "Debug",
     [switch]$NoBuild,
     [switch]$Watch,
-    [switch]$NoTray
+    [switch]$NoTray,
+    [switch]$Quiet
 )
+
+# Verbose unless asked not to: every command, dotnet's whole build log and
+# the agent's debug log are what the owner reads a run by.
+if (-not $Quiet) { $VerbosePreference = "Continue" }
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -37,6 +45,11 @@ Set-Location $RepoRoot
 
 $Project = Join-Path $RepoRoot "src\WslcAgent.Server"
 $Url = "http://${BindHost}:${Port}"
+# Verbose (unless -Quiet): MSBuild's whole log — detailed, every project, target and task —
+# without the terminal logger, which folds any verbosity into a line per
+# project; and the agent itself at Debug as it runs.
+$Verbose = $VerbosePreference -eq "Continue"
+$Output = if ($Verbose) { @("-v", "detailed", "--tl:off") } else { @("-v", "q") }
 
 function Get-DescendantProcessIds {
     param([int]$ParentId)
@@ -76,13 +89,21 @@ if (-not $NoBuild -and -not $Watch) {
     # In a scope of its own: Packaging.ps1 turns strict mode on for whoever loads it.
     $scope = @(& { . (Join-Path $RepoRoot "packaging\Packaging.ps1"); Get-WslcAgentSolutionScope })
     Write-Host "Building WslcAgent.slnx ($Configuration)..." -ForegroundColor Cyan
-    dotnet build (Join-Path $RepoRoot "WslcAgent.slnx") -c $Configuration -nologo -v q @scope
+    Write-Verbose "dotnet build WslcAgent.slnx -c $Configuration $Output $scope"
+    dotnet build (Join-Path $RepoRoot "WslcAgent.slnx") -c $Configuration -nologo @Output @scope
     if ($LASTEXITCODE -ne 0) { throw "dotnet build failed with exit code $LASTEXITCODE" }
 }
 
 # Development: the referenced projects' static assets (the Blazor UI) are
 # served from the build output. A Production run needs `dotnet publish`.
 $env:ASPNETCORE_ENVIRONMENT = "Development"
+if ($Verbose) {
+    # The agent's own log at Debug, ASP.NET Core's at Information (its Debug is
+    # every request's every step), over appsettings.Development.json.
+    $env:Logging__LogLevel__Default = "Debug"
+    ${env:Logging__LogLevel__Microsoft.AspNetCore} = "Information"
+    Write-Verbose "Agent log levels: Default=Debug, Microsoft.AspNetCore=Information"
+}
 
 # The icon beside the clock, for this agent: the solution build above made it,
 # except under -Watch, which builds only the agent. It waits for the agent by
@@ -92,7 +113,8 @@ if (-not $NoTray) {
     $TrayProject = Join-Path $RepoRoot "src\WslcAgent.Tray"
     if ($Watch -and -not $NoBuild) {
         Write-Host "Building WslcAgent.Tray ($Configuration)..." -ForegroundColor Cyan
-        dotnet build $TrayProject -c $Configuration -nologo -v q
+        Write-Verbose "dotnet build $TrayProject -c $Configuration $Output"
+        dotnet build $TrayProject -c $Configuration -nologo @Output
         if ($LASTEXITCODE -ne 0) { throw "dotnet build of the tray failed with exit code $LASTEXITCODE" }
     }
 
@@ -105,8 +127,10 @@ if (-not $NoTray) {
 Write-Host "Starting WSLC AI Agent on $Url (Ctrl+C to stop)" -ForegroundColor Green
 try {
     if ($Watch) {
+        Write-Verbose "dotnet watch --project $Project run -c $Configuration -- --urls $Url"
         dotnet watch --project $Project run -c $Configuration -- --urls $Url
     } else {
+        Write-Verbose "dotnet run --project $Project -c $Configuration --no-build -- --urls $Url"
         dotnet run --project $Project -c $Configuration --no-build -- --urls $Url
     }
 } finally {
