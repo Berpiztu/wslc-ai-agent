@@ -4755,6 +4755,25 @@
     justify-content: flex-end;
 }
 
+/* Its entries wrapped onto several lines stand together, a line's height
+   apart, where the object's vertical alignment says: by default the lines
+   were stretched over the object's whole height, far apart and deaf to the
+   alignment, and the second fell out of an object made just tall enough. */
+.wslc-dash-legend .wslc-chart-legend {
+    row-gap: 2px;
+    align-content: center;
+}
+
+.bz-dash-valign-top .wslc-dash-legend .wslc-chart-legend,
+.bz-dash-valign-top.wslc-dash-legend .wslc-chart-legend {
+    align-content: flex-start;
+}
+
+.bz-dash-valign-bottom .wslc-dash-legend .wslc-chart-legend,
+.bz-dash-valign-bottom.wslc-dash-legend .wslc-chart-legend {
+    align-content: flex-end;
+}
+
 /* Every object's buttons — a card's shortcuts and verbs, the client's
    download, the session's refresh and stop — step with its size from a
    20px glyph, which is their Medium (scaled from a 27px Medium they stood
