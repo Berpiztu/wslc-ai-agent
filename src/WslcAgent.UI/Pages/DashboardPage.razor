@@ -190,6 +190,11 @@
                 <DashboardDesigner @key="_store" @ref="_designer" Store="_store" Draft="_draft" Framed="true" Fitting="_fitting" CardElevation="Style.Applied.CardElevation" DraftChanged="@(() => StateHasChanged())" Designing="Designing" View="@(_view!)" Defaults="Defaults" Measures="Measures"
                                    SelectionChanged="OnSelectionChanged" ToolboxHeader="DesignObjectsButton" />
             }
+            else
+            {
+                @* Until the window's orientation says which view to show; the designer then waits with its own ring. *@
+                <LoadingRing />
+            }
         </div>
         @* Not modal, moved by its title, over the dashboard's top-left corner
            when it opens; the zoom scales the dashboard alone, never this

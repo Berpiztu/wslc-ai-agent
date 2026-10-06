@@ -30,7 +30,15 @@
 @inject IDialogService Dialogs
 
 <CascadingValue Value="_document" IsFixed="true">
-    <div class="@($"bz-dash-designer{(Designing ? " bz-dash-designing" : Framed ? " bz-dash-fitted" : "")}")" style="@DesignerStyle" data-bz-view="@(Framed ? View : null)">
+    <div class="@($"bz-dash-designer{(Designing ? " bz-dash-designing" : Framed ? " bz-dash-fitted" : "")}{(Waiting ? " bz-dash-waiting" : "")}")" style="@DesignerStyle" data-bz-view="@(Framed ? View : null)">
+        @* Until the dashboard is read and fitted the canvas is not seen
+           (bz-dash-unread): a ring in its middle says it is on its way. *@
+        @if (Waiting)
+        {
+            <div class="bz-dash-loading">
+                <MudProgressCircular Indeterminate="true" Color="Color.Primary" Class="bz-dash-loading-dial" />
+            </div>
+        }
         <div class="@FrameClass" style="@CanvasFrameStyle" @ref="_frame">
             <div class="@CanvasClass" @ref="_canvas" tabindex="0" style="@CanvasStyle"
                  @onpointerdown="PressCanvasAsync" @onpointermove="Follow" @onpointerup="ReleaseAsync" @onpointercancel="Abandon" @onwheel="Wheeled" @onkeydown="KeyAsync"
@@ -499,7 +507,7 @@
     /// corner — instead of falling back to the arrow.
     /// </summary>
     private string CanvasClass =>
-        !_loaded || Unfitted ? "bz-dash-canvas bz-dash-unread"
+        Waiting ? "bz-dash-canvas bz-dash-unread"
         : _drag is { Resizing: true } || _groupDrag is { Resizing: true } ? "bz-dash-canvas bz-dash-resizing"
         : _drag is not null || _groupDrag is not null || _many is not null ? "bz-dash-canvas bz-dash-dragging"
         : "bz-dash-canvas";
@@ -904,6 +912,9 @@
 
     /// <summary>A framed view out of design not fitted yet: drawn unseen, as the dashboard is while it is read.</summary>
     private bool Unfitted => !Designing && Framed && !_shown;
+
+    /// <summary>The dashboard not read yet, or not fitted to the screen: the canvas unseen, a ring in its place.</summary>
+    private bool Waiting => !_loaded || Unfitted;
 
     /// <summary>
     /// The zoom a view takes as <see cref="Fitting"/> says, from the cell the

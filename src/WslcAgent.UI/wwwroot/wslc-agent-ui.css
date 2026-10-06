@@ -232,8 +232,11 @@
 /* Cards waiting for their rows: the ring in the middle of the area they will
    fill. The table keeps its line across the top; in this view everything that
    is under way is a ring. */
+/* The ring a screen waits with (LoadingRing): in the middle of its area, the
+   whole of it in a flex row too (the dashboard's board). */
 .wslc-cards-loading {
     display: flex;
+    flex: 1 1 auto;
     align-items: center;
     justify-content: center;
     min-height: 160px;

@@ -10,9 +10,7 @@
            progress of anything in this view is a ring. *@
         @if (Loading && !Items.Any())
         {
-            <div class="wslc-cards-loading">
-                <MudProgressCircular Indeterminate="true" Color="Color.Primary" Class="wslc-cards-loading-dial" />
-            </div>
+            <LoadingRing />
         }
         else if (!Items.Any())
         {

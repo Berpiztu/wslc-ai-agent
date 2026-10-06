@@ -340,6 +340,26 @@
     visibility: hidden;
 }
 
+/* …and a ring stands in the middle of where it will be, as large as a
+   screen's ring while its cards come (the application's LoadingRing). */
+.bz-dash-designer.bz-dash-waiting {
+    position: relative;
+}
+
+.bz-dash-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.bz-dash-loading .bz-dash-loading-dial.mud-progress-circular {
+    width: 64px;
+    height: 64px;
+}
+
 /* A free text (FreeText): the theme's body text times the
    object's size — Small three quarters, Large a third more, the proportion
    every object of the dashboard steps by (TypeSizes.Scale) — times its Text
