@@ -376,10 +376,20 @@
         }
 
         var name = _editing is null ? "This file" : ContainerPath.Name(_editing);
-        if (await DialogFlow.ConfirmAsync(Dialogs, "Discard changes?", $"{name} has changes that are not saved. Leave and discard them?", "Discard", destructive: true))
+        switch (await DialogFlow.LeaveUnsavedAsync(Dialogs, $"{name} has changes that are not saved. Save them, or discard them, and leave?"))
         {
-            _editorDirty = false;
-            return;
+            case UnsavedChoice.Discard:
+                _editorDirty = false;
+                return;
+            case UnsavedChoice.Save:
+                await SaveEditorAsync();
+                if (!_editorDirty)
+                {
+                    return;
+                }
+
+                // The save failed (the editor says why): the file stays open with its changes.
+                break;
         }
 
         context.PreventNavigation();

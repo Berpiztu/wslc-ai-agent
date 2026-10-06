@@ -13,6 +13,10 @@
         <DialogTitle Title="@Dialog.Title">
             <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Answer(false))">Cancel</MudButton>
             <MudButton Size="Size.Small" Variant="Variant.Filled" Color="@(Destructive ? Color.Error : Color.Primary)" OnClick="@(() => Answer(true))">@YesText</MudButton>
+            @if (OtherText.Length > 0)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="AnswerOther">@OtherText</MudButton>
+            }
         </DialogTitle>
     </TitleContent>
     <DialogContent>
@@ -42,6 +46,12 @@
     /// </summary>
     [Parameter] public string ForAll { get; set; } = "";
 
+    /// <summary>
+    /// A second way through, beside the verb: Save beside Discard when work
+    /// not saved is left. Empty for a plain yes or no, which is most of them.
+    /// </summary>
+    [Parameter] public string OtherText { get; set; } = "";
+
     private bool _forAll;
 
     /// <summary>
@@ -50,4 +60,6 @@
     /// "no to this one and to the rest" is one press.
     /// </summary>
     private void Answer(bool yes) => Dialog.Close(DialogResult.Ok(new Confirmed(yes, _forAll)));
+
+    private void AnswerOther() => Dialog.Close(DialogResult.Ok(new Confirmed(false, _forAll, Other: true)));
 }

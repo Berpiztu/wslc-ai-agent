@@ -172,13 +172,7 @@
     }
 
     /// <summary>Save: every object and card changed written as its kind's default in this view; a failure is the designer's to say, the draft kept.</summary>
-    private async Task SaveAsync()
-    {
-        if (_designer is not null)
-        {
-            await _designer.SaveAsync();
-        }
-    }
+    private async Task<bool> SaveAsync() => _designer is not null && await _designer.SaveAsync();
 
     /// <summary>Discard, once confirmed: the board back as it is saved.</summary>
     private async Task DiscardAsync()
@@ -204,13 +198,18 @@
             return;
         }
 
-        if (await DialogFlow.ConfirmAsync(Dialogs, "Discard changes?", "The board has changes that are not saved. Leave it and discard them?", "Discard", destructive: true))
+        switch (await DialogFlow.LeaveUnsavedAsync(Dialogs, "The board has changes that are not saved. Save them, or discard them, and leave it?"))
         {
-            await designer.DiscardAsync();
-            return;
+            case UnsavedChoice.Discard:
+                await designer.DiscardAsync();
+                return;
+            case UnsavedChoice.Save when await SaveAsync():
+                return;
+            default:
+                // Stayed, or the save failed: the board keeps its changes.
+                context.PreventNavigation();
+                return;
         }
-
-        context.PreventNavigation();
     }
 
     public void Dispose() => _guard?.Dispose();

@@ -9,7 +9,15 @@ namespace WslcAgent.UI.Components;
 /// what is still to be asked and for nothing already answered, so five files
 /// refused one by one stay refused when the sixth is accepted for all.
 /// </summary>
-public sealed record Confirmed(bool Yes, bool ForAll);
+public sealed record Confirmed(bool Yes, bool ForAll, bool Other = false);
+
+/// <summary>What is done with work not saved that is being left: stay with it, let it go, or save it and go.</summary>
+public enum UnsavedChoice
+{
+    Stay,
+    Discard,
+    Save,
+}
 
 /// <summary>The ways the UI asks the user something: a form dialog, a picker that returns a name, and a yes/cancel confirmation.</summary>
 public static class DialogFlow
@@ -22,6 +30,13 @@ public static class DialogFlow
         FullWidth = true,
         BackdropClick = false,
     };
+
+    /// <summary>
+    /// A confirmation opens with Cancel focused — its first button — so Enter,
+    /// pressed by habit, answers no: nothing is removed, discarded or saved
+    /// without choosing the button that does it.
+    /// </summary>
+    private static readonly DialogOptions Confirmation = Small with { DefaultFocus = DefaultFocus.FirstChild };
 
     /// <summary>For the launch form and the host folder picker: wider, tall enough for a form.</summary>
     private static readonly DialogOptions Large = Small with { MaxWidth = MaxWidth.Medium };
@@ -156,12 +171,34 @@ public static class DialogFlow
             { d => d.Destructive, destructive },
             { d => d.ForAll, forAll },
         };
-        var reference = await dialogs.ShowAsync<Dialogs.ConfirmDialog>(title, parameters, Small);
+        var reference = await dialogs.ShowAsync<Dialogs.ConfirmDialog>(title, parameters, Confirmation);
         var result = await reference.Result;
         // Dismissed — Escape, the overlay — is a no, and a no that says
         // nothing about the rest: the user answered nothing, so nothing is
         // answered for them.
         return result is { Canceled: false, Data: Confirmed answered } ? answered : new Confirmed(false, false);
+    }
+
+    /// <summary>
+    /// Work not saved is being left (Done, Back, a link): Cancel stays with it,
+    /// Discard lets it go, Save keeps it and goes — the quickest way out when
+    /// the changes are wanted. Every screen with unsaved work asks this.
+    /// </summary>
+    public static async Task<UnsavedChoice> LeaveUnsavedAsync(IDialogService dialogs, string message)
+    {
+        var parameters = new DialogParameters<Dialogs.ConfirmDialog>
+        {
+            { d => d.Message, message },
+            { d => d.YesText, "Discard" },
+            { d => d.Destructive, true },
+            { d => d.OtherText, "Save" },
+        };
+        var reference = await dialogs.ShowAsync<Dialogs.ConfirmDialog>("Unsaved changes", parameters, Confirmation);
+        var result = await reference.Result;
+        // Dismissed — Escape, the overlay — stays: nothing was answered, so nothing is thrown away.
+        return result is { Canceled: false, Data: Confirmed answered }
+            ? answered.Other ? UnsavedChoice.Save : answered.Yes ? UnsavedChoice.Discard : UnsavedChoice.Stay
+            : UnsavedChoice.Stay;
     }
 
     /// <summary>The removal confirmation every resource uses.</summary>

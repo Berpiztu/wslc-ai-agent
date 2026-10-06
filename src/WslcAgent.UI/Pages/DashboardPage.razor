@@ -628,11 +628,11 @@
     }
 
     /// <summary>Save: the view as designed written where the dashboard is kept, said on the activity line; a failure is the designer's to say, the draft kept.</summary>
-    private async Task SaveAsync()
+    private async Task<bool> SaveAsync()
     {
         if (_designer is null)
         {
-            return;
+            return false;
         }
 
         using var work = Activity.Begin("Saving the view");
@@ -640,11 +640,11 @@
         {
             work.Done("View saved");
             _ = ReadPagesAsync();
+            return true;
         }
-        else
-        {
-            work.Quiet();
-        }
+
+        work.Quiet();
+        return false;
     }
 
     /// <summary>Discard, once confirmed: the view back as it is saved.</summary>
@@ -685,13 +685,18 @@
             return;
         }
 
-        if (await DialogFlow.ConfirmAsync(Dialogs, "Discard changes?", "This view has changes that are not saved. Leave design and discard them?", "Discard", destructive: true))
+        switch (await DialogFlow.LeaveUnsavedAsync(Dialogs, "This view has changes that are not saved. Save them, or discard them, and leave design?"))
         {
-            await designer.DiscardAsync();
-            return;
+            case UnsavedChoice.Discard:
+                await designer.DiscardAsync();
+                return;
+            case UnsavedChoice.Save when await SaveAsync():
+                return;
+            default:
+                // Stayed, or the save failed: the changes stay on the board, kept on this device.
+                context.PreventNavigation();
+                return;
         }
-
-        context.PreventNavigation();
     }
 
     /// <summary>The address goes on designing this same page.</summary>
