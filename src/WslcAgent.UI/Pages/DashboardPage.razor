@@ -468,7 +468,7 @@
             return;
         }
 
-        var work = Activity.Begin($"Copying the {what} view to {name}");
+        using var work = Activity.Begin($"Copying the {what} view to {name}");
         try
         {
             await there.SaveAsync(DashboardPages.Write(theirs, PageKey, DashboardViews.Write(theirPage, view, mine)));
@@ -539,7 +539,7 @@
             return;
         }
 
-        var work = Activity.Begin($"Saving the {what} view as the default");
+        using var work = Activity.Begin($"Saving the {what} view as the default");
         try
         {
             var shipped = await Api.GetDefaultDashboardV2Async();
@@ -635,7 +635,7 @@
             return;
         }
 
-        var work = Activity.Begin("Saving the view");
+        using var work = Activity.Begin("Saving the view");
         if (await _designer.SaveAsync())
         {
             work.Done("View saved");

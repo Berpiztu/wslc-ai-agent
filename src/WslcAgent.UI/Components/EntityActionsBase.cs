@@ -41,7 +41,7 @@ public abstract class EntityActionsBase : ComponentBase
     protected async Task RunAsync(string what, string verb, Func<CancellationToken, Task> action)
     {
         SetBusy(true);
-        var work = Activity.Begin($"{VerbWords.Gerund(verb)} {what}");
+        using var work = Activity.Begin($"{VerbWords.Gerund(verb)} {what}");
         try
         {
             await action(CancellationToken.None);

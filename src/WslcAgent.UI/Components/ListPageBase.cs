@@ -475,7 +475,7 @@ public abstract class ListPageBase<TItem> : ComponentBase, IDisposable
         }
 
         var failures = new List<string>();
-        var work = Activity.Begin($"{VerbWords.Gerund(verb)} 1 of {items.Count}");
+        using var work = Activity.Begin($"{VerbWords.Gerund(verb)} 1 of {items.Count}");
         for (var index = 0; index < items.Count; index++)
         {
             work.Set($"{VerbWords.Gerund(verb)} {index + 1} of {items.Count}");

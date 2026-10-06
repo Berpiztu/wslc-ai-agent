@@ -1,8 +1,11 @@
-@* The title bar's second line while a verb has something to say (ActivityLine):
-   the verb running, in the tertiary colour, with a spinner and how many
-   others run beside it; then
-   what it came to, in its button's colour; a failure in red, with Copy and a
-   cross, and its whole text in a dialog when the line is too short for it. *@
+@* The title bar's second line while a verb has something to say (ActivityLine),
+   and never more than that one line: the verb running, in the tertiary colour,
+   with a spinner; else what one came to a moment ago, in its button's colour;
+   else the newest failure, in red, with Copy and a cross, its whole text in a
+   dialog on a click. When the line holds more than one thing — verbs running
+   side by side, failures not closed — a count and an arrow open its list over
+   the page, as the session selector opens its own: one row each, the newest
+   first, a box of fixed height that scrolls, and Close all at its foot. *@
 @implements IDisposable
 @inject ActivityLine Line
 @inject IDialogService Dialogs
@@ -12,31 +15,75 @@
     @if (Line.Running is { } work)
     {
         <MudProgressCircular Indeterminate="true" Size="Size.Small" Color="Color.Tertiary" Class="wslc-activity-spinner" />
-        <MudText Typo="Typo.h6" Color="Color.Tertiary" Class="wslc-activity-text" title="@work.Text">@work.Text…@(Line.AlsoRunning > 0 ? $" +{Line.AlsoRunning}" : "")</MudText>
+        <MudText Typo="Typo.h6" Color="Color.Tertiary" Class="wslc-activity-text" title="@work.Text">@work.Text…</MudText>
     }
-    else if (Line.Result is { } result)
+    else if (Line.Shown is { } note)
     {
-        @if (result.Tone == Color.Error)
+        @if (note.Tone == Color.Error)
         {
-            <div class="wslc-activity-failure" title="Show the whole message" @onclick="ShowFailureAsync">
-                <MudText Typo="Typo.h6" Color="Color.Error" Class="wslc-activity-text">@result.Text</MudText>
-            </div>
-            <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" Color="Color.Error" title="Copy" aria-label="Copy" OnClick="@(() => CopyAsync(result.Text))" />
-            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error" title="Close" aria-label="Close" OnClick="Line.Dismiss" />
+            @Failure(note, Typo.h6)
         }
         else
         {
-            <MudText Typo="Typo.h6" Color="result.Tone" Class="wslc-activity-text" title="@result.Text">@result.Text</MudText>
+            <MudText Typo="Typo.h6" Color="note.Tone" Class="wslc-activity-text" title="@note.Text">@note.Text</MudText>
         }
+    }
+    @if (Line.Listed > 1)
+    {
+        <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Class="wslc-activity-more" PopoverClass="wslc-activity-popover">
+            <ActivatorContent>
+                @* MudBlazor 9 hands the activator a MenuContext and opens nothing on a click by itself. *@
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="@(Line.Failures.Count > 0 ? Color.Error : Color.Tertiary)"
+                           EndIcon="@Icons.Material.Filled.ArrowDropDown" title="Show everything the line holds"
+                           OnClick="@(() => context.ToggleAsync(EventArgs.Empty))">@CountText</MudButton>
+            </ActivatorContent>
+            <ChildContent>
+                <div class="wslc-activity-list">
+                    @foreach (var running in Line.AllRunning)
+                    {
+                        <div class="wslc-activity-row">
+                            <MudProgressCircular Indeterminate="true" Size="Size.Small" Color="Color.Tertiary" Class="wslc-activity-spinner" />
+                            <MudText Typo="Typo.body2" Color="Color.Tertiary" Class="wslc-activity-text" title="@running.Text">@running.Text…</MudText>
+                        </div>
+                    }
+                    @foreach (var failure in Line.Failures)
+                    {
+                        <div class="wslc-activity-row">@Failure(failure, Typo.body2)</div>
+                    }
+                </div>
+                @if (Line.Failures.Count > 0)
+                {
+                    <div class="wslc-activity-list-foot">
+                        <MudButton Size="Size.Small" Color="Color.Error" OnClick="Line.DismissAll">Close all</MudButton>
+                    </div>
+                }
+            </ChildContent>
+        </MudMenu>
     }
 </div>
 
 @code {
     protected override void OnInitialized() => Line.Changed += OnChanged;
 
-    private Task ShowFailureAsync() => Line.Result is { } result
-        ? DialogFlow.ExplainAsync(Dialogs, "Failed", result.Text, "")
-        : Task.CompletedTask;
+    /// <summary>What the count says: the failures, which wait for the user, before the verbs running.</summary>
+    private string CountText => Line.Failures.Count switch
+    {
+        0 => $"{Line.Listed} running",
+        1 => "1 error",
+        var failures => $"{failures} errors",
+    };
+
+    /// <summary>A failure, on the line or in its list: the text that opens whole on a click, Copy and the cross.</summary>
+    private RenderFragment Failure(ActivityNote failure, Typo typo) =>
+        @<text>
+            <div class="wslc-activity-failure" title="Show the whole message" @onclick="@(() => ShowFailureAsync(failure))">
+                <MudText Typo="typo" Color="Color.Error" Class="wslc-activity-text">@failure.Text</MudText>
+            </div>
+            <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" Color="Color.Error" title="Copy" aria-label="Copy" OnClick="@(() => CopyAsync(failure.Text))" />
+            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error" title="Close" aria-label="Close" OnClick="@(() => Line.Dismiss(failure))" />
+        </text>;
+
+    private Task ShowFailureAsync(ActivityNote failure) => DialogFlow.ExplainAsync(Dialogs, "Failed", failure.Text, "");
 
     private async Task CopyAsync(string text)
     {

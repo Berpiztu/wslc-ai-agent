@@ -248,7 +248,7 @@
     /// </summary>
     private async Task CopyRunAsync(bool fullVariables)
     {
-        var work = Activity.Begin($"Copying the run command of {Container.Name}");
+        using var work = Activity.Begin($"Copying the run command of {Container.Name}");
         try
         {
             var details = await Api.GetContainerDetailsAsync(Container.Id);

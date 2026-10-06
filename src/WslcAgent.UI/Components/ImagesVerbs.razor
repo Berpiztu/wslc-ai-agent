@@ -67,7 +67,7 @@
         }
 
         _archiveBusy = true;
-        var work = Activity.Begin(progress);
+        using var work = Activity.Begin(progress);
         try
         {
             await using var content = file.OpenReadStream(MaxArchiveBytes);

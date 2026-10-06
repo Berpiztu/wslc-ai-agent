@@ -1381,7 +1381,8 @@
     flex: none;
 }
 
-.wslc-activity .wslc-activity-text {
+.wslc-activity .wslc-activity-text,
+.wslc-activity-row .wslc-activity-text {
     flex: 0 1 auto;
     min-width: 0;
     overflow: hidden;
@@ -1390,15 +1391,60 @@
     font-weight: 400;
 }
 
-.wslc-activity > .wslc-activity-failure {
+.wslc-activity > .wslc-activity-failure,
+.wslc-activity-row > .wslc-activity-failure {
     flex: 0 1 auto;
     min-width: 0;
     cursor: pointer;
 }
 
-.wslc-activity > .mud-icon-button {
+.wslc-activity > .mud-icon-button,
+.wslc-activity-row > .mud-icon-button {
     flex: none;
     padding: 2px;
+}
+
+/* The count that opens the line's list keeps to the right of what the line
+   says, and never gives way: without it what is behind cannot be reached. */
+.wslc-activity > .wslc-activity-more {
+    flex: none;
+    margin-inline-start: auto;
+}
+
+.wslc-activity-more .mud-button-root {
+    white-space: nowrap;
+}
+
+/* The line's list, opened over the page: a box of one size from the moment
+   it opens (a row more or less never moves it), as wide as a long message
+   reads but never past the window, scrolling what it does not hold; a row
+   each, the line's own parts at body size. */
+.wslc-activity-list {
+    width: min(32rem, calc(100vw / var(--wslc-zoom, 1) - 32px));
+    height: min(50vh, 20rem);
+    overflow-y: auto;
+    padding: 4px 8px;
+    box-sizing: border-box;
+}
+
+.wslc-activity-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    min-width: 0;
+}
+
+.wslc-activity-row > .wslc-activity-spinner {
+    flex: none;
+    width: 16px;
+    height: 16px;
+}
+
+.wslc-activity-list-foot {
+    display: flex;
+    justify-content: flex-end;
+    padding: 0 8px 4px;
 }
 
 /* The page's second line when it has no search, as high as the search box

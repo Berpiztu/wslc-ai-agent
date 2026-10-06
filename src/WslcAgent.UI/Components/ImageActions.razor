@@ -115,7 +115,7 @@
 
     private async Task PushAsync()
     {
-        var work = Activity.Begin($"Pushing {Image.Reference}");
+        using var work = Activity.Begin($"Pushing {Image.Reference}");
         try
         {
             await Api.PushImageAsync(Image.Reference);
@@ -155,7 +155,7 @@
             return;
         }
 
-        var work = Activity.Begin($"Saving {Image.Reference}");
+        using var work = Activity.Begin($"Saving {Image.Reference}");
         try
         {
             var saved = await Api.SaveImageAsync(Image.Reference, output);

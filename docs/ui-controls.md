@@ -375,11 +375,15 @@ Body lines are `Typo.body2` with the label in bold; secondary lines
 - What the user's own verbs do is said on the title bar's second line
   (`ActivityLine`, drawn by `ActivityLineView`), never in a toast that covers
   the bar: `var work = Activity.Begin("Stopping web")` while it runs (a
-  spinner, and "+n" when others run beside it; `work.Set` repaints it:
-  "Removing 2 of 5"), then `work.Done($"{name}: {verb} ok", verb)` for 3
-  seconds in its button's colour, or `work.Fail($"{name}: {verb} failed.
-  {ex.Message}")` in red until it is closed or the next verb starts, with
-  Copy, a cross and the whole text in a dialog on a click. `Activity.Done` is
+  spinner, in the tertiary colour; `work.Set` repaints it: "Removing 2 of
+  5"), then `work.Done($"{name}: {verb} ok", verb)` for 3 seconds in its
+  button's colour, or `work.Fail($"{name}: {verb} failed. {ex.Message}")` in
+  red until it is closed, with Copy, a cross and the whole text in a dialog
+  on a click. The line is one line whatever it holds: with more than one verb
+  running or failure not closed, a count with an arrow ("2 errors") opens its
+  list over the page, as the session selector does — a row each, the newest
+  first, a box of fixed size that scrolls, Close all at its foot; the last 20
+  failures are kept. `Activity.Done` is
   the result of a verb that ran under a dialog (a form's Save, said as it
   closes), `Activity.Say` a note about a verb that did not run,
   `Activity.Fail` a failure before one could. With nothing to say the line is the page's search or subtitle.

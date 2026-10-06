@@ -28,7 +28,7 @@ public abstract class PageVerbsBase : ComponentBase
     /// <summary>A page-level verb (prune, create…): runs, says so on the title bar's activity line, refreshes.</summary>
     protected async Task RunAsync(string what, string verb, Func<CancellationToken, Task> action)
     {
-        var work = Activity.Begin($"{VerbWords.Gerund(verb)} {what}");
+        using var work = Activity.Begin($"{VerbWords.Gerund(verb)} {what}");
         try
         {
             await action(CancellationToken.None);

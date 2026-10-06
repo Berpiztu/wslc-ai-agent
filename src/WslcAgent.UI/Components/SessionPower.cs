@@ -170,7 +170,7 @@ public sealed class SessionPower(WslcAgentApi api, ISnackbar snackbar, ActivityL
 
     public async Task SelectAsync(string name)
     {
-        var work = activity.Begin($"Selecting {name}");
+        using var work = activity.Begin($"Selecting {name}");
         try
         {
             await api.SelectSessionAsync(name);
@@ -217,7 +217,7 @@ public sealed class SessionPower(WslcAgentApi api, ISnackbar snackbar, ActivityL
         string? failure = null;
         Busy = true;
         // The veil says each step while the verb lasts; the line says how it ended.
-        var work = activity.Begin(stopping ? $"Stopping {label}" : $"Starting {label}");
+        using var work = activity.Begin(stopping ? $"Stopping {label}" : $"Starting {label}");
         try
         {
             SetPhase(stopping
