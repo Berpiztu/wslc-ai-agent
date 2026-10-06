@@ -9,17 +9,19 @@
 @implements IDisposable
 @inject IDialogService Dialogs
 @inject SessionPower Power
+@inject IJSRuntime Js
 
 @* Two parts: the selector, which the brand block lays under the application's
    name at the name's own width, and the verbs beside it. *@
 <div class="wslc-session-row">
-    <div class="wslc-session-pick" style="--wslc-session-chars: @Math.Max(1, Power.Selected.Length)">
+    @* The name's width in ems, measured in its own font, sizes its text to the column (the stylesheet's formula). *@
+    <div class="wslc-session-pick" @ref="_pick" style="@($"--wslc-session-ems: {NameEms.ToString(System.Globalization.CultureInfo.InvariantCulture)}")">
         @* The closed field carries the name alone: what the options say about
            the one showing there — that it is the active one, that it is the
            selected one — it says by being the one showing there, and on a
            phone those words are what pushes the name out of the row. *@
         <MudSelect T="string" Value="Power.Selected" ValueChanged="Power.SelectAsync" Dense="true" Margin="Margin.Dense"
-                   Variant="Variant.Filled" Placeholder="Session" Disabled="Power.Loading" Class="wslc-session-select"
+                   Variant="Variant.Filled" Placeholder="Session" Disabled="Power.Loading" Class="wslc-session-select" IconSize="Size.Small"
                    title="@Power.SelectTitle" ToStringFunc="SessionName">
             @* Only the sessions the agent can work in: the CLI's own store for
                this user is one of them, by its name, and the elevated
@@ -49,6 +51,39 @@
     {
         Power.Changed += OnChanged;
         return Power.ReadyAsync();
+    }
+
+    private ElementReference _pick;
+
+    /// <summary>The name measured last, and its width in ems.</summary>
+    private (string Name, double Ems)? _measured;
+
+    /// <summary>
+    /// The shown name's width in ems: measured in its own font once it can be,
+    /// and until then the widest Roboto lowercase advance (0.6em) per character,
+    /// which never cuts a name.
+    /// </summary>
+    private double NameEms => _measured is { } known && known.Name == Power.Selected
+        ? known.Ems
+        : 0.6 * Math.Max(1, Power.Selected.Length);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var name = Power.Selected;
+        if (name.Length == 0 || _measured?.Name == name)
+        {
+            return;
+        }
+
+        try
+        {
+            _measured = (name, await Js.InvokeAsync<double>("wslcAgent.textEms", _pick, name));
+            StateHasChanged();
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException or InvalidOperationException)
+        {
+            // The page is going, or its helpers are not up yet: the estimate stays until the next render.
+        }
     }
 
     /// <summary>What the closed selector reads: the session's name, and nothing else.</summary>

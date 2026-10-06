@@ -435,6 +435,19 @@ window.wslcAgent = {
         return window.matchMedia('(pointer: coarse)').matches;
     },
 
+    // How wide a text is in ems, in the font and letter spacing of the element
+    // it will be shown in: what lets a field size its text to fit exactly,
+    // instead of assuming every letter as wide as the widest. Measured once
+    // the web fonts are in, so a fallback font's widths are never the answer.
+    async textEms(element, text) {
+        await document.fonts.ready;
+        const style = getComputedStyle(element);
+        const context = document.createElement('canvas').getContext('2d');
+        context.font = `${style.fontStyle} ${style.fontWeight} 100px ${style.fontFamily}`;
+        const spacing = (parseFloat(style.letterSpacing) || 0) / parseFloat(style.fontSize);
+        return context.measureText(text).width / 100 + spacing * text.length;
+    },
+
     // Back, in the order a native client walks it: whatever is over the
     // page first, then the navigation that opened over it, and only then the
     // step before. False when there is nothing left, which is what lets the

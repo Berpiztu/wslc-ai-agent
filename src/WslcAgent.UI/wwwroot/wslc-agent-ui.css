@@ -1207,13 +1207,14 @@
        application's name gives it — a size below the four of docs/RULES.md,
        allowed for this field alone so that the block never grows and no name
        is ever cut.
-       The formula: the column's own width (100cqi) less the 26px the arrow
-       takes, shared out among the name's characters, over the 0.6em that is
-       the widest Roboto lowercase advance. The name's length arrives as
-       --wslc-session-chars from the panel. */
+       The formula: the column's own width (100cqi) less the 22px the arrow
+       takes (MudBlazor's small icon, 1.25rem = 20px, and 2px), over the
+       name's own width in ems, measured in its font by the panel and passed
+       as --wslc-session-ems (0.6em a character, the widest Roboto lowercase
+       advance, until it is measured). */
     font-size: min(
         var(--mud-typography-body2-size),
-        calc((100cqi - 26px) / var(--wslc-session-chars, 14) / 0.6));
+        calc((100cqi - 22px) / var(--wslc-session-ems, 8.4)));
 }
 
 .wslc-session-select .mud-input > .mud-input-adornment {
