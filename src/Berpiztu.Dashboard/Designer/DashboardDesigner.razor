@@ -597,12 +597,15 @@
             + Colour("background-color", background == ThemeColor.Inherited && group is not null ? GroupBackground(group) : background)
             + Colour("color", foreground == ThemeColor.Inherited && group is not null ? GroupForeground(group) : foreground)
             + Margins(o)
+            + (group is null ? BorderStyle(o.Border) : "")
             + PartCss.Style(o);
     }
 
     /// <summary>Where a group's frame stands, and the colour its card is filled with; inherited, the page shows through it.</summary>
     private string FrameStyle(DashboardGroup group) =>
-        Placed(group.Box, anchor: group.Anchor ?? HorizontalAnchor.Scale) + Colour("background-color", GroupBackground(group) is var background && background == ThemeColor.Inherited ? ThemeColor.Transparent : background);
+        Placed(group.Box, anchor: group.Anchor ?? HorizontalAnchor.Scale)
+        + Colour("background-color", GroupBackground(group) is var background && background == ThemeColor.Inherited ? ThemeColor.Transparent : background)
+        + BorderStyle(group.Border);
 
     /// <summary>What keeps what it shows clear of its edges: its margins across and down, none until set.</summary>
     private static string Margins(ObjectInstance o) =>
@@ -723,15 +726,20 @@
     private bool Up(ObjectInstance o) => Measures is not null && Catalogue.Find(o.Type) is { } kind && kind.Up(o, Measures);
 
     /// <summary>
-    /// Out of design, a card's or an object's state: green selected, the primary
-    /// colour under the pointer. <paramref name="unit"/> is the card or the
-    /// object standing alone; null for an object in a card, whose card shows it.
+    /// Out of design, a card's or an object's line and state: its border
+    /// colour (<see cref="BorderStyle"/>), the tertiary under the pointer,
+    /// green selected. <paramref name="unit"/> is the card or the object
+    /// standing alone; null for an object in a card, whose card shows it.
     /// </summary>
     private string ViewState(string? unit) =>
         Designing || unit is null ? ""
-        : _document.Chosen is [var chosen] && chosen == unit ? " bz-dash-picked"
-        : _hovered == unit ? " bz-dash-hovered"
-        : "";
+        : " bz-dash-bordered"
+            + (_document.Chosen is [var chosen] && chosen == unit ? " bz-dash-picked"
+                : _hovered == unit ? " bz-dash-hovered"
+                : "");
+
+    /// <summary>The colour of a card's line out of design, as the stylesheet takes it (--bz-dash-border); Transparent is none.</summary>
+    private static string BorderStyle(ThemeColor? border) => Colour("--bz-dash-border", border ?? ThemeColors.CardBorder);
 
     /// <summary>The objects standing alone and the groups the rectangle touches, even in part: what it chooses, as Windows' own rectangle does.</summary>
     private IReadOnlyList<string> Caught(Marquee marquee) =>

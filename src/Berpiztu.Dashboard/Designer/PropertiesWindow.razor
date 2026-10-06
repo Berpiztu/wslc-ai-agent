@@ -170,6 +170,11 @@
                 <ChoiceField T="int?" Value="frame.Elevation" ValueChanged="@(elevation => SetFrameAsync(frame with { Elevation = elevation }))"
                              Options="ElevationOptions" Label="Elevation"
                              Title="How far the card stands off the page; Settings is the Containers screen's cards', the Settings page's" />
+                @* Its line's colour out of design; None is no line. *@
+                <ChoiceField T="ThemeColor" Value="@(frame.Border ?? ThemeColors.CardBorder)"
+                             ValueChanged="@(color => SetFrameAsync(frame with { Border = Kept(color, ThemeColors.CardBorder) }))"
+                             Options="BorderOptions" Label="Border color"
+                             Title="The colour of the card's line; None draws no line. Under the pointer it is the tertiary" />
                 @* Which of the view's edges the card keeps to as a fluid view
                    widens, as its objects keep
                    to the card's. *@

@@ -96,6 +96,11 @@ public enum VerticalAlign
 /// Which of its card's edges it keeps to as the card widens with a fluid view
 /// (<see cref="HorizontalAnchor"/>); null is <see cref="HorizontalAnchor.Scale"/>.
 /// </param>
+/// <param name="Border">
+/// Standing alone, where it is drawn as a card: the colour of that card's
+/// line, as a card's <see cref="DashboardGroup.Border"/>; Transparent is none,
+/// null its default. In a card its card's line is the one drawn.
+/// </param>
 public sealed record ObjectInstance(
     string Id,
     string Type,
@@ -117,7 +122,8 @@ public sealed record ObjectInstance(
     string? Text = null,
     IReadOnlyList<ObjectAlarm>? Alarms = null,
     int? Elevation = null,
-    HorizontalAnchor? Anchor = null)
+    HorizontalAnchor? Anchor = null,
+    ThemeColor? Border = null)
 {
     /// <summary>The cells it stands on; worked out, never stored.</summary>
     [JsonIgnore]

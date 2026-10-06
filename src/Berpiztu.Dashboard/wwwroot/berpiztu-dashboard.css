@@ -262,12 +262,18 @@
 }
 
 /* Out of design, a card or an object standing alone is drawn as a card: its
-   line the primary
-   colour under the pointer, green and a pixel wider inside once it is
+   line its Border colour (--bz-dash-border, the primary until another is
+   chosen; None is transparent, the line kept unseen so nothing moves); the
+   tertiary under the pointer; green and a pixel wider inside once it is
    selected. An object in a card shows through its card. */
+.bz-dash-object.bz-dash-loose.bz-dash-bordered,
+.bz-dash-group.bz-dash-bordered {
+    border-color: var(--bz-dash-border, var(--mud-palette-primary));
+}
+
 .bz-dash-object.bz-dash-loose.bz-dash-hovered,
 .bz-dash-group.bz-dash-hovered {
-    border-color: var(--mud-palette-primary);
+    border-color: var(--mud-palette-tertiary);
 }
 
 .bz-dash-object.bz-dash-loose.bz-dash-picked,

@@ -67,6 +67,9 @@ public static class ThemeColors
 
     public const ThemeColor GroupForeground = ThemeColor.Text;
 
+    /// <summary>A card's line out of design: the primary colour, until another is chosen or none (Transparent).</summary>
+    public const ThemeColor CardBorder = ThemeColor.Primary;
+
     /// <summary>
     /// How much Primary <see cref="ThemeColor.PrimaryTint"/> takes over a
     /// card's ground: the share WSLC's list cards give their header and verbs

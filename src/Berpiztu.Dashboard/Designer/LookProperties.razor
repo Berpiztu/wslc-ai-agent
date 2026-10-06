@@ -27,6 +27,11 @@
                  ValueChanged="@(elevation => SetAsync((o, _) => o with { Elevation = elevation }))"
                  Options="ElevationOptions" Label="Elevation"
                  Title="How far it stands off what is under it; Settings is its design's: standing alone, the Settings page's card elevation, in a card none" />
+    @* Standing alone it is drawn as a card: the colour of that card's line; None is no line. *@
+    <ChoiceField T="ThemeColor?" Value="@Alike(Objects.Select(o => o.Border ?? ThemeColors.CardBorder))"
+                 ValueChanged="@(color => SetAsync((o, _) => color is { } chosen ? o with { Border = Kept(chosen, ThemeColors.CardBorder) } : o))"
+                 Options="SomeBorderOptions" Label="Border color"
+                 Title="Standing alone, drawn as a card: the colour of its line, None for no line, the tertiary under the pointer; in a card its card's line is drawn" />
     @* Which of its card's edges it keeps to as a fluid view widens the card
        (as Visual Basic's Anchor). *@
     <ChoiceField T="HorizontalAnchor?" Value="@Alike(Kinds.Select(k => k.Kind.AnchorOf(k.Object)))"

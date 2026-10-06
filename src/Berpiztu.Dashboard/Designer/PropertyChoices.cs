@@ -29,6 +29,22 @@ internal static class PropertyChoices
     public static readonly IReadOnlyList<FieldOption<ThemeColor?>> SomeColorOptions =
         [.. ColorOptions.Select(color => new FieldOption<ThemeColor?>(color.Value, color.Text))];
 
+    /// <summary>
+    /// The colours a card's line takes: None (kept as Transparent: no line),
+    /// then the theme's by name; Inherited has nothing to take a line from.
+    /// </summary>
+    public static readonly IReadOnlyList<FieldOption<ThemeColor>> BorderOptions =
+    [
+        new(ThemeColor.Transparent, "None"),
+        .. Enum.GetValues<ThemeColor>()
+            .Where(color => color is not (ThemeColor.Inherited or ThemeColor.Transparent))
+            .Select(color => new FieldOption<ThemeColor>(color, ThemeColors.Label(color))),
+    ];
+
+    /// <summary>The line's colours for several objects at once: none of them marked while theirs differ.</summary>
+    public static readonly IReadOnlyList<FieldOption<ThemeColor?>> SomeBorderOptions =
+        [.. BorderOptions.Select(color => new FieldOption<ThemeColor?>(color.Value, color.Text))];
+
     /// <summary>A card's elevations (as the Containers screen's cards have one): the application's own for its cards, then 0 to the highest.</summary>
     public static readonly IReadOnlyList<FieldOption<int?>> ElevationOptions =
     [

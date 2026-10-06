@@ -66,7 +66,8 @@ public sealed record ObjectDefault(
     int? X = null,
     int? Y = null,
     int? Elevation = null,
-    HorizontalAnchor? Anchor = null)
+    HorizontalAnchor? Anchor = null,
+    ThemeColor? Border = null)
 {
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -83,20 +84,20 @@ public sealed record ObjectDefault(
     /// </summary>
     public static ObjectDefault Of(ObjectInstance o, DashboardGroup? card = null) =>
         new(o.W, o.H, o.Size, o.Horizontal, o.Vertical, o.Background, o.Foreground, o.Parts, o.MarginX, o.MarginY,
-            card is null ? null : o.X - card.X, card is null ? null : o.Y - card.Y, o.Elevation, o.Anchor);
+            card is null ? null : o.X - card.X, card is null ? null : o.Y - card.Y, o.Elevation, o.Anchor, o.Border);
 
     /// <summary>
     /// A card as it is born, kept under its template's type: its cells, and
-    /// its colours, its elevation and its anchor (otherwise the Charts card
+    /// its colours, its elevation, its anchor and its line (otherwise the Charts card
     /// given another background on the board was dropped on the dashboard
     /// with the page's).
     /// </summary>
     public static ObjectDefault Of(DashboardGroup card) =>
-        new(card.W, card.H, Background: card.Background, Foreground: card.Foreground, Elevation: card.Elevation, Anchor: card.Anchor);
+        new(card.W, card.H, Background: card.Background, Foreground: card.Foreground, Elevation: card.Elevation, Anchor: card.Anchor, Border: card.Border);
 
-    /// <summary>The card with this look: its colours, its elevation and its anchor; its cells are the born card's (<see cref="Catalogue.BornCard"/>).</summary>
+    /// <summary>The card with this look: its colours, its elevation, its anchor and its line; its cells are the born card's (<see cref="Catalogue.BornCard"/>).</summary>
     public DashboardGroup On(DashboardGroup card) =>
-        card with { Background = Background, Foreground = Foreground, Elevation = Elevation, Anchor = Anchor };
+        card with { Background = Background, Foreground = Foreground, Elevation = Elevation, Anchor = Anchor, Border = Border };
 
     /// <summary>The object with this look and these cells, where it stands and what it reads kept.</summary>
     public ObjectInstance On(ObjectInstance o) =>
@@ -114,6 +115,7 @@ public sealed record ObjectDefault(
             MarginY = MarginY,
             Elevation = Elevation,
             Anchor = Anchor,
+            Border = Border,
         };
 
     /// <summary>As it is written, which is also how two are compared: its parts are a dictionary, which a record does not compare by what it holds.</summary>
