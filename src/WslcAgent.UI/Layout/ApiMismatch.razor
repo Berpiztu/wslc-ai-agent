@@ -1,0 +1,52 @@
+@using WslcAgent.ApiClient
+@using WslcAgent.UI.Updates
+@inject ApiCompatibilityWatch Compatibility
+@inject ClientUpdateChecker Checker
+@inject WslcAgent.UI.Access.IClientServers Servers
+@inject WslcAgent.UI.Lifetime.IClientLifetime Lifetime
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+@* This client and its agent can no longer work together (ApiCompatibilityWatch):
+   what the application shows instead of itself, under MainLayout's veil. It
+   says which side is too old and offers what can be done about it: a client
+   too old updates itself from the agent's package; an agent too old is
+   updated on its own machine, which this client cannot do, so it only says so.
+   Either way another agent can be chosen, or the application closed. *@
+<MudPaper Class="pa-6" Elevation="4">
+    <MudStack AlignItems="AlignItems.Center" Spacing="2">
+        <MudIcon Icon="@Icons.Material.Filled.SystemUpdate" Color="Color.Warning" Size="Size.Large" />
+        @if (Compatibility.Blocked == ApiMatch.ClientTooOld)
+        {
+            <MudText Typo="Typo.subtitle1" role="alert">This agent needs a newer client</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">The agent (@Compatibility.AgentVersion) no longer works with this version of the client. Update the client to go on.</MudText>
+        }
+        else
+        {
+            <MudText Typo="Typo.subtitle1" role="alert">This client needs a newer agent</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">The agent (@Compatibility.AgentVersion) is too old for this client. Update the agent on its machine, then come back.</MudText>
+        }
+        <MudStack Row="true" Spacing="2" Class="mt-2">
+            @if (Compatibility.Blocked == ApiMatch.ClientTooOld)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="UpdateClientAsync" Disabled="Checker.Installing"
+                           title="Download the agent's client package and install it">Update the client</MudButton>
+            }
+            @if (Servers.Supported)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="ChangeAgent" title="Choose another agent">Change agent</MudButton>
+            }
+            @if (Lifetime.Supported)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="Lifetime.Close" title="Close the application">Close</MudButton>
+            }
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@code {
+    private Task UpdateClientAsync() => UpdateFlow.DownloadAndInstallAsync(Snackbar, Checker);
+
+    /// <summary>The sign-in screen holds the native client's chooser of agents; it has a layout of its own, so no veil follows it there.</summary>
+    private void ChangeAgent() => Navigation.NavigateTo("login");
+}

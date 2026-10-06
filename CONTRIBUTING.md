@@ -59,6 +59,13 @@ The full set is in [docs/architecture.md](docs/architecture.md) and
 - **One API.** Everything goes through `/api/v1`, documented in
   [docs/api-v1.md](docs/api-v1.md). Every endpoint gets a matching MCP tool
   where it makes sense, both over the same service.
+  Every change to it raises `ApiCompatibility.Level`
+  (`src/WslcAgent.ApiClient/ApiCompatibility.cs`); one that breaks older
+  clients (something removed, renamed or made required) also raises
+  `MinimumClientLevel`, and one a client cannot do without on an older agent
+  raises `MinimumAgentLevel`. A change that only adds raises neither. Native
+  clients check these against `/health` and stop, or warn, when either side
+  is behind.
 - **Reuse before you add.** One component per concept (one list-page shell,
   one details view, one picker per kind of resource), fed different data.
   When two places do the same thing, extract it before a third appears.

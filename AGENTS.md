@@ -34,6 +34,13 @@ MudBlazor, .NET MAUI Blazor Hybrid, the official MCP C# SDK.
 - **One API.** A new capability is an endpoint in `/api/v1`, documented in
   [docs/api-v1.md](docs/api-v1.md), and a matching MCP tool where it makes
   sense, both over the same service interface.
+  Every change to it raises `ApiCompatibility.Level`
+  (`src/WslcAgent.ApiClient/ApiCompatibility.cs`); one that breaks older
+  clients (something removed, renamed or made required) also raises
+  `MinimumClientLevel`, and one a client cannot do without on an older agent
+  raises `MinimumAgentLevel`. A change that only adds raises neither. Native
+  clients check these against `/health` and stop, or warn, when either side
+  is behind.
 - **Destructive MCP tools** (remove, prune, kill, exec, publish, stop a
   session) go through the approval gate and are off unless the user switches
   them on. Keep it that way for any new one.

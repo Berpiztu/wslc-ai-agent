@@ -19,7 +19,7 @@
     }
     else if (Line.Shown is { } note)
     {
-        @if (note.Tone == Color.Error)
+        @if (note.Stays)
         {
             @Failure(note, Typo.h6)
         }
@@ -33,7 +33,7 @@
         <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Class="wslc-activity-more" PopoverClass="wslc-activity-popover">
             <ActivatorContent>
                 @* MudBlazor 9 hands the activator a MenuContext and opens nothing on a click by itself. *@
-                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="@(Line.Failures.Count > 0 ? Color.Error : Color.Tertiary)"
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="@CountColor"
                            EndIcon="@Icons.Material.Filled.ArrowDropDown" title="Show everything the line holds"
                            OnClick="@(() => context.ToggleAsync(EventArgs.Empty))">@CountText</MudButton>
             </ActivatorContent>
@@ -46,12 +46,12 @@
                             <MudText Typo="Typo.body2" Color="Color.Tertiary" Class="wslc-activity-text" title="@running.Text">@running.Text…</MudText>
                         </div>
                     }
-                    @foreach (var failure in Line.Failures)
+                    @foreach (var failure in Line.Kept)
                     {
                         <div class="wslc-activity-row">@Failure(failure, Typo.body2)</div>
                     }
                 </div>
-                @if (Line.Failures.Count > 0)
+                @if (Line.Kept.Count > 0)
                 {
                     <div class="wslc-activity-list-foot">
                         <MudButton Size="Size.Small" Color="Color.Error" OnClick="Line.DismissAll">Close all</MudButton>
@@ -65,25 +65,35 @@
 @code {
     protected override void OnInitialized() => Line.Changed += OnChanged;
 
-    /// <summary>What the count says: the failures, which wait for the user, before the verbs running.</summary>
-    private string CountText => Line.Failures.Count switch
+    private int Errors => Line.Kept.Count(note => note.Tone == Color.Error);
+
+    private int Warnings => Line.Kept.Count - Errors;
+
+    /// <summary>What the count says: the failures and warnings, which wait for the user, before the verbs running.</summary>
+    private string CountText => (Errors, Warnings) switch
     {
-        0 => $"{Line.Listed} running",
-        1 => "1 error",
-        var failures => $"{failures} errors",
+        (0, 0) => $"{Line.Listed} running",
+        (var errors, 0) => Counted(errors, "error"),
+        (0, var warnings) => Counted(warnings, "warning"),
+        var (errors, warnings) => $"{Counted(errors, "error")}, {Counted(warnings, "warning")}",
     };
 
-    /// <summary>A failure, on the line or in its list: the text that opens whole on a click, Copy and the cross.</summary>
-    private RenderFragment Failure(ActivityNote failure, Typo typo) =>
+    private Color CountColor => Errors > 0 ? Color.Error : Warnings > 0 ? Color.Warning : Color.Tertiary;
+
+    private static string Counted(int count, string noun) => count == 1 ? $"1 {noun}" : $"{count} {noun}s";
+
+    /// <summary>A failure or a warning, on the line or in its list, in its own tone: the text that opens whole on a click, Copy and the cross.</summary>
+    private RenderFragment Failure(ActivityNote note, Typo typo) =>
         @<text>
-            <div class="wslc-activity-failure" title="Show the whole message" @onclick="@(() => ShowFailureAsync(failure))">
-                <MudText Typo="typo" Color="Color.Error" Class="wslc-activity-text">@failure.Text</MudText>
+            <div class="wslc-activity-failure" title="Show the whole message" @onclick="@(() => ShowWholeAsync(note))">
+                <MudText Typo="typo" Color="note.Tone" Class="wslc-activity-text">@note.Text</MudText>
             </div>
-            <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" Color="Color.Error" title="Copy" aria-label="Copy" OnClick="@(() => CopyAsync(failure.Text))" />
-            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error" title="Close" aria-label="Close" OnClick="@(() => Line.Dismiss(failure))" />
+            <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" Color="note.Tone" title="Copy" aria-label="Copy" OnClick="@(() => CopyAsync(note.Text))" />
+            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="note.Tone" title="Close" aria-label="Close" OnClick="@(() => Line.Dismiss(note))" />
         </text>;
 
-    private Task ShowFailureAsync(ActivityNote failure) => DialogFlow.ExplainAsync(Dialogs, "Failed", failure.Text, "");
+    private Task ShowWholeAsync(ActivityNote note) =>
+        DialogFlow.ExplainAsync(Dialogs, note.Tone == Color.Error ? "Failed" : "Warning", note.Text, "");
 
     private async Task CopyAsync(string text)
     {

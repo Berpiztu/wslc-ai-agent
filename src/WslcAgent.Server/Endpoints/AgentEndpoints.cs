@@ -1,3 +1,4 @@
+using WslcAgent.ApiClient;
 using WslcAgent.ApiClient.Contracts;
 using WslcAgent.Mcp;
 using WslcAgent.Server.Wslc;
@@ -10,9 +11,11 @@ public static class AgentEndpoints
     public static RouteGroupBuilder MapAgentEndpoints(this RouteGroupBuilder api)
     {
         // The build is what a client watches to know the agent it was served by
-        // has been replaced: a rebuild changes it, the version does not.
+        // has been replaced: a rebuild changes it, the version does not. The
+        // API levels are what a native client, installed on its own, checks
+        // itself against (ApiCompatibility).
         api.MapGet("/health", (IAgentInfo info, IHostEnvironment host) =>
-                new HealthResponse("ok", info.Version, info.Build, host.IsDevelopment()))
+                new HealthResponse("ok", info.Version, info.Build, host.IsDevelopment(), ApiCompatibility.Level, ApiCompatibility.MinimumClientLevel))
             .WithName("Health");
 
         api.MapGet("/version", GetVersionAsync)

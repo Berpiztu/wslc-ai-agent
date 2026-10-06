@@ -16,6 +16,7 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime Js
 @inject WslcAgent.UI.Components.AgentBuild Build
+@inject WslcAgent.UI.Updates.ApiCompatibilityWatch Compatibility
 
 <MudThemeProvider Theme="WslcTheme.Theme" @bind-IsDarkMode="_darkMode" />
 <MudPopoverProvider />
@@ -135,7 +136,7 @@ else
         </div>
     </MudAppBar>
 
-    <MudMainContent Class="wslc-main d-flex flex-column" inert="@Veiled">
+    <MudMainContent Class="wslc-main d-flex flex-column" inert="@(Veiled || Mismatched)">
         @if (Chrome.SectionActions is not null)
         {
             <MudToolBar Dense="true" Class="@($"wslc-section-actions flex-shrink-0{SessionOffClass}")" inert="@SessionOff">
@@ -174,6 +175,12 @@ else
     <MudOverlay Visible="Veiled" DarkBackground="true" AutoClose="false" ZIndex="1400">
         <AgentUnreachable />
     </MudOverlay>
+    @* A native client and its agent that can no longer work together, either
+       side the old one (ApiCompatibilityWatch): the application waits under
+       this until one of them is updated or another agent is chosen. *@
+    <MudOverlay Visible="Mismatched" DarkBackground="true" AutoClose="false" ZIndex="1400">
+        <ApiMismatch />
+    </MudOverlay>
     <SessionPowerVeil />
 </MudLayout>
 }
@@ -204,6 +211,7 @@ else
         Chrome.Changed += OnChromeChanged;
         Activity.Changed += OnChromeChanged;
         WslcSession.Changed += OnChromeChanged;
+        Compatibility.Changed += OnChromeChanged;
         Link.Changed += OnLinkChanged;
         Errors.Reported += OnUnhandled;
         Session.SignInRequired += OnSignInRequired;
@@ -355,6 +363,9 @@ else
     /// <summary>The agent does not answer. The sign-in screen has a layout of its own, so this never covers the chooser of agents.</summary>
     private bool LinkOff => !Link.Online;
 
+    /// <summary>This native client and its agent can no longer work together: the screen waits under the mismatch's veil.</summary>
+    private bool Mismatched => Compatibility.Blocked is not null;
+
     /// <summary>The agent has not answered for longer than the grace: the screen waits under the veil.</summary>
     private bool Veiled => LinkOff && _graceOver;
 
@@ -440,7 +451,10 @@ else
     {
         try
         {
-            Build.Seen(await Api.GetHealthAsync());
+            var health = await Api.GetHealthAsync();
+            Build.Seen(health);
+            // A native client checks itself against the agent's API, at start and whenever the agent comes back (it may be a new one).
+            Compatibility.Seen(health);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or AgentApiException)
         {
@@ -470,6 +484,7 @@ else
         Chrome.Changed -= OnChromeChanged;
         Activity.Changed -= OnChromeChanged;
         WslcSession.Changed -= OnChromeChanged;
+        Compatibility.Changed -= OnChromeChanged;
         Link.Changed -= OnLinkChanged;
         _grace?.Cancel();
         _reconnecting?.Dispose();

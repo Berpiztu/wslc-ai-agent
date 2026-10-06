@@ -22,16 +22,16 @@ public sealed class ActivityLine(AgentLink link) : IDisposable
     /// <summary>Verbs whose button is the application's blue: their result says so in that blue, so the line and the control that caused it read as one thing.</summary>
     private static readonly string[] BlueVerbs = ["stop"];
 
-    /// <summary>The failures kept: the oldest goes past this many, so the list never grows without end.</summary>
-    private const int FailuresKept = 20;
+    /// <summary>The failures and warnings kept: the oldest goes past this many, so the list never grows without end.</summary>
+    private const int KeptAtMost = 20;
 
     private readonly List<ActivityWork> _running = [];
 
-    private readonly List<ActivityNote> _failures = [];
+    private readonly List<ActivityNote> _kept = [];
 
     private CancellationTokenSource? _fading;
 
-    /// <summary>The last verb that worked or the last note, for a moment; failures are <see cref="Failures"/>.</summary>
+    /// <summary>The last verb that worked or the last note, for a moment; failures and warnings are <see cref="Kept"/>.</summary>
     public ActivityNote? Result { get; private set; }
 
     /// <summary>The verb started last of those still running; null when none runs.</summary>
@@ -40,17 +40,17 @@ public sealed class ActivityLine(AgentLink link) : IDisposable
     /// <summary>The verbs running, the last started first.</summary>
     public IEnumerable<ActivityWork> AllRunning => Enumerable.Reverse(_running);
 
-    /// <summary>The failures not closed yet, the newest first.</summary>
-    public IReadOnlyList<ActivityNote> Failures => _failures;
+    /// <summary>The failures and warnings not closed yet, the newest first.</summary>
+    public IReadOnlyList<ActivityNote> Kept => _kept;
 
-    /// <summary>What the line's list holds: the verbs running and the failures not closed.</summary>
-    public int Listed => _running.Count + _failures.Count;
+    /// <summary>What the line's list holds: the verbs running and the failures and warnings not closed.</summary>
+    public int Listed => _running.Count + _kept.Count;
 
     /// <summary>
     /// What the closed line shows: a verb running, else a result of a moment ago,
     /// else the newest failure. A running verb is drawn by the view from <see cref="Running"/>.
     /// </summary>
-    public ActivityNote? Shown => Result ?? (_failures.Count > 0 ? _failures[0] : null);
+    public ActivityNote? Shown => Result ?? (_kept.Count > 0 ? _kept[0] : null);
 
     /// <summary>There is something to say: the page's own line gives way to it.</summary>
     public bool Speaking => Running is not null || Shown is not null;
@@ -75,17 +75,20 @@ public sealed class ActivityLine(AgentLink link) : IDisposable
     /// <summary>A verb that failed before it could start (what it needed could not be read): said until it is closed.</summary>
     public void Fail(string text) => Show(new ActivityNote(text, Color.Error));
 
-    /// <summary>Closes a failure the user has read.</summary>
+    /// <summary>Something the user should act on but that stops nothing (a client behind its agent): kept, in the warning tone, until it is closed.</summary>
+    public void Warn(string text) => Show(new ActivityNote(text, Color.Warning));
+
+    /// <summary>Closes a failure or a warning the user has read.</summary>
     public void Dismiss(ActivityNote failure)
     {
-        _failures.Remove(failure);
+        _kept.Remove(failure);
         Changed?.Invoke();
     }
 
-    /// <summary>Closes every failure.</summary>
+    /// <summary>Closes every failure and warning.</summary>
     public void DismissAll()
     {
-        _failures.Clear();
+        _kept.Clear();
         Changed?.Invoke();
     }
 
@@ -107,20 +110,21 @@ public sealed class ActivityLine(AgentLink link) : IDisposable
         Show(result);
     }
 
-    /// <summary>A result takes the line: a failure joins the list until it is closed, anything else is said for a moment.</summary>
+    /// <summary>A result takes the line: a failure or a warning joins the list until it is closed, anything else is said for a moment.</summary>
     private void Show(ActivityNote result)
     {
-        if (result.Tone == Color.Error)
+        if (result.Stays)
         {
-            if (link.Online)
+            // A failure while the agent does not answer is the link's, said by the layout.
+            if (result.Tone == Color.Warning || link.Online)
             {
-                _failures.Insert(0, result);
-                if (_failures.Count > FailuresKept)
+                _kept.Insert(0, result);
+                if (_kept.Count > KeptAtMost)
                 {
-                    _failures.RemoveAt(_failures.Count - 1);
+                    _kept.RemoveAt(_kept.Count - 1);
                 }
 
-                // The failure is the newest thing to say: a result of a moment ago gives way to it.
+                // It is the newest thing to say: a result of a moment ago gives way to it.
                 _fading?.Cancel();
                 Result = null;
             }
@@ -164,6 +168,9 @@ public sealed class ActivityNote(string text, Color tone)
     public string Text { get; } = text;
 
     public Color Tone { get; } = tone;
+
+    /// <summary>A failure or a warning: it stays in the line's list until the user closes it.</summary>
+    public bool Stays => Tone is Color.Error or Color.Warning;
 }
 
 /// <summary>

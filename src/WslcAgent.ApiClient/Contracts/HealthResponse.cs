@@ -11,4 +11,6 @@ namespace WslcAgent.ApiClient.Contracts;
 /// old to say.
 /// </param>
 /// <param name="Development">A development build, whose UI is rebuilt under the user all day; a client may take a new one without asking.</param>
-public sealed record HealthResponse(string Status, string Version, string Build = "", bool Development = false);
+/// <param name="ApiLevel">The level of the API the agent speaks (<see cref="ApiCompatibility.Level"/>); 0 from an agent too old to say.</param>
+/// <param name="MinimumClientApiLevel">The oldest client level the agent still serves (<see cref="ApiCompatibility.MinimumClientLevel"/>).</param>
+public sealed record HealthResponse(string Status, string Version, string Build = "", bool Development = false, int ApiLevel = 0, int MinimumClientApiLevel = 0);

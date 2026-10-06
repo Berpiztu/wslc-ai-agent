@@ -83,6 +83,7 @@ public static class UiServiceCollectionExtensions
         services.TryAddSingleton<WslcAgent.UI.Lifetime.IClientLifetime, WslcAgent.UI.Lifetime.NoClientLifetime>();
         services.TryAddSingleton<WslcAgent.UI.Notifications.IClientNotifications, WslcAgent.UI.Notifications.NoClientNotifications>();
         services.AddScoped<ClientUpdateChecker>();
+        services.AddScoped<ApiCompatibilityWatch>();
         services.AddScoped<AgentChanges>();
         services.AddScoped<FileTransfers>();
         services.AddScoped<AgentBuild>();
