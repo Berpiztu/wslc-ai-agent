@@ -147,7 +147,11 @@
         }
     }
 
-    /// <summary>Another version of its image: the agent pulls it and recreates the container; the pull console follows it here.</summary>
+    /// <summary>
+    /// Another version of its image: the agent pulls it and recreates the
+    /// container. Its row shows the pull, with the button that opens its
+    /// console for whoever wants to watch it; no console opens by itself.
+    /// </summary>
     private async Task UpdateImageAsync()
     {
         string? pulling = null;
@@ -162,8 +166,6 @@
             return;
         }
 
-        await PullFlow.ShowLogAsync(Dialogs, pulling);
-        // Said once the pull's console is closed: while it is open it covers the bar.
         Activity.Say($"{Container.Name}: updating to {pulling}. The container is recreated once the pull ends.");
         await Changed.InvokeAsync();
     }
