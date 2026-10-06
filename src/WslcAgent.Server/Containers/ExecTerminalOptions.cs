@@ -21,4 +21,10 @@ public sealed class ExecTerminalOptions
 
     /// <summary>Largest client message accepted; a bigger one closes the session.</summary>
     public int MaxMessageBytes { get; set; } = 65536;
+
+    /// <summary>Seconds a disconnected session is kept for resumption.</summary>
+    public int ResumeTimeoutSeconds { get; set; } = 600;
+
+    /// <summary>Maximum UTF-8 bytes of output retained while disconnected.</summary>
+    public int MaxBufferedBytes { get; set; } = 262144;
 }

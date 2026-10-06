@@ -1,6 +1,8 @@
 using System.Buffers;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net.WebSockets;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using WslcAgent.ApiClient.Contracts;
@@ -8,22 +10,7 @@ using WslcAgent.Server.Wslc;
 
 namespace WslcAgent.Server.Containers;
 
-/// <summary>
-/// The interactive terminals: one <c>wslc exec --interactive</c> process, or the
-/// Terminal page's host shell (<see cref="HostShell"/>),
-/// bridged to one WebSocket.
-/// <code>
-/// client → {"type":"start","command":"/bin/sh -i"} {"type":"stdin","data":"…"}
-///          {"type":"resize","cols":120,"rows":30} {"type":"pong"} {"type":"close"}
-/// agent  → {"type":"ready","backend":"conpty","pty":true,"label":"…"} {"type":"stdout","data":"…"}
-///          {"type":"ping"} {"type":"warning","message":"…"} {"type":"exit","code":N}
-///          {"type":"error","message":"…"}
-/// </code>
-/// On Windows the process runs behind a pseudo console, so <c>pty</c> is true:
-/// the shell echoes, draws its own prompt and answers a resize, and the client
-/// only renders. Without one the backend is <c>pipe</c>, <c>pty</c> is false
-/// and the client echoes and sends whole lines.
-/// </summary>
+/// <summary>Interactive shells shared between successive WebSocket connections.</summary>
 public sealed class ExecTerminals(
     IWslcRunner wslc,
     ICliActivity activity,
@@ -34,61 +21,94 @@ public sealed class ExecTerminals(
     private static readonly TimeSpan Heartbeat = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan PolicyTick = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan CloseWarning = TimeSpan.FromSeconds(60);
+    private readonly ConcurrentDictionary<string, Session> _sessions = new();
+    private readonly SemaphoreSlim _startGate = new(1, 1);
 
-    private int _open;
-
-    /// <summary>Runs one exec session until the shell exits, the client leaves or a limit closes it.</summary>
     public Task RunAsync(WebSocket socket, string container, CancellationToken cancellationToken) =>
         RunSessionAsync(socket, container, (start, ct) => StartExecAsync(container, start, ct), cancellationToken);
 
-    /// <summary>
-    /// The Terminal page's host shell over the same protocol and limits. It is not a
-    /// <c>wslc</c> command, so CLI Activity does not list it.
-    /// </summary>
     public Task RunHostAsync(WebSocket socket, CancellationToken cancellationToken) =>
-        RunSessionAsync(
-            socket,
-            "host",
+        RunSessionAsync(socket, "host",
             (start, _) => Task.FromResult(new Started(HostShell.Start(Number(start, "cols", 120), Number(start, "rows", 30)), HostShell.Label, Traced: false)),
             cancellationToken);
 
-    private async Task RunSessionAsync(WebSocket socket, string target, Func<JsonElement, CancellationToken, Task<Started>> start, CancellationToken cancellationToken)
+    private async Task RunSessionAsync(WebSocket socket, string target, Func<JsonElement, CancellationToken, Task<Started>> starter, CancellationToken cancellationToken)
     {
-        var limits = options.CurrentValue;
-        if (limits.MaxSessions > 0 && Interlocked.Increment(ref _open) > limits.MaxSessions)
-        {
-            Interlocked.Decrement(ref _open);
-            await SendAsync(socket, new { type = "error", message = $"Too many terminal sessions are open ({limits.MaxSessions}). Close one and try again." }, cancellationToken);
-            await CloseAsync(socket);
-            return;
-        }
-
         try
         {
-            await BridgeAsync(socket, start, limits, cancellationToken);
+            var limits = options.CurrentValue;
+            var first = await ReceiveAsync(socket, limits, cancellationToken);
+            if (first is null)
+            {
+                return;
+            }
+
+            Session? session;
+            if (Type(first.Value) == "resume")
+            {
+                var id = Text(first.Value, "sessionId");
+                if (!_sessions.TryGetValue(id, out session) || session.Target != target)
+                {
+                    await SendAsync(socket, new { type = "error", message = "Terminal session not found or expired." }, cancellationToken);
+                    return;
+                }
+            }
+            else if (Type(first.Value) == "start")
+            {
+                await _startGate.WaitAsync(cancellationToken);
+                try
+                {
+                    if (limits.MaxSessions > 0 && _sessions.Count >= limits.MaxSessions)
+                    {
+                        await SendAsync(socket, new { type = "error", message = $"Too many terminal sessions are open ({limits.MaxSessions}). Close one and try again." }, cancellationToken);
+                        return;
+                    }
+
+                    var started = await starter(first.Value, cancellationToken);
+                    session = new Session(Guid.NewGuid().ToString("N"), target, started, limits, activity, logger,
+                        id => _sessions.TryRemove(id, out _));
+                    if (!_sessions.TryAdd(session.Id, session))
+                    {
+                        started.Process.Dispose();
+                        throw new InvalidOperationException("Could not register terminal session.");
+                    }
+
+                    session.Start();
+                }
+                finally
+                {
+                    _startGate.Release();
+                }
+            }
+            else
+            {
+                await SendAsync(socket, new { type = "error", message = "The session must begin with a start or resume message." }, cancellationToken);
+                return;
+            }
+
+            await session.AttachAsync(socket, cancellationToken);
         }
         catch (Exception ex) when (ex is WslcException or WslcNotFoundException or ArgumentException or IOException)
         {
-            await SendAsync(socket, new { type = "error", message = ex.Message }, CancellationToken.None);
+            if (socket.State == WebSocketState.Open)
+            {
+                await SendAsync(socket, new { type = "error", message = ex.Message }, CancellationToken.None);
+            }
         }
         catch (Exception ex) when (ex is OperationCanceledException or WebSocketException)
         {
-            logger.LogInformation("terminal for {Target} ended: {Message}", target, ex.Message);
+            logger.LogInformation("terminal for {Target} disconnected: {Message}", target, ex.Message);
         }
         finally
         {
-            Interlocked.Decrement(ref _open);
             await CloseAsync(socket);
         }
     }
 
-    /// <summary><c>wslc exec --interactive [--tty] ID SHELL</c>.</summary>
     private async Task<Started> StartExecAsync(string container, JsonElement start, CancellationToken cancellationToken)
     {
         var id = WslcArgs.Require(container, "container");
         var shell = await ContainerShell.ResolveAsync(wslc, id, Text(start, "command"), cancellationToken);
-        // --tty only where a pseudo console gives the shell a real terminal;
-        // asking for one over pipes is what made wslc print "can't access tty".
         List<string> args = ["exec", "--interactive"];
         if (wslc.SupportsTerminal)
         {
@@ -100,180 +120,286 @@ public sealed class ExecTerminals(
         return new Started(wslc.StartInteractive(args, Number(start, "cols", 120), Number(start, "rows", 30)), "", Traced: true);
     }
 
-    private async Task BridgeAsync(WebSocket socket, Func<JsonElement, CancellationToken, Task<Started>> starter, ExecTerminalOptions limits, CancellationToken cancellationToken)
+    private sealed class Session(
+        string id, string target, Started started, ExecTerminalOptions limits,
+        ICliActivity activity, ILogger logger, Action<string> remove)
     {
-        if (await ReceiveAsync(socket, limits, cancellationToken) is not { } start || Type(start) != "start")
+        private readonly SemaphoreSlim _gate = new(1, 1);
+        private readonly CancellationTokenSource _stop = new();
+        private readonly Queue<(string Data, int Bytes)> _pending = new();
+        private readonly SessionClock _clock = new(DateTimeOffset.UtcNow);
+        private readonly Stopwatch _elapsed = Stopwatch.StartNew();
+        private WebSocket? _socket;
+        private DateTimeOffset? _detachedAt = DateTimeOffset.UtcNow;
+        private int _pendingBytes;
+        private int? _exitCode;
+        private bool _finished;
+        private int _stopping;
+
+        public string Id => id;
+        public string Target => target;
+
+        public void Start() => _ = RunAsync();
+
+        private async Task RunAsync()
         {
-            await SendAsync(socket, new { type = "error", message = "The session must begin with a start message." }, cancellationToken);
-            return;
-        }
-
-        var started = await starter(start, cancellationToken);
-        using var process = started.Process;
-        var startedAt = DateTimeOffset.UtcNow;
-        var elapsed = Stopwatch.StartNew();
-        // Running for as long as the terminal is open, as any other command is while it runs.
-        var trace = started.Traced ? activity.Start(process.Args) : null;
-        using var session = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var clock = new SessionClock(startedAt);
-
-        await SendAsync(socket, new { type = "ready", backend = process.Backend, pty = process.HasTerminal, label = started.Label }, cancellationToken);
-
-        var output = Task.WhenAll(
-            PumpAsync(process.Output, socket, session, clock),
-            PumpAsync(process.Error, socket, session, clock));
-        var background = Task.WhenAll(
-            output,
-            ExitAsync(process, output, socket, session),
-            PolicyAsync(socket, limits, session, clock));
-
-        try
-        {
-            await ReadClientAsync(socket, process, limits, session, clock);
-        }
-        finally
-        {
-            await session.CancelAsync();
-            process.Kill();
-            await Task.WhenAny(background, Task.Delay(TimeSpan.FromSeconds(2), CancellationToken.None));
-            elapsed.Stop();
-            if (trace is not null)
+            var process = started.Process;
+            var trace = started.Traced ? activity.Start(process.Args) : null;
+            try
             {
-                activity.Finish(trace, elapsed.Elapsed, process.ExitCode, process.ExitCode == 0 ? "success" : "error", "", "");
+                var output = Task.WhenAll(PumpAsync(process.Output), PumpAsync(process.Error));
+                var policy = PolicyAsync();
+                try
+                {
+                    await process.WaitForExitAsync(_stop.Token);
+                    await Task.WhenAny(output, Task.Delay(TimeSpan.FromSeconds(1), _stop.Token));
+                    await _gate.WaitAsync();
+                    try
+                    {
+                        _exitCode = process.ExitCode;
+                        if (_socket is not null)
+                        {
+                            await SendAsync(_socket, new { type = "exit", code = _exitCode }, CancellationToken.None);
+                            await EndAsync(_socket);
+                            Stop();
+                        }
+                    }
+                    finally
+                    {
+                        _gate.Release();
+                    }
+
+                    // A detached shell may finish while its client is away; keep its output and exit code.
+                    await Task.Delay(Timeout.InfiniteTimeSpan, _stop.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Closed explicitly, or a policy limit was reached.
+                }
+
+                Stop();
+                await Task.WhenAny(output, Task.Delay(TimeSpan.FromSeconds(2)));
+                await policy;
+            }
+            finally
+            {
+                process.Kill();
+                process.Dispose();
+                _elapsed.Stop();
+                if (trace is not null)
+                {
+                    activity.Finish(trace, _elapsed.Elapsed, process.ExitCode, process.ExitCode == 0 ? "success" : "error", "", "");
+                }
+
+                await _gate.WaitAsync();
+                try
+                {
+                    _finished = true;
+                }
+                finally
+                {
+                    _gate.Release();
+                }
+
+                remove(id);
             }
         }
-    }
 
-    /// <summary>Client messages until it closes the socket or the session ends.</summary>
-    private static async Task ReadClientAsync(WebSocket socket, IWslcSession process, ExecTerminalOptions limits, CancellationTokenSource session, SessionClock clock)
-    {
-        while (!session.IsCancellationRequested && socket.State == WebSocketState.Open)
+        public async Task AttachAsync(WebSocket socket, CancellationToken cancellationToken)
         {
-            if (await ReceiveAsync(socket, limits, session.Token) is not { } message)
+            await _gate.WaitAsync(cancellationToken);
+            try
+            {
+                if (_finished || _stopping != 0 || _socket is not null ||
+                    (_detachedAt is { } detached && DateTimeOffset.UtcNow - detached >= TimeSpan.FromSeconds(limits.ResumeTimeoutSeconds)))
+                {
+                    await SendAsync(socket, new { type = "error", message = "Terminal session is no longer available." }, cancellationToken);
+                    return;
+                }
+
+                _socket = socket;
+                _detachedAt = null;
+                await SendAsync(socket, new { type = "ready", backend = started.Process.Backend, pty = started.Process.HasTerminal, label = started.Label, sessionId = id }, cancellationToken);
+                while (_pending.TryDequeue(out var item))
+                {
+                    _pendingBytes -= item.Bytes;
+                    await SendAsync(socket, new { type = "stdout", data = item.Data }, cancellationToken);
+                }
+
+                if (_exitCode is { } code)
+                {
+                    await SendAsync(socket, new { type = "exit", code }, cancellationToken);
+                    await EndAsync(socket);
+                    Stop();
+                    return;
+                }
+            }
+            finally
+            {
+                _gate.Release();
+            }
+
+            try
+            {
+                using var receive = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stop.Token);
+                while (!_stop.IsCancellationRequested && socket.State == WebSocketState.Open)
+                {
+                    var message = await ReceiveAsync(socket, limits, receive.Token);
+                    if (message is null)
+                    {
+                        break;
+                    }
+
+                    _clock.Touch();
+                    switch (Type(message.Value))
+                    {
+                        case "stdin":
+                            await started.Process.Input.WriteAsync(Text(message.Value, "data"));
+                            await started.Process.Input.FlushAsync(CancellationToken.None);
+                            break;
+                        case "resize":
+                            started.Process.Resize(Number(message.Value, "cols", 120), Number(message.Value, "rows", 30));
+                            break;
+                        case "ping":
+                            await SendToClientAsync(new { type = "pong" });
+                            break;
+                        case "close":
+                            Stop();
+                            return;
+                    }
+                }
+            }
+            finally
+            {
+                await _gate.WaitAsync();
+                try
+                {
+                    if (_socket == socket)
+                    {
+                        _socket = null;
+                        _detachedAt = DateTimeOffset.UtcNow;
+                    }
+                }
+                finally
+                {
+                    _gate.Release();
+                }
+            }
+        }
+
+        private async Task PumpAsync(TextReader? reader)
+        {
+            if (reader is null)
             {
                 return;
             }
 
-            clock.Touch();
-            switch (Type(message))
+            var buffer = new char[4096];
+            try
             {
-                case "stdin":
-                    await process.Input.WriteAsync(Text(message, "data"));
-                    await process.Input.FlushAsync(CancellationToken.None);
-                    break;
-                case "resize":
-                    process.Resize(Number(message, "cols", 120), Number(message, "rows", 30));
-                    break;
-                case "ping":
-                    await SendAsync(socket, new { type = "pong" }, session.Token);
-                    break;
-                case "close":
-                    return;
-                default:
-                    // pong: nothing to do, it only says the client is alive.
-                    break;
-            }
-        }
-    }
-
-    /// <summary>One output stream to the client, in slices as they arrive.</summary>
-    private static async Task PumpAsync(TextReader? reader, WebSocket socket, CancellationTokenSource session, SessionClock clock)
-    {
-        if (reader is null)
-        {
-            // A terminal has one screen: there is no second stream to pump.
-            return;
-        }
-
-        var buffer = new char[4096];
-        try
-        {
-            while (!session.IsCancellationRequested)
-            {
-                var read = await reader.ReadAsync(buffer, session.Token);
-                if (read <= 0)
+                while (!_stop.IsCancellationRequested)
                 {
-                    return;
-                }
+                    var count = await reader.ReadAsync(buffer, _stop.Token);
+                    if (count == 0)
+                    {
+                        return;
+                    }
 
-                clock.Touch();
-                await SendAsync(socket, new { type = "stdout", data = new string(buffer, 0, read) }, session.Token);
-            }
-        }
-        catch (Exception ex) when (ex is OperationCanceledException or IOException or ObjectDisposedException)
-        {
-            // The process died or the socket went away: the session is over.
-        }
-    }
-
-    /// <summary>
-    /// The shell's own end. Its last output goes out first (the pipes reach EOF
-    /// when it exits), then the exit code, then the socket is closed from this
-    /// side: cancelling the session instead would abort the connection and the
-    /// client could lose the exit message it was just sent.
-    /// </summary>
-    private static async Task ExitAsync(IWslcSession process, Task output, WebSocket socket, CancellationTokenSource session)
-    {
-        try
-        {
-            await process.WaitForExitAsync(session.Token);
-            await Task.WhenAny(output, Task.Delay(TimeSpan.FromSeconds(1), session.Token));
-            await SendAsync(socket, new { type = "exit", code = process.ExitCode }, CancellationToken.None);
-            await EndAsync(socket);
-        }
-        catch (OperationCanceledException)
-        {
-            // The client left first.
-        }
-        finally
-        {
-            await session.CancelAsync();
-        }
-    }
-
-    /// <summary>
-    /// The limits, checked on their own tick: the heartbeat, the warning a
-    /// minute before, and the close itself. Cancelling the session aborts the
-    /// pending receive, which is what ends the bridge.
-    /// </summary>
-    private static async Task PolicyAsync(WebSocket socket, ExecTerminalOptions limits, CancellationTokenSource session, SessionClock clock)
-    {
-        var nextBeat = DateTimeOffset.UtcNow + Heartbeat;
-        var warned = false;
-        try
-        {
-            while (!session.IsCancellationRequested)
-            {
-                await Task.Delay(PolicyTick, session.Token);
-                var now = DateTimeOffset.UtcNow;
-
-                if (Passed(limits.IdleTimeoutSeconds, clock.LastActivity, now) || Passed(limits.MaxLifetimeSeconds, clock.StartedAt, now))
-                {
-                    await SendAsync(socket, new { type = "error", message = "The session was closed after being idle or open for too long." }, CancellationToken.None);
-                    await EndAsync(socket);
-                    await session.CancelAsync();
-                    return;
-                }
-
-                var closing = Passed(limits.IdleTimeoutSeconds, clock.LastActivity + CloseWarning, now)
-                    || Passed(limits.MaxLifetimeSeconds, clock.StartedAt + CloseWarning, now);
-                if (closing && !warned)
-                {
-                    await SendAsync(socket, new { type = "warning", message = "This session is about to close; press a key to keep it." }, session.Token);
-                }
-
-                warned = closing;
-
-                if (now >= nextBeat)
-                {
-                    nextBeat = now + Heartbeat;
-                    await SendAsync(socket, new { type = "ping" }, session.Token);
+                    _clock.Touch();
+                    var text = new string(buffer, 0, count);
+                    await _gate.WaitAsync(_stop.Token);
+                    try
+                    {
+                        if (_socket is { State: WebSocketState.Open } socket)
+                        {
+                            await SendAsync(socket, new { type = "stdout", data = text }, _stop.Token);
+                        }
+                        else
+                        {
+                            var bytes = Encoding.UTF8.GetByteCount(text);
+                            _pending.Enqueue((text, bytes));
+                            _pendingBytes += bytes;
+                            while (_pendingBytes > limits.MaxBufferedBytes && _pending.TryDequeue(out var discarded))
+                            {
+                                _pendingBytes -= discarded.Bytes;
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        _gate.Release();
+                    }
                 }
             }
+            catch (Exception ex) when (ex is OperationCanceledException or IOException or ObjectDisposedException)
+            {
+                logger.LogDebug("Terminal output ended: {Message}", ex.Message);
+            }
         }
-        catch (OperationCanceledException)
+
+        private async Task SendToClientAsync(object message)
         {
-            // The session ended for another reason.
+            await _gate.WaitAsync();
+            try
+            {
+                if (_socket is { State: WebSocketState.Open } socket)
+                {
+                    await SendAsync(socket, message, CancellationToken.None);
+                }
+            }
+            finally
+            {
+                _gate.Release();
+            }
+        }
+
+        private async Task PolicyAsync()
+        {
+            var nextBeat = DateTimeOffset.UtcNow + Heartbeat;
+            var warned = false;
+            try
+            {
+                while (!_stop.IsCancellationRequested)
+                {
+                    await Task.Delay(PolicyTick, _stop.Token);
+                    var now = DateTimeOffset.UtcNow;
+                    if (Passed(limits.IdleTimeoutSeconds, _clock.LastActivity, now)
+                        || Passed(limits.MaxLifetimeSeconds, _clock.StartedAt, now)
+                        || (_detachedAt is { } detached && now - detached >= TimeSpan.FromSeconds(limits.ResumeTimeoutSeconds)))
+                    {
+                        await SendToClientAsync(new { type = "error", message = "The session was closed after being idle, disconnected or open for too long." });
+                        Stop();
+                        return;
+                    }
+
+                    var closing = Passed(limits.IdleTimeoutSeconds, _clock.LastActivity + CloseWarning, now)
+                        || Passed(limits.MaxLifetimeSeconds, _clock.StartedAt + CloseWarning, now);
+                    if (closing && !warned)
+                    {
+                        await SendToClientAsync(new { type = "warning", message = "This session is about to close; press a key to keep it." });
+                    }
+
+                    warned = closing;
+                    if (now >= nextBeat)
+                    {
+                        nextBeat = now + Heartbeat;
+                        await SendToClientAsync(new { type = "ping" });
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Another limit or the client closed the shell.
+            }
+        }
+
+        private void Stop()
+        {
+            if (Interlocked.Exchange(ref _stopping, 1) == 0)
+            {
+                _stop.Cancel();
+                started.Process.Kill();
+            }
         }
     }
 
@@ -282,21 +408,17 @@ public sealed class ExecTerminals(
 
     private static string Type(JsonElement message) => Text(message, "type");
 
-    /// <summary>A number the client sent (the window size), or the default when it sent none.</summary>
     private static int Number(JsonElement message, string property, int fallback) =>
         message.ValueKind == JsonValueKind.Object && message.TryGetProperty(property, out var value) && value.TryGetInt32(out var number) && number > 0
-            ? number
-            : fallback;
+            ? number : fallback;
 
     private static string Text(JsonElement message, string property) =>
         message.ValueKind == JsonValueKind.Object && message.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
-            ? value.GetString() ?? ""
-            : "";
+            ? value.GetString() ?? "" : "";
 
-    /// <summary>One client message, or null when the client closed the socket.</summary>
     private static async Task<JsonElement?> ReceiveAsync(WebSocket socket, ExecTerminalOptions limits, CancellationToken cancellationToken)
     {
-        var message = new ArrayBufferWriter<byte>(4096);
+        var message = new System.Buffers.ArrayBufferWriter<byte>(4096);
         var chunk = new byte[4096];
         while (true)
         {
@@ -341,28 +463,22 @@ public sealed class ExecTerminals(
         }
         catch (Exception ex) when (ex is WebSocketException or OperationCanceledException or ObjectDisposedException)
         {
-            // The client left: the session ends on its own.
+            // A disconnected client can resume this session.
         }
     }
 
-    /// <summary>
-    /// Says goodbye without waiting for the answer: a plain close would need to
-    /// read the reply, and the session's own receive loop owns that.
-    /// </summary>
     private static async Task EndAsync(WebSocket socket)
     {
-        if (socket.State != WebSocketState.Open)
+        if (socket.State == WebSocketState.Open)
         {
-            return;
-        }
-
-        try
-        {
-            await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "session ended", CancellationToken.None);
-        }
-        catch (Exception ex) when (ex is WebSocketException or ObjectDisposedException or InvalidOperationException)
-        {
-            // Already closing or gone.
+            try
+            {
+                await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "session ended", CancellationToken.None);
+            }
+            catch (Exception ex) when (ex is WebSocketException or ObjectDisposedException or InvalidOperationException)
+            {
+                // Already closing.
+            }
         }
     }
 
@@ -381,18 +497,13 @@ public sealed class ExecTerminals(
         }
     }
 
-    /// <summary>A shell that has started: the process, what the client is told it is, and whether CLI Activity lists it.</summary>
     private sealed record Started(IWslcSession Process, string Label, bool Traced);
 
-    /// <summary>When the session started and when it last saw a keystroke or a byte of output.</summary>
     private sealed class SessionClock(DateTimeOffset startedAt)
     {
         private long _lastActivity = startedAt.UtcTicks;
-
         public DateTimeOffset StartedAt { get; } = startedAt;
-
         public DateTimeOffset LastActivity => new(Interlocked.Read(ref _lastActivity), TimeSpan.Zero);
-
         public void Touch() => Interlocked.Exchange(ref _lastActivity, DateTimeOffset.UtcNow.UtcTicks);
     }
 }

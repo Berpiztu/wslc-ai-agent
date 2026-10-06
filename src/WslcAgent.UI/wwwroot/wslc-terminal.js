@@ -155,7 +155,19 @@ class Session {
         this.line = "";
         this.lastWasCr = false;
         this.disposed = false;
+        this.sessionId = null;
+        this.retry = null;
+        this.retryDelay = 1000;
         this.last = { state: "closed", text: "Idle" };
+        this.onReturn = () => {
+            if (!this.disposed && !this.socket && this.retry) {
+                clearTimeout(this.retry);
+                this.retry = null;
+                this.connectSocket();
+            }
+        };
+        window.addEventListener("online", this.onReturn);
+        document.addEventListener("visibilitychange", this.onReturn);
 
         this.term = new window.Terminal({
             cursorBlink: true,
@@ -363,7 +375,9 @@ class Session {
             this.banner = banner;
         }
 
-        this.disconnect(false, true);
+        this.disconnect(true, true);
+        this.sessionId = null;
+        this.retryDelay = 1000;
         this.term.reset();
         this.term.options.convertEol = false;
         this.line = "";
@@ -377,24 +391,39 @@ class Session {
 
         this.refit();
 
+        this.connectSocket();
+    }
+
+    /** Reattach after a network interruption without replacing the screen or shell. */
+    connectSocket() {
+        if (this.disposed || this.socket) {
+            return;
+        }
+
+        this.starting = true;
+        this.state("connecting", this.sessionId ? "Resuming…" : "Connecting…");
         let socket;
         try {
             socket = new WebSocket(this.url);
         } catch (error) {
             this.starting = false;
-            this.writeln(`\r\n[error] ${error}`);
-            this.state("error", "Failed");
+            this.state("error", String(error));
+            this.scheduleRetry();
             return;
         }
 
         this.socket = socket;
         socket.onopen = () => {
-            const start = { type: "start", cols: this.term.cols, rows: this.term.rows };
-            if (this.command) {
-                start.command = this.command;
-            }
+            if (this.sessionId) {
+                this.send({ type: "resume", sessionId: this.sessionId });
+            } else {
+                const start = { type: "start", cols: this.term.cols, rows: this.term.rows };
+                if (this.command) {
+                    start.command = this.command;
+                }
 
-            this.send(start);
+                this.send(start);
+            }
         };
         socket.onmessage = (event) => this.received(event.data);
         socket.onerror = () => {
@@ -409,15 +438,24 @@ class Session {
                 return;
             }
 
-            if (this.connected || this.starting) {
-                this.writeln("\r\n[disconnected]");
-            }
-
             this.connected = false;
             this.starting = false;
             this.socket = null;
             this.state("closed", "Disconnected");
+            this.scheduleRetry();
         };
+    }
+
+    scheduleRetry() {
+        if (this.disposed || this.retry) {
+            return;
+        }
+
+        this.retry = setTimeout(() => {
+            this.retry = null;
+            this.connectSocket();
+        }, this.retryDelay);
+        this.retryDelay = Math.min(this.retryDelay * 2, 10000);
     }
 
     received(raw) {
@@ -433,6 +471,8 @@ class Session {
             case "ready":
                 this.connected = true;
                 this.starting = false;
+                this.sessionId = message.sessionId ?? null;
+                this.retryDelay = 1000;
                 this.backend = String(message.backend ?? "");
                 this.pty = typeof message.pty === "boolean" ? message.pty : true;
                 // Pipe output carries a bare LF; a pty already emits CRLF.
@@ -461,12 +501,17 @@ class Session {
             case "exit":
                 this.writeln(`\r\n[process exited${message.code === null || message.code === undefined ? "" : ` with code ${message.code}`}]`);
                 this.disconnect(false, true);
+                this.sessionId = null;
                 this.state("closed", "Exited");
                 break;
             case "error":
                 this.writeln(`\r\n[error] ${message.message ?? "unknown error"}`);
                 this.toast(message.message ?? "Terminal error", "error");
                 this.disconnect(false, true);
+                if (this.sessionId && /session not found or expired|session is no longer available/i.test(message.message ?? "")) {
+                    this.sessionId = null;
+                    this.scheduleRetry();
+                }
                 this.state("error", "Error");
                 break;
         }
@@ -694,6 +739,10 @@ class Session {
     }
 
     disconnect(sendClose = true, quiet = false) {
+        if (this.retry) {
+            clearTimeout(this.retry);
+            this.retry = null;
+        }
         this.connected = false;
         this.starting = false;
         this.line = "";
@@ -726,6 +775,8 @@ class Session {
         }
 
         this.disposed = true;
+        window.removeEventListener("online", this.onReturn);
+        document.removeEventListener("visibilitychange", this.onReturn);
         sessions.delete(this.key);
         this.disconnect(true, true);
         this.observer?.disconnect();
