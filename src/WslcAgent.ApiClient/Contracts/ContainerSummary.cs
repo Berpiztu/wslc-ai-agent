@@ -24,6 +24,7 @@ namespace WslcAgent.ApiClient.Contracts;
 /// <param name="DiskIoBytes">Block I/O read and written together, in bytes: the card's Disk dial and its share of every container's.</param>
 /// <param name="NetIoBytes">Network I/O received and sent together, in bytes: the card's Network dial and its share of every container's.</param>
 /// <param name="Uid">The agent's own number for this container (the resource registry, <c>resources.json</c>): no rename and no recreate changes it, so the dashboard points at it; 0 for a row the registry does not hold, such as a Files helper.</param>
+/// <param name="UpdatingTo">The image this container's image update is pulling, while the pull lasts (<c>/images/pulls</c> has its progress); null otherwise.</param>
 public sealed record ContainerSummary(
     string Id,
     string Name,
@@ -47,7 +48,8 @@ public sealed record ContainerSummary(
     string NetIo = "",
     long DiskIoBytes = 0,
     long NetIoBytes = 0,
-    int Uid = 0)
+    int Uid = 0,
+    string? UpdatingTo = null)
 {
     /// <summary>The agent's own state while a change to the container is being applied (a recreate).</summary>
     public const string Recreating = "recreating";
@@ -56,6 +58,9 @@ public sealed record ContainerSummary(
 
     /// <summary>A change to it is being applied: for these seconds it may not exist at all, and no verb has a container to act on.</summary>
     public bool IsRecreating => State == Recreating;
+
+    /// <summary>Its image update is pulling the new image: the recreate that follows will replace it.</summary>
+    public bool IsUpdating => UpdatingTo is not null;
 
     /// <summary>The publications, an empty list when there are none: the field is optional on the wire.</summary>
     public IReadOnlyList<Publication> Published => Publications ?? [];

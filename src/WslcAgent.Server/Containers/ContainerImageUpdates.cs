@@ -16,7 +16,7 @@ namespace WslcAgent.Server.Containers;
 /// not start leaves the previous container in place. Started here and returned at
 /// once: the agent owns the rest, and its end is a notification.
 /// </summary>
-public sealed class ContainerImageUpdates(IContainerService containers, ImagePulls pulls, Notifier notifier, ILogger<ContainerImageUpdates> logger)
+public sealed class ContainerImageUpdates(IContainerService containers, ImagePulls pulls, ImageUpdatesUnderWay underWay, Notifier notifier, ILogger<ContainerImageUpdates> logger)
 {
     private static readonly TimeSpan PullTimeout = TimeSpan.FromHours(1);
     private static readonly TimeSpan PollEvery = TimeSpan.FromMilliseconds(500);
@@ -27,6 +27,8 @@ public sealed class ContainerImageUpdates(IContainerService containers, ImagePul
     {
         var details = await containers.DetailsAsync(WslcArgs.Require(container, "container"), cancellationToken);
         var image = ImageReference.Normalize(WslcArgs.Require(request.Image, "image"));
+        // The container's row shows the pull from the moment it starts.
+        underWay.Begin(details.Id, image);
         var pull = pulls.Start(image);
         _ = Task.Run(() => FinishAsync(details.Id, details.Name, image));
         return pull;
@@ -35,7 +37,17 @@ public sealed class ContainerImageUpdates(IContainerService containers, ImagePul
     private async Task FinishAsync(string id, string name, string image)
     {
         var elapsed = Stopwatch.StartNew();
-        var error = await PulledAsync(image);
+        string? error;
+        try
+        {
+            error = await PulledAsync(image);
+        }
+        finally
+        {
+            // The pull is over: the recreate marks the row from here, or nothing does.
+            underWay.End(id);
+        }
+
         if (error is null)
         {
             try

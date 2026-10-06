@@ -23,6 +23,7 @@ public sealed partial class ContainerService(
     ContainerRestarter restarter,
     Resources.ResourceRegistry registry,
     ContainerRecreations recreations,
+    ImageUpdatesUnderWay updates,
     WslcEvents events,
     ILogger<ContainerService> logger) : IContainerService
 {
@@ -47,7 +48,7 @@ public sealed partial class ContainerService(
         var owned = rows.Where(c => !IsHelper(c.Name)).ToList();
         var uids = registry.Reconcile(Resources.ResourceRegistry.Container, [.. owned.Select(c => (c.Id, c.Name))], complete: all);
         var containers = recreations.Overlay([.. (helpers ? rows : owned).Select(c => c with { Uid = uids.GetValueOrDefault(c.Id) })], complete: all);
-        var annotated = publications.Annotate(policies.Annotate(containers));
+        var annotated = updates.Annotate(publications.Annotate(policies.Annotate(containers)));
         return new ContainerListResponse(annotated, Aggregate(annotated));
     }
 

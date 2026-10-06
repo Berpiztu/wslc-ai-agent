@@ -113,13 +113,13 @@
     protected override string Key => Container.Id;
 
     /// <summary>
-    /// Every verb stands greyed while one of them runs, and while the
-    /// container is being recreated: for those
+    /// Every verb stands greyed while one of them runs, while its image update
+    /// pulls the new image, and while the container is being recreated: for those
     /// seconds it may not exist, and a start pressed then would fail or cross
     /// the recreate. And while the container is still being run or created:
     /// its verbs stand where they will be, greyed until it exists.
     /// </summary>
-    private bool Locked => Busy || Container.IsRecreating || Launching;
+    private bool Locked => Busy || Container.IsRecreating || Container.IsUpdating || Launching;
 
     /// <summary>The launch form pre-filled from inspect; saving removes and recreates.</summary>
     private async Task EditAsync()
@@ -162,8 +162,9 @@
             return;
         }
 
-        Snackbar.Add($"{Container.Name}: updating to {pulling}. The container is recreated once the pull ends.", Severity.Info);
         await PullFlow.ShowLogAsync(Dialogs, pulling);
+        // Said once the pull's console is closed: while it is open it covers the bar.
+        Activity.Say($"{Container.Name}: updating to {pulling}. The container is recreated once the pull ends.");
         await Changed.InvokeAsync();
     }
 

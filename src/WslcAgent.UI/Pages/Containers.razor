@@ -65,6 +65,16 @@
                                               OnLog="@(() => PullFlow.ShowLogAsync(Dialogs, launch.Image))" OnCancel="@(() => CancelLaunchAsync(launch))"
                                               OnDismiss="@(() => DismissLaunchAsync(launch))" />
                             }
+                            else if (UpdateOf(context.Item.Value) is { } update)
+                            {
+                                @* Its image update pulling the new image: the pull's bar on
+                                   the container that was asked to update, not only on the
+                                   image. *@
+                                <ProgressCell Name="@context.Item.Value.Name" Pct="update.Pct" Status="@UpdateStatus(update)" Failed="@(update.State != "running")"
+                                              LogTitle="View the update's pull" CancelTitle="Cancel the update" DismissTitle="Dismiss"
+                                              OnLog="@(() => PullFlow.ShowLogAsync(Dialogs, update.Image, finished: update.State != "running"))"
+                                              OnCancel="@(() => CancelUpdateAsync(update.Image))" OnDismiss="RefreshAsync" />
+                            }
                             else if (TransfersOf(context.Item.Value) is { Count: > 0 } moving)
                             {
                                 @* Files on the move, in or out: the same bar as a run, on
@@ -144,6 +154,13 @@
                                               OnLog="@(() => PullFlow.ShowLogAsync(Dialogs, launch.Image))" OnCancel="@(() => CancelLaunchAsync(launch))"
                                               OnDismiss="@(() => DismissLaunchAsync(launch))" />
                             }
+                            else if (UpdateOf(c) is { } update)
+                            {
+                                <ProgressRing Pct="update.Pct" Status="@UpdateStatus(update)" Failed="@(update.State != "running")"
+                                              LogTitle="View the update's pull" CancelTitle="Cancel the update" DismissTitle="Dismiss"
+                                              OnLog="@(() => PullFlow.ShowLogAsync(Dialogs, update.Image, finished: update.State != "running"))"
+                                              OnCancel="@(() => CancelUpdateAsync(update.Image))" OnDismiss="RefreshAsync" />
+                            }
                             else if (TransfersOf(c) is { Count: > 0 } moving)
                             {
                                 <ProgressRing Pct="@TransferFlow.Pct(moving)" Status="@TransferFlow.Status(moving)" Failed="@TransferFlow.Failed(moving)"
@@ -198,6 +215,9 @@
 
     private IReadOnlyList<ContainerLaunch> _launches = [];
     private IReadOnlyList<ContainerTransfer> _transfers = [];
+
+    /// <summary>The agent's pulls, read only while a container's image update is pulling.</summary>
+    private IReadOnlyList<ImagePullState> _pulls = [];
     private readonly HashSet<string> _reportedLaunches = [];
 
     /// <summary>Runs still on their way first, as a temporary row each.</summary>
@@ -207,6 +227,7 @@
         _aggregate = response.Aggregate;
         _launches = await Api.GetContainerLaunchesAsync();
         _transfers = await Api.GetContainerTransfersAsync();
+        _pulls = response.Containers.Any(row => row.IsUpdating) ? await Api.GetImagePullsAsync() : [];
         ReportFinishedLaunches();
         var rows = _launches.Where(l => l.Phase != "done")
             .Select(l => new ContainerSummary(LaunchPrefix + l.Id, l.Name, l.Image, l.Active ? "created" : "error", l.Status, "", "", "", [], "", "", "", ""));
@@ -229,6 +250,24 @@
 
     private void OnQueueChanged() => _ = InvokeAsync(StateHasChanged);
 
+    /// <summary>The pull this container's image update waits for, while it does; one not listed yet is about to start.</summary>
+    private ImagePullState? UpdateOf(ContainerSummary row) =>
+        row.UpdatingTo is { } image
+            ? _pulls.FirstOrDefault(pull => pull.Image == image) ?? new ImagePullState(image, "running", 0, "Starting the pull…", "")
+            : null;
+
+    /// <summary>What the update's bar says: the image it moves to, and the pull's step or why it failed.</summary>
+    private static string UpdateStatus(ImagePullState pull) =>
+        $"Updating to {pull.Image}: {(pull.State == "running" ? pull.Status : pull.Error.Length > 0 ? pull.Error : pull.State)}";
+
+    private async Task CancelUpdateAsync(string image)
+    {
+        if (await PullFlow.CancelAsync(Dialogs, Api, Snackbar, image))
+        {
+            await RefreshAsync();
+        }
+    }
+
     private ContainerLaunch? LaunchOf(ContainerSummary row) =>
         row.Id.StartsWith(LaunchPrefix, StringComparison.Ordinal) ? _launches.FirstOrDefault(l => LaunchPrefix + l.Id == row.Id) : null;
 
@@ -247,7 +286,7 @@
     private static string CancelTitle(IReadOnlyList<ContainerTransfer> transfers) =>
         TransferFlow.Active(transfers) is { Count: > 1 } several ? $"Cancel {several.Count} transfers" : "Cancel transfer";
 
-    /// <summary>A run or an upload under way is followed every second; when one ends the list refreshes so the real row replaces it.</summary>
+    /// <summary>A run, an upload or an image update's pull under way is followed every second; when one ends the list refreshes so the real row replaces it.</summary>
     private async Task FollowJobsAsync(CancellationToken cancellationToken)
     {
         using var timer = new PeriodicTimer(JobsEvery);
@@ -255,17 +294,23 @@
         {
             while (await timer.WaitForNextTickAsync(cancellationToken))
             {
-                if (!_launches.Any(l => l.Active) && !_transfers.Any(t => t.Active))
+                var updating = Items.Any(row => row.IsUpdating);
+                if (!_launches.Any(l => l.Active) && !_transfers.Any(t => t.Active) && !updating)
                 {
                     continue;
                 }
 
                 var launches = _launches;
                 var transfers = _transfers;
+                var pulls = _pulls;
                 try
                 {
                     _launches = await Api.GetContainerLaunchesAsync(cancellationToken);
                     _transfers = await Api.GetContainerTransfersAsync(cancellationToken);
+                    if (updating)
+                    {
+                        _pulls = await Api.GetImagePullsAsync(cancellationToken);
+                    }
                 }
                 catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
                 {
@@ -273,7 +318,9 @@
                     continue;
                 }
 
-                if (Ended(launches, _launches, l => l.Id, l => l.Active) || Ended(transfers, _transfers, t => t.Id, t => t.Active))
+                // An update's pull that ended: the row goes on to its recreate, which the list shows.
+                if (Ended(launches, _launches, l => l.Id, l => l.Active) || Ended(transfers, _transfers, t => t.Id, t => t.Active)
+                    || Ended(pulls, _pulls, p => p.Image, p => p.State == "running"))
                 {
                     await InvokeAsync(RefreshAsync);
                 }
