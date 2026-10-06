@@ -15,6 +15,8 @@
 <div class="wslc-action-body">
     <div class="wslc-action-main wslc-terminal">
         <div class="wslc-terminal-pane" @ref="_pane"></div>
+        @* The keys a phone's keyboard lacks, under the pane. *@
+        <ControlKeys Modifiers="_modifiers" ModifiersChanged="LatchAsync" OnKey="SendKeyAsync" Disabled="@(!_live)" />
     </div>
     @* The rail every window in the app shares: MudBlazor's filled small icon
        buttons with its own Material icons, in the app's verb colours — green
@@ -135,6 +137,38 @@
         _started = false;
         _live = false;
         _status = "Closed";
+    }
+
+    /// <summary>Ctrl, Alt and Shift held on the row under the pane, for the next key.</summary>
+    private ControlModifiers _modifiers;
+
+    /// <summary>A key from the row under the pane, with the modifiers held for it, sent to the shell as the keyboard would.</summary>
+    private async Task SendKeyAsync(ControlKeyPress press)
+    {
+        if (_session is not null)
+        {
+            await _session.InvokeVoidAsync("press", press.Key.ToString(),
+                press.Modifiers.HasFlag(ControlModifiers.Ctrl), press.Modifiers.HasFlag(ControlModifiers.Shift), press.Modifiers.HasFlag(ControlModifiers.Alt));
+        }
+    }
+
+    /// <summary>Ctrl, Alt or Shift pressed on the row: the terminal holds them for the next key typed on the keyboard.</summary>
+    private async Task LatchAsync(ControlModifiers modifiers)
+    {
+        _modifiers = modifiers;
+        if (_session is not null)
+        {
+            await _session.InvokeVoidAsync("latch",
+                modifiers.HasFlag(ControlModifiers.Ctrl), modifiers.HasFlag(ControlModifiers.Shift), modifiers.HasFlag(ControlModifiers.Alt));
+        }
+    }
+
+    /// <summary>The terminal used Ctrl or Alt on a key typed on the keyboard: the row shows them up again; a locked Shift stays.</summary>
+    [JSInvokable]
+    public Task OnModifiersUsed()
+    {
+        _modifiers &= ControlModifiers.Shift;
+        return InvokeAsync(StateHasChanged);
     }
 
     private async Task ClearAsync()

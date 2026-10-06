@@ -1,0 +1,72 @@
+@* A row of the keys a phone's on-screen keyboard usually lacks — Esc, Tab,
+   Ctrl, Alt, Shift, the arrows, Home, End — as Termux offers them under its
+   terminal. Ctrl and Alt are held as Termux holds them: pressed once they
+   stay down, filled, for the next key — one of the row's or one typed on the
+   keyboard — and let go after it; pressed again they let go at once. Shift
+   is locked instead: it stays down, key after key, until it is pressed again
+   (Shift held and the arrows, pressed one after another, select in nano). The row
+   only says what was pressed (OnKey, with the modifiers held) and which
+   modifiers are down (Modifiers, which the host lets go of once it used them
+   on a key typed elsewhere): what a key does is its host's, so the row serves
+   a terminal or any field that wants them. A press never takes the focus from
+   where the user is typing, or the phone's keyboard would close at every key. *@
+
+<div class="wslc-control-keys" role="toolbar" aria-label="Control keys"
+     @onpointerdown:preventDefault="true" @onmousedown:preventDefault="true">
+    @foreach (var key in Keys)
+    {
+        @Key(key)
+        @if (key == ControlKey.Tab && ShowModifiers)
+        {
+            @Modifier(ControlModifiers.Ctrl, "Ctrl")
+            @Modifier(ControlModifiers.Alt, "Alt")
+            @Modifier(ControlModifiers.Shift, "Shift")
+        }
+    }
+</div>
+
+@code {
+    /// <summary>The keys offered, in order; a terminal's by default. Ctrl, Alt and Shift follow Tab.</summary>
+    [Parameter] public IReadOnlyList<ControlKey> Keys { get; set; } = ControlKeyNames.Cursor;
+
+    /// <summary>Ctrl, Alt and Shift on the row.</summary>
+    [Parameter] public bool ShowModifiers { get; set; } = true;
+
+    /// <summary>The modifiers held down now.</summary>
+    [Parameter] public ControlModifiers Modifiers { get; set; }
+
+    [Parameter] public EventCallback<ControlModifiers> ModifiersChanged { get; set; }
+
+    /// <summary>A key of the row was pressed, with the modifiers held for it; Ctrl and Alt are let go after it, Shift stays.</summary>
+    [Parameter] public EventCallback<ControlKeyPress> OnKey { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    private RenderFragment Key(ControlKey key) =>
+        @<MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" Disabled="Disabled"
+                    title="@ControlKeyNames.Title(key)" aria-label="@ControlKeyNames.Title(key)"
+                    OnClick="@(() => PressAsync(key))">@ControlKeyNames.Label(key)</MudButton>;
+
+    private RenderFragment Modifier(ControlModifiers modifier, string label) =>
+        @<MudButton Size="Size.Small" Variant="@(Modifiers.HasFlag(modifier) ? Variant.Filled : Variant.Outlined)"
+                    Color="@(Modifiers.HasFlag(modifier) ? Color.Primary : Color.Default)" Disabled="Disabled"
+                    title="@($"{label}: held for the next key")" aria-label="@label" aria-pressed="@Modifiers.HasFlag(modifier)"
+                    OnClick="@(() => SetModifiersAsync(Modifiers ^ modifier))">@label</MudButton>;
+
+    private async Task PressAsync(ControlKey key)
+    {
+        await OnKey.InvokeAsync(new ControlKeyPress(key, Modifiers));
+        await SetModifiersAsync(Modifiers & ControlModifiers.Shift);
+    }
+
+    private async Task SetModifiersAsync(ControlModifiers modifiers)
+    {
+        if (modifiers == Modifiers)
+        {
+            return;
+        }
+
+        Modifiers = modifiers;
+        await ModifiersChanged.InvokeAsync(modifiers);
+    }
+}

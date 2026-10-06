@@ -2975,6 +2975,23 @@
     scrollbar-color: var(--mud-palette-lines-inputs) transparent;
 }
 
+/* The keys a phone's keyboard lacks, in one row under the pane: as many as
+   fit side by side, the row scrolling sideways on a narrow screen rather than
+   growing a second line under the shell. */
+.wslc-control-keys {
+    display: flex;
+    flex: none;
+    gap: 4px;
+    padding: 4px 0.3rem 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.wslc-control-keys .mud-button-root {
+    flex: none;
+    min-width: 40px;
+}
+
 .wslc-terminal-pane:focus-within {
     outline: 1px solid var(--mud-palette-primary);
 }

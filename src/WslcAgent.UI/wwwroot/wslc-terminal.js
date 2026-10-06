@@ -401,8 +401,66 @@ class Session {
         return true;
     }
 
-    /** A keystroke: straight through with a pty, line by line behind a pipe. */
+    /**
+     * A keystroke from the keyboard. Ctrl, Alt or Shift held on the row under
+     * the pane (latch) change the next single key typed, as a real keyboard's would,
+     * and are let go after it; the host hears it, so the row shows them up.
+     */
     typed(data) {
+        if (this.latched) {
+            const latched = this.latched;
+            // Ctrl and Alt are let go after the key; Shift stays locked until the row lets it go.
+            this.latched = latched.shift ? { ctrl: false, shift: true, alt: false } : null;
+            if (latched.ctrl || latched.alt) {
+                this.host?.invokeMethodAsync("OnModifiersUsed");
+            }
+
+            // Ctrl from the row with A selects the terminal's text, as Ctrl+A
+            // does in an editor, for the rail's Copy: on a phone there is no
+            // other way to select it all. A keyboard's own Ctrl+A never comes
+            // through here and stays the shell's (the start of the line).
+            if (latched.ctrl && !latched.alt && data.toLowerCase() === "a") {
+                this.term.selectAll();
+                return;
+            }
+
+            if (data.length === 1) {
+                data = this.modified(data, latched);
+            }
+        }
+
+        this.input(data);
+    }
+
+    /** Ctrl, Alt and Shift held on the row for the next key typed. */
+    latch(ctrl, shift, alt) {
+        this.latched = ctrl || shift || alt ? { ctrl: !!ctrl, shift: !!shift, alt: !!alt } : null;
+        this.term.focus();
+    }
+
+    /**
+     * One typed character with the held modifiers: upper case with Shift, its
+     * control code with Ctrl (Ctrl+C is ETX), Esc before it with Alt (the Meta
+     * a real keyboard sends: Alt+B is a word back in bash).
+     */
+    modified(char, latched) {
+        let result = latched.shift ? char.toUpperCase() : char;
+        if (latched.ctrl) {
+            const code = result.toUpperCase().charCodeAt(0);
+            if (code >= 64 && code <= 95) {
+                result = String.fromCharCode(code - 64);
+            } else if (result === " ") {
+                result = "\x00";
+            } else if (result === "?") {
+                result = "\x7f";
+            }
+        }
+
+        return latched.alt ? `\x1b${result}` : result;
+    }
+
+    /** What goes to the shell: straight through with a pty, line by line behind a pipe. */
+    input(data) {
         if (!this.connected) {
             return;
         }
@@ -481,6 +539,36 @@ class Session {
         } catch {
             return false;
         }
+    }
+
+    /**
+     * A key pressed on the row under the pane (ControlKeys), with the Ctrl,
+     * Alt and Shift held for it, sent as the keyboard would send it: the arrows, Home
+     * and End in the form the shell asked for (application cursor mode, as a
+     * full-screen program sets it) or, with a modifier, xterm's CSI 1;m form
+     * (Ctrl+→ is a word to the right); Shift+Tab is the back tab. The focus
+     * goes back on the terminal so typing goes on where it was.
+     */
+    press(name, ctrl, shift, alt) {
+        const modifier = 1 + (shift ? 1 : 0) + (alt ? 2 : 0) + (ctrl ? 4 : 0);
+        const application = this.term.modes?.applicationCursorKeysMode;
+        const cursor = (final) => modifier > 1 ? `\x1b[1;${modifier}${final}` : `${application ? "\x1bO" : "\x1b["}${final}`;
+        const sequence = {
+            Escape: alt ? "\x1b\x1b" : "\x1b",
+            Tab: `${alt ? "\x1b" : ""}${shift ? "\x1b[Z" : "\t"}`,
+            Up: cursor("A"),
+            Down: cursor("B"),
+            Right: cursor("C"),
+            Left: cursor("D"),
+            Home: cursor("H"),
+            End: cursor("F"),
+        }[name];
+        this.latched = shift ? { ctrl: false, shift: true, alt: false } : null;
+        if (sequence) {
+            this.input(sequence);
+        }
+
+        this.term.focus();
     }
 
     /** Types `text` into the shell as if the user had: a terminal job's command line. */
