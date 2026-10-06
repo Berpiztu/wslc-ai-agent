@@ -797,7 +797,7 @@
           "isDesign": false
         }
       },
-      "x": 11,
+      "x": 9,
       "y": 3,
       "elevation": 5
     },
@@ -812,7 +812,7 @@
           "isDesign": false
         }
       },
-      "x": 15,
+      "x": 14,
       "y": 3,
       "elevation": 5
     },
@@ -864,12 +864,13 @@
       "size": "medium"
     },
     "wslc.system-session": {
-      "w": 10,
+      "w": 8,
       "h": 4,
-      "size": "medium",
+      "size": "small",
       "horizontal": "left",
       "x": 1,
-      "y": 3
+      "y": 3,
+      "elevation": 5
     },
     "wslc.host-disk-legend": {
       "w": 11,
