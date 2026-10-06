@@ -1,5 +1,6 @@
 @page "/images"
 @inherits ListPageBase<ImageSummary>
+@inject PullActivity PullsFollowed
 
 <PageShell Title="Images" RequiresSession="true">
     <TopbarSearch>
@@ -122,7 +123,12 @@
     private static readonly TimeSpan PullsEvery = TimeSpan.FromSeconds(1);
 
     private IReadOnlyList<ImagePullState> _pulls = [];
-    private readonly HashSet<string> _reportedFailures = [];
+
+    /// <summary>The pulls whose end this page has said, by image; one running again is said again when it ends.</summary>
+    private readonly HashSet<string> _reportedEnds = [];
+
+    /// <summary>The pulls the agent listed as ended when the page opened are old news: taken as said, not said again on every visit.</summary>
+    private bool _endsSeeded;
 
     /// <summary>Pulls still under way first, over their catalog row or as a pending row of their own.</summary>
     protected override async Task<IReadOnlyList<ImageSummary>> LoadAsync()
@@ -130,6 +136,7 @@
         var response = await Api.GetImagesAsync();
         _aggregate = response.Aggregate;
         _pulls = await Api.GetImagePullsAsync();
+        ReportEndedPulls();
         var pending = _pulls.Where(p => p.State != "success" && !response.Images.Any(row => PullFlow.For([p], row) is not null)).Select(PullFlow.PendingRow);
         var pulling = response.Images.Where(row => PullFlow.For(_pulls, row) is { State: not "success" });
         return [.. pulling, .. pending, .. response.Images.Where(row => PullFlow.For(_pulls, row) is null or { State: "success" })];
@@ -143,8 +150,7 @@
 
     /// <summary>
     /// A running pull is followed every second (the list itself refreshes every five): a
-    /// finished one refreshes the catalog, a failed one is reported once. A cancelled pull
-    /// is not a failure.
+    /// finished one refreshes the catalog, and its end is said once (ReportEndedPulls).
     /// </summary>
     private async Task FollowPullsAsync(CancellationToken cancellationToken)
     {
@@ -169,10 +175,7 @@
                     continue;
                 }
 
-                foreach (var failed in _pulls.Where(p => p.State == "error" && _reportedFailures.Add(p.Image)))
-                {
-                    Activity.Fail($"Pull failed: {failed.Error}");
-                }
+                ReportEndedPulls();
 
                 if (before.Any(p => p.State == "running" && _pulls.FirstOrDefault(n => n.Image == p.Image)?.State != "running"))
                 {
@@ -187,6 +190,41 @@
         catch (OperationCanceledException)
         {
             // The page closed.
+        }
+    }
+
+    /// <summary>
+    /// The end of each pull the agent lists, said once on the activity line:
+    /// pulled, or why it failed. A cancelled pull is not a failure. The ones
+    /// this client asked for are said by <see cref="PullActivity"/> instead, which
+    /// follows them wherever the user goes; these are the rest — a run's, an
+    /// update's, another client's.
+    /// </summary>
+    private void ReportEndedPulls()
+    {
+        if (!_endsSeeded)
+        {
+            _endsSeeded = true;
+            _reportedEnds.UnionWith(_pulls.Where(p => p.State != "running").Select(p => p.Image));
+        }
+
+        foreach (var pull in _pulls)
+        {
+            if (pull.State == "running")
+            {
+                _reportedEnds.Remove(pull.Image);
+            }
+            else if (!PullsFollowed.Follows(pull.Image) && _reportedEnds.Add(pull.Image))
+            {
+                if (pull.State == "success")
+                {
+                    Activity.Done($"{pull.Image} pulled");
+                }
+                else if (pull.State == "error")
+                {
+                    Activity.Fail($"Pull of {pull.Image} failed: {pull.Error}");
+                }
+            }
         }
     }
 

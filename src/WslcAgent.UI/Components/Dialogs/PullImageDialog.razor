@@ -1,8 +1,9 @@
 @* Pull an image by reference: from the header row (empty) or a row's menu
-   (prefilled). The agent runs the pull; the dialog closes at once and the
+   (prefilled). The agent runs the pull; the dialog closes at once, the
+   title bar's activity line says it from its start to its end, and the
    Images table shows its progress, its console and a way to stop it. *@
 @using WslcAgent.ApiClient
-@inject WslcAgentApi Api
+@inject PullActivity Pulls
 
 <FormDialog SubmitText="Pull" BusyText="Starting…" OnSubmit="PullAsync">
     @* In lower case as it is typed: an image name is lower case by rule, and a
@@ -36,5 +37,5 @@
     }
 
     private Task PullAsync() =>
-        Api.StartImagePullAsync(_latest ? $"{ImageReference.RepositoryOf(_reference)}:{ImageReference.Latest}" : _reference, allTags: false);
+        Pulls.StartAsync(_latest ? $"{ImageReference.RepositoryOf(_reference)}:{ImageReference.Latest}" : _reference);
 }
