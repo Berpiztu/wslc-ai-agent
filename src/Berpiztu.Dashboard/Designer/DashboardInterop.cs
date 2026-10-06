@@ -9,6 +9,9 @@ public sealed record ScreenBox(double Left, double Top, double Width, double Hei
     public bool Contains(double x, double y) => x >= Left && x < Left + Width && y >= Top && y < Top + Height;
 }
 
+/// <summary>The room inside a frame as if it showed no scrollbar, and how thick one of its scrollbars is, in CSS pixels.</summary>
+public sealed record FrameRoom(double Width, double Height, double Bar);
+
 /// <summary>
 /// The SDK's JavaScript, and all of it: what only the browser can answer. Where an element stands and how large it
 /// is, when its size changes, whether the window is taller than it is wide
@@ -27,9 +30,9 @@ public sealed class DashboardInterop(IJSRuntime js) : IAsyncDisposable
     public async Task<ScreenBox> MeasureAsync(ElementReference element) =>
         await (await Module).InvokeAsync<ScreenBox>("measure", element);
 
-    /// <summary>The room inside an element, its scrollbars left out; its width and height alone, from no corner.</summary>
-    public async Task<ScreenBox> MeasureInsideAsync(ElementReference element) =>
-        await (await Module).InvokeAsync<ScreenBox>("measureInside", element);
+    /// <summary>The room inside an element as if it showed no scrollbar, and its scrollbars' thickness: the same whether one shows now or not.</summary>
+    public async Task<FrameRoom> MeasureInsideAsync(ElementReference element) =>
+        await (await Module).InvokeAsync<FrameRoom>("measureInside", element);
 
     /// <summary>
     /// Tells <paramref name="turned"/> whether the window is taller than it

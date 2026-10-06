@@ -867,13 +867,13 @@
         var fitted = (Zoom: 1.0, Across: 1.0, Down: 1.0);
         if (!Designing && Framed && extent is { Columns: > 0, Rows: > 0 })
         {
-            // The room inside the frame: fitted to the width, the room for a
-            // scrollbar down is kept aside, and left out of it.
-            var frame = await Interop.MeasureInsideAsync(_frame);
+            // The room inside the frame with no scrollbar, whether one shows
+            // now or not, so a scrollbar coming or going never refits it.
+            var room = await Interop.MeasureInsideAsync(_frame);
             var cell = (await Interop.MeasureAsync(_baseProbe)).Width;
             if (cell > 0)
             {
-                fitted = Fitted(frame.Width / extent.Columns, frame.Height / extent.Rows, cell);
+                fitted = Fitted(room, extent.Columns, extent.Rows, cell);
             }
         }
 
@@ -905,9 +905,17 @@
     /// — the zoom then the smaller, and the cells stretched by how much the
     /// other is larger, across or down —; fluid, no zoom at all and the cells
     /// widened to the one across, their rows as they are.
+    /// A fitting that scrolls one way has the room its scrollbar takes kept
+    /// aside the other way: filling the width (Width, Fluid, Fill when the
+    /// screen is wider than the view) scrolls down, and filling the height
+    /// scrolls across. Seen whole or stretched, nothing scrolls.
     /// </summary>
-    private (double Zoom, double Across, double Down) Fitted(double across, double down, double cell)
+    private (double Zoom, double Across, double Down) Fitted(FrameRoom room, int columns, int rows, double cell)
     {
+        var across = room.Width / columns;
+        var down = room.Height / rows;
+        var acrossBesideBar = (room.Width - room.Bar) / columns;
+        var downAboveBar = (room.Height - room.Bar) / rows;
         switch (Fitting)
         {
             case ViewFit.Stretch when Math.Floor(across) > 0 && Math.Floor(down) > 0:
@@ -915,11 +923,14 @@
                 var smaller = Math.Min(wide, tall);
                 return (smaller / cell, wide / smaller, tall / smaller);
             case ViewFit.Fill:
-                return (Math.Ceiling(Math.Max(across, down)) / cell, 1, 1);
-            case ViewFit.Width when Math.Floor(across) > 0:
-                return (Math.Floor(across) / cell, 1, 1);
-            case ViewFit.Fluid when across > 0:
-                return (1, across / cell, 1);
+                // Where the screen and the view are nearly one shape, the
+                // room kept for the scrollbar would leave a strip: the other
+                // way fills it then, and nothing scrolls.
+                return (Math.Ceiling(across >= down ? Math.Max(acrossBesideBar, down) : Math.Max(downAboveBar, across)) / cell, 1, 1);
+            case ViewFit.Width when Math.Floor(acrossBesideBar) > 0:
+                return (Math.Floor(acrossBesideBar) / cell, 1, 1);
+            case ViewFit.Fluid when acrossBesideBar > 0:
+                return (1, acrossBesideBar / cell, 1);
             default:
                 var whole = Math.Floor(Math.Min(across, down));
                 return (whole > 0 ? whole / cell : 1, 1, 1);

@@ -20,10 +20,28 @@ export function capture(element, pointerId) {
     }
 }
 
-// The room inside the element, its scrollbars left out: what a view fitted to
-// its width has across, once the room for a scrollbar down is kept aside.
+// The room inside the element as if it showed no scrollbar, and how thick one
+// of its scrollbars is: the same answer whether a scrollbar shows right now or
+// not. A view fitted on the room a scrollbar left was refitted when the
+// scrollbar went, grew until it came back, and shook for as long as the window
+// stood at that size.
 export function measureInside(element) {
-    return { left: 0, top: 0, width: element.clientWidth, height: element.clientHeight };
+    const style = getComputedStyle(element);
+    const across = parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth);
+    const down = parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+    return { width: element.offsetWidth - across, height: element.offsetHeight - down, bar: scrollbarOf(element) };
+}
+
+// A scrollbar's thickness as the element draws one: a hidden box of its own
+// classes, which always shows its scrollbars, measured beside it.
+function scrollbarOf(element) {
+    const probe = document.createElement('div');
+    probe.className = element.className;
+    probe.style.cssText = 'position: absolute; top: 0; left: 0; width: 100px; height: 100px; overflow: scroll; visibility: hidden; flex: none; border: 0;';
+    element.parentElement.appendChild(probe);
+    const bar = probe.offsetWidth - probe.clientWidth;
+    probe.remove();
+    return bar;
 }
 
 // That the element's size changed, told to C# once it has stood still a tenth
