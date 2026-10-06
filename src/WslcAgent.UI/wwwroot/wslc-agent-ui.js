@@ -948,6 +948,23 @@ for (const end of ['pointerup', 'pointercancel']) {
     }, true);
 }
 
+// The page itself never scrolls — each screen scrolls inside its own column —
+// but a phone's keyboard can leave it scrolled: the browser lifts the field
+// being typed in above the keyboard, and when the keyboard goes the page stays
+// lifted, the screen shifted and the keyboard's space empty under it. When the
+// visible area grows back, the page is put back at its top.
+if (window.visualViewport) {
+    let wslcViewHeight = window.visualViewport.height;
+    window.visualViewport.addEventListener('resize', () => {
+        const height = window.visualViewport.height;
+        if (height > wslcViewHeight && document.scrollingElement && document.scrollingElement.scrollTop !== 0) {
+            document.scrollingElement.scrollTop = 0;
+        }
+
+        wslcViewHeight = height;
+    });
+}
+
 // The zoom this device chose, read before the first paint so the page does not
 // jump from 100 % to it once Blazor starts.
 function wslcAgentStoredZoom() {

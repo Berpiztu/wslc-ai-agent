@@ -171,7 +171,88 @@ class Session {
         this.term.open(element);
         this.term.onData((data) => this.typed(data));
         this.term.attachCustomKeyEventHandler((event) => this.keyed(event));
+        // Under a keyboard the cursor's line follows the shell as it writes.
+        this.term.onCursorMove(() => {
+            if (this.lifted) {
+                this.lift(this.term.element.parentElement);
+            }
+        });
+        this.followFinger();
         this.observe(element);
+    }
+
+    /**
+     * A finger dragged up or down the pane scrolls the terminal's history, line
+     * by line under the finger, as a list follows it. The emulator takes
+     * touches into its own gesture handling and nothing scrolled on a phone,
+     * where the mouse wheel scrolled on a desktop. The listeners are on the
+     * surface, which goes with the session from pane to pane.
+     */
+    followFinger() {
+        const surface = this.term.element;
+        let lastY = null;
+        let carried = 0;
+        surface.addEventListener("touchstart", (event) => {
+            lastY = event.touches.length === 1 ? event.touches[0].clientY : null;
+            carried = 0;
+        }, { passive: true });
+        surface.addEventListener("touchmove", (event) => {
+            if (lastY === null || event.touches.length !== 1) {
+                return;
+            }
+
+            const y = event.touches[0].clientY;
+            carried += lastY - y;
+            lastY = y;
+            const row = this.rowHeight();
+            const lines = Math.trunc(carried / row);
+            if (lines !== 0) {
+                this.term.scrollLines(lines);
+                carried -= lines * row;
+            }
+
+            // The page under the terminal does not move with it.
+            event.preventDefault();
+        }, { passive: false });
+        surface.addEventListener("touchend", () => {
+            lastY = null;
+        }, { passive: true });
+    }
+
+    /** The pane lost only height, not width, while the shell is being typed in: the phone's keyboard took it. */
+    keyboardTook(pane) {
+        return this.fittedHeight > 0
+            && pane.clientWidth === this.fittedWidth
+            && pane.clientHeight < this.fittedHeight
+            && document.activeElement === this.term.textarea;
+    }
+
+    /**
+     * The terminal at its own size under a keyboard, moved up inside its
+     * pane just enough for the cursor's line to stay in sight; what goes past
+     * the pane's top is hidden until the keyboard goes.
+     */
+    lift(pane) {
+        const style = getComputedStyle(pane);
+        const visible = pane.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+        const cursorBottom = (this.term.buffer.active.cursorY + 1) * this.rowHeight();
+        const offset = Math.max(0, cursorBottom - visible);
+        this.term.element.style.transform = offset > 0 ? `translateY(${-offset}px)` : "";
+        this.lifted = true;
+    }
+
+    /** The keyboard went: the terminal back in its place, at the size it kept. */
+    lower() {
+        if (this.lifted) {
+            this.term.element.style.transform = "";
+            this.lifted = false;
+        }
+    }
+
+    /** One row's height on screen, which the finger is measured in. */
+    rowHeight() {
+        const screen = this.term.element?.querySelector(".xterm-screen");
+        return screen && this.term.rows > 0 ? screen.clientHeight / this.term.rows : 16;
     }
 
     /**
@@ -181,6 +262,8 @@ class Session {
      * laid out yet and left the shell a few columns wide.
      */
     observe(element) {
+        // A new pane is measured afresh, not taken for a keyboard over the last one.
+        this.fittedHeight = 0;
         this.observer?.disconnect();
         this.observer = new ResizeObserver(() => this.refit());
         this.observer.observe(element);
@@ -216,8 +299,23 @@ class Session {
         }
     }
 
-    /** The pane may be hidden (a tab that is not current): nothing to measure. */
+    /**
+     * The terminal sized to its pane, and the shell told. The pane may be
+     * hidden (a tab that is not current): nothing to measure. A pane that only
+     * lost height while the shell is typed in is the phone's keyboard coming up
+     * over it, and the terminal keeps its size (lift): resized, the shell's
+     * console (ConPTY) repainted its screen from the top when the keyboard went
+     * and the rows came back, and the prompt jumped up with an empty half
+     * under it.
+     */
     refit() {
+        const pane = this.term.element?.parentElement;
+        if (pane && this.keyboardTook(pane)) {
+            this.lift(pane);
+            return;
+        }
+
+        this.lower();
         try {
             const size = fontFor(this.term.element?.clientWidth ?? 0);
             if (size !== this.term.options.fontSize) {
@@ -227,6 +325,11 @@ class Session {
             this.fit.fit();
         } catch {
             return;  // Not visible yet.
+        }
+
+        if (pane && pane.clientHeight > 0) {
+            this.fittedWidth = pane.clientWidth;
+            this.fittedHeight = pane.clientHeight;
         }
 
         const { cols, rows } = this.term;

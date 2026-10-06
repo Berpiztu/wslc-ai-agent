@@ -190,7 +190,12 @@ public class MainActivity : MauiAppCompatActivity
                 view.SetPadding(bars.Left, bars.Top, bars.Right, bars.Bottom);
             }
 
-            return insets ?? WindowInsetsCompat.Consumed!;
+            // Consumed here, where they are applied: passed on, the web view
+            // took the keyboard's inset a second time — it shrank its own
+            // visible area and scrolled the page over the padding — and when
+            // the keyboard went the padding left but that scroll stayed, the
+            // terminal shifted and the keyboard's space was left empty.
+            return WindowInsetsCompat.Consumed!;
         }
     }
 }
