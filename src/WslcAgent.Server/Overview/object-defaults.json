@@ -2,7 +2,7 @@
   "landscape": {
     "wslc.charts-card": {
       "w": 26,
-      "h": 27,
+      "h": 28,
       "size": "medium",
       "background": "primaryTint"
     },
@@ -27,21 +27,23 @@
         }
       },
       "x": 13,
-      "y": 14
+      "y": 15
     },
     "wslc.charts-card.wslc.host-network-chart": {
       "w": 13,
       "h": 10,
       "size": "small",
       "x": 13,
-      "y": 17
+      "y": 18
     },
     "wslc.charts-card.wslc.host-network-legend": {
       "w": 7,
       "h": 3,
       "size": "small",
+      "horizontal": "left",
+      "marginX": 5,
       "x": 19,
-      "y": 14
+      "y": 15
     },
     "wslc.charts-card.wslc.host-disk-activity": {
       "w": 6,
@@ -62,19 +64,19 @@
         }
       },
       "x": 0,
-      "y": 14
+      "y": 15
     },
     "wslc.charts-card.wslc.host-disk-legend": {
       "w": 7,
       "h": 3,
       "size": "small",
-      "vertical": "bottom",
+      "horizontal": "left",
       "x": 6,
-      "y": 14
+      "y": 15
     },
     "wslc.charts-card.wslc.host-cpu-activity": {
-      "w": 5,
-      "h": 2,
+      "w": 6,
+      "h": 3,
       "size": "small",
       "parts": {
         "value": {
@@ -94,15 +96,16 @@
       "y": 2
     },
     "wslc.charts-card.wslc.host-cpu-legend": {
-      "w": 8,
-      "h": 2,
+      "w": 7,
+      "h": 3,
       "size": "small",
-      "x": 5,
+      "horizontal": "left",
+      "x": 6,
       "y": 2
     },
     "wslc.charts-card.wslc.host-memory-activity": {
-      "w": 4,
-      "h": 2,
+      "w": 6,
+      "h": 3,
       "size": "small",
       "parts": {
         "label": {
@@ -126,28 +129,30 @@
       "h": 10,
       "size": "small",
       "x": 0,
-      "y": 4
+      "y": 5
     },
     "wslc.charts-card.wslc.host-disk-chart": {
       "w": 13,
       "h": 10,
       "size": "small",
       "x": 0,
-      "y": 17
+      "y": 18
     },
     "wslc.charts-card.wslc.host-memory-chart": {
       "w": 13,
       "h": 10,
       "size": "small",
       "x": 13,
-      "y": 4
+      "y": 5
     },
     "wslc.charts-card.wslc.host-memory-legend": {
-      "w": 9,
-      "h": 2,
+      "w": 7,
+      "h": 3,
       "size": "small",
+      "horizontal": "left",
       "foreground": "tertiary",
-      "x": 17,
+      "marginX": 5,
+      "x": 19,
       "y": 2
     },
     "wslc.host-transfers-title": {
@@ -364,7 +369,7 @@
       "size": "medium"
     },
     "wslc.host-cpu-activity": {
-      "w": 10,
+      "w": 11,
       "h": 4,
       "size": "medium",
       "parts": {
@@ -377,7 +382,7 @@
       "y": 0
     },
     "wslc.host-memory-activity": {
-      "w": 10,
+      "w": 11,
       "h": 4,
       "size": "medium",
       "parts": {
@@ -390,17 +395,21 @@
       "y": 0
     },
     "wslc.host-disk-legend": {
-      "w": 10,
+      "w": 11,
       "h": 4,
       "size": "medium",
-      "x": 12,
+      "horizontal": "left",
+      "marginX": 5,
+      "x": 11,
       "y": 0
     },
     "wslc.host-network-legend": {
       "w": 10,
       "h": 4,
       "size": "medium",
-      "x": 12,
+      "horizontal": "left",
+      "marginX": 20,
+      "x": 11,
       "y": 0
     },
     "wslc.system-session": {
@@ -416,12 +425,41 @@
       "size": "medium",
       "x": 26,
       "y": 4
+    },
+    "wslc.host-memory-legend": {
+      "w": 11,
+      "h": 4,
+      "size": "medium",
+      "horizontal": "left",
+      "x": 11,
+      "y": 0
+    },
+    "wslc.host-disk-activity": {
+      "w": 11,
+      "h": 4,
+      "size": "medium",
+      "x": 0,
+      "y": 0
+    },
+    "wslc.host-network-activity": {
+      "w": 11,
+      "h": 4,
+      "size": "medium",
+      "x": 0,
+      "y": 0
+    },
+    "wslc.host-cpu-legend": {
+      "w": 11,
+      "h": 4,
+      "size": "medium",
+      "x": 11,
+      "y": 0
     }
   },
   "portrait": {
     "wslc.charts-card": {
       "w": 24,
-      "h": 23,
+      "h": 24,
       "size": "medium",
       "background": "primaryTint"
     },
@@ -430,7 +468,7 @@
       "h": 8,
       "size": "small",
       "x": 12,
-      "y": 15
+      "y": 16
     },
     "wslc.charts-card.wslc.host-network-activity": {
       "w": 6,
@@ -451,14 +489,14 @@
         }
       },
       "x": 12,
-      "y": 12
+      "y": 13
     },
     "wslc.charts-card.wslc.host-disk-chart": {
       "w": 12,
       "h": 8,
       "size": "small",
       "x": 0,
-      "y": 15
+      "y": 16
     },
     "wslc.charts-card.wslc.host-disk-activity": {
       "w": 6,
@@ -479,25 +517,29 @@
         }
       },
       "x": 0,
-      "y": 12
+      "y": 13
     },
     "wslc.charts-card.wslc.host-disk-legend": {
       "w": 6,
       "h": 3,
       "size": "small",
+      "horizontal": "left",
+      "marginX": 5,
       "x": 6,
-      "y": 12
+      "y": 13
     },
     "wslc.charts-card.wslc.host-network-legend": {
       "w": 6,
       "h": 3,
       "size": "small",
+      "horizontal": "left",
+      "marginX": 5,
       "x": 18,
-      "y": 12
+      "y": 13
     },
     "wslc.charts-card.wslc.host-cpu-activity": {
       "w": 6,
-      "h": 2,
+      "h": 3,
       "size": "small",
       "parts": {
         "label": {
@@ -518,14 +560,15 @@
     },
     "wslc.charts-card.wslc.host-cpu-legend": {
       "w": 6,
-      "h": 2,
+      "h": 3,
       "size": "small",
+      "horizontal": "left",
       "x": 6,
       "y": 2
     },
     "wslc.charts-card.wslc.host-memory-activity": {
-      "w": 4,
-      "h": 2,
+      "w": 6,
+      "h": 3,
       "size": "small",
       "parts": {
         "label": {
@@ -545,10 +588,11 @@
       "y": 2
     },
     "wslc.charts-card.wslc.host-memory-legend": {
-      "w": 8,
-      "h": 2,
+      "w": 6,
+      "h": 3,
       "size": "small",
-      "x": 16,
+      "horizontal": "left",
+      "x": 18,
       "y": 2
     },
     "wslc.charts-card.wslc.host-memory-chart": {
@@ -556,14 +600,14 @@
       "h": 8,
       "size": "small",
       "x": 12,
-      "y": 4
+      "y": 5
     },
     "wslc.charts-card.wslc.host-cpu-chart": {
       "w": 12,
       "h": 8,
       "size": "small",
       "x": 0,
-      "y": 4
+      "y": 5
     },
     "wslc.host-transfers-title": {
       "w": 24,
@@ -730,7 +774,7 @@
       "y": 1
     },
     "wslc.system-kernel": {
-      "w": 4,
+      "w": 3,
       "h": 2,
       "size": "small",
       "parts": {
@@ -753,7 +797,7 @@
           "isDesign": false
         }
       },
-      "x": 9,
+      "x": 11,
       "y": 3,
       "elevation": 5
     },
@@ -768,7 +812,7 @@
           "isDesign": false
         }
       },
-      "x": 13,
+      "x": 15,
       "y": 3,
       "elevation": 5
     },
@@ -783,20 +827,20 @@
           "isDesign": false
         }
       },
-      "x": 17,
+      "x": 19,
       "y": 3,
       "elevation": 5
     },
     "wslc.system-events": {
-      "w": 4,
+      "w": 3,
       "h": 2,
       "size": "small",
       "horizontal": "left",
-      "x": 17,
+      "x": 20,
       "y": 1
     },
     "wslc.system-card": {
-      "w": 22,
+      "w": 24,
       "h": 8,
       "size": "medium",
       "background": "primaryTint"
@@ -820,11 +864,121 @@
       "size": "medium"
     },
     "wslc.system-session": {
-      "w": 8,
+      "w": 10,
       "h": 4,
       "size": "medium",
+      "horizontal": "left",
       "x": 1,
       "y": 3
+    },
+    "wslc.host-disk-legend": {
+      "w": 11,
+      "h": 4,
+      "size": "medium",
+      "horizontal": "left",
+      "marginX": 5,
+      "x": 13,
+      "y": 0
+    },
+    "wslc.host-cpu-activity": {
+      "w": 13,
+      "h": 4,
+      "size": "medium",
+      "x": 0,
+      "y": 0
+    },
+    "wslc.host-cpu-legend": {
+      "w": 11,
+      "h": 4,
+      "size": "medium",
+      "x": 13,
+      "y": 0
+    },
+    "wslc.host-cpu-chart": {
+      "w": 24,
+      "h": 16,
+      "size": "medium",
+      "x": 0,
+      "y": 4
+    },
+    "wslc.host-memory-activity": {
+      "w": 12,
+      "h": 4,
+      "size": "medium",
+      "x": 0,
+      "y": 0
+    },
+    "wslc.host-memory-legend": {
+      "w": 12,
+      "h": 4,
+      "size": "medium",
+      "horizontal": "left",
+      "x": 12,
+      "y": 0
+    },
+    "wslc.host-memory-chart": {
+      "w": 24,
+      "h": 18,
+      "size": "medium",
+      "x": 0,
+      "y": 4
+    },
+    "wslc.host-disk-activity": {
+      "w": 13,
+      "h": 4,
+      "size": "medium",
+      "x": 0,
+      "y": 0
+    },
+    "wslc.host-disk-chart": {
+      "w": 24,
+      "h": 16,
+      "size": "small",
+      "x": 0,
+      "y": 4
+    },
+    "wslc.host-network-activity": {
+      "w": 13,
+      "h": 4,
+      "size": "medium",
+      "x": 0,
+      "y": 0
+    },
+    "wslc.host-network-legend": {
+      "w": 11,
+      "h": 4,
+      "size": "medium",
+      "horizontal": "left",
+      "marginX": 25,
+      "x": 13,
+      "y": 0
+    },
+    "wslc.host-network-chart": {
+      "w": 24,
+      "h": 16,
+      "size": "medium",
+      "x": 0,
+      "y": 4
+    },
+    "wslc.cpu-chart-card": {
+      "w": 24,
+      "h": 20,
+      "size": "medium"
+    },
+    "wslc.memory-chart-card": {
+      "w": 24,
+      "h": 22,
+      "size": "medium"
+    },
+    "wslc.disk-chart-card": {
+      "w": 24,
+      "h": 20,
+      "size": "medium"
+    },
+    "wslc.network-chart-card": {
+      "w": 24,
+      "h": 20,
+      "size": "medium"
     }
   }
 }
