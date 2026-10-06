@@ -435,6 +435,14 @@ window.wslcAgent = {
         return window.matchMedia('(pointer: coarse)').matches;
     },
 
+    // Tells .NET each time the page goes out of sight or comes back into it: a
+    // phone's app put in the background and opened again, a tab left and found.
+    watchVisibility(receiver) {
+        document.addEventListener('visibilitychange', () => {
+            receiver.invokeMethodAsync('VisibilityChanged', document.visibilityState === 'visible');
+        });
+    },
+
     // How wide a text is in ems, in the font and letter spacing of the element
     // it will be shown in: what lets a field size its text to fit exactly,
     // instead of assuming every letter as wide as the widest. Measured once

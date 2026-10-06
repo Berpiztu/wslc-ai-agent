@@ -275,15 +275,63 @@ else
         }
     }
 
-    /// <summary>The safety net for a host whose page helpers were not up when the layout asked: by the first render they are.</summary>
+    /// <summary>
+    /// The safety net for a host whose page helpers were not up when the layout
+    /// asked: by the first render they are. And from then on the page says when
+    /// it goes out of sight and comes back (<see cref="VisibilityChanged"/>).
+    /// </summary>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && !_deviceRead)
+        if (!firstRender)
+        {
+            return;
+        }
+
+        if (!_deviceRead)
         {
             await ReadDeviceAsync();
             StateHasChanged();
         }
+
+        try
+        {
+            _self = DotNetObjectReference.Create(this);
+            await Js.InvokeVoidAsync("wslcAgent.watchVisibility", _self);
+        }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException)
+        {
+            // No page helpers: the grace then runs as it would on a desktop that never hides.
+        }
     }
+
+    private DotNetObjectReference<MainLayout>? _self;
+
+    /// <summary>The page is out of sight: a silence then is the background's, not the agent's.</summary>
+    private bool _hidden;
+
+    /// <summary>
+    /// The page went out of sight or came back. A phone's app in the
+    /// background loses its connection and its grace ran out there, so it came
+    /// back to the veil for the second it took to reconnect. Back in sight, the
+    /// grace starts again, "Reconnecting" is said, and the agent is asked at
+    /// once instead of at the next probe.
+    /// </summary>
+    [JSInvokable]
+    public Task VisibilityChanged(bool visible) => InvokeAsync(async () =>
+    {
+        _hidden = !visible;
+        if (!visible || !LinkOff)
+        {
+            return;
+        }
+
+        _grace?.Cancel();
+        _graceOver = false;
+        _reconnecting ??= Activity.Begin("Reconnecting to the agent");
+        _ = GraceAsync(_grace = new CancellationTokenSource());
+        StateHasChanged();
+        await NoteBuildAsync();
+    });
 
     /// <summary>A call was refused: sign in, then come back to this page.</summary>
     private void OnSignInRequired() => InvokeAsync(GoToLogin);
@@ -406,7 +454,9 @@ else
             return;
         }
 
-        if (LinkOff)
+        // Out of sight the grace does not run out: the page shows the veil only
+        // to someone looking at it, and counts again when it is back (VisibilityChanged).
+        if (LinkOff && !_hidden)
         {
             _graceOver = true;
             _reconnecting?.Dispose();
@@ -487,6 +537,7 @@ else
         Compatibility.Changed -= OnChromeChanged;
         Link.Changed -= OnLinkChanged;
         _grace?.Cancel();
+        _self?.Dispose();
         _reconnecting?.Dispose();
         Errors.Reported -= OnUnhandled;
         Session.SignInRequired -= OnSignInRequired;
