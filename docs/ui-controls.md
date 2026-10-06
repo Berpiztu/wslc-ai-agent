@@ -372,9 +372,19 @@ Body lines are `Typo.body2` with the label in bold; secondary lines
 ## Feedback
 
 - Load errors: `<MudAlert Severity="Severity.Error" Class="mb-2 flex-shrink-0">@_error</MudAlert>` above the grid.
+- What the user's own verbs do is said on the title bar's second line
+  (`ActivityLine`, drawn by `ActivityLineView`), never in a toast that covers
+  the bar: `var work = Activity.Begin("Stopping web")` while it runs (a
+  spinner, and "+n" when others run beside it; `work.Set` repaints it:
+  "Removing 2 of 5"), then `work.Done($"{name}: {verb} ok", verb)` for 3
+  seconds in its button's colour, or `work.Fail($"{name}: {verb} failed.
+  {ex.Message}")` in red until it is closed or the next verb starts, with
+  Copy, a cross and the whole text in a dialog on a click. `Activity.Say` is a
+  note about a verb that did not run, `Activity.Fail` a failure before one
+  could. With nothing to say the line is the page's search or subtitle.
+  Toasts stay for what does not answer a click on the page: dialogs' own
+  results, the agent's and the client's updates, unexpected errors.
 - Toasts appear top right, over the title bar: its height (36px), the application's body type, sliding in from the edge (position set once in `AddWslcAgentUi`, the rest in `wslc-agent-ui.css`). Held in the hand they come down under the title bar, across the top, the same toast (`Toasts`; the bottom edge is the status bar).
-- Action results: `Snackbar.Add($"{name}: {verb} ok", Severity.Success)` and
-  `Snackbar.Add($"{name}: {verb} failed. {ex.Message}", Severity.Error)`.
 - Confirmations: `DialogFlow.ConfirmAsync(Dialogs, "Remove container", "Remove {name} ({id})? This cannot be undone.", "Remove", destructive: true)` (`ConfirmRemoveAsync` for removals); the yes text is the verb, drawn in `Color.Error` when destructive and `Color.Primary` otherwise; never MudBlazor's message box.
 - Picker dialogs (`NamedPickerDialog`, `HostFolderPickerDialog`), one
   composition: compact (`DialogFlow.PickAsync`, no close cross),

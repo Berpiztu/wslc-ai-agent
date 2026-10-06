@@ -13,7 +13,7 @@ namespace WslcAgent.UI.Components;
 /// What changes is published through <see cref="SessionState"/>, which every
 /// screen listens to.
 /// </summary>
-public sealed class SessionPower(WslcAgentApi api, ISnackbar snackbar, SessionState state, AgentChanges changes)
+public sealed class SessionPower(WslcAgentApi api, ISnackbar snackbar, ActivityLine activity, SessionState state, AgentChanges changes)
 {
     private Task? _first;
 
@@ -170,15 +170,17 @@ public sealed class SessionPower(WslcAgentApi api, ISnackbar snackbar, SessionSt
 
     public async Task SelectAsync(string name)
     {
+        var work = activity.Begin($"Selecting {name}");
         try
         {
             await api.SelectSessionAsync(name);
             Selected = name;
             await LoadAsync();
+            work.Done($"{name} selected");
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
         {
-            snackbar.Add($"Select session: {ex.Message}", Severity.Error);
+            work.Fail($"Select session: {ex.Message}");
         }
     }
 
@@ -214,6 +216,8 @@ public sealed class SessionPower(WslcAgentApi api, ISnackbar snackbar, SessionSt
         var title = stopping ? $"{label} did not stop" : $"{label} did not start";
         string? failure = null;
         Busy = true;
+        // The veil says each step while the verb lasts; the line says how it ended.
+        var work = activity.Begin(stopping ? $"Stopping {label}" : $"Starting {label}");
         try
         {
             SetPhase(stopping
@@ -231,7 +235,7 @@ public sealed class SessionPower(WslcAgentApi api, ISnackbar snackbar, SessionSt
             }
             else
             {
-                snackbar.Add(stopping ? $"{label} stopped." : $"{label} started.", Severity.Success);
+                work.Done(stopping ? $"{label} stopped." : $"{label} started.", stopping ? "stop" : "start");
             }
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException or TaskCanceledException)
@@ -248,6 +252,8 @@ public sealed class SessionPower(WslcAgentApi api, ISnackbar snackbar, SessionSt
 
         if (failure is not null)
         {
+            // A failure here is a dialog with what to do about it, not a line.
+            work.Quiet();
             await reportFailure(title, failure, stopping
                 ? "The session may be stuck, and its containers may not answer until it is cleared: wsl --shutdown, or a restart of Windows. The session line shows what wslc reports now."
                 : "The session line shows what wslc reports now. The agent's log has the wslc output.");

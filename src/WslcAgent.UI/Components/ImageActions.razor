@@ -115,23 +115,16 @@
 
     private async Task PushAsync()
     {
-        var pushing = Snackbar.Add("Pushing image...", Severity.Info, o => o.RequireInteraction = true);
+        var work = Activity.Begin($"Pushing {Image.Reference}");
         try
         {
             await Api.PushImageAsync(Image.Reference);
-            Snackbar.Add("Image pushed", Severity.Success);
+            work.Done($"{Image.Reference} pushed");
             await Changed.InvokeAsync();
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
         {
-            Snackbar.Add(ex.Message.Length > 0 ? ex.Message : "Failed to push image", Severity.Error);
-        }
-        finally
-        {
-            if (pushing is not null)
-            {
-                Snackbar.Remove(pushing);
-            }
+            work.Fail(ex.Message.Length > 0 ? ex.Message : "Failed to push image");
         }
     }
 
@@ -162,14 +155,15 @@
             return;
         }
 
+        var work = Activity.Begin($"Saving {Image.Reference}");
         try
         {
             var saved = await Api.SaveImageAsync(Image.Reference, output);
-            Snackbar.Add($"Image saved to {saved.Path}", Severity.Success);
+            work.Done($"Image saved to {saved.Path}");
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
         {
-            Snackbar.Add(ex.Message.Length > 0 ? ex.Message : "Failed to save image", Severity.Error);
+            work.Fail(ex.Message.Length > 0 ? ex.Message : "Failed to save image");
         }
     }
 

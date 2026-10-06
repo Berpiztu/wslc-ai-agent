@@ -65,6 +65,7 @@ public static class UiServiceCollectionExtensions
         services.AddScoped<PageChrome>();
         services.AddScoped<HostDevice>();
         services.AddScoped<BusyRows>();
+        services.AddScoped<ActivityLine>();
         services.AddScoped<OpenPopups>();
         services.AddScoped<SessionState>();
         services.AddScoped<SessionPower>();

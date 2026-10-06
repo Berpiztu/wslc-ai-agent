@@ -44,23 +44,22 @@
 
     /// <summary>An imported image is named after what is typed in the search box.</summary>
     private Task ImportArchiveAsync(IBrowserFile? file) =>
-        ArchiveAsync(file, "Importing image...", async (content, name) =>
+        ArchiveAsync(file, "Importing image", async (content, name) =>
         {
             await Api.ImportImageAsync(content, name, Search.Trim());
-            Snackbar.Add("Image imported", Severity.Success);
             await SearchChanged.InvokeAsync("");
+            return "Image imported";
         });
 
     private Task LoadArchiveAsync(IBrowserFile? file) =>
-        ArchiveAsync(file, "Loading image archive...", async (content, name) =>
+        ArchiveAsync(file, "Loading image archive", async (content, name) =>
         {
             var loaded = (await Api.LoadImagesAsync(content, name)).Loaded;
-            Snackbar.Add(
-                loaded.Count == 0 ? "Image loaded" : $"Loaded: {string.Join(", ", loaded.Take(3))}{(loaded.Count > 3 ? $" (+{loaded.Count - 3} more)" : "")}",
-                Severity.Success);
+            return loaded.Count == 0 ? "Image loaded" : $"Loaded: {string.Join(", ", loaded.Take(3))}{(loaded.Count > 3 ? $" (+{loaded.Count - 3} more)" : "")}";
         });
 
-    private async Task ArchiveAsync(IBrowserFile? file, string progress, Func<Stream, string, Task> send)
+    /// <summary>Sends an archive the user picked; <paramref name="send"/> answers what the line says once it is in.</summary>
+    private async Task ArchiveAsync(IBrowserFile? file, string progress, Func<Stream, string, Task<string>> send)
     {
         if (file is null)
         {
@@ -68,23 +67,18 @@
         }
 
         _archiveBusy = true;
-        var note = Snackbar.Add(progress, Severity.Info, options => options.RequireInteraction = true);
+        var work = Activity.Begin(progress);
         try
         {
             await using var content = file.OpenReadStream(MaxArchiveBytes);
-            await send(content, file.Name);
+            work.Done(await send(content, file.Name));
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException or IOException)
         {
-            Snackbar.Add(ex.Message, Severity.Error);
+            work.Fail(ex.Message);
         }
         finally
         {
-            if (note is not null)
-            {
-                Snackbar.Remove(note);
-            }
-
             _archiveBusy = false;
         }
 

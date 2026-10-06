@@ -171,7 +171,7 @@
 
                 foreach (var failed in _pulls.Where(p => p.State == "error" && _reportedFailures.Add(p.Image)))
                 {
-                    Snackbar.Add($"Pull failed: {failed.Error}", Severity.Error);
+                    Activity.Fail($"Pull failed: {failed.Error}");
                 }
 
                 if (before.Any(p => p.State == "running" && _pulls.FirstOrDefault(n => n.Image == p.Image)?.State != "running"))

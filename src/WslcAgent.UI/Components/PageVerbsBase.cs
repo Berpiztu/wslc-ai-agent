@@ -20,20 +20,23 @@ public abstract class PageVerbsBase : ComponentBase
 
     [Inject] protected IDialogService Dialogs { get; set; } = default!;
 
+    [Inject] protected ActivityLine Activity { get; set; } = default!;
+
     /// <summary>Raised after a verb that may have changed the family.</summary>
     [Parameter] public EventCallback Changed { get; set; }
 
-    /// <summary>A page-level verb (prune, create…): runs, reports, refreshes.</summary>
+    /// <summary>A page-level verb (prune, create…): runs, says so on the title bar's activity line, refreshes.</summary>
     protected async Task RunAsync(string what, string verb, Func<CancellationToken, Task> action)
     {
+        var work = Activity.Begin($"{VerbWords.Gerund(verb)} {what}");
         try
         {
             await action(CancellationToken.None);
-            Snackbar.Add($"{what}: {verb} ok", Severity.Success);
+            work.Done($"{what}: {verb} ok", verb);
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
         {
-            Snackbar.Add($"{what}: {verb} failed. {ex.Message}", Severity.Error);
+            work.Fail($"{what}: {verb} failed. {ex.Message}");
         }
 
         await Changed.InvokeAsync();

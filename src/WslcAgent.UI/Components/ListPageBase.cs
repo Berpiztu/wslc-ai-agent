@@ -46,6 +46,8 @@ public abstract class ListPageBase<TItem> : ComponentBase, IDisposable
 
     [Inject] protected IDialogService Dialogs { get; set; } = default!;
 
+    [Inject] protected ActivityLine Activity { get; set; } = default!;
+
     [Inject] private OpenPopups Popups { get; set; } = default!;
 
     [Inject] private SessionState Session { get; set; } = default!;
@@ -460,9 +462,9 @@ public abstract class ListPageBase<TItem> : ComponentBase, IDisposable
 
     /// <summary>
     /// Runs one verb on every selected row:
-    /// one toast for the whole batch, counting itself up in place ("Stopping 2
-    /// of 5") instead of a new toast per row, and one summary at the end — the
-    /// count that went through, or the failures, the first five of them named.
+    /// one line on the title bar for the whole batch, counting itself up in
+    /// place ("Stopping 2 of 5"), and one summary at the end — the count that
+    /// went through, or the failures, the first five of them named.
     /// </summary>
     protected async Task BulkAsync(string verb, Func<TItem, CancellationToken, Task> action)
     {
@@ -473,21 +475,10 @@ public abstract class ListPageBase<TItem> : ComponentBase, IDisposable
         }
 
         var failures = new List<string>();
-        var progress = new LiveProgress();
-        progress.Set($"{Gerund(verb)} 1 of {items.Count}");
-        var toast = Snackbar.Add(
-            builder =>
-            {
-                builder.OpenComponent<LiveProgressToast>(0);
-                builder.AddComponentParameter(1, nameof(LiveProgressToast.Progress), progress);
-                builder.CloseComponent();
-            },
-            Severity.Info,
-            options => options.RequireInteraction = true);
-
+        var work = Activity.Begin($"{VerbWords.Gerund(verb)} 1 of {items.Count}");
         for (var index = 0; index < items.Count; index++)
         {
-            progress.Set($"{Gerund(verb)} {index + 1} of {items.Count}");
+            work.Set($"{VerbWords.Gerund(verb)} {index + 1} of {items.Count}");
             try
             {
                 await action(items[index], CancellationToken.None);
@@ -498,38 +489,22 @@ public abstract class ListPageBase<TItem> : ComponentBase, IDisposable
             }
         }
 
-        // The batch is over: its line goes, and the summary takes its place.
-        toast?.ForceClose();
+        // The batch is over: the summary takes its line's place.
         if (failures.Count == 0)
         {
-            Snackbar.Add($"{items.Count} item(s) {PastTense(verb)}", Severity.Success);
+            work.Done($"{items.Count} item(s) {VerbWords.PastTense(verb)}", verb);
         }
         else
         {
             var head = failures.Count == items.Count
                 ? $"All {items.Count} {verb} action(s) failed"
                 : $"{failures.Count}/{items.Count} {verb} action(s) failed";
-            Snackbar.Add($"{head}\n{string.Join("\n", failures.Take(5))}", Severity.Error);
+            work.Fail($"{head}\n{string.Join("\n", failures.Take(5))}");
         }
 
         Selected.Clear();
         await RefreshAsync();
     }
-
-    private static string PastTense(string verb) => verb switch
-    {
-        "stop" => "stopped",
-        _ when verb.EndsWith('e') => verb + "d",
-        _ => verb + "ed",
-    };
-
-    /// <summary>What the batch is doing right now: Starting, Stopping, Removing.</summary>
-    private static string Gerund(string verb) => verb switch
-    {
-        "stop" => "Stopping",
-        _ when verb.EndsWith('e') => char.ToUpperInvariant(verb[0]) + verb[1..^1] + "ing",
-        _ => char.ToUpperInvariant(verb[0]) + verb[1..] + "ing",
-    };
 
     /// <summary>Removes the selection after one confirmation.</summary>
     protected async Task BulkRemoveAsync(string kind, Func<TItem, CancellationToken, Task> remove)

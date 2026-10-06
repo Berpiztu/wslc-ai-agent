@@ -319,7 +319,7 @@ table's `StateDot` pulses in place and the card shows its line; pages pass
 
 One `<Resource>Actions` component per resource, all deriving from
 `EntityActionsBase` (`Components/EntityActionsBase.cs`), which owns `Api`,
-`Busy`, `RunAsync` (verb + snackbar + `Changed`), `RemoveAsync` (confirm,
+`Busy`, `RunAsync` (verb + activity line + `Changed`), `RemoveAsync` (confirm,
 then remove) and `OpenAsync<TDialog>`. The same row of small icon buttons
 serves the table's Actions column and the card footer, in this
 order: containers [start or stop] [⋮] [remove]; images [＋] [▶] [⋮] [remove];
@@ -341,8 +341,8 @@ Export JSON (`/containers/{id}/inspect.json` download) · Backup
 ## 5. Data and behaviour
 
 - Load through `WslcAgentApi` only; catch `AgentApiException` and
-  `HttpRequestException`, show them in a `MudAlert` (load) or a snackbar
-  (actions).
+  `HttpRequestException`, show them in a `MudAlert` (load) or on the title
+  bar's activity line (actions, `ActivityLine`).
 - Poll every 5 seconds with a `PeriodicTimer`, cancelled in `Dispose`. A tick
   is skipped while a row menu is open (`OpenPopups`, fed by the menus'
   `OpenChanged` through `EntityActionsBase.MenuOpenChanged`): the refresh

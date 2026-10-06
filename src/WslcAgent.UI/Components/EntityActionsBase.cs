@@ -7,7 +7,7 @@ namespace WslcAgent.UI.Components;
 /// <summary>
 /// What every row-actions component shares: a busy flag while a verb runs
 /// (also published to <see cref="BusyRows"/> so the row's dot and card show
-/// it), snackbar reporting, the removal confirmation, dialogs, and the
+/// it), reporting on the title bar's activity line, the removal confirmation, dialogs, and the
 /// <see cref="Changed"/> callback the page refreshes on.
 /// </summary>
 public abstract class EntityActionsBase : ComponentBase
@@ -19,6 +19,8 @@ public abstract class EntityActionsBase : ComponentBase
     [Inject] protected IDialogService Dialogs { get; set; } = default!;
 
     [Inject] private BusyRows Rows { get; set; } = default!;
+
+    [Inject] protected ActivityLine Activity { get; set; } = default!;
 
     [Inject] private OpenPopups Popups { get; set; } = default!;
 
@@ -39,15 +41,16 @@ public abstract class EntityActionsBase : ComponentBase
     protected async Task RunAsync(string what, string verb, Func<CancellationToken, Task> action)
     {
         SetBusy(true);
+        var work = Activity.Begin($"{VerbWords.Gerund(verb)} {what}");
         try
         {
             await action(CancellationToken.None);
-            VerbToast.Done(Snackbar, $"{what}: {verb} ok", verb);
+            work.Done($"{what}: {verb} ok", verb);
             await Changed.InvokeAsync();
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
         {
-            Snackbar.Add($"{what}: {verb} failed. {ex.Message}", Severity.Error);
+            work.Fail($"{what}: {verb} failed. {ex.Message}");
         }
         finally
         {

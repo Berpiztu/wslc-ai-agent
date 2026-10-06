@@ -925,7 +925,26 @@
    page — its title and status over its search — and at the right the verbs
    and the client's controls. The title gives way (ellipsis) and the verbs
    keep their width. */
+/* One height for the title bar at every width: the theme's 72px. MudBlazor
+   takes an eighth off below 600px and a quarter off a phone held sideways,
+   from the bar and from the page under it alike, and the bar changed height
+   as the window changed width. */
+.mud-appbar .mud-toolbar-appbar {
+    height: var(--mud-appbar-height);
+}
+
+.mud-main-content {
+    padding-top: var(--mud-appbar-height);
+}
+
+/* The bar's three columns stand on the same two lines at every width: the
+   name, the page title and the agent's address on a 22px line; the session,
+   the search (or subtitle, or activity) and the zoom on a field's line, the
+   field's 26px and the 4px a dense field keeps above and below it. Only the
+   type steps down when the width is short (below), never a line's height. */
 .wslc-appbar-row {
+    --wslc-bar-line: 22px;
+    --wslc-bar-field-line: calc(var(--wslc-field-h, 26px) + 8px);
     flex: 1 1 auto;
     min-width: 0;
     display: grid;
@@ -945,13 +964,13 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: 2px;
 }
 
 .wslc-appbar-page-title {
     display: flex;
     align-items: center;
     min-width: 0;
+    height: var(--wslc-bar-line);
 }
 
 .wslc-appbar-page > .wslc-appbar-search {
@@ -980,6 +999,7 @@
     flex: 0 0 auto;
     display: grid;
     grid-template-columns: max-content max-content;
+    grid-template-rows: var(--wslc-bar-line) var(--wslc-bar-field-line);
     align-items: center;
     row-gap: 0;
     column-gap: 4px;
@@ -1098,6 +1118,7 @@
     flex: 0 0 auto;
     display: grid;
     grid-template-columns: auto auto;
+    grid-template-rows: var(--wslc-bar-line) var(--wslc-bar-field-line);
     align-items: center;
     justify-items: center;
 }
@@ -1217,6 +1238,17 @@
         calc((100cqi - 22px) / var(--wslc-session-ems, 8.4)));
 }
 
+/* In the title bar the cap is the application's name above the field (h6,
+   the default size on a phone), not body2: the name is as wide as the column,
+   and body2 left a third of it empty (measured at 1400px: 11.52px shown where
+   95.8px over 6.03em fit 15.9px). The session never reads larger than the
+   name. */
+.wslc-appbar-row .wslc-session-select .mud-input > .mud-input-slot.mud-input-root-filled.mud-input-root-margin-dense {
+    font-size: min(
+        var(--mud-typography-h6-size),
+        calc((100cqi - 22px) / var(--wslc-session-ems, 8.4)));
+}
+
 .wslc-session-select .mud-input > .mud-input-adornment {
     height: 100%;
     margin-top: 0;
@@ -1246,8 +1278,7 @@
 }
 
 @media (max-width: 600px) {
-    .wslc-topnav .mud-input,
-    .wslc-appbar-search .mud-input {
+    .wslc-topnav .mud-input {
         height: 24px;
     }
 }
@@ -1335,6 +1366,41 @@
     white-space: nowrap;
 }
 
+/* The title bar's second line while a verb has something to say
+   (ActivityLineView): the spinner, the text cut with an ellipsis, and a
+   failure's Copy and cross, as high as the search box it stands in for. */
+.wslc-appbar-page > .wslc-activity {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    height: var(--wslc-bar-field-line);
+}
+
+.wslc-activity > .wslc-activity-spinner {
+    flex: none;
+}
+
+.wslc-activity .wslc-activity-text {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 400;
+}
+
+.wslc-activity > .wslc-activity-failure {
+    flex: 0 1 auto;
+    min-width: 0;
+    cursor: pointer;
+}
+
+.wslc-activity > .mud-icon-button {
+    flex: none;
+    padding: 2px;
+}
+
 /* The page's second line when it has no search, as high as the search box
    would be (the field's height and the 4px a dense field keeps above and
    below it), so the title stands on the first line on every page, and one
@@ -1343,8 +1409,8 @@
 .wslc-appbar-page > .wslc-appbar-subtitle {
     display: block;
     font-weight: 400;
-    height: calc(var(--wslc-field-h, 26px) + 8px);
-    line-height: calc(var(--wslc-field-h, 26px) + 8px);
+    height: var(--wslc-bar-field-line);
+    line-height: var(--wslc-bar-field-line);
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1395,7 +1461,6 @@
     }
 
     .wslc-appbar-client .wslc-zoom .mud-input {
-        height: 22px;
         font-size: var(--wslc-typography-tiny-size);
     }
 
@@ -1415,8 +1480,8 @@
     }
 
     /* The page's column closer to the session block, and its search box all
-       of the column's width, its text, glyph and height those of the zoom's
-       field beside it: at the desktop's sizes
+       of the column's width, its text and glyph those of the zoom's field
+       beside it: at the desktop's sizes
        the box was mostly its own padding and the fitter left it 7rem wide. The
        fitter's narrow step is overridden too: here the box takes what the
        column has, however much that is. */
@@ -1430,7 +1495,6 @@
     }
 
     .wslc-appbar-row .wslc-appbar-search .mud-input {
-        height: 22px;
         font-size: var(--mud-typography-overline-size);
     }
 
@@ -1442,29 +1506,22 @@
         padding: 2px;
     }
 
-    /* The page's column on the client grid's two 22px rows, as one grid, the
-       title beside the theme and Log out and the search box level with the
-       zoom: 44px, no gap, and none of the field's own 4px margin, which set
-       the box 2.5px above the zoom. Its glyph and text keep 4px from the box's
-       edges and 2px from each other instead of the desktop's 12px and 8px. */
-    .wslc-appbar-row .wslc-appbar-page {
-        gap: 0;
-    }
+    /* The search box's glyph and text keep 4px from the box's edges and 2px
+       from each other instead of the desktop's 12px and 8px. */
 
-    .wslc-appbar-row .wslc-appbar-page-title,
-    .wslc-appbar-row .wslc-appbar-page > .wslc-appbar-search {
-        height: 22px;
-    }
-
-    /* The subtitle on the second 22px row, where the search box stands, at the title's size here. */
-    .wslc-appbar-row .wslc-appbar-page > .wslc-appbar-subtitle {
-        height: 22px;
-        line-height: 22px;
+    /* The activity at the title's size here. */
+    .wslc-appbar-row .wslc-activity .wslc-activity-text {
         font-size: var(--mud-typography-body2-size);
     }
 
-    .wslc-appbar-row .wslc-appbar-search .mud-input-control {
-        margin: 0;
+    .wslc-appbar-row .wslc-activity > .wslc-activity-spinner {
+        width: 14px;
+        height: 14px;
+    }
+
+    /* The subtitle at the title's size here. */
+    .wslc-appbar-row .wslc-appbar-page > .wslc-appbar-subtitle {
+        font-size: var(--mud-typography-body2-size);
     }
 
     .wslc-appbar-row .wslc-appbar-search .mud-input.mud-input-adorned-start {
@@ -1479,23 +1536,10 @@
         padding-right: 4px;
     }
 
-    /* The brand block on the same two 22px rows: the name beside the title,
-       the session selector level with the search and the zoom, the session's
-       two buttons one on each row. */
-    .wslc-appbar-row .wslc-appbar-brand {
-        grid-template-rows: 22px 22px;
-    }
-
-    .wslc-appbar-row .wslc-brand-name {
-        line-height: 22px;
-    }
-
-    .wslc-appbar-row .wslc-session-pick .mud-input-control {
-        margin: 0;
-    }
-
-    .wslc-appbar-row .wslc-session-pick .mud-input {
-        height: 22px;
+    .wslc-appbar-row .wslc-session-select .mud-input > .mud-input-slot.mud-input-root-filled.mud-input-root-margin-dense {
+        font-size: min(
+            var(--mud-typography-default-size),
+            calc((100cqi - 22px) / var(--wslc-session-ems, 8.4)));
     }
 
     .wslc-appbar-row .wslc-session-verbs > .mud-icon-button {
@@ -4970,15 +5014,6 @@
 .mud-snackbar-location-top-center .mud-snackbar .mud-snackbar-content-message {
     padding: 0;
     white-space: pre-line;
-}
-
-/* A verb whose button is the application's blue says so in that blue when it
-   worked (VerbToast): MudBlazor paints a toast from its severity and its
-   severities stop at the info tone, so Stop takes this class where MudBlazor
-   would have put its own. */
-.mud-snackbar.wslc-toast-primary {
-    background-color: var(--mud-palette-primary);
-    color: var(--mud-palette-primary-text);
 }
 
 .mud-snackbar-location-top-right .mud-snackbar .mud-snackbar-icon,

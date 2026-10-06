@@ -1,0 +1,56 @@
+@* The title bar's second line while a verb has something to say (ActivityLine):
+   the verb running, in the tertiary colour, with a spinner and how many
+   others run beside it; then
+   what it came to, in its button's colour; a failure in red, with Copy and a
+   cross, and its whole text in a dialog when the line is too short for it. *@
+@implements IDisposable
+@inject ActivityLine Line
+@inject IDialogService Dialogs
+@inject IJSRuntime Js
+
+<div class="wslc-activity">
+    @if (Line.Running is { } work)
+    {
+        <MudProgressCircular Indeterminate="true" Size="Size.Small" Color="Color.Tertiary" Class="wslc-activity-spinner" />
+        <MudText Typo="Typo.h6" Color="Color.Tertiary" Class="wslc-activity-text" title="@work.Text">@work.Text…@(Line.AlsoRunning > 0 ? $" +{Line.AlsoRunning}" : "")</MudText>
+    }
+    else if (Line.Result is { } result)
+    {
+        @if (result.Tone == Color.Error)
+        {
+            <div class="wslc-activity-failure" title="Show the whole message" @onclick="ShowFailureAsync">
+                <MudText Typo="Typo.h6" Color="Color.Error" Class="wslc-activity-text">@result.Text</MudText>
+            </div>
+            <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" Color="Color.Error" title="Copy" aria-label="Copy" OnClick="@(() => CopyAsync(result.Text))" />
+            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error" title="Close" aria-label="Close" OnClick="Line.Dismiss" />
+        }
+        else
+        {
+            <MudText Typo="Typo.h6" Color="result.Tone" Class="wslc-activity-text" title="@result.Text">@result.Text</MudText>
+        }
+    }
+</div>
+
+@code {
+    protected override void OnInitialized() => Line.Changed += OnChanged;
+
+    private Task ShowFailureAsync() => Line.Result is { } result
+        ? DialogFlow.ExplainAsync(Dialogs, "Failed", result.Text, "")
+        : Task.CompletedTask;
+
+    private async Task CopyAsync(string text)
+    {
+        try
+        {
+            await Js.InvokeVoidAsync("navigator.clipboard.writeText", text);
+        }
+        catch (JSException)
+        {
+            // The browser refused the clipboard: the text is still on the line and in its dialog.
+        }
+    }
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Line.Changed -= OnChanged;
+}

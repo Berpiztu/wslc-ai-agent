@@ -131,7 +131,7 @@
         }
         catch (Exception ex) when (ex is ApiClient.AgentApiException or HttpRequestException)
         {
-            Snackbar.Add($"{Container.Name}: inspect failed. {ex.Message}", Severity.Error);
+            Activity.Fail($"{Container.Name}: inspect failed. {ex.Message}");
             return;
         }
 
@@ -247,19 +247,19 @@
     /// </summary>
     private async Task CopyRunAsync(bool fullVariables)
     {
+        var work = Activity.Begin($"Copying the run command of {Container.Name}");
         try
         {
             var details = await Api.GetContainerDetailsAsync(Container.Id);
             var line = ApiClient.RunCommandLine.Write(details.Form, fullVariables);
             await Js.InvokeVoidAsync("navigator.clipboard.writeText", line);
             // The line itself is on the clipboard, which is where it was asked
-            // for; a toast that prints the whole run command covers half the
-            // screen and says nothing the clipboard does not already hold.
-            Snackbar.Add("Run command copied", Severity.Success);
+            // for; the activity line says so without printing the whole command.
+            work.Done("Run command copied");
         }
         catch (Exception ex) when (ex is ApiClient.AgentApiException or HttpRequestException or JSException)
         {
-            Snackbar.Add($"Failed to copy: {ex.Message}", Severity.Error);
+            work.Fail($"Failed to copy: {ex.Message}");
         }
     }
 }

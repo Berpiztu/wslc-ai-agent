@@ -57,7 +57,7 @@
 @inject IDialogService Dialogs
 @inject DeviceDashboardDrafts Drafts
 @inject WslcAgent.UI.Components.Styles.UiStyle Style
-@inject ISnackbar Snackbar
+@inject ActivityLine Activity
 @inject ContainerRows Containers
 @inject ImageRows Images
 @inject VolumeRows Volumes
@@ -456,7 +456,7 @@
         var what = $"{PageName(PageKey)} {view}";
         if (DashboardViews.Read(DashboardPages.Read(await Place.Of(Place.Scope).LoadAsync(), PageKey), view) is not { Length: > 0 } mine)
         {
-            Snackbar.Add($"{(Place.Scope == DashboardScope.User ? "The user keeps" : "This device keeps")} no {what} view of its own: what shows is the default, and it is not copied over another.", Severity.Info);
+            Activity.Say($"{(Place.Scope == DashboardScope.User ? "The user keeps" : "This device keeps")} no {what} view of its own: what shows is the default, and it is not copied over another.");
             return;
         }
 
@@ -468,8 +468,16 @@
             return;
         }
 
-        await there.SaveAsync(DashboardPages.Write(theirs, PageKey, DashboardViews.Write(theirPage, view, mine)));
-        Snackbar.Add($"The {what} view copied to {name}.", Severity.Success);
+        var work = Activity.Begin($"Copying the {what} view to {name}");
+        try
+        {
+            await there.SaveAsync(DashboardPages.Write(theirs, PageKey, DashboardViews.Write(theirPage, view, mine)));
+            work.Done($"The {what} view copied to {name}.");
+        }
+        catch (Exception failure) when (failure is not OperationCanceledException)
+        {
+            work.Fail($"The {what} view was not copied: {failure.Message}");
+        }
     }
 
     /// <summary>
@@ -518,7 +526,7 @@
         var what = $"{PageName(PageKey)} {view}";
         if (DashboardViews.Read(DashboardPages.Read(await Place.Of(Place.Scope).LoadAsync(), PageKey), view) is not { Length: > 0 } mine)
         {
-            Snackbar.Add($"The user keeps no {what} view of its own: what shows is the default already.", Severity.Info);
+            Activity.Say($"The user keeps no {what} view of its own: what shows is the default already.");
             return;
         }
 
@@ -531,18 +539,19 @@
             return;
         }
 
+        var work = Activity.Begin($"Saving the {what} view as the default");
         try
         {
             var shipped = await Api.GetDefaultDashboardV2Async();
             var page = DashboardPages.Read(shipped, PageKey);
             await Api.SetDefaultDashboardV2Async(DashboardPages.Write(shipped, PageKey, DashboardViews.Write(page, view, Defaults.Writable ? ShippedDashboard.Of(mine) : mine)));
-            Snackbar.Add(Defaults.Writable
+            work.Done(Defaults.Writable
                 ? $"The {what} view saved in the default dashboard; the next installer ships it."
-                : $"The {what} view is this agent's default now.", Severity.Success);
+                : $"The {what} view is this agent's default now.");
         }
         catch (Exception failure) when (failure is AgentApiException or HttpRequestException)
         {
-            Snackbar.Add(failure.Message, Severity.Error);
+            work.Fail(failure.Message);
         }
     }
 
@@ -618,12 +627,23 @@
         await Js.InvokeAsync<string?>("wslcAgent.dashboardViewFit", ZoomOf, fitting.ToString().ToLowerInvariant());
     }
 
-    /// <summary>Save: the view as designed written where the dashboard is kept; a failure is the designer's to say, the draft kept.</summary>
+    /// <summary>Save: the view as designed written where the dashboard is kept, said on the activity line; a failure is the designer's to say, the draft kept.</summary>
     private async Task SaveAsync()
     {
-        if (_designer is not null && await _designer.SaveAsync())
+        if (_designer is null)
         {
+            return;
+        }
+
+        var work = Activity.Begin("Saving the view");
+        if (await _designer.SaveAsync())
+        {
+            work.Done("View saved");
             _ = ReadPagesAsync();
+        }
+        else
+        {
+            work.Quiet();
         }
     }
 
@@ -648,7 +668,7 @@
             return true;
         }
 
-        Snackbar.Add("This view has changes that are not saved: Save or Discard them first.", Severity.Info);
+        Activity.Say("This view has changes that are not saved: Save or Discard them first.");
         return false;
     }
 

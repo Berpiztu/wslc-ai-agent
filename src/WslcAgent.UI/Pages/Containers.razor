@@ -293,19 +293,18 @@
     private static bool Ended<T>(IReadOnlyList<T> before, IReadOnlyList<T> now, Func<T, string> id, Func<T, bool> active) =>
         before.Where(active).Any(job => !now.Any(fresh => id(fresh) == id(job) && active(fresh)));
 
-    /// <summary>What a finished run had to adjust (the notes the form showed when it waited), and a failure, once each.</summary>
+    /// <summary>What a finished run had to adjust (the notes the form showed when it waited), and a failure, once each, on the activity line.</summary>
     private void ReportFinishedLaunches()
     {
         foreach (var launch in _launches.Where(l => !l.Active && _reportedLaunches.Add(l.Id)))
         {
-            foreach (var note in launch.Notes)
-            {
-                Snackbar.Add(note, Severity.Warning);
-            }
-
             if (launch.Phase == "error")
             {
-                Snackbar.Add($"{launch.Name}: run failed. {launch.Error}", Severity.Error);
+                Activity.Fail(string.Join("\n", launch.Notes.Prepend($"{launch.Name}: run failed. {launch.Error}")));
+            }
+            else if (launch.Notes.Count > 0)
+            {
+                Activity.Say($"{launch.Name}: {string.Join(" ", launch.Notes)}");
             }
         }
     }
@@ -363,7 +362,7 @@
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
         {
-            Snackbar.Add($"{launch.Name}: {ex.Message}", Severity.Error);
+            Activity.Fail($"{launch.Name}: {ex.Message}");
             return;
         }
 
@@ -387,7 +386,7 @@
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
         {
-            Snackbar.Add(ex.Message, Severity.Error);
+            Activity.Fail(ex.Message);
         }
 
         await RefreshAsync();
