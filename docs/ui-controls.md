@@ -453,24 +453,24 @@ Body lines are `Typo.body2` with the label in bold; secondary lines
   shell that had already ended goes with its page. The rail's Close verb
   ends a session on purpose; Log out ends them all; another tab or device
   has its own registry.
-- Control keys (`ControlKeys`): the keys a phone's keyboard lacks — Esc,
-  Tab, Ctrl, Alt, Shift, the arrows, Home, End (`ControlKeyNames.Cursor`, or
-  any `Keys` list; `ShowModifiers` for Ctrl, Alt and Shift) — in one row of
-  small outlined buttons that scrolls sideways rather than wrapping. Shift is
-  locked: it stays down, filled, until pressed again (Shift and the arrows
-  select in nano, key after key). Ctrl and Alt are held as Termux holds
-  them: pressed once they stay down, filled, for the next key and let go
-  after it (`@bind-Modifiers`; the host lets go of them when it used them on
-  a key typed on the keyboard). It only says what was
-  pressed (`OnKey`, a `ControlKeyPress`: the key and the modifiers held); the
-  host decides what it does. A press keeps the focus where the user types, so
-  a phone's keyboard stays up. Under every terminal pane, where
-  `wslc-terminal.js` sends a row key as the keyboard would (`press`, xterm's
-  `CSI 1;m` with a modifier, Shift+Tab the back tab) and applies held
-  modifiers to the next key typed (`latch`: Ctrl+C is ETX, Alt puts Esc
-  before the key as Meta does). One exception: the row's Ctrl with A selects
-  the terminal's whole text for Copy, as Ctrl+A does in an editor; a
-  keyboard's own Ctrl+A stays the shell's.
+- Control keys (`ControlKeys`): the keys a phone's keyboard lacks, laid out
+  as Termux lays them — rows of equal columns across the whole width, every
+  key in sight (`Layout`, rows of `ControlKey`; `ControlKeyNames.Terminal`
+  is Termux's two rows of seven, Shift in the minus's place: Esc / Shift Home
+  ↑ End PgUp, then Tab Ctrl Alt ← ↓ → PgDn). Ctrl and Alt are held as Termux holds them: pressed once they
+  stay down, filled, for the next key and let go after it; Shift is locked
+  until pressed again (Shift and the arrows select in nano, key after key) (`@bind-Modifiers`; the host
+  lets go of them when it used them on a key typed on the keyboard). It only
+  says what was pressed (`OnKey`, a `ControlKeyPress`: the key and the
+  modifiers held); the host decides what it does. A press keeps the focus
+  where the user types, so a phone's keyboard stays up. Under every terminal
+  pane, where `wslc-terminal.js` sends a key as the keyboard would (`press`,
+  xterm's `CSI 1;m` with a modifier, Shift+Tab the back tab, PgUp/PgDn as
+  `CSI 5~`/`6~`, `/` as typed) and applies held modifiers to the next
+  key typed (`latch`: Ctrl+C is ETX, Alt puts Esc before the key as Meta
+  does). One exception: Ctrl with A selects the terminal's whole text for
+  Copy, as Ctrl+A does in an editor; a keyboard's own Ctrl+A stays the
+  shell's.
 - Saving a file on the user's machine: the browser downloads it (a link with
   `download`, or `NavigateTo(url, forceLoad: true)`), and a native client,
   whose WebView has no download UI, writes it itself through `IClientFiles`

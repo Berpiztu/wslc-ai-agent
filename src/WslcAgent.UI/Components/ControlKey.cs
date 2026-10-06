@@ -11,6 +11,18 @@ public enum ControlKey
     Right,
     Home,
     End,
+    PageUp,
+    PageDown,
+    Slash,
+
+    /// <summary>A modifier, held for the next key (<see cref="ControlModifiers"/>).</summary>
+    Ctrl,
+
+    /// <summary>A modifier, held for the next key.</summary>
+    Alt,
+
+    /// <summary>A modifier, locked until pressed again.</summary>
+    Shift,
 }
 
 /// <summary>Ctrl, Alt and Shift as <see cref="ControlKeys"/> holds them: Ctrl and Alt for the next key, Shift until it is pressed again.</summary>
@@ -23,26 +35,43 @@ public enum ControlModifiers
     Alt = 4,
 }
 
-/// <summary>A key pressed on the row, with the modifiers that were held for it.</summary>
+/// <summary>A key pressed, with the modifiers that were held for it.</summary>
 public readonly record struct ControlKeyPress(ControlKey Key, ControlModifiers Modifiers);
 
-/// <summary>How each control key reads on its button and in its tooltip.</summary>
+/// <summary>The control keys' layouts, and how each key reads on its button and in its tooltip.</summary>
 public static class ControlKeyNames
 {
-    /// <summary>The keys a terminal wants most: leaving, completing, the history and moving along the line.</summary>
-    public static readonly IReadOnlyList<ControlKey> Cursor =
-        [ControlKey.Escape, ControlKey.Tab, ControlKey.Up, ControlKey.Down, ControlKey.Left, ControlKey.Right, ControlKey.Home, ControlKey.End];
+    /// <summary>
+    /// A terminal's keys as Termux lays them out: two rows of seven, the arrows
+    /// as a cross with Home and End beside the up arrow and the pages at the
+    /// right; Shift where Termux has the minus, which the phone's keyboard has
+    /// at hand, so Shift and the arrows select in nano.
+    /// </summary>
+    public static readonly IReadOnlyList<IReadOnlyList<ControlKey>> Terminal =
+    [
+        [ControlKey.Escape, ControlKey.Slash, ControlKey.Shift, ControlKey.Home, ControlKey.Up, ControlKey.End, ControlKey.PageUp],
+        [ControlKey.Tab, ControlKey.Ctrl, ControlKey.Alt, ControlKey.Left, ControlKey.Down, ControlKey.Right, ControlKey.PageDown],
+    ];
+
+    /// <summary>The modifier a key holds; none for a key that is sent.</summary>
+    public static ControlModifiers ModifierOf(ControlKey key) => key switch
+    {
+        ControlKey.Ctrl => ControlModifiers.Ctrl,
+        ControlKey.Alt => ControlModifiers.Alt,
+        ControlKey.Shift => ControlModifiers.Shift,
+        _ => ControlModifiers.None,
+    };
 
     public static string Label(ControlKey key) => key switch
     {
         ControlKey.Escape => "Esc",
-        ControlKey.Tab => "Tab",
         ControlKey.Up => "↑",
         ControlKey.Down => "↓",
         ControlKey.Left => "←",
         ControlKey.Right => "→",
-        ControlKey.Home => "Home",
-        ControlKey.End => "End",
+        ControlKey.PageUp => "PgUp",
+        ControlKey.PageDown => "PgDn",
+        ControlKey.Slash => "/",
         _ => key.ToString(),
     };
 
@@ -52,6 +81,11 @@ public static class ControlKeyNames
         ControlKey.Down => "Down arrow",
         ControlKey.Left => "Left arrow",
         ControlKey.Right => "Right arrow",
+        ControlKey.PageUp => "Page up",
+        ControlKey.PageDown => "Page down",
+        ControlKey.Ctrl => "Ctrl: held for the next key",
+        ControlKey.Alt => "Alt (Meta): held for the next key",
+        ControlKey.Shift => "Shift: locked until pressed again",
         _ => key.ToString(),
     };
 }

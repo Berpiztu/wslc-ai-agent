@@ -656,6 +656,9 @@ class Session {
         const modifier = 1 + (shift ? 1 : 0) + (alt ? 2 : 0) + (ctrl ? 4 : 0);
         const application = this.term.modes?.applicationCursorKeysMode;
         const cursor = (final) => modifier > 1 ? `\x1b[1;${modifier}${final}` : `${application ? "\x1bO" : "\x1b["}${final}`;
+        const page = (code) => modifier > 1 ? `\x1b[${code};${modifier}~` : `\x1b[${code}~`;
+        // A character key goes as if typed on the keyboard with the held modifiers.
+        const typed = (char) => this.modified(char, { ctrl: !!ctrl, shift: !!shift, alt: !!alt });
         const sequence = {
             Escape: alt ? "\x1b\x1b" : "\x1b",
             Tab: `${alt ? "\x1b" : ""}${shift ? "\x1b[Z" : "\t"}`,
@@ -665,6 +668,9 @@ class Session {
             Left: cursor("D"),
             Home: cursor("H"),
             End: cursor("F"),
+            PageUp: page(5),
+            PageDown: page(6),
+            Slash: typed("/"),
         }[name];
         this.latched = shift ? { ctrl: false, shift: true, alt: false } : null;
         if (sequence) {

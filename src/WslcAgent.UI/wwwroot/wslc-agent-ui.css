@@ -2975,21 +2975,22 @@
     scrollbar-color: var(--mud-palette-lines-inputs) transparent;
 }
 
-/* The keys a phone's keyboard lacks, in one row under the pane: as many as
-   fit side by side, the row scrolling sideways on a narrow screen rather than
-   growing a second line under the shell. */
+/* The keys a phone's keyboard lacks, under the pane as Termux lays them:
+   rows of equal columns across the pane's whole width (the layout's widest
+   row, --wslc-control-columns), so every key is in sight at once on a phone
+   instead of the row running off its edge. */
 .wslc-control-keys {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(var(--wslc-control-columns, 7), minmax(0, 1fr));
     flex: none;
     gap: 4px;
     padding: 4px 0.3rem 0;
-    overflow-x: auto;
-    scrollbar-width: none;
 }
 
 .wslc-control-keys .mud-button-root {
-    flex: none;
-    min-width: 40px;
+    min-width: 0;
+    padding-inline: 2px;
+    white-space: nowrap;
 }
 
 .wslc-terminal-pane:focus-within {
