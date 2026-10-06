@@ -32,6 +32,9 @@
     /// <summary>The page's search box, centred in the title row.</summary>
     [Parameter] public RenderFragment? TopbarSearch { get; set; }
 
+    /// <summary>The line under the title when the page has no search: what it shows, in words.</summary>
+    [Parameter] public RenderFragment? Subtitle { get; set; }
+
     /// <summary>Right side of the title row (e.g. bulk actions).</summary>
     [Parameter] public RenderFragment? TopbarNav { get; set; }
 
@@ -50,7 +53,7 @@
 
     protected override void OnInitialized() => Session.Changed += OnSessionChanged;
 
-    protected override void OnParametersSet() => Chrome.Set(Title, Status, TopbarSearch, TopbarNav, SectionActions, Verbs, RequiresSession, TitleContent);
+    protected override void OnParametersSet() => Chrome.Set(Title, Status, TopbarSearch, TopbarNav, SectionActions, Verbs, RequiresSession, TitleContent, Subtitle);
 
     private void OnSessionChanged() => _ = InvokeAsync(StateHasChanged);
 

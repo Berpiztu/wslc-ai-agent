@@ -1335,6 +1335,22 @@
     white-space: nowrap;
 }
 
+/* The page's second line when it has no search, as high as the search box
+   would be (the field's height and the 4px a dense field keeps above and
+   below it), so the title stands on the first line on every page, and one
+   line, cut with an ellipsis before it pushes anything. The title's own size,
+   not its weight: it fills the line and reads as the line under the title. */
+.wslc-appbar-page > .wslc-appbar-subtitle {
+    display: block;
+    font-weight: 400;
+    height: calc(var(--wslc-field-h, 26px) + 8px);
+    line-height: calc(var(--wslc-field-h, 26px) + 8px);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 @media (max-width: 600px) {
     .wslc-topnav { gap: 4px; }
     .wslc-topnav .mud-button-root { font-size: 0.7rem; height: 24px; min-height: 24px; }
@@ -1438,6 +1454,13 @@
     .wslc-appbar-row .wslc-appbar-page-title,
     .wslc-appbar-row .wslc-appbar-page > .wslc-appbar-search {
         height: 22px;
+    }
+
+    /* The subtitle on the second 22px row, where the search box stands, at the title's size here. */
+    .wslc-appbar-row .wslc-appbar-page > .wslc-appbar-subtitle {
+        height: 22px;
+        line-height: 22px;
+        font-size: var(--mud-typography-body2-size);
     }
 
     .wslc-appbar-row .wslc-appbar-search .mud-input-control {

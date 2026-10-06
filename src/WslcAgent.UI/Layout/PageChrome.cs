@@ -4,8 +4,8 @@ namespace WslcAgent.UI.Layout;
 
 /// <summary>
 /// What the current page contributes to the layout's top bar: the
-/// title, a status slot next to it, a search slot
-/// centred in the bar, a navigation slot on the right (e.g. bulk actions), a
+/// title, a status slot next to it, a second line under the title — the
+/// page's search, or else what the page says of what it shows —, a navigation slot on the right (e.g. bulk actions), a
 /// second row of section actions and the page's verbs, drawn in the navigation
 /// button's list. <see cref="PageShell"/> fills it; <see cref="MainLayout"/> renders it.
 /// </summary>
@@ -20,6 +20,9 @@ public sealed class PageChrome
 
     public RenderFragment? TopbarSearch { get; private set; }
 
+    /// <summary>The line under the title on a page with no search: what the page shows, in words (the dashboard's page and scope).</summary>
+    public RenderFragment? Subtitle { get; private set; }
+
     public RenderFragment? TopbarNav { get; private set; }
 
     public RenderFragment? SectionActions { get; private set; }
@@ -32,12 +35,13 @@ public sealed class PageChrome
 
     public event Action? Changed;
 
-    public void Set(string title, RenderFragment? status, RenderFragment? topbarSearch, RenderFragment? topbarNav, RenderFragment? sectionActions, RenderFragment? verbs = null, bool requiresSession = false, RenderFragment? titleContent = null)
+    public void Set(string title, RenderFragment? status, RenderFragment? topbarSearch, RenderFragment? topbarNav, RenderFragment? sectionActions, RenderFragment? verbs = null, bool requiresSession = false, RenderFragment? titleContent = null, RenderFragment? subtitle = null)
     {
         Title = title;
         TitleContent = titleContent;
         Status = status;
         TopbarSearch = topbarSearch;
+        Subtitle = subtitle;
         TopbarNav = topbarNav;
         SectionActions = sectionActions;
         Verbs = verbs;

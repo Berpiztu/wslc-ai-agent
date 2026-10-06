@@ -63,10 +63,10 @@
 @inject VolumeRows Volumes
 @inject WslcAgent.UI.Dashboard.NetworkRows Networks
 
-@* The title bar names the page on screen and where the dashboard is kept:
-   "Dashboard (System, server)", and between the two the view on screen,
-   landscape or portrait, in design as out of it, so which of the
-   dashboard's alarms are in force is read at a glance. *@
+@* The title bar names the page on screen, with the view on screen beside it,
+   landscape or portrait, in design as out of it, so which of the dashboard's
+   alarms are in force is read at a glance; under them, where the dashboard is
+   kept: "System, server". *@
 <PageShell Title="@Title">
     <TitleContent>
         Dashboard
@@ -76,8 +76,8 @@
                 <MudIcon Icon="@ViewVerb.Icon(_view == BoardView.Portrait)" />
             </span>
         }
-        (@PageName(PageKey), @Named(Place.Scope))
     </TitleContent>
+    <Subtitle>@PageName(PageKey), @Named(Place.Scope)</Subtitle>
     <Verbs>
         @if (!Designing && _selection.Objects.Count > 0)
         {

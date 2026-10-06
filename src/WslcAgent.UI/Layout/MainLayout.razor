@@ -84,7 +84,8 @@ else
                     <SessionPanel />
                 </div>
                 @* The page, two lines: its title
-                   and status on the first, its search on the second. *@
+                   and status on the first; on the second its search, or else
+                   what the page says of what it shows. *@
                 <div class="wslc-appbar-page">
                     <div class="wslc-appbar-page-title">
                         <MudText Typo="Typo.h6" Class="wslc-title">@(Chrome.TitleContent ?? (RenderFragment)(title => title.AddContent(0, Chrome.Title)))</MudText>
@@ -96,6 +97,11 @@ else
                     @if (Chrome.TopbarSearch is not null)
                     {
                         <div class="@($"wslc-appbar-search{SessionOffClass}")" inert="@SessionOff">@Chrome.TopbarSearch</div>
+                    }
+                    else
+                    {
+                        @* Drawn even when empty: the title stands on the first line on every page. *@
+                        <MudText Typo="Typo.h6" Class="wslc-appbar-subtitle mud-text-secondary">@Chrome.Subtitle</MudText>
                     }
                 </div>
             </div>

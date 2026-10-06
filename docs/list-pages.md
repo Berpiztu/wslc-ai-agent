@@ -47,7 +47,9 @@ page does the same way: `Api`, `Snackbar`, `Dialogs`, `Items`, `Selected`,
 `Dash` / `Has`. A page overrides the four members above and nothing else.
 
 `PageShell` hands `Title`, `Status`, `TopbarSearch`, `TopbarNav` and `SectionActions` to the
-layout (`MainLayout` + `PageChrome`). The layout draws the navigation button, the top
+layout (`MainLayout` + `PageChrome`). The title bar shows the page in two lines: its title
+on the first, and on the second its search, or, on a page without one, its `Subtitle`
+(what it shows, in words: the dashboard's page and scope). The layout draws the navigation button, the top
 bar and the section-actions row; the page never touches them.
 
 ## 1. Header row (stats left, tools right)
