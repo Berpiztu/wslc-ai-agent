@@ -16,6 +16,7 @@
 @inject WslcAgentApi Api
 @inject IDialogService Dialogs
 @inject ISnackbar Snackbar
+@inject ActivityLine Activity
 @inject IClientFiles Files
 
 <div class="wslc-action-body">
@@ -540,14 +541,24 @@
         {
             if (Mode == LaunchMode.Edit)
             {
-                var id = await RecreateAsync(request);
-                Snackbar.Add($"Recreated {Named}", Severity.Success);
-                await OnDone.InvokeAsync(id);
+                var created = await Api.RecreateContainerAsync(SourceId, request);
+                // Said on the title bar's activity line, which the form closing uncovers:
+                // with what the recreate had to adjust, in the info tone so it is read.
+                if (created.Notes.Count == 0)
+                {
+                    Activity.Done($"Recreated {Named}");
+                }
+                else
+                {
+                    Activity.Say($"Recreated {Named}. {string.Join(" ", created.Notes)}");
+                }
+
+                await OnDone.InvokeAsync(created.Id);
             }
             else
             {
                 await Api.LaunchContainerAsync(request);
-                Snackbar.Add($"{(start ? "Run" : "Create")} started — watch the Containers table", Severity.Info);
+                Activity.Say($"{(start ? "Run" : "Create")} started — watch the Containers table");
                 await OnDone.InvokeAsync("");
             }
         }
@@ -627,18 +638,6 @@
             $"Create {(Form.Name.Length > 0 ? Form.Name : "a container")} from {Form.Image}, stopped? The image is pulled first if it is not on this machine.", "Save"),
     };
 
-    private async Task<string> RecreateAsync(ContainerLaunchRequest request) =>
-        Noted(await Api.RecreateContainerAsync(SourceId, request));
-
-    private string Noted(ContainerCreated created)
-    {
-        foreach (var note in created.Notes)
-        {
-            Snackbar.Add(note, Severity.Warning);
-        }
-
-        return created.Id;
-    }
 
     // Both paint at once: a click paints by itself only at its first wait and
     // at its end, and the veil goes up and down several times in between.

@@ -379,9 +379,10 @@ Body lines are `Typo.body2` with the label in bold; secondary lines
   "Removing 2 of 5"), then `work.Done($"{name}: {verb} ok", verb)` for 3
   seconds in its button's colour, or `work.Fail($"{name}: {verb} failed.
   {ex.Message}")` in red until it is closed or the next verb starts, with
-  Copy, a cross and the whole text in a dialog on a click. `Activity.Say` is a
-  note about a verb that did not run, `Activity.Fail` a failure before one
-  could. With nothing to say the line is the page's search or subtitle.
+  Copy, a cross and the whole text in a dialog on a click. `Activity.Done` is
+  the result of a verb that ran under a dialog (a form's Save, said as it
+  closes), `Activity.Say` a note about a verb that did not run,
+  `Activity.Fail` a failure before one could. With nothing to say the line is the page's search or subtitle.
   Toasts stay for what does not answer a click on the page: dialogs' own
   results, the agent's and the client's updates, unexpected errors.
 - Toasts appear top right, over the title bar: its height (36px), the application's body type, sliding in from the edge (position set once in `AddWslcAgentUi`, the rest in `wslc-agent-ui.css`). Held in the hand they come down under the title bar, across the top, the same toast (`Toasts`; the bottom edge is the status bar).

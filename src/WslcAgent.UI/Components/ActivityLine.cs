@@ -52,6 +52,9 @@ public sealed class ActivityLine(AgentLink link) : IDisposable
         return work;
     }
 
+    /// <summary>A verb that ran where the line could not be seen (a dialog over it): what it came to, for a moment, in its button's colour.</summary>
+    public void Done(string text, string verb = "") => Show(new ActivityNote(text, ToneOf(verb)));
+
     /// <summary>Says something about a verb that did not run (it was not the moment for it), for a moment, in the info tone.</summary>
     public void Say(string text) => Show(new ActivityNote(text, Color.Info));
 
