@@ -511,3 +511,4 @@ packaging/**/GeneratedFiles.wxs
 # The publishing plugin run on this machine (plugins/wslc-published/dev.ps1)
 plugins/wslc-published/.venv/
 plugins/wslc-published/.dev-data/
+.vscode/settings.json
