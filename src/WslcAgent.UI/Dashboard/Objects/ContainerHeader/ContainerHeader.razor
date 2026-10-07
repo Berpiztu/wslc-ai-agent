@@ -1,5 +1,7 @@
 @* A container's header: the Containers list's card header — its name, its
-   image, the avatar in its state's colour, its state chip — standing alone.
+   image, the avatar in its state's colour, its state chip, and the pastel
+   green of a running container — standing alone. While running the green
+   wins over the object's Background; stopped, the Background shows.
    While
    files travel in or out of the container, the ring of its transfers takes
    the avatar's place, as in the list. It fills its cells, as the header's
@@ -10,6 +12,8 @@
 @using Berpiztu.Dashboard.Model
 @inherits ContainerObject
 @attribute [DashboardObject("wslc.container-header", "Container header", Group = "Container", Subgroup = "User", Icon = Icons.Material.Filled.AccountBox, Source = ContainerSourceFamily.FamilyKey, Columns = 16, Rows = 4, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Left, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both)]
+@attribute [DashboardObjectPart("name", "Name")]
+@attribute [DashboardObjectPart("subtitle", "Subtitle")]
 @inject TransferRows Transfers
 @inject FileTransfers Queue
 
@@ -17,7 +21,7 @@
 {
     <div class="@SectionClass("wslc-card-part-summary")">
         <EntityCardPart>
-            <EntityCardHeader Title="@c.Name" Subtitle="@c.Image" AvatarColor="@StateColors.For(c.State)" Key="@c.Id" Avatar="@Ring(c)">
+            <EntityCardHeader Title="@c.Name" Subtitle="@c.Image" AvatarColor="@StateColors.For(c.State)" Key="@c.Id" Avatar="@Ring(c)" Tone="@CardTone.Of(c)">
                 <HeaderActions>
                     @if (c.State.Length > 0)
                     {

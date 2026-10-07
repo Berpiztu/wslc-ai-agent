@@ -7,6 +7,8 @@
 @using Berpiztu.Dashboard.Model
 @inherits NetworkObject
 @attribute [DashboardObject("wslc.network-header", "Network header", Group = "Network", Subgroup = "User", Icon = Icons.Material.Filled.AccountBox, Source = NetworkSourceFamily.FamilyKey, Columns = 16, Rows = 4, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Left, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both)]
+@attribute [DashboardObjectPart("name", "Name")]
+@attribute [DashboardObjectPart("subtitle", "Subtitle")]
 
 @if (Network is { } r)
 {

@@ -6,6 +6,8 @@
 @using Berpiztu.Dashboard.Model
 @inherits WslcObject
 @attribute [DashboardObject("wslc.system-header", "System header", Group = "System", Subgroup = "System", Icon = Icons.Material.Filled.AccountBox, Columns = 16, Rows = 4, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Left)]
+@attribute [DashboardObjectPart("name", "Name")]
+@attribute [DashboardObjectPart("subtitle", "Subtitle")]
 @inject SessionState Session
 
 <div class="@SectionClass("wslc-card-part-summary")">

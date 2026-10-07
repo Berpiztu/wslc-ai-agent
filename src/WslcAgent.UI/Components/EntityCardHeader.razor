@@ -4,11 +4,13 @@
    drawn once. While a verb runs on the row
    (BusyRows, by Key), or while it is on its way (the Avatar a page hands
    over), the avatar is a ring: everything under way is a ring, and the
-   avatar's own place costs the card no height. *@
+   avatar's own place costs the card no height. A page may give the header a
+   tone of the palette that says the row's state at a glance (a running
+   container's is green); without one it keeps the card's own. *@
 @implements IDisposable
 @inject BusyRows Rows
 
-<MudCardHeader>
+<MudCardHeader Style="@CardTone.Style(Tone)">
     <CardHeaderAvatar>
         @* A row on its way puts its progress where the avatar is: the card says
            at a glance what it is doing, in the place the eye already goes to.
@@ -63,6 +65,9 @@
     [Parameter] public string? Key { get; set; }
 
     [Parameter] public RenderFragment? HeaderActions { get; set; }
+
+    /// <summary>The header's background saying the row's state (<see cref="CardTone"/>); null for the card's own tone.</summary>
+    [Parameter] public Color? Tone { get; set; }
 
     private string Initial => string.IsNullOrEmpty(AvatarText)
         ? (Title.Length > 0 ? Title[..1].ToUpperInvariant() : "?")

@@ -7,6 +7,8 @@
 @using Berpiztu.Dashboard.Model
 @inherits VolumeObject
 @attribute [DashboardObject("wslc.volume-header", "Volume header", Group = "Volume", Subgroup = "User", Icon = Icons.Material.Filled.AccountBox, Source = VolumeSourceFamily.FamilyKey, Columns = 16, Rows = 4, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Left, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both)]
+@attribute [DashboardObjectPart("name", "Name")]
+@attribute [DashboardObjectPart("subtitle", "Subtitle")]
 
 @if (Volume is { } r)
 {

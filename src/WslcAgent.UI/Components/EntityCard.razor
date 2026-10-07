@@ -7,13 +7,13 @@
 @inject WslcAgent.UI.Components.Styles.UiStyle Style
 
 <MudCard Elevation="Style.Applied.CardElevation" Outlined="Style.Applied.CardOutlined" Square="Style.Applied.CardSquare" Class="wslc-card d-flex flex-column" Style="height: 100%">
-    <EntityCardHeader Title="@Title" Subtitle="@Subtitle" AvatarText="@AvatarText" AvatarColor="AvatarColor" Avatar="Avatar" Key="@Key" HeaderActions="HeaderActions" />
+    <EntityCardHeader Title="@Title" Subtitle="@Subtitle" AvatarText="@AvatarText" AvatarColor="AvatarColor" Avatar="Avatar" Key="@Key" HeaderActions="HeaderActions" Tone="Tone" />
     <MudCardContent Class="flex-grow-1">
         @ChildContent
     </MudCardContent>
     @if (Actions is not null)
     {
-        <MudCardActions Class="py-1 justify-end">
+        <MudCardActions Class="py-1 justify-end" Style="@CardTone.Style(Tone)">
             @Actions
         </MudCardActions>
     }
@@ -36,6 +36,9 @@
     [Parameter] public string? Key { get; set; }
 
     [Parameter] public RenderFragment? HeaderActions { get; set; }
+
+    /// <summary>The header's and the actions row's background, saying the row's state (<see cref="CardTone"/>); null for the card's own tone.</summary>
+    [Parameter] public Color? Tone { get; set; }
 
     [Parameter] public RenderFragment? ChildContent { get; set; }
 

@@ -3824,12 +3824,13 @@
     padding-bottom: 5px;
 }
 
-/* A dashboard card's header part (EntityCardPart): its state chip — running,
-   exited — in the middle of the header's height, beside the avatar and the
-   name, which are. MudBlazor sets a header's actions at the top and 8px above
-   it, which in a part as tall as its cells left the chip over the middle.
-   The list pages' cards keep MudBlazor's. */
-.wslc-card-section .mud-card-header .mud-card-header-actions {
+/* A card's state chip — running, exited — in the middle of the header's
+   height, beside the avatar and the name, which are: in the list's cards and
+   in a dashboard card's header part (EntityCardPart) alike. MudBlazor sets a
+   header's actions at the top and 8px above it, which put the chip's middle
+   at 13px of a 50px header (measured), and over the middle of a part as tall
+   as its cells. */
+.wslc-card .mud-card-header .mud-card-header-actions {
     align-self: center;
     margin-top: 0;
 }
@@ -4326,6 +4327,17 @@
     min-height: 0;
 }
 
+/* A card's header or actions row standing as a dashboard object paints no
+   tone of its own: the object's Background shows through it, so the
+   properties window changes it. Their objects default to Primary tint, the
+   very mix of the list card's rows' tone, so until the user picks another
+   they look the same. A running container's still say so in green (CardTone),
+   over whatever Background. */
+.wslc-card-section > .mud-card-header,
+.wslc-card-section > .mud-card-actions {
+    background-color: transparent;
+}
+
 /* The buttons keep their taps (VerbTaps), across the footer's whole width so
    its two groups stand at its two ends as in the list's card: the shortcuts
    at the left, the row's own verbs at the right. They are verbs of View. */
@@ -4416,23 +4428,55 @@
    body2 down, h6 up. The line under it
    is body2, 0.72rem: overline down, body1 up. The chip steps the same way.
    The avatar takes MudBlazor's own three sizes, 24, 40 and 56px. The System
-   card's header is this header too. */
+   card's header is this header too. The name and the line under it are parts
+   of their own (name, subtitle): each takes its part's size on top of the
+   step, and its colour and weight below. */
+.wslc-card-part-summary .mud-card-header .mud-typography-subtitle1 {
+    font-size: calc(var(--mud-typography-subtitle1-size) * var(--bz-part-name-scale, 1));
+}
+
 .wslc-card-part-summary.wslc-type-small .mud-card-header .mud-typography-subtitle1 {
-    font-size: var(--mud-typography-body2-size);
+    font-size: calc(var(--mud-typography-body2-size) * var(--bz-part-name-scale, 1));
 }
 
 .wslc-card-part-summary.wslc-type-large .mud-card-header .mud-typography-subtitle1 {
-    font-size: var(--mud-typography-h6-size);
+    font-size: calc(var(--mud-typography-h6-size) * var(--bz-part-name-scale, 1));
 }
 
-.wslc-card-part-summary.wslc-type-small .mud-card-header .mud-typography-body2,
+.wslc-card-part-summary .mud-card-header .mud-typography-body2 {
+    font-size: calc(var(--mud-typography-body2-size) * var(--bz-part-subtitle-scale, 1));
+}
+
+.wslc-card-part-summary.wslc-type-small .mud-card-header .mud-typography-body2 {
+    font-size: calc(var(--mud-typography-overline-size) * var(--bz-part-subtitle-scale, 1));
+}
+
+.wslc-card-part-summary.wslc-type-large .mud-card-header .mud-typography-body2 {
+    font-size: calc(var(--mud-typography-body1-size) * var(--bz-part-subtitle-scale, 1));
+}
+
 .wslc-card-part-summary.wslc-type-small .mud-card-header .mud-chip {
     font-size: var(--mud-typography-overline-size);
 }
 
-.wslc-card-part-summary.wslc-type-large .mud-card-header .mud-typography-body2,
 .wslc-card-part-summary.wslc-type-large .mud-card-header .mud-chip {
     font-size: var(--mud-typography-body1-size);
+}
+
+.bz-part-name-color .wslc-card-part-summary .mud-card-header .mud-typography-subtitle1 {
+    color: var(--bz-part-name-color);
+}
+
+.bz-part-name-weight .wslc-card-part-summary .mud-card-header .mud-typography-subtitle1 {
+    font-weight: var(--bz-part-name-weight);
+}
+
+.bz-part-subtitle-color .wslc-card-part-summary .mud-card-header .mud-typography-body2 {
+    color: var(--bz-part-subtitle-color);
+}
+
+.bz-part-subtitle-weight .wslc-card-part-summary .mud-card-header .mud-typography-body2 {
+    font-weight: var(--bz-part-subtitle-weight);
 }
 
 .wslc-card-part-summary.wslc-type-small .mud-card-header .mud-avatar {

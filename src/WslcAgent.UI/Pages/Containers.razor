@@ -142,7 +142,7 @@
         {
             <CardsGrid TItem="ContainerSummary" Items="Visible" Loading="Loading" EmptyText="@EmptyText">
                 <ItemTemplate Context="c">
-                    <EntityCard Title="@c.Name" Subtitle="@c.Image" AvatarColor="@StateColors.For(c.State)" Key="@c.Id">
+                    <EntityCard Title="@c.Name" Subtitle="@c.Image" AvatarColor="@StateColors.For(c.State)" Key="@c.Id" Tone="@CardTone.Of(c)">
                         <HeaderActions>
                             <StateChip State="@c.State" />
                         </HeaderActions>
