@@ -1,0 +1,72 @@
+@* Mounted once by the layout: the browser's own back — its button, the
+   mouse's, Alt+Left — leaves the dialog on top instead of the page under it,
+   as the phone's gesture does (wslcAgent.back). A dialog is opened over the
+   page that opened it, so back returns to that page, dialog closed; the next
+   back is the page's. Only a step back is held: forward goes on, and so does
+   a dialog's own verb that opens another page (Logs, a recreated container).
+   Renders nothing. *@
+@implements IDisposable
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+@code {
+    private IDisposable? _guard;
+
+    /// <summary>Where the browser stands in the app's history (Blazor's own numbering of its entries).</summary>
+    private int _index;
+
+    /// <summary>The address of each history entry visited, by its number: a navigation to the one before this is a step back.</summary>
+    private readonly Dictionary<int, string> _entries = [];
+
+    protected override void OnInitialized()
+    {
+        _guard = Navigation.RegisterLocationChangingHandler(OnChangingAsync);
+        Navigation.LocationChanged += OnChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await RememberAsync();
+        }
+    }
+
+    /// <summary>
+    /// A step back while a dialog is open stays on this page and leaves the
+    /// dialog by its own button, which may ask first. A step back is told by
+    /// where it goes, the entry before this one: while the browser's back is
+    /// being decided Blazor has already put the history back where it was, to
+    /// be able to cancel it, so the history itself no longer says it moved.
+    /// </summary>
+    private async ValueTask OnChangingAsync(LocationChangingContext context)
+    {
+        if (_entries.TryGetValue(_index - 1, out var before)
+            && string.Equals(before, context.TargetLocation, StringComparison.Ordinal)
+            && await JS.InvokeAsync<bool>("wslcAgent.leaveDialog"))
+        {
+            context.PreventNavigation();
+        }
+    }
+
+    private void OnChanged(object? sender, LocationChangedEventArgs e) => _ = RememberAsync();
+
+    private async Task RememberAsync()
+    {
+        try
+        {
+            _index = await JS.InvokeAsync<int>("wslcAgent.historyIndex");
+            _entries[_index] = Navigation.Uri;
+        }
+        catch (JSDisconnectedException)
+        {
+            // The client is closing: nothing is left to go back in.
+        }
+    }
+
+    public void Dispose()
+    {
+        _guard?.Dispose();
+        Navigation.LocationChanged -= OnChanged;
+    }
+}

@@ -465,11 +465,7 @@ window.wslcAgent = {
     // its own to walk: the UI navigates inside one document, so its back stack
     // lives here, not in the view.
     back() {
-        const dialog = document.querySelector('.mud-dialog-container .mud-dialog');
-        if (dialog) {
-            // What a dialog does with Escape is the dialog's business: one that
-            // holds unsaved work asks before it goes.
-            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        if (this.leaveDialog()) {
             return true;
         }
 
@@ -481,12 +477,45 @@ window.wslcAgent = {
             return true;
         }
 
-        if (window.history.length > 1) {
+        if (this.historyIndex() > 0) {
             window.history.back();
             return true;
         }
 
         return false;
+    },
+
+    // Leaves the dialog on top, the last opened, by its own way out: the button
+    // its title row carries, so one that holds unsaved work asks before it
+    // goes, as that button does. Not Escape: MudBlazor hears it only on the
+    // dialog, only where the dialog lets it close, and a dialog holding a
+    // terminal or a form keeps the key for itself. Close before Cancel: a
+    // pull's console has both, and its Cancel stops the pull. False when no
+    // dialog is open. The browser's own back comes here too (BackLeavesDialogs).
+    leaveDialog() {
+        const dialogs = document.querySelectorAll('.mud-dialog-container .mud-dialog');
+        if (dialogs.length === 0) {
+            return false;
+        }
+
+        const top = dialogs[dialogs.length - 1];
+        const buttons = [...top.querySelectorAll('.wslc-dialog-head button, .mud-dialog-actions button')]
+            .filter(button => !button.disabled);
+        const leave = ['Close', 'Done', 'Cancel', 'No']
+            .map(word => buttons.find(button => button.textContent.trim() === word))
+            .find(Boolean)
+            ?? top.querySelector('.mud-button-close');
+        leave?.click();
+        return true;
+    },
+
+    // Where the browser stands in the app's own history: Blazor numbers its
+    // entries in history.state (_index, none on the first). history.length is
+    // no measure: it keeps counting the entries already gone back over, so on
+    // the first screen it still said there was somewhere to go, and the
+    // gesture never left the app.
+    historyIndex() {
+        return window.history.state?._index ?? 0;
     },
 
     // Which native client this browser's device takes: "android", "windows"

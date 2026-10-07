@@ -53,6 +53,31 @@ public class MainActivity : MauiAppCompatActivity
         AndroidClientNotifications.Open(Intent);
     }
 
+    /// <summary>
+    /// The back key goes to the one back handler (<see cref="WebViewBackCallback"/>)
+    /// whoever has the focus. BlazorWebView answers the key itself while it
+    /// has it — after any tap on the page — walking its own history with
+    /// GoBack: past the dialog on top, past wslcAgent.back, a screen or several
+    /// at once. Measured on the emulator: Images, View &amp; edit open, back
+    /// landed on Containers with the dialog gone, and back() never called.
+    /// The keyboard on screen still closes first: Android hands it the key
+    /// before the activity.
+    /// </summary>
+    public override bool DispatchKeyEvent(KeyEvent? e)
+    {
+        if (e?.KeyCode != Keycode.Back)
+        {
+            return base.DispatchKeyEvent(e);
+        }
+
+        if (e.Action == KeyEventActions.Up && !e.IsCanceled)
+        {
+            OnBackPressedDispatcher.OnBackPressed();
+        }
+
+        return true;
+    }
+
     protected override void OnNewIntent(Intent? intent)
     {
         base.OnNewIntent(intent);
