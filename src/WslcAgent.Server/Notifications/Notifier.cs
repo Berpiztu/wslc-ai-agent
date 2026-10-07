@@ -49,7 +49,7 @@ public sealed class Notifier(NotificationSettingsStore settings, NotificationHis
     /// </summary>
     private static string AreaOf(string kind) => kind switch
     {
-        NotificationKind.ContainerStopped or NotificationKind.ContainerNotRestarted
+        NotificationKind.ContainerStopped or NotificationKind.ContainerNotRestarted or NotificationKind.ContainerUnhealthy
             or NotificationKind.ContainerCpu or NotificationKind.ContainerMemory => CliTraceDescription.Containers,
         // With the update's own lines, under File transfers (AgentUpdater.LogPrefix).
         NotificationKind.UpdateFailed or NotificationKind.UpdateInstalled

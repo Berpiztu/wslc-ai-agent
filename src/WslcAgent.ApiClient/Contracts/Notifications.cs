@@ -46,6 +46,7 @@ public static class NotificationKind
     public const string ContainerCpu = "container-cpu";
     public const string ContainerStopped = "container-stopped";
     public const string ContainerNotRestarted = "container-not-restarted";
+    public const string ContainerUnhealthy = "container-unhealthy";
     public const string JobFailed = "job-failed";
     public const string JobFinished = "job-finished";
     public const string UpdateFailed = "update-failed";
@@ -165,16 +166,17 @@ public sealed record NotificationThreshold(bool On, int Percent, int Minutes);
 /// <param name="HostCpu">The containers' CPU used of the machine's.</param>
 /// <param name="ContainerMemory">Any container's memory, of its limit: at its limit it is killed.</param>
 /// <param name="ContainerCpu">Any container's CPU: working hard is usually its job, so off by default.</param>
-/// <param name="ContainerStopped">A container stopped without being asked to: <c>wslc events</c> says it stopped, and no one killed it first.</param>
+/// <param name="ContainerStopped">A container stopped without being asked to: <c>wslc events</c> says it ended, and no one killed it first.</param>
 /// <param name="ContainerNotRestarted">The restart policy could not start a container.</param>
 /// <param name="JobFailed">A transfer, pull, build or backup failed.</param>
 /// <param name="JobFinished">One of them finished, however short.</param>
 /// <param name="UpdateFailed">The agent's update failed.</param>
 /// <param name="UpdateInstalled">The agent updated itself.</param>
 /// <param name="SessionLost">The WSLC session went down without the user stopping it from the agent.</param>
-/// <param name="Recovered">A reading that notified is back under its threshold.</param>
+/// <param name="Recovered">A reading that notified is back under its threshold, or a container that notified unhealthy is healthy again.</param>
 /// <param name="UpdateAnnounced">The agent is about to update itself, with a minute to cancel it from the notification: on unless switched off, a settings file saved before it existed included.</param>
 /// <param name="UpdateCancelled">An announced update was cancelled, from any client.</param>
+/// <param name="ContainerUnhealthy">A container's health check fails (wslc 3.0.2 on): on unless switched off, a settings file saved before it existed included.</param>
 public sealed record NotificationSettings(
     NotificationThreshold HostDisk,
     NotificationThreshold HostMemory,
@@ -190,7 +192,8 @@ public sealed record NotificationSettings(
     bool SessionLost,
     bool Recovered,
     bool UpdateAnnounced = true,
-    bool UpdateCancelled = true)
+    bool UpdateCancelled = true,
+    bool ContainerUnhealthy = true)
 {
     // Every reading at once, 0 minutes, while notifications are being tried;
     // the minutes come back once they are.
@@ -219,6 +222,7 @@ public sealed record NotificationSettings(
         NotificationKind.ContainerCpu => ContainerCpu.On,
         NotificationKind.ContainerStopped => ContainerStopped,
         NotificationKind.ContainerNotRestarted => ContainerNotRestarted,
+        NotificationKind.ContainerUnhealthy => ContainerUnhealthy,
         NotificationKind.JobFailed => JobFailed,
         NotificationKind.JobFinished => JobFinished,
         NotificationKind.UpdateFailed => UpdateFailed,

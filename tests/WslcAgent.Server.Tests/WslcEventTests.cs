@@ -40,6 +40,35 @@ public sealed class WslcEventTests
     }
 
     [Fact]
+    public void A_die_of_wslc_3_0_2_gives_its_exit_code_wherever_it_stands()
+    {
+        // From 3.0.2 the attributes come in alphabetical order, labels among them.
+        var read = WslcEventParsing.Parse(
+            "2026-10-07T09:12:40.123456789Z container die 8449a1cce27f93 (com.example.note=a, b, execDuration=12, exitCode=3, image=alpine:latest, name=jade_wasatch)");
+
+        Assert.NotNull(read);
+        Assert.Equal("die", read.Action);
+        Assert.Equal("8449a1cce27f93", read.Id);
+        // Nine fractional digits and a Z, as wslc 3.0.2 writes them.
+        Assert.Equal(TimeSpan.Zero, read.Time.Offset);
+        Assert.Equal(new DateTime(2026, 10, 7, 9, 12, 40), read.Time.DateTime.AddTicks(-(read.Time.Ticks % TimeSpan.TicksPerSecond)));
+        Assert.Equal(3, read.ExitCode);
+    }
+
+    [Fact]
+    public void A_health_status_is_one_action_of_two_words()
+    {
+        var read = WslcEventParsing.Parse(
+            "2026-10-07T09:13:02.000000000Z container health_status: unhealthy 8449a1cce27f93 (image=alpine:latest, name=jade_wasatch)");
+
+        Assert.NotNull(read);
+        Assert.Equal("container", read.Type);
+        Assert.Equal("health_status: unhealthy", read.Action);
+        Assert.Equal("8449a1cce27f93", read.Id);
+        Assert.Null(read.ExitCode);
+    }
+
+    [Fact]
     public void What_is_not_an_event_is_not_read_as_one()
     {
         // The CLI's own abort arrives on the same stream when the session goes.

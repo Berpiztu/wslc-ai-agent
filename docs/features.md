@@ -325,8 +325,11 @@ The Home page is a dashboard designed by each user, not a fixed screen.
 - **Watched by the agent itself**, whether or not a client is open: host
   disk, memory and CPU, and each container's memory and CPU, past a threshold
   for a number of minutes, and back under it; a container stopping
-  unexpectedly or not restarting; a session going down; jobs finished or
-  failed; the agent's own updates.
+  unexpectedly, not restarting, or failing its health check (wslc 3.0.2 on)
+  and healthy again; a session going down; jobs finished or failed; the
+  agent's own updates.
+- **One phone, several agents**: each push says which agent it comes from,
+  and a tap on another agent's opens the app on that agent.
 - **Delivered** as Windows notifications by the tray and the Windows app, and
   as push notifications on Android, with a Cancel button on an update's.
 - Tapping one opens its page; the history is kept.

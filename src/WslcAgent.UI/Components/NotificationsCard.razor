@@ -30,11 +30,13 @@
         <NotificationThresholdRow Label="Container CPU" Hint="Any container's CPU: working hard is usually its job" Value="_edited.ContainerCpu"
                                   ValueChanged="@(threshold => _edited = _edited with { ContainerCpu = threshold })" />
         <SquareCheckBox Value="_edited.Recovered" ValueChanged="@(on => _edited = _edited with { Recovered = on })"
-                        Label="Back under the threshold" title="A reading that notified says so again when it is back under its threshold" />
+                        Label="Back under the threshold" title="A reading that notified says so again when it is back under its threshold, and an unhealthy container when it is healthy again" />
 
         <MudText Typo="Typo.body1" Class="mt-3 mb-1">Events</MudText>
         <SquareCheckBox Value="_edited.ContainerStopped" ValueChanged="@(on => _edited = _edited with { ContainerStopped = on })"
-                        Label="A container stopped without being asked to" title="wslc events says it stopped, and nobody stopped it: not the application, not a terminal" />
+                        Label="A container stopped without being asked to" title="wslc events says it ended, and nobody stopped it: not the application, not a terminal" />
+        <SquareCheckBox Value="_edited.ContainerUnhealthy" ValueChanged="@(on => _edited = _edited with { ContainerUnhealthy = on })"
+                        Label="A container is unhealthy" title="Its health check fails, as wslc events reports it from wslc 3.0.2 on" />
         <SquareCheckBox Value="_edited.ContainerNotRestarted" ValueChanged="@(on => _edited = _edited with { ContainerNotRestarted = on })"
                         Label="A container not brought back at start-up" title="Its restart policy could not start it" />
         <SquareCheckBox Value="_edited.SessionLost" ValueChanged="@(on => _edited = _edited with { SessionLost = on })"

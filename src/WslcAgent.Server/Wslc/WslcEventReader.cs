@@ -19,7 +19,8 @@ namespace WslcAgent.Server.Wslc;
 /// refused a few seconds later.
 /// <para>
 /// It is where the notifications hear what happens:
-/// every container event goes to <see cref="ContainerStops"/>, and a stream
+/// every container event goes to <see cref="ContainerStops"/> and
+/// <see cref="ContainerHealth"/>, and a stream
 /// that died with a session the user did not stop from the agent is a session
 /// lost.
 /// </para>
@@ -30,6 +31,7 @@ public sealed class WslcEventReader(
     WslcEvents events,
     StoppedSessions held,
     ContainerStops stops,
+    ContainerHealth health,
     Notifier notifier,
     ILogger<WslcEventReader> logger) : BackgroundService
 {
@@ -230,6 +232,7 @@ public sealed class WslcEventReader(
         }
 
         stops.Heard(read);
+        health.Heard(read);
         lock (_gate)
         {
             _pending.Add(read.Type);
