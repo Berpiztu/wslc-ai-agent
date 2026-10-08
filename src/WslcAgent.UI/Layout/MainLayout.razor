@@ -328,7 +328,7 @@ else
 
         _grace?.Cancel();
         _graceOver = false;
-        _reconnecting ??= Activity.Begin("Reconnecting to the agent");
+        SayReconnecting();
         _ = GraceAsync(_grace = new CancellationTokenSource());
         StateHasChanged();
         await NoteBuildAsync();
@@ -415,8 +415,21 @@ else
     /// <summary>This native client and its agent can no longer work together: the screen waits under the mismatch's veil.</summary>
     private bool Mismatched => Compatibility.Blocked is not null;
 
-    /// <summary>The agent has not answered for longer than the grace: the screen waits under the veil.</summary>
-    private bool Veiled => LinkOff && _graceOver;
+    /// <summary>
+    /// The agent has not answered for longer than the grace: the screen waits
+    /// under the veil. Never for a development agent, stopped and started all
+    /// day: the page waits as it is, and reloads when it is back with its new build.
+    /// </summary>
+    private bool Veiled => LinkOff && _graceOver && !Build.Development;
+
+    /// <summary>"Reconnecting to the agent…" on the activity line, not for a development agent (<see cref="Veiled"/>).</summary>
+    private void SayReconnecting()
+    {
+        if (!Build.Development)
+        {
+            _reconnecting ??= Activity.Begin("Reconnecting to the agent");
+        }
+    }
 
     /// <summary>
     /// The link went: the activity line says it is reconnecting and the agent
@@ -435,7 +448,7 @@ else
         }
         else
         {
-            _reconnecting ??= Activity.Begin("Reconnecting to the agent");
+            SayReconnecting();
             _ = GraceAsync(_grace = new CancellationTokenSource());
             _ = ProbeAsync();
         }

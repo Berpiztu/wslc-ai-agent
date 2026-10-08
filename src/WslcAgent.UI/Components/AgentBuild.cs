@@ -30,6 +30,13 @@ public sealed class AgentBuild(NavigationManager navigation, ISnackbar snackbar)
     private bool _asked;
 
     /// <summary>
+    /// The agent last said it is a development build: stopped and started
+    /// under the user all day, so its silence is no news and the screen says
+    /// nothing of it (MainLayout's reconnecting line and veil).
+    /// </summary>
+    public bool Development { get; private set; }
+
+    /// <summary>
     /// What the agent has just said about itself, from wherever the
     /// application was already asking. The first answer is the one everything
     /// else is compared with; an agent too old to say its build says nothing
@@ -37,6 +44,11 @@ public sealed class AgentBuild(NavigationManager navigation, ISnackbar snackbar)
     /// </summary>
     public void Seen(HealthResponse? health)
     {
+        if (health is not null)
+        {
+            Development = health.Development;
+        }
+
         if (health is not { Build.Length: > 0 } answer || !OperatingSystem.IsBrowser())
         {
             return;
