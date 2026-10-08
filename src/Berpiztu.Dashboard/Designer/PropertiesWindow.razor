@@ -1,6 +1,9 @@
 @* The properties window: small, moved
    by its title so it is put where it hides nothing being worked on, and
-   there for as long as the dashboard is designed, with nothing to open. It
+   there for as long as the dashboard is designed. When it is in the way — on
+   a phone's narrow canvas above all — it folds into a button of one cell,
+   as the toolbox does, and stays folded whatever is selected until the
+   button is pressed (the owner's request of 7 October 2026). It
    shows the object selected, and each change applies as it is made — there
    is no Save; the last change is undone from its title. The
    source's field is the application's (ISourceFamily.Field), so it is drawn
@@ -14,7 +17,7 @@
 @* Outlined as its fields are: the object's
    name on its top line, which moves the window, and undo and remove on its
    bottom line at its right. *@
-<FloatingWindow Name="@Name" Class="bz-dash-properties">
+<FloatingWindow Name="@Name" Class="bz-dash-properties" Hideable="true" FoldedIcon="@Icons.Material.Filled.Tune" FoldedColor="Color.Primary">
     <ChildContent>
         @if (Selected is { } shown && Kind is { } kind)
         {

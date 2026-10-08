@@ -237,6 +237,22 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
             ? Task.CompletedTask
             : ChangeAsync(Layout with { CanvasWidth = width, CanvasHeight = height });
 
+    /// <summary>
+    /// The view drawn on the canvas: where it starts and its size, in one
+    /// change undo takes back. Nothing moves: what stands before the view or
+    /// past it is not shown out of design.
+    /// </summary>
+    public Task SetCanvasAsync(CellBox view) =>
+        view.W < 1 || view.H < 1 || view.X < 0 || view.Y < 0
+            ? Task.CompletedTask
+            : ChangeAsync(Layout with
+            {
+                CanvasLeft = view.X > 0 ? view.X : null,
+                CanvasTop = view.Y > 0 ? view.Y : null,
+                CanvasWidth = view.W,
+                CanvasHeight = view.H,
+            });
+
     /// <summary>Several objects changed at once, in one change undo takes back whole: a card's source, chosen once for its objects.</summary>
     public Task SetEachAsync(IReadOnlyList<ObjectInstance> changed) =>
         changed.Count == 0 ? Task.CompletedTask : ChangeAsync(changed.Aggregate(Layout, (layout, o) => layout.With(o)));

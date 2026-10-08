@@ -174,7 +174,7 @@
                 <VerbFab StartIcon="@Icons.Material.Filled.ZoomIn" Label="@(_zooming ? "Hide zoom" : "Show zoom")" OnClick="@(() => _zooming = !_zooming)"
                          Title="@(_zooming ? "Hide the dashboard's zoom" : "Show the dashboard's zoom, in a window that stays open while the dashboard is moved")" />
             }
-            <DesignVerb Designing="Designing" />
+            <DesignVerb Designing="Designing" View="@_view" />
         }
     </Verbs>
     <ChildContent>
@@ -209,6 +209,7 @@
                 <MudToggleGroup T="ViewFit" Value="@(_fitting ?? ViewFit.Fill)" ValueChanged="FitAsync" Size="Style.Applied.ToggleSize" Color="Style.Applied.ToggleColor"
                                 Outlined="Style.Applied.ToggleOutlined" Delimiters="Style.Applied.ToggleDelimiters"
                                 Class="@(Style.Applied.ToggleRounded ? "rounded-pill mt-2" : "mt-2")" CheckMark="Style.Applied.ToggleCheckMark">
+                    <MudToggleItem Value="ViewFit.Actual" Text="1:1" title="The view at its own size, as in design, from the top-left corner; nothing zoomed, nothing moved; what goes past the screen scrolled to" />
                     <MudToggleItem Value="ViewFit.Fit" Text="Fit" title="The whole view, as large as it goes, its aspect kept; the room left over at both sides" />
                     <MudToggleItem Value="ViewFit.Fill" Text="Fill" title="The screen filled, the aspect kept; what goes past it scrolled to" />
                     <MudToggleItem Value="ViewFit.Width" Text="Width" title="The screen's whole width filled, larger or smaller, the aspect kept; what goes past its bottom scrolled to" />
@@ -618,10 +619,20 @@
     /// </summary>
     private async Task ReadFittingAsync()
     {
-        var kept = await Js.InvokeAsync<string?>("wslcAgent.dashboardViewFit", ZoomOf);
+        var asked = ZoomOf;
+        var view = _view;
+        var kept = await Js.InvokeAsync<string?>("wslcAgent.dashboardViewFit", asked);
+        if (asked != ZoomOf)
+        {
+            // The window turned again while this was read: the view on screen
+            // now has read its own. Taken anyway, a portrait view's Fluid read
+            // late was laid on the landscape view a window put back wide.
+            return;
+        }
+
         _fitting = Enum.TryParse<ViewFit>(kept, ignoreCase: true, out var fitting)
             ? fitting
-            : _view == BoardView.Portrait ? ViewFit.Fluid : ViewFit.Fill;
+            : view == BoardView.Portrait ? ViewFit.Fluid : ViewFit.Fill;
         await InvokeAsync(StateHasChanged);
     }
 

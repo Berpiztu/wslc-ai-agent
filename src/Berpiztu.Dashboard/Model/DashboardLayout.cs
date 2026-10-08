@@ -66,6 +66,19 @@ public sealed record DashboardLayout(int Columns, IReadOnlyList<ObjectInstance> 
     /// <summary>The view's height in cells, set with <see cref="CanvasWidth"/>.</summary>
     public int? CanvasHeight { get; init; }
 
+    /// <summary>
+    /// The view's first column on the canvas, set in design by drawing it
+    /// where it is wanted: what is shown out of design starts there, and what
+    /// stands before it is not shown. Null is the canvas's first column.
+    /// </summary>
+    public int? CanvasLeft { get; init; }
+
+    /// <summary>The view's first row on the canvas, set with <see cref="CanvasLeft"/>.</summary>
+    public int? CanvasTop { get; init; }
+
+    /// <summary>Where the view starts on the canvas, its first column and row: the canvas's first cell until it is drawn elsewhere.</summary>
+    public (int Column, int Row) CanvasOrigin => (CanvasLeft ?? 0, CanvasTop ?? 0);
+
     /// <summary>The object with this id, if the dashboard has it.</summary>
     public ObjectInstance? Find(string id) => Objects.FirstOrDefault(o => o.Id == id);
 
@@ -207,7 +220,7 @@ public sealed record DashboardLayout(int Columns, IReadOnlyList<ObjectInstance> 
             Objects = [.. Objects.Where(o => o.Group != groupId)],
         };
 
-    public string Write() => JsonSerializer.Serialize(new Stored(FormVersion, Columns, Objects, Groups, Status.Count > 0 ? Status : null, CanvasWidth, CanvasHeight), Json);
+    public string Write() => JsonSerializer.Serialize(new Stored(FormVersion, Columns, Objects, Groups, Status.Count > 0 ? Status : null, CanvasWidth, CanvasHeight, CanvasLeft, CanvasTop), Json);
 
     /// <summary>
     /// A stored dashboard read back; an empty or unreadable one is an empty
@@ -231,6 +244,8 @@ public sealed record DashboardLayout(int Columns, IReadOnlyList<ObjectInstance> 
                     Status = stored.Status ?? [],
                     CanvasWidth = stored.CanvasWidth is > 0 ? stored.CanvasWidth : null,
                     CanvasHeight = stored.CanvasHeight is > 0 ? stored.CanvasHeight : null,
+                    CanvasLeft = stored.CanvasLeft is > 0 ? stored.CanvasLeft : null,
+                    CanvasTop = stored.CanvasTop is > 0 ? stored.CanvasTop : null,
                 }
                 : Empty;
         }
@@ -244,5 +259,5 @@ public sealed record DashboardLayout(int Columns, IReadOnlyList<ObjectInstance> 
 
     /// <summary>The written form: the layout and the version of the form it was written in.</summary>
     private sealed record Stored(int Version, int Columns, IReadOnlyList<ObjectInstance>? Objects, IReadOnlyList<DashboardGroup>? Groups,
-        IReadOnlyList<StatusAlarm>? Status = null, int? CanvasWidth = null, int? CanvasHeight = null);
+        IReadOnlyList<StatusAlarm>? Status = null, int? CanvasWidth = null, int? CanvasHeight = null, int? CanvasLeft = null, int? CanvasTop = null);
 }

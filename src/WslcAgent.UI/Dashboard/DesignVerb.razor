@@ -2,8 +2,13 @@
    every object is always designed, and has none). Designing is a step of
    its own in the history: the address carries it (?design=1), so Back takes
    the dashboard out of design; the board of every object goes back to it in
-   design by the same parameter. *@
+   design by the same parameter. Design opens the view on screen — the
+   window's way up: landscape on a desktop, portrait on a phone standing —,
+   never the one designed last time, and Done takes the view out of the
+   address with design, so nothing of it is left to be opened again days later
+   (the owner, 7 October 2026). *@
 @namespace WslcAgent.UI.Dashboard
+@using BoardView = Berpiztu.Dashboard.Model.DashboardView
 @inject NavigationManager Navigation
 
 <VerbFab StartIcon="@(Designing ? Icons.Material.Filled.Check : Icons.Material.Filled.DesignServices)"
@@ -16,8 +21,15 @@
 
     [Parameter, EditorRequired] public bool Designing { get; set; }
 
+    /// <summary>The view on screen out of design, the one Design opens; null while it is not known yet.</summary>
+    [Parameter] public string? View { get; set; }
+
     /// <summary>Whether the address's value of <see cref="Query"/> says the board is being designed.</summary>
     public static bool Says(string? value) => value is "1" or "true";
 
-    private void Toggle() => Navigation.NavigateTo(Navigation.GetUriWithQueryParameter(Query, Designing ? null : "1"));
+    private void Toggle() => Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(new Dictionary<string, object?>
+    {
+        [Query] = Designing ? null : "1",
+        [ViewVerb.Query] = !Designing && View == BoardView.Portrait ? BoardView.Portrait : null,
+    }));
 }

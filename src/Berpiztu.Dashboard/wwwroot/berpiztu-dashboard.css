@@ -67,10 +67,29 @@
     touch-action: none;
 }
 
-/* The view's size at the toolbox's top, apart from the objects
-   under it. */
-.bz-dash-canvas-size-fields {
-    margin-bottom: 8px;
+/* The canvas size's window, the toolbox's width, at the page's top in the
+   middle until it is moved, between the toolbox at the left and the
+   properties at the right. */
+.bz-dash-canvas-window {
+    top: 96px;
+    left: calc(50% - var(--bz-dash-toolbox-width) / 2);
+    width: var(--bz-dash-toolbox-width);
+}
+
+/* The canvas size: three fields to a row — ratio, columns and rows; the
+   screen's width and height and the fit — each row with what it gives on a
+   line of text under it, only as tall as its text. Both classes in the selector: the properties'
+   grid (.bz-dash-props) stands later in this file and would take its two
+   columns back. */
+.bz-dash-props.bz-dash-canvas-size-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: var(--bz-dash-window-cell) auto var(--bz-dash-window-cell) auto;
+}
+
+.bz-dash-canvas-size-fields > .mud-typography-caption {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* A step of the toolbox in under the one above it: a subgroup under Cards or
@@ -165,6 +184,12 @@
    frame across and scrolls down, never sideways. The room a scrollbar down
    takes is kept aside from the start, and the zoom is worked out on what is
    left, so the scrollbar coming never pushes the view past the edge. */
+/* One to one: the view at its own size from the screen's top-left corner, as
+   in design, not in the middle; what goes past the screen scrolls. */
+.bz-dash-fitted .bz-dash-canvas-frame.bz-dash-fit-actual .bz-dash-canvas {
+    margin: 0;
+}
+
 .bz-dash-canvas-frame.bz-dash-fit-width {
     overflow-x: hidden;
     scrollbar-gutter: stable;
@@ -185,17 +210,6 @@
     .bz-dash-fitted[data-bz-view="portrait"] .bz-dash-canvas {
         visibility: hidden;
     }
-}
-
-/* In design, a dashboard with views stands in a frame of its view's size, in
-   the middle of the page, outlined; no larger than the page,
-   what stands past it scrolls. */
-.bz-dash-canvas-frame.bz-dash-framed {
-    flex: 0 0 auto;
-    margin: auto;
-    max-width: 100%;
-    max-height: 100%;
-    outline: 1px solid var(--mud-palette-lines-default);
 }
 
 /* One cell, out of sight: the designer measures it to turn the pointer into
@@ -540,6 +554,108 @@
     background-color: color-mix(in srgb, var(--mud-palette-primary) 10%, transparent);
     pointer-events: none;
 }
+
+/* In design, the canvas's edge — its columns and rows from the canvas
+   size's window — as a line over the objects, and everything past it shaded
+   up to the frame's edge, which clips the shade; it takes no press, the
+   objects under it are worked on as ever. */
+.bz-dash-view-bounds {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 3;
+    pointer-events: none;
+    outline: 2px dashed var(--mud-palette-primary);
+    box-shadow: 0 0 0 100vmax color-mix(in srgb, var(--mud-palette-text-primary) 12%, transparent);
+}
+
+/* In design, the screen the view is meant for — the canvas size's W and H —
+   drawn from where the view starts at a cell's own size: a dotted line in the
+   tertiary colour, apart from the canvas's dashed primary one, its size
+   written at its top right. It takes no press. */
+.bz-dash-screen-bounds {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 3;
+    pointer-events: none;
+    outline: 2px dotted var(--mud-palette-tertiary);
+}
+
+.bz-dash-screen-label {
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    padding: 0 4px;
+    font-size: var(--mud-typography-caption-size);
+    color: var(--mud-palette-tertiary);
+    background-color: var(--mud-palette-surface);
+    white-space: nowrap;
+}
+
+/* Drawing the canvas: the whole canvas takes the pointer, over every object,
+   a finger's drag included, which would scroll otherwise. */
+.bz-dash-draw-surface {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    cursor: crosshair;
+    touch-action: none;
+}
+
+/* The view being drawn, over the drawing surface: its line, and a handle on
+   each side and corner that takes the pointer — the box itself takes none, so
+   a press inside it begins a fresh box. Each handle shows its way as a card's
+   corner does, by its cursor. */
+.bz-dash-view-frame {
+    position: relative;
+    z-index: 5;
+    pointer-events: none;
+    outline: 2px dashed var(--mud-palette-primary);
+    background-color: color-mix(in srgb, var(--mud-palette-primary) 8%, transparent);
+}
+
+.bz-dash-view-handle {
+    position: absolute;
+    pointer-events: auto;
+    touch-action: none;
+}
+
+.bz-dash-view-handle-n,
+.bz-dash-view-handle-s {
+    left: 12px;
+    right: 12px;
+    height: 12px;
+    cursor: ns-resize;
+}
+
+.bz-dash-view-handle-e,
+.bz-dash-view-handle-w {
+    top: 12px;
+    bottom: 12px;
+    width: 12px;
+    cursor: ew-resize;
+}
+
+.bz-dash-view-handle-n { top: -6px; }
+.bz-dash-view-handle-s { bottom: -6px; }
+.bz-dash-view-handle-e { right: -6px; }
+.bz-dash-view-handle-w { left: -6px; }
+
+.bz-dash-view-handle-nw,
+.bz-dash-view-handle-ne,
+.bz-dash-view-handle-se,
+.bz-dash-view-handle-sw {
+    width: 14px;
+    height: 14px;
+    background-color: var(--mud-palette-primary);
+    border-radius: 2px;
+}
+
+.bz-dash-view-handle-nw { top: -7px; left: -7px; cursor: nwse-resize; }
+.bz-dash-view-handle-se { bottom: -7px; right: -7px; cursor: nwse-resize; }
+.bz-dash-view-handle-ne { top: -7px; right: -7px; cursor: nesw-resize; }
+.bz-dash-view-handle-sw { bottom: -7px; left: -7px; cursor: nesw-resize; }
 
 /* Where an object carried from the toolbox would stand. */
 .bz-dash-ghost {

@@ -6,7 +6,7 @@
    gives them their cells. *@
 @typeparam T
 
-<MudTextField T="T" Value="Value" ValueChanged="ValueChanged" Label="@Label" Immediate="true"
+<MudTextField T="T" Value="Value" ValueChanged="ValueChanged" Label="@Label" Immediate="Immediate"
               Margin="Margin.Dense" Variant="Variant.Outlined" HelperTextOnFocus="false"
               title="@Title" Class="@Class" />
 
@@ -22,4 +22,12 @@
     [Parameter] public string Title { get; set; } = "";
 
     [Parameter] public string? Class { get; set; }
+
+    /// <summary>
+    /// Applied as it is typed; false applies it once Enter is pressed or the
+    /// field is left, for a value whose every keystroke would do work of its
+    /// own (the canvas's fit: its first digit alone is a canvas of thousands
+    /// of cells).
+    /// </summary>
+    [Parameter] public bool Immediate { get; set; } = true;
 }

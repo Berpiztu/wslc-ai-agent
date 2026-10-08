@@ -24,4 +24,13 @@ public enum ViewFit
     /// what goes past the bottom is scrolled to.
     /// </summary>
     Fluid,
+
+    /// <summary>
+    /// One to one: the view at its own size, every cell as large as in
+    /// design, from the screen's top-left corner as in design; nothing zoomed,
+    /// nothing centred, what goes past the screen scrolled to. Leaving design
+    /// or coming into it, everything stays where it was seen (the owner's
+    /// request of 7 October 2026: nothing done by itself).
+    /// </summary>
+    Actual,
 }

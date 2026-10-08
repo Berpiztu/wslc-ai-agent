@@ -30,7 +30,7 @@
 @inject IDialogService Dialogs
 
 <CascadingValue Value="_document" IsFixed="true">
-    <div class="@($"bz-dash-designer{(Designing ? " bz-dash-designing" : Framed ? " bz-dash-fitted" : "")}{(Waiting ? " bz-dash-waiting" : "")}")" style="@DesignerStyle" data-bz-view="@(Framed ? View : null)">
+    <div class="@($"bz-dash-designer{(Designing ? " bz-dash-designing" : Framed ? " bz-dash-fitted" : "")}{(Waiting ? " bz-dash-waiting" : "")}")" style="@DesignerStyle" data-bz-view="@(Framed ? View : null)" @ref="_root">
         @* Until the dashboard is read and fitted the canvas is not seen
            (bz-dash-unread): a ring in its middle says it is on its way. *@
         @if (Waiting)
@@ -39,7 +39,7 @@
                 <MudProgressCircular Indeterminate="true" Color="Color.Primary" Class="bz-dash-loading-dial" />
             </div>
         }
-        <div class="@FrameClass" style="@CanvasFrameStyle" @ref="_frame">
+        <div class="@FrameClass" @ref="_frame">
             <div class="@CanvasClass" @ref="_canvas" tabindex="0" style="@CanvasStyle"
                  @onpointerdown="PressCanvasAsync" @onpointermove="Follow" @onpointerup="ReleaseAsync" @onpointercancel="Abandon" @onwheel="Wheeled" @onkeydown="KeyAsync"
                  @onclick="TapFloorAsync">
@@ -110,6 +110,35 @@
                 {
                     <div class="@($"bz-dash-ghost{(_document.Layout.Fits(ghost) ? "" : " bz-dash-blocked")}")" style="@Area(ghost.Box)"></div>
                 }
+                @if (Designing)
+                {
+                    @* The canvas's edge, its columns and rows, and what stands past it shaded: what the canvas size's
+                       window changes is seen where it is designed, as it is typed. *@
+                    <div class="bz-dash-view-bounds" style="@ViewBoundsStyle"></div>
+                    @* The screen the view is meant for (the canvas size's W and H), from where the view starts, at a
+                       cell's own size: what of the canvas it holds as it is, and so what Fit has to shrink. *@
+                    <div class="bz-dash-screen-bounds" style="@ScreenBoundsStyle">
+                        <span class="bz-dash-screen-label">@FormattableString.Invariant($"Screen {Screen.Width} × {Screen.Height} px")</span>
+                    </div>
+                }
+                @if (Designing && _framing)
+                {
+                    @* Drawing the canvas: over everything, so a press anywhere — an object too — begins the box. *@
+                    <div class="bz-dash-draw-surface" @ref="_drawSurface"
+                         @onpointerdown="@(pointer => BeginFramingAsync(pointer, null))" @onpointerdown:stopPropagation="true"
+                         @onpointermove="FollowFraming" @onpointermove:stopPropagation="true"
+                         @onpointerup="EndFramingAsync" @onpointerup:stopPropagation="true"
+                         @onpointercancel="@(() => _framed = null)" @onclick:stopPropagation="true"></div>
+                    @* The view as it is, or as it is being drawn, with a handle on each side and corner: pulled, the
+                       side moves a cell at a time, larger or smaller, as a card's corner does. *@
+                    <div class="bz-dash-view-frame" style="@Area(_framed?.Box ?? ViewBox)">
+                        @foreach (var edges in FrameHandles)
+                        {
+                            <div class="@($"bz-dash-view-handle bz-dash-view-handle-{HandleName(edges)}")"
+                                 @onpointerdown="@(pointer => BeginFramingAsync(pointer, edges))" @onpointerdown:stopPropagation="true"></div>
+                        }
+                    </div>
+                }
             </div>
         </div>
         @* A cell at its own size, out of the canvas the zoom scales: what the
@@ -122,6 +151,16 @@
                 <Toolbox Entries="Entries" Carrying="@(_carried is not null)" Anchor="@(() => _frame)" OnTake="TakeAsync" OnCarry="Carry" OnRelease="DropAsync" Header="ToolboxTop" />
             }
             <PropertiesWindow Document="_document" Defaults="Defaults" View="@View" />
+            <FloatingWindow Name="Canvas size" Class="bz-dash-canvas-window" Hideable="true" StartsFolded="true"
+                            FoldedIcon="@Icons.Material.Filled.AspectRatio" FoldedColor="Color.Info">
+                <ChildContent>@CanvasSize</ChildContent>
+                <Verbs>
+                    <MudIconButton Icon="@Icons.Material.Filled.Crop" Size="Size.Small"
+                                   Color="@(_framing ? Color.Primary : Color.Default)" Variant="@(_framing ? Variant.Filled : Variant.Text)"
+                                   OnClick="ToggleFraming"
+                                   title="Draw the canvas: the whole screen opens to draw on; press anywhere and drag, cell by cell, or pull a side or a corner of the canvas, larger or smaller; let go and the canvas is that box. Nothing moves; what stands outside it is not shown out of design (undo takes it back). Press again to finish" />
+                </Verbs>
+            </FloatingWindow>
         }
     </div>
 </CascadingValue>
@@ -292,6 +331,17 @@
         }
 
         await _document.LoadAsync();
+        if (Designing)
+        {
+            // The draft left on the device, over what the store holds: only
+            // once that is read. Opened alongside the read, as the first
+            // parameters came while it waited, the read could land after it
+            // and lay the stored dashboard over the draft — a view left and
+            // come back to had lost its changes, and the next change, finding
+            // nothing unsaved, let the draft go.
+            await _document.OpenDraftAsync();
+        }
+
         _loaded = true;
     }
 
@@ -417,9 +467,11 @@
         _carried = null;
         _hovered = null;
         _document.Select(null);
-        if (Designing)
+        if (Designing && _loaded)
         {
-            // A draft left on the device is designed on again.
+            // Into design once the dashboard is read: a draft left on the
+            // device is designed on again. Before it is read, the read opens
+            // it itself (OnInitializedAsync).
             _ = _document.OpenDraftAsync();
         }
     }
@@ -436,6 +488,11 @@
         if (_sizeWatch is not null)
         {
             await _sizeWatch.DisposeAsync();
+        }
+
+        if (_screenWatch is not null)
+        {
+            await _screenWatch.DisposeAsync();
         }
 
         if (_holdWatch is not null)
@@ -524,8 +581,16 @@
             // down to the lowest object where it stands below them. Any other
             // board: down to its lowest object, and in design a few more.
             var lowest = boxes.Select(box => box.Y + box.H).DefaultIfEmpty(0).Max();
-            var rows = Framed ? (Designing ? Math.Max(lowest, Extent.Rows) : Extent.Rows)
+            // In design a dashboard with views shows every row its place
+            // holds, the view's and the objects' too wherever they reach, and
+            // as many as a box being drawn reaches.
+            var rows = Framed ? (Designing ? Math.Max(lowest, Math.Max(Origin.Row + Extent.Rows, _roomCells.Rows)) : ShownFrom.Row + Extent.Rows)
                 : lowest + (Designing ? RowsBelow : 0);
+            if (_framed is { Box: var drawing })
+            {
+                rows = Math.Max(rows, drawing.Y + drawing.H);
+            }
+
             return FormattableString.Invariant($"grid-template-rows: repeat({rows}, var(--bz-dash-cell-y, var(--bz-dash-cell)))");
         }
     }
@@ -547,6 +612,31 @@
     /// </summary>
     private string Placed(CellBox box, DashboardGroup? card = null, HorizontalAnchor anchor = HorizontalAnchor.Scale)
     {
+        if (!Designing && Framed && Origin != (0, 0))
+        {
+            // Out of design only the view is shown: what stands wholly outside
+            // it, shaded in design, is not drawn. One to one it stays where it
+            // stood in design, the room before it kept; otherwise it is placed
+            // from the view's start, where the view is fitted from.
+            var fromView = box with { X = box.X - Origin.Column, Y = box.Y - Origin.Row };
+            if (InView(fromView) is not { } seen || seen.X >= Extent.Columns || seen.Y >= Extent.Rows)
+            {
+                return "display: none";
+            }
+
+            if (OneToOne)
+            {
+                return Area(box);
+            }
+
+            box = fromView;
+            card = card is null ? null : card with { X = card.X - Origin.Column, Y = card.Y - Origin.Row };
+            if (!Fluid)
+            {
+                return Area(seen);
+            }
+        }
+
         if (!Fluid)
         {
             return Area(box);
@@ -562,6 +652,25 @@
         var keep = card is null ? 0 : MemberKeep;
         return FormattableString.Invariant(
             $"position: absolute; margin: 0; left: calc({placed.Left} + {keep}px); top: calc({box.Y} * {Cell} + {keep}px); width: calc({placed.Width} - {2 * keep}px); height: calc({box.H} * {Cell} - {2 * keep}px)");
+    }
+
+    /// <summary>One to one out of design: the canvas at its own size from its first cell, as in design.</summary>
+    private bool OneToOne => !Designing && Framed && Fitting == ViewFit.Actual;
+
+    /// <summary>
+    /// The cell the canvas is shown from out of design: one to one its first,
+    /// as in design, the room before the view kept; otherwise the view's start.
+    /// </summary>
+    private (int Column, int Row) ShownFrom => OneToOne ? Origin : (0, 0);
+
+    /// <summary>The part of a box from the view's start on, its cells counted from there; null where none of it is.</summary>
+    private static CellBox? InView(CellBox box)
+    {
+        var left = Math.Max(0, box.X);
+        var top = Math.Max(0, box.Y);
+        var width = box.X + box.W - left;
+        var height = box.Y + box.H - top;
+        return width < 1 || height < 1 ? null : new CellBox(left, top, width, height);
     }
 
     /// <summary>How far an object in a card keeps from the card's line, as .bz-dash-member's margin keeps it on cells.</summary>
@@ -764,20 +873,21 @@
     /// </summary>
     private string DesignerStyle => Designing || !Framed
         ? FormattableString.Invariant($"--bz-dash-columns: {_document.Layout.Columns}; --bz-dash-fixed-cell: {DashboardLayout.CellSize}")
-        : FormattableString.Invariant($"--bz-dash-columns: {Math.Max(1, Extent.Columns)}; --bz-dash-fixed-cell: {DashboardLayout.CellSize}; --bz-dash-fit: {_fit}; --bz-dash-cell-x: calc({_across} * var(--bz-dash-fixed-cell)); --bz-dash-cell-y: calc({_down} * var(--bz-dash-fixed-cell))");
+        : FormattableString.Invariant($"--bz-dash-columns: {Math.Max(1, ShownFrom.Column + Extent.Columns)}; --bz-dash-fixed-cell: {DashboardLayout.CellSize}; --bz-dash-fit: {_fit}; --bz-dash-cell-x: calc({_across} * var(--bz-dash-fixed-cell)); --bz-dash-cell-y: calc({_down} * var(--bz-dash-fixed-cell))");
 
     /// <summary>
-    /// In design a framed dashboard's frame is its view's size: its columns
-    /// and rows of cells, no larger than the page; what stands past it scrolls.
+    /// In design the frame is the dashboard's whole place, from its top-left
+    /// corner, whatever the view's size: the view is its line and its shade
+    /// on the canvas (.bz-dash-view-bounds), so drawing it, pulling its sides
+    /// or typing its size never moves the canvas, nor anything on it. A frame
+    /// of the view's size, in the middle of the page, moved everything each
+    /// time the view changed (the owner, 7 October 2026: "déjalo como yo lo he dejado").
     /// </summary>
     private string FrameClass =>
-        Designing && Framed ? "bz-dash-canvas-frame bz-dash-framed"
-        : Framed && Fitting is ViewFit.Width or ViewFit.Fluid ? "bz-dash-canvas-frame bz-dash-fit-width"
+        !Framed || Designing ? "bz-dash-canvas-frame"
+        : Fitting is ViewFit.Width or ViewFit.Fluid ? "bz-dash-canvas-frame bz-dash-fit-width"
+        : Fitting is ViewFit.Actual ? "bz-dash-canvas-frame bz-dash-fit-actual"
         : "bz-dash-canvas-frame";
-
-    private string? CanvasFrameStyle => Designing && Framed
-        ? FormattableString.Invariant($"width: calc({Extent.Columns} * var(--bz-dash-fixed-cell)); height: calc({Extent.Rows} * var(--bz-dash-fixed-cell))")
-        : null;
 
     /// <summary>
     /// Once the dashboard is read, its frame's size watched; in design, the
@@ -795,6 +905,8 @@
         {
             _watching = true;
             _sizeWatch = await Interop.WatchSizeAsync(_frame, ResizedAsync);
+            _screenWatch = await Interop.WatchSizeAsync(_root, MeasureScreenAsync);
+            await MeasureScreenAsync();
             _holdWatch = await Interop.WatchHoldAsync(_canvas, HeldAsync);
         }
 
@@ -812,6 +924,30 @@
     private bool _watching;
 
     private IAsyncDisposable? _sizeWatch;
+
+    /// <summary>The dashboard's whole place on the page: the room its view is fitted to out of design, a phone's screen on a phone.</summary>
+    private ElementReference _root;
+
+    private IAsyncDisposable? _screenWatch;
+
+    /// <summary>That room in pixels, the screen beside the canvas size where it stands the view's way up; null until measured.</summary>
+    private (double Width, double Height)? _screen;
+
+    /// <summary>The proportion the canvas size keeps, as chosen; null while none was, and it is the one the size already has.</summary>
+    private string? _proportion;
+
+    /// <summary>The room measured again: at first, and as the window is resized or a phone turned.</summary>
+    private Task MeasureScreenAsync() => InvokeAsync(async () =>
+    {
+        var box = await Interop.MeasureAsync(_root);
+        var screen = (Math.Round(box.Width), Math.Round(box.Height));
+        if (screen != _screen)
+        {
+            _screen = screen;
+            StateHasChanged();
+        }
+    });
+
 
     /// <summary>A finger held still on the canvas's floor is watched, to begin a selection there.</summary>
     private IAsyncDisposable? _holdWatch;
@@ -845,23 +981,305 @@
     private (int Columns, int Rows) Extent =>
         _document.Layout is { CanvasWidth: { } width, CanvasHeight: { } height } ? (width, height) : DashboardView.DefaultCanvas(View);
 
+    /// <summary>The top of the toolbox: the host's verbs; nothing when it has none.</summary>
+    private RenderFragment? ToolboxTop => ToolboxHeader;
+
+    /// <summary>The screen drawn on the canvas: its pixels turned into cells, a cell being its own size's pixels on a screen at 100 %.</summary>
+    private string ScreenBoundsStyle =>
+        FormattableString.Invariant($"left: calc({Origin.Column} * var(--bz-dash-fixed-cell)); top: calc({Origin.Row} * var(--bz-dash-fixed-cell)); width: calc({Screen.Width / DashboardLayout.CellPixels} * var(--bz-dash-fixed-cell)); height: calc({Screen.Height / DashboardLayout.CellPixels} * var(--bz-dash-fixed-cell))");
+
+    private string ViewBoundsStyle =>
+        FormattableString.Invariant($"left: calc({Origin.Column} * var(--bz-dash-fixed-cell)); top: calc({Origin.Row} * var(--bz-dash-fixed-cell)); width: calc({Sized.Columns} * var(--bz-dash-fixed-cell)); height: calc({Sized.Rows} * var(--bz-dash-fixed-cell))");
+
     /// <summary>
-    /// The view's size typed at the top of the toolbox: columns and rows, applied as they are typed, as every field is;
-    /// a size under one cell, the field emptied on the way to another number,
-    /// is let pass.
+    /// Where the view starts on the canvas: a dashboard's, as drawn and kept
+    /// with it; the board's reckoner's, as drawn while the board is open.
     /// </summary>
-    /// <summary>The top of the toolbox: the host's verbs, then the canvas size on a framed dashboard; nothing when neither is.</summary>
-    private RenderFragment? ToolboxTop => ToolboxHeader is null && !Framed ? null : ToolboxTopContent;
+    private (int Column, int Row) Origin => Framed ? _document.Layout.CanvasOrigin : _sizedAt;
 
-    private RenderFragment ToolboxTopContent => @<text>@ToolboxHeader@(Framed ? CanvasSize : null)</text>;
+    private (int Column, int Row) _sizedAt;
 
+    /// <summary>The view on the canvas: where it starts and its size.</summary>
+    private CellBox ViewBox => new(Origin.Column, Origin.Row, Sized.Columns, Sized.Rows);
+
+    /// <summary>
+    /// The canvas is being drawn with the pointer (the canvas size's window's
+    /// verb): a press anywhere begins the box, a handle pulls a side; nothing
+    /// on the canvas moves, before, while or after.
+    /// </summary>
+    private bool _framing;
+
+    /// <summary>
+    /// The view being drawn: the box so far; the sides the pointer pulls, or
+    /// none for a box drawn afresh; and where that began — the cell pressed for
+    /// a fresh box, the view as it was for a side pulled.
+    /// </summary>
+    private (CellBox Box, Sides Pulled, CellBox Start)? _framed;
+
+    /// <summary>The sides of the view a handle pulls.</summary>
+    [Flags]
+    private enum Sides
+    {
+        None = 0,
+        Left = 1,
+        Right = 2,
+        Top = 4,
+        Bottom = 8,
+    }
+
+    /// <summary>The handles round the view while it is drawn: its four sides and its four corners.</summary>
+    private static readonly Sides[] FrameHandles =
+    [
+        Sides.Top, Sides.Right, Sides.Bottom, Sides.Left,
+        Sides.Top | Sides.Left, Sides.Top | Sides.Right, Sides.Bottom | Sides.Right, Sides.Bottom | Sides.Left,
+    ];
+
+    /// <summary>A handle's name in the stylesheet: n, e, s, w, nw, ne, se, sw.</summary>
+    private static string HandleName(Sides sides) =>
+        (sides.HasFlag(Sides.Top) ? "n" : sides.HasFlag(Sides.Bottom) ? "s" : "")
+        + (sides.HasFlag(Sides.Left) ? "w" : sides.HasFlag(Sides.Right) ? "e" : "");
+
+    /// <summary>The cells the frame shows across and down, measured with the canvas: in design every one of them is drawn on.</summary>
+    private (int Columns, int Rows) _roomCells;
+
+    private ElementReference _drawSurface;
+
+    private void ToggleFraming()
+    {
+        _framing = !_framing;
+        _framed = null;
+    }
+
+    /// <summary>
+    /// A press while drawing: on a handle, that side or corner of the view is
+    /// pulled; anywhere else a fresh box begins at the cell pressed. The
+    /// pointer is kept by the drawing surface, which follows it from then on.
+    /// </summary>
+    private async Task BeginFramingAsync(PointerEventArgs pointer, Sides? pulled)
+    {
+        if (pointer.Button != 0)
+        {
+            return;
+        }
+
+        await MeasureCanvasAsync();
+        var (column, row) = CellAt(pointer.ClientX, pointer.ClientY);
+        var start = pulled is null ? new CellBox(Math.Max(0, column), Math.Max(0, row), 1, 1) : ViewBox;
+        _framed = (start, pulled ?? Sides.None, start);
+        await Interop.CaptureAsync(_drawSurface, pointer.PointerId);
+    }
+
+    /// <summary>The box follows the pointer a whole cell at a time, never half of one, past the screen's edge too.</summary>
+    private void FollowFraming(PointerEventArgs pointer)
+    {
+        if (_framed is not { } framing)
+        {
+            return;
+        }
+
+        var (column, row) = CellAt(pointer.ClientX, pointer.ClientY);
+        _framed = framing with { Box = framing.Pulled == Sides.None ? Spanned(framing.Start, column, row) : Pulled(framing.Start, framing.Pulled, column, row) };
+    }
+
+    /// <summary>A fresh box: from the cell pressed to the pointer's, whichever way it went, never before the canvas's first cell.</summary>
+    private static CellBox Spanned(CellBox pressed, int column, int row)
+    {
+        var left = Math.Max(0, Math.Min(pressed.X, column));
+        var top = Math.Max(0, Math.Min(pressed.Y, row));
+        return new CellBox(left, top, Math.Max(pressed.X, column) - left + 1, Math.Max(pressed.Y, row) - top + 1);
+    }
+
+    /// <summary>The view with the sides pulled taken to the pointer's cell, one cell at least, never before the canvas's first cell.</summary>
+    private static CellBox Pulled(CellBox view, Sides sides, int column, int row)
+    {
+        var (left, top, right, bottom) = (view.X, view.Y, view.X + view.W - 1, view.Y + view.H - 1);
+        if (sides.HasFlag(Sides.Left))
+        {
+            left = Math.Clamp(column, 0, right);
+        }
+
+        if (sides.HasFlag(Sides.Right))
+        {
+            right = Math.Max(column, left);
+        }
+
+        if (sides.HasFlag(Sides.Top))
+        {
+            top = Math.Clamp(row, 0, bottom);
+        }
+
+        if (sides.HasFlag(Sides.Bottom))
+        {
+            bottom = Math.Max(row, top);
+        }
+
+        return new CellBox(left, top, right - left + 1, bottom - top + 1);
+    }
+
+    /// <summary>
+    /// The box let go: the view is that box, where it was drawn, larger or
+    /// smaller than it was. Nothing moves and nothing is refused: what stands
+    /// outside the view is shaded, and not shown out of design. Drawing goes on
+    /// until its verb is pressed again, so a side can be pulled after; the
+    /// ratio is read again from the size it gave.
+    /// </summary>
+    private async Task EndFramingAsync()
+    {
+        if (_framed is not { Box: var box })
+        {
+            return;
+        }
+
+        _framed = null;
+        _proportion = null;
+        if (Framed)
+        {
+            await _document.SetCanvasAsync(box);
+            return;
+        }
+
+        _sizedHere = (box.W, box.H);
+        _sizedAt = (box.X, box.Y);
+    }
+
+    /// <summary>
+    /// The canvas size's own window, folded into its button as the toolbox
+    /// and the properties are (the owner's request of 7 October 2026), on a
+    /// dashboard and on the board of every object alike. On a framed
+    /// dashboard it is the view's size, kept with it; on the board, which has
+    /// no view and keeps only its objects, a reckoner: the size typed stays
+    /// while the board is open, against the screen it is meant for.
+    /// </summary>
+    private (int Columns, int Rows) Sized => Framed ? Extent : _sizedHere ?? DashboardView.DefaultCanvas(View);
+
+    /// <summary>The size typed on the board of every object, which keeps no view; null for the view's own.</summary>
+    private (int Columns, int Rows)? _sizedHere;
+
+    private Task SizeAsync(int columns, int rows)
+    {
+        if (Framed)
+        {
+            return _document.SetCanvasSizeAsync(columns, rows);
+        }
+
+        if (columns >= 1 && rows >= 1)
+        {
+            _sizedHere = (columns, rows);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// What is typed first and what it gives under it: the canvas's ratio,
+    /// columns and rows, and under them the canvas in pixels and its shape;
+    /// the screen's width and height and the fit, and under them the cells
+    /// the screen holds.
+    /// </summary>
     private RenderFragment CanvasSize => @<div class="bz-dash-props bz-dash-canvas-size-fields">
-        <MudText Typo="Typo.caption" Class="mud-text-secondary bz-dash-prop-wide">Canvas size</MudText>
-        <TextField T="int" Value="Extent.Columns" ValueChanged="@(width => _document.SetCanvasSizeAsync(width, Extent.Rows))" Label="Cols"
+        <ChoiceField T="string" Value="@Proportion.Name" ValueChanged="KeepProportionAsync" Options="ProportionOptions" Label="Ratio"
+                     Title="The shape the canvas keeps: with one chosen, the columns typed give the rows and the rows the columns; Free leaves each to its field" />
+        <TextField T="int" Value="Sized.Columns" ValueChanged="SetColumnsAsync" Label="Cols"
                    Title="The view's columns: what is shown out of design, zoomed to fit the screen" />
-        <TextField T="int" Value="Extent.Rows" ValueChanged="@(height => _document.SetCanvasSizeAsync(Extent.Columns, height))" Label="Rows"
+        <TextField T="int" Value="Sized.Rows" ValueChanged="SetRowsAsync" Label="Rows"
                    Title="The view's rows: what is shown out of design, zoomed to fit the screen" />
+        <MudText Typo="Typo.caption" Class="mud-text-secondary bz-dash-prop-wide" title="The canvas being designed, its columns and rows of cells, in pixels, and its shape">
+            @FormattableString.Invariant($"Canvas {Sized.Columns * DashboardLayout.CellPixels:0} × {Sized.Rows * DashboardLayout.CellPixels:0} px · {CanvasProportion.Describe(Sized.Columns, Sized.Rows)}")
+        </MudText>
+        <TextField T="int" Value="Screen.Width" ValueChanged="@(width => TypeScreen(width, Screen.Height))" Label="W px"
+                   Title="The screen's width in pixels: this one's, measured, where it is the view's way up; a phone's for the portrait view designed on a computer; type another's" />
+        <TextField T="int" Value="Screen.Height" ValueChanged="@(height => TypeScreen(Screen.Width, height))" Label="H px"
+                   Title="The screen's height in pixels, the room the dashboard is shown in" />
+        <TextField T="int" Value="FitPercent" ValueChanged="FitToAsync" Label="Fit %" Immediate="false"
+                   Title="How large the canvas is shown on that screen with Fit, the whole of it in. Type a size and press Enter: the columns and rows become what that screen shows at it — at 100, the cells the screen holds" />
+        <MudText Typo="Typo.caption" Class="mud-text-secondary bz-dash-prop-wide" title="The cells the screen holds at their own size, across and down">
+            @FormattableString.Invariant($"Screen · {Math.Floor(Screen.Width / DashboardLayout.CellPixels):0} × {Math.Floor(Screen.Height / DashboardLayout.CellPixels):0} cells")
+        </MudText>
     </div>;
+
+    private IReadOnlyList<CanvasProportion> Proportions => CanvasProportion.For(View);
+
+    /// <summary>
+    /// The screen the view is meant for, in pixels: the one typed for this
+    /// view; or this one's room, where it stands the view's way up (a phone
+    /// designing its portrait view, a computer its landscape one); or, on a
+    /// screen the other way up, the view's own: a phone's room for the
+    /// portrait view, a full HD screen for the landscape one.
+    /// </summary>
+    private (int Width, int Height) Screen =>
+        _typedScreens.TryGetValue(View, out var typed) ? typed
+        : _screen is { Width: > 0, Height: > 0 } measured && (measured.Height > measured.Width) == (View == DashboardView.Portrait)
+            ? ((int)measured.Width, (int)measured.Height)
+        : View == DashboardView.Portrait ? ((int)Math.Round(DashboardView.PhoneColumns * DashboardLayout.CellPixels), DashboardView.PhoneHeight)
+        : (1920, 1080);
+
+    /// <summary>The screens typed in this design, one per view; a field emptied on the way to another number is let pass.</summary>
+    private readonly Dictionary<string, (int Width, int Height)> _typedScreens = [];
+
+    private void TypeScreen(int width, int height)
+    {
+        if (width > 0 && height > 0)
+        {
+            _typedScreens[View] = (width, height);
+        }
+    }
+
+    /// <summary>How large the canvas stands once fitted to the screen out of design: the whole of it in, its proportion kept.</summary>
+    private double ShownAt =>
+        Math.Min(Screen.Width / (Sized.Columns * DashboardLayout.CellPixels), Screen.Height / (Sized.Rows * DashboardLayout.CellPixels));
+
+    private int FitPercent => (int)Math.Round(ShownAt * 100);
+
+    /// <summary>
+    /// A fit typed: the canvas becomes what the screen shows at that size —
+    /// at 100, the very cells the screen holds — and its ratio is read from
+    /// what it became, a screen's name where it is one, Free otherwise.
+    /// </summary>
+    private Task FitToAsync(int percent)
+    {
+        if (percent < 1)
+        {
+            return Task.CompletedTask;
+        }
+
+        var cell = DashboardLayout.CellPixels * percent / 100;
+        _proportion = null;
+        return SizeAsync(Math.Max(1, (int)Math.Floor(Screen.Width / cell)), Math.Max(1, (int)Math.Floor(Screen.Height / cell)));
+    }
+
+    private IReadOnlyList<FieldOption<string>> ProportionOptions => [.. Proportions.Select(p => new FieldOption<string>(p.Name, p.Name))];
+
+    /// <summary>
+    /// The proportion kept: the one chosen, or while none was, the one the
+    /// view's size already has, so a view of 64 by 36 reads 16:9; Free where
+    /// none fits.
+    /// </summary>
+    private CanvasProportion Proportion =>
+        Proportions.FirstOrDefault(p => p.Name == _proportion)
+        ?? Proportions.FirstOrDefault(p => p.Fits(Sized.Columns, Sized.Rows))
+        ?? CanvasProportion.Free;
+
+    /// <summary>A proportion chosen: kept from now on, and the rows taken to it from the columns there are.</summary>
+    private Task KeepProportionAsync(string name)
+    {
+        _proportion = name;
+        var kept = Proportion;
+        return kept.IsFree ? Task.CompletedTask : SizeAsync(Sized.Columns, kept.RowsFor(Sized.Columns));
+    }
+
+    /// <summary>The columns typed, and with a proportion kept the rows it gives them.</summary>
+    private Task SetColumnsAsync(int columns)
+    {
+        var kept = Proportion;
+        return SizeAsync(columns, kept.IsFree || columns < 1 ? Sized.Rows : kept.RowsFor(columns));
+    }
+
+    /// <summary>The rows typed, and with a proportion kept the columns it gives them.</summary>
+    private Task SetRowsAsync(int rows)
+    {
+        var kept = Proportion;
+        return SizeAsync(kept.IsFree || rows < 1 ? Sized.Columns : kept.ColumnsFor(rows), rows);
+    }
 
     /// <summary>
     /// Out of design, the largest zoom at which the whole view fits the frame,
@@ -951,6 +1369,8 @@
                 return (Math.Floor(acrossBesideBar) / cell, 1, 1);
             case ViewFit.Fluid when acrossBesideBar > 0:
                 return (1, acrossBesideBar / cell, 1);
+            case ViewFit.Actual:
+                return (1, 1, 1);
             default:
                 var whole = Math.Floor(Math.Min(across, down));
                 return (whole > 0 ? whole / cell : 1, 1, 1);
@@ -973,7 +1393,8 @@
             var reach = _document.Layout.Objects.Select(o => o.X + o.W)
                 .Concat(_document.Layout.Groups.Select(g => g.X + g.W))
                 .DefaultIfEmpty(1).Max();
-            _document.ShowColumns(Framed ? Math.Max(reach, Extent.Columns) : Math.Max(reach, (int)Math.Floor(frame.Width / _cell)));
+            _roomCells = ((int)Math.Floor(frame.Width / _cell), (int)Math.Floor(frame.Height / _cell));
+            _document.ShowColumns(Math.Max(reach, Math.Max(Framed ? Origin.Column + Extent.Columns : 0, _roomCells.Columns)));
         }
     }
 
