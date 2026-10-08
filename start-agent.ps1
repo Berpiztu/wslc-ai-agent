@@ -51,47 +51,92 @@ $Url = "http://${BindHost}:${Port}"
 $Verbose = $VerbosePreference -eq "Continue"
 $Output = if ($Verbose) { @("-v", "detailed", "--tl:off") } else { @("-v", "q") }
 
+# Never PID 0: the System Idle Process is listed as its own child, and asking
+# for its children went round for ever, the script ending without starting the
+# agent. A process already gone through is not gone through again.
 function Get-DescendantProcessIds {
-    param([int]$ParentId)
+    param([int]$ParentId, [System.Collections.Generic.HashSet[int]]$Seen = [System.Collections.Generic.HashSet[int]]::new())
 
+    if ($ParentId -le 0 -or -not $Seen.Add($ParentId)) { return }
     $ChildIds = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $ParentId" -ErrorAction SilentlyContinue |
         Select-Object -ExpandProperty ProcessId)
     foreach ($ChildId in $ChildIds) {
-        Get-DescendantProcessIds -ParentId $ChildId
+        if ($ChildId -le 0 -or $Seen.Contains($ChildId)) { continue }
+        Get-DescendantProcessIds -ParentId $ChildId -Seen $Seen
         $ChildId
     }
 }
 
-# Port-in-use check: offer to kill the existing listener first.
-$Existing = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
-if ($Existing) {
-    $OwnerPid = ($Existing | Select-Object -First 1).OwningProcess
-    $Owner = Get-Process -Id $OwnerPid -ErrorAction SilentlyContinue
-    $DescendantPids = @(Get-DescendantProcessIds -ParentId $OwnerPid)
-    $OwnerName = if ($Owner) { $Owner.ProcessName } else { "process already exited" }
-    Write-Host "Port $Port is already in use by PID $OwnerPid ($OwnerName)." -ForegroundColor Yellow
-    $Answer = Read-Host "Kill PID $OwnerPid and continue? [y/N]"
-    if ($Answer -match '^[Yy]') {
-        $ProcessIdsToStop = @($DescendantPids) + $OwnerPid | Select-Object -Unique
-        Stop-Process -Id $ProcessIdsToStop -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Milliseconds 500
-        $Remaining = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
-        if ($Remaining) {
-            Write-Error "Port $Port is still in use by PID $(($Remaining | Select-Object -First 1).OwningProcess); aborting."
-        }
-        Write-Host "Port $Port is now available." -ForegroundColor Green
-    } else {
-        Write-Error "Port $Port is in use; aborting."
+# The process listening on the port, or 0 when none is named. Neither
+# Get-NetTCPConnection nor netstat is steady here: measured, the installed
+# agent, alive and listening, was in one look in two, and a listener is named
+# PID 0 now and then. So both are asked, a few times, and the first process
+# named answers.
+function Get-PortOwner {
+    param([int]$Port)
+
+    for ($Look = 0; $Look -lt 6; $Look++) {
+        $Named = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+            Where-Object OwningProcess -gt 0 | Select-Object -First 1
+        if ($Named) { return [int]$Named.OwningProcess }
+        $Line = netstat -ano -p TCP | Select-String -Pattern ":$Port\s+\S+\s+LISTENING\s+([1-9]\d*)" | Select-Object -First 1
+        if ($Line) { return [int]$Line.Matches[0].Groups[1].Value }
+        Start-Sleep -Milliseconds 100
     }
+    return 0
 }
 
-if (-not $NoBuild -and -not $Watch) {
-    # In a scope of its own: Packaging.ps1 turns strict mode on for whoever loads it.
-    $scope = @(& { . (Join-Path $RepoRoot "packaging\Packaging.ps1"); Get-WslcAgentSolutionScope })
-    Write-Host "Building WslcAgent.slnx ($Configuration)..." -ForegroundColor Cyan
-    Write-Verbose "dotnet build WslcAgent.slnx -c $Configuration $Output $scope"
-    dotnet build (Join-Path $RepoRoot "WslcAgent.slnx") -c $Configuration -nologo @Output @scope
-    if ($LASTEXITCODE -ne 0) { throw "dotnet build failed with exit code $LASTEXITCODE" }
+# The live process listening on the port, or nothing: none, or only the
+# listeners of a process already gone.
+function Get-PortProcess {
+    param([int]$Port)
+
+    $OwnerPid = Get-PortOwner -Port $Port
+    if ($OwnerPid -le 0) { return $null }
+    return Get-Process -Id $OwnerPid -ErrorAction SilentlyContinue
+}
+
+# Port-in-use check. A live process listening is offered to be stopped first.
+# Listeners left by an agent that stopped, which Windows names as nobody's
+# (PID 0) and clears in its own time, do not keep the agent from listening
+# again — measured: the agent ran on this port beside two of them —, so they
+# are let be and the agent starts; asking to kill PID 0 only aborted the start.
+$Owner = Get-PortProcess -Port $Port
+if ($Owner) {
+    $DescendantPids = @(Get-DescendantProcessIds -ParentId $Owner.Id)
+    Write-Host "Port $Port is already in use by PID $($Owner.Id) ($($Owner.ProcessName))." -ForegroundColor Yellow
+    $Answer = Read-Host "Kill PID $($Owner.Id) and continue? [y/N]"
+    if ($Answer -notmatch '^[Yy]') {
+        Write-Error "Port $Port is in use; aborting."
+    }
+
+    Stop-Process -Id (@($DescendantPids) + $Owner.Id | Select-Object -Unique) -Force -ErrorAction SilentlyContinue
+    # The process ends a moment after it is told to: up to five seconds, asked every quarter of one.
+    for ($Wait = 0; $Wait -lt 20 -and (Get-PortProcess -Port $Port); $Wait++) {
+        Start-Sleep -Milliseconds 250
+    }
+    if (Get-PortProcess -Port $Port) {
+        Write-Error "Port $Port is still in use by PID $((Get-PortProcess -Port $Port).Id); aborting."
+    }
+    Write-Host "Port $Port is now available." -ForegroundColor Green
+} elseif (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue) {
+    Write-Host "Port $Port still lists listeners of a stopped agent, which Windows clears by itself; starting anyway." -ForegroundColor DarkGray
+}
+
+# Only what the agent runs on: the agent, which builds the UI it serves with
+# it, and the icon beside the clock. Not the whole solution: its Android
+# client made an APK at every start, and the Windows client and the tests
+# took their time too, none of them run here (debug-android.ps1 and
+# build-client-apk.ps1 make the APK; build.ps1 builds and tests the whole).
+if (-not $NoBuild) {
+    $Builds = @($Project) + $(if ($NoTray) { @() } else { @(Join-Path $RepoRoot "src\WslcAgent.Tray") })
+    foreach ($Built in $Builds) {
+        if ($Watch -and $Built -eq $Project) { continue }
+        Write-Host "Building $(Split-Path -Leaf $Built) ($Configuration)..." -ForegroundColor Cyan
+        Write-Verbose "dotnet build $Built -c $Configuration $Output"
+        dotnet build $Built -c $Configuration -nologo @Output
+        if ($LASTEXITCODE -ne 0) { throw "dotnet build of $(Split-Path -Leaf $Built) failed with exit code $LASTEXITCODE" }
+    }
 }
 
 # Development: the referenced projects' static assets (the Blazor UI) are
@@ -105,18 +150,11 @@ if ($Verbose) {
     Write-Verbose "Agent log levels: Default=Debug, Microsoft.AspNetCore=Information"
 }
 
-# The icon beside the clock, for this agent: the solution build above made it,
-# except under -Watch, which builds only the agent. It waits for the agent by
-# itself, retrying its events stream, so it can start first.
+# The icon beside the clock, for this agent, built above. It waits for the
+# agent by itself, retrying its events stream, so it can start first.
 $TrayProcess = $null
 if (-not $NoTray) {
     $TrayProject = Join-Path $RepoRoot "src\WslcAgent.Tray"
-    if ($Watch -and -not $NoBuild) {
-        Write-Host "Building WslcAgent.Tray ($Configuration)..." -ForegroundColor Cyan
-        Write-Verbose "dotnet build $TrayProject -c $Configuration $Output"
-        dotnet build $TrayProject -c $Configuration -nologo @Output
-        if ($LASTEXITCODE -ne 0) { throw "dotnet build of the tray failed with exit code $LASTEXITCODE" }
-    }
 
     $TrayExe = Join-Path $TrayProject "bin\$Configuration\net10.0-windows10.0.19041.0\wslc-ai-agent-tray.exe"
     if (-not (Test-Path -LiteralPath $TrayExe)) { throw "The tray is not built: $TrayExe" }
