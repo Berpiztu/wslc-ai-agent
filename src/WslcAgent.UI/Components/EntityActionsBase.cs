@@ -32,6 +32,9 @@ public abstract class EntityActionsBase : ComponentBase
 
     protected bool Busy { get; private set; }
 
+    /// <summary>The verb running on the row brings it down (<see cref="BusyRows.IsStopping"/>).</summary>
+    protected bool Stopping => Rows.IsStopping(Key);
+
     /// <summary>A verb a later slice brings: it stays a normal button and says so.</summary>
     protected void NotYet(string feature, string slice) => Slices.NotYet(Snackbar, feature, slice);
 
@@ -40,7 +43,7 @@ public abstract class EntityActionsBase : ComponentBase
 
     protected async Task RunAsync(string what, string verb, Func<CancellationToken, Task> action)
     {
-        SetBusy(true);
+        SetBusy(true, verb);
         using var work = Activity.Begin($"{VerbWords.Gerund(verb)} {what}");
         try
         {
@@ -77,12 +80,12 @@ public abstract class EntityActionsBase : ComponentBase
         }
     }
 
-    private void SetBusy(bool busy)
+    private void SetBusy(bool busy, string verb = "")
     {
         Busy = busy;
         if (busy)
         {
-            Rows.Begin(Key);
+            Rows.Begin(Key, verb);
         }
         else
         {

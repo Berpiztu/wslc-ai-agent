@@ -8,13 +8,19 @@
    listed, has the bar whole and its cross in the success colour: it is over,
    it went well, and the cross only closes it. What a list puts before a
    row's name (a group's +/−, the mark of a row that stands under one) goes
-   before it here too (Lead). *@
+   before it here too (Lead). Work that has no measure of how far it is (a
+   container being started or stopped) has the bar moving from end to end and
+   no percentage (Indeterminate); a row that only waits its turn has the bar
+   whole and still, without one either (ShowPct). A stop's moving bar runs
+   from right to left (Reversed). A row with nothing to
+   cancel or to dismiss has no cross: a cross that does nothing is worse
+   than none. *@
 
-<div title="@Status" class="wslc-progress-cell @(Mixed ? "wslc-progress-mixed" : "")">
+<div title="@Status" class="wslc-progress-cell @(Mixed ? "wslc-progress-mixed" : "") @(Reversed ? "wslc-progress-reversed" : "")">
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Wrap="Wrap.NoWrap">
         @Lead
         <span class="wslc-progress-name">@Name</span>
-        @if (Running)
+        @if (Running && ShowPct && !Indeterminate)
         {
             <MudText Typo="Typo.body2" Class="mud-text-secondary wslc-progress-pct">@(Pct)%</MudText>
         }
@@ -24,11 +30,14 @@
         {
             <MudIconButton Icon="@Icons.Material.Filled.Subject" Size="Size.Small" title="@LogTitle" aria-label="@LogTitle" OnClick="OnLog" />
         }
-        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="@(Done ? Color.Success : Color.Error)" title="@(Running ? CancelTitle : DismissTitle)" aria-label="@(Running ? CancelTitle : DismissTitle)"
-                       OnClick="@(Running ? OnCancel : OnDismiss)" />
+        @if ((Running ? OnCancel : OnDismiss).HasDelegate)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="@(Done ? Color.Success : Color.Error)" title="@(Running ? CancelTitle : DismissTitle)" aria-label="@(Running ? CancelTitle : DismissTitle)"
+                           OnClick="@(Running ? OnCancel : OnDismiss)" />
+        }
     </MudStack>
     @* Info, the ring's blue in the cards: the same work in the same colour in both views. *@
-    <MudProgressLinear Value="@(Running ? Math.Max(Pct, 2) : 100)" Color="@(Done ? Color.Success : Failed ? Color.Error : Color.Info)" Size="Size.Small" />
+    <MudProgressLinear Indeterminate="@(Running && Indeterminate)" Value="@(Running ? Math.Max(Pct, 2) : 100)" Color="@(Done ? Color.Success : Failed ? Color.Error : Color.Info)" Size="Size.Small" />
 </div>
 
 @code {
@@ -38,6 +47,15 @@
     [Parameter] public RenderFragment? Lead { get; set; }
 
     [Parameter] public int Pct { get; set; }
+
+    /// <summary>The work says how far it has got, and the row says it as a percentage; false for a bar that only stands there (a row waiting its turn).</summary>
+    [Parameter] public bool ShowPct { get; set; } = true;
+
+    /// <summary>The work has no measure of how far it is: the bar moves from end to end, and no percentage is said.</summary>
+    [Parameter] public bool Indeterminate { get; set; }
+
+    /// <summary>The work is a stop: the bar is drawn from the right, so it runs from right to left.</summary>
+    [Parameter] public bool Reversed { get; set; }
 
     /// <summary>The step under way, or why it failed.</summary>
     [Parameter] public string Status { get; set; } = "";

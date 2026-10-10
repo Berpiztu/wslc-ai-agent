@@ -149,10 +149,12 @@ publishing and cleaning up need them on.
     shows the pull as the lists do, in the window's title beside Close: a
     ring with its percentage, and beside it its output and its cancel.
   - **A Compose file**: the **Compose** verb opens a window built as the
-    Run form is. Its one field, **Docker Compose file, or paste**, takes
-    the file in any of three ways: its button opens the system's own Open
-    dialog and leaves the file's path there; a path is pasted; or the
-    Compose file itself is pasted, which the one line holds unseen. Once
+    Run form is. The file is given one of two ways, a field each: **Open
+    Compose file**, whose button opens the system's own Open dialog and
+    leaves the file's path there, or a path is typed; and **Paste
+    Compose**, where the Compose file itself is pasted, the one line
+    showing its first and its arrow opening it whole over the window, to
+    read and change. Once
     there is a file, **Context** is asked for under it: the folder its
     relative paths, its `build` and its `env_file` start from, which the
     file does not say. It is the file's own folder when the file was opened
@@ -167,9 +169,9 @@ publishing and cleaning up need them on.
     its entries, a mount each, and the link from its real folder, since WSLC
     does not follow a junction),
     or not supported (and why), so nothing the file asks for is dropped
-    unseen. Under the list, **Variables** holds the file's parameters, every
-    `${NAME}` it asks for with the value it was read as, to set before it
-    is saved. The rail holds the Run form's two verbs: **Save** creates the project
+    unseen. On the line of **Context** and **Check Compose file**,
+    **Variables** holds the file's parameters, every `${NAME}` it asks for
+    with the value it was read as, to set before it is saved. The rail holds the Run form's two verbs: **Save** creates the project
     (its networks and volumes, the images it builds, a container a service)
     and leaves it stopped, **Run** also starts it, in the order the services
     depend on each other. Both say first what they are about to do, and then
@@ -183,7 +185,8 @@ publishing and cleaning up need them on.
     group: one row with its name, how many of its containers run and their
     CPU and memory share added up, whose **+** opens its containers' rows
     under it; in cards, its own card followed by its containers' cards, in
-    the same cells as any other card, with a line round them as one, green
+    the same cells as any other card. A line runs round them as one, round
+    its rows in the table as round its cards, green
     with every container running, blue with none, and striped in both with
     some; while something is being done to the project the line is striped
     and its card's header goes from the stopped tone to the running one
@@ -192,7 +195,10 @@ publishing and cleaning up need them on.
     project is of the containers that run: one left stopped stays so. Its own
     verbs start, stop and restart its containers in the order its services
     start in, one at a time: the group opens, the container it is on
-    shows it is working and the project how far it has got. A container of
+    shows it is working and the project how far it has got. A stop reads
+    the other way: the project's bar and ring begin whole and run down
+    as its containers go, the bar of the container being stopped
+    moves from right to left, and its ring turns backwards. A container of
     a project is not started, by its own verb either, while a service its
     own depends on is not running, nor restarted, which a window of its
     own says, naming what has to be started first; stopping one that

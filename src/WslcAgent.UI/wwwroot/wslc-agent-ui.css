@@ -2617,6 +2617,53 @@
     grid-template-columns: minmax(0, 13fr) minmax(0, 7fr) minmax(0, 18fr) minmax(0, 15fr);
 }
 
+/* A field of one line that has to be a text area (the Compose file's: a plain
+   field drops the line breaks of a file pasted into it). MudBlazor gives a
+   filled text area the label's room twice, as its margin and as its padding,
+   so it stood 27px taller than the field beside it (71.6px against 44.6px,
+   measured). Without the margin it is the height every field is. */
+.wslc-field-one-line .mud-input > textarea.mud-input-root.mud-input-root-filled.mud-input-root-margin-dense {
+    margin-top: 0;
+}
+
+/* The titles of a window read from further off (the Compose window's, by the
+   owner's request of 10 October 2026). A field's label, standing over its
+   value, at the title step: 1.06 / 0.82 of the body size it is written in,
+   and not MudBlazor's three quarters of it, which is under every step of the
+   scale. Its box is then 23.8px tall from 1.5px down, so the value starts 4px
+   lower than in any other form (27px, through the variable the fields'
+   padding is read from) and a field is those 4px taller. What a field holds
+   stays at the body size. A list's title, at the title step too. */
+.wslc-labels-large {
+    --wslc-form-pad-top: 27px;
+}
+
+.wslc-labels-large .mud-input-control-input-container > .mud-input-text.mud-shrink ~ label.mud-input-label.mud-input-label-inputcontrol,
+.wslc-labels-large .mud-input-control-input-container > .mud-input-text:focus-within ~ label.mud-input-label.mud-input-label-inputcontrol {
+    transform: translate(8px, 1.5px) scale(calc(1.06 / 0.82));
+}
+
+.wslc-labels-large .wslc-form-label {
+    font-size: var(--mud-typography-h6-size);
+}
+
+/* The Compose window's line under its file: the context, the verb that reads
+   the file with it, and the file's variables. The two fields share the width
+   and the verb takes what its words need. The verb stands level with the
+   fields' values: a field is taller than its value by the note under it, the
+   line a picker's button gives back to stay level (.wslc-field-pick.has-note,
+   above), so the verb's cell gives the same line back and centres in what is
+   left. */
+.wslc-form-grid.wslc-form-line.wslc-compose-fields {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
+.wslc-compose-fields > .wslc-compose-verb {
+    display: flex;
+    align-items: center;
+    padding-bottom: calc(var(--mud-typography-overline-size) * 1.66);
+}
+
 /* A grid's name with its legend: two views, as the dashboard has, the window's
    orientation choosing (the owner's request of 3 October 2026). Lying down, the
    legend in full words on the name's line; standing up, on a line of its own, a
@@ -3991,7 +4038,7 @@
    wide. The cells are as tall as their row, so the line under them is one.
    The line says how the project is: the success colour with every container
    running, the primary with none, and stripes of the two with some. */
-.wslc-cards-grid > .wslc-card-bracket {
+.wslc-cards-grid > .wslc-bracket {
     --wslc-bracket: var(--mud-palette-primary);
     align-self: stretch;
     margin: -4px;
@@ -4000,15 +4047,15 @@
     border-inline: 2px solid transparent;
 }
 
-.wslc-cards-grid > .wslc-card-bracket.wslc-bracket-running {
+.wslc-cards-grid > .wslc-bracket.wslc-bracket-running {
     --wslc-bracket: var(--mud-palette-success);
 }
 
-.wslc-cards-grid > .wslc-card-bracket.wslc-bracket-start {
+.wslc-cards-grid > .wslc-bracket.wslc-bracket-start {
     border-inline-start-color: var(--wslc-bracket);
 }
 
-.wslc-cards-grid > .wslc-card-bracket.wslc-bracket-end {
+.wslc-cards-grid > .wslc-bracket.wslc-bracket-end {
     border-inline-end-color: var(--wslc-bracket);
 }
 
@@ -4043,29 +4090,113 @@
     50% { background-color: color-mix(in srgb, var(--mud-palette-success) 25%, var(--mud-palette-surface)); }
 }
 
-.wslc-cards-grid > .wslc-card-bracket.wslc-bracket-waiting > .wslc-card > .mud-card-header,
-.wslc-cards-grid > .wslc-card-bracket.wslc-bracket-waiting > .wslc-card > .mud-card-actions {
+.wslc-cards-grid > .wslc-bracket.wslc-bracket-waiting > .wslc-card > .mud-card-header,
+.wslc-cards-grid > .wslc-bracket.wslc-bracket-waiting > .wslc-card > .mud-card-actions {
     animation: wslc-card-working 1.4s ease-in-out infinite;
+}
+
+/* A row's bar for a stop: the same bar drawn from the right, so that what
+   moves in it moves from right to left, the way a stop reads. */
+.wslc-progress-cell.wslc-progress-reversed .mud-progress-linear {
+    transform: scaleX(-1);
 }
 
 /* Stripes: the border is painted from a gradient, which takes every side that
    has a width, so the sides a cell does not close are given none. The widths
    are top, right, bottom, left. */
-.wslc-cards-grid > .wslc-card-bracket.wslc-bracket-partial {
+.wslc-cards-grid > .wslc-bracket.wslc-bracket-partial {
     border-image: repeating-linear-gradient(135deg, var(--mud-palette-success) 0 6px, var(--mud-palette-primary) 6px 12px) 2;
     border-image-width: 2px 0;
 }
 
-.wslc-cards-grid > .wslc-card-bracket.wslc-bracket-partial.wslc-bracket-start {
+.wslc-cards-grid > .wslc-bracket.wslc-bracket-partial.wslc-bracket-start {
     border-image-width: 2px 0 2px 2px;
 }
 
-.wslc-cards-grid > .wslc-card-bracket.wslc-bracket-partial.wslc-bracket-end {
+.wslc-cards-grid > .wslc-bracket.wslc-bracket-partial.wslc-bracket-end {
     border-image-width: 2px 2px 2px 0;
 }
 
-.wslc-cards-grid > .wslc-card-bracket.wslc-bracket-partial.wslc-bracket-start.wslc-bracket-end {
+.wslc-cards-grid > .wslc-bracket.wslc-bracket-partial.wslc-bracket-start.wslc-bracket-end {
     border-image-width: 2px;
+}
+
+/* The same line in the table, round a project's rows: over its first row,
+   under its last, down the left of every one's first cell and down the right
+   of its last. It is drawn over each cell, not in it: the grid's own lines are
+   the cells' borders, which stand above anything a cell paints of its own and
+   would cut the line at every column and every row. So each cell lays a sheet
+   over its whole box, the borders included (the 1px it has at its right and
+   under it; the last cell has none at its right, nor the table's last row
+   under it), which the cell lets out past its edge by that 1px, and the sheet
+   paints the sides this cell has of the line and nothing else. The first and
+   the last cell are pinned, so the two ends of the line stay in sight however
+   far the row is scrolled. */
+.wslc-fill > .mud-table .mud-table-body .mud-table-row.wslc-bracket > .mud-table-cell {
+    --wslc-bracket: var(--mud-palette-primary);
+    --wslc-bracket-paint: linear-gradient(var(--wslc-bracket), var(--wslc-bracket));
+    overflow: clip;
+    overflow-clip-margin: 1px;
+}
+
+.wslc-fill > .mud-table .mud-table-body .mud-table-row.wslc-bracket > .mud-table-cell:not(.sticky-left):not(.sticky-right) {
+    position: relative;
+}
+
+.wslc-fill > .mud-table .mud-table-body .mud-table-row.wslc-bracket.wslc-bracket-running > .mud-table-cell {
+    --wslc-bracket: var(--mud-palette-success);
+}
+
+.wslc-fill > .mud-table .mud-table-body .mud-table-row.wslc-bracket.wslc-bracket-partial > .mud-table-cell {
+    --wslc-bracket-paint: repeating-linear-gradient(135deg, var(--mud-palette-success) 0 6px, var(--mud-palette-primary) 6px 12px);
+}
+
+.wslc-fill > .mud-table .mud-table-body .mud-table-row.wslc-bracket.wslc-bracket-start > .mud-table-cell {
+    --wslc-bracket-over: var(--wslc-bracket-paint);
+}
+
+.wslc-fill > .mud-table .mud-table-body .mud-table-row.wslc-bracket.wslc-bracket-end > .mud-table-cell {
+    --wslc-bracket-under: var(--wslc-bracket-paint);
+}
+
+.wslc-fill > .mud-table .mud-table-body .mud-table-row.wslc-bracket > .mud-table-cell:first-child {
+    --wslc-bracket-before: var(--wslc-bracket-paint);
+}
+
+.wslc-fill > .mud-table .mud-table-body .mud-table-row.wslc-bracket > .mud-table-cell:last-child {
+    --wslc-bracket-after: var(--wslc-bracket-paint);
+}
+
+.wslc-fill > .mud-table .mud-table-body .mud-table-row.wslc-bracket > .mud-table-cell::after {
+    content: "";
+    position: absolute;
+    inset: 0 -1px -1px 0;
+    pointer-events: none;
+    background-image: var(--wslc-bracket-over, none), var(--wslc-bracket-under, none), var(--wslc-bracket-before, none), var(--wslc-bracket-after, none);
+    background-repeat: no-repeat;
+    background-size: 100% 2px, 100% 2px, 2px 100%, 2px 100%;
+    background-position: left top, left bottom, left top, right top;
+}
+
+.wslc-fill > .mud-table .mud-table-body .mud-table-row.wslc-bracket > .mud-table-cell:last-child::after {
+    right: 0;
+}
+
+.wslc-fill > .mud-table .mud-table-root > .mud-table-body:last-child > .mud-table-row.wslc-bracket:last-child > .mud-table-cell::after {
+    bottom: 0;
+}
+
+/* A ring that turns for a stop turns the other way. MudBlazor's turn is three
+   animations of one length (the ring, its child turning back so what it holds
+   stays upright, and the dash along the ring): each played backwards is the
+   same turn seen backwards. */
+.wslc-ring-reversed.mud-progress-circular.mud-progress-indeterminate,
+.wslc-ring-reversed .mud-progress-circular-circle.mud-progress-indeterminate {
+    animation-direction: reverse;
+}
+
+.wslc-ring-reversed .mud-progress-circular-indeterminate-child {
+    animation-direction: normal;
 }
 
 /* A card's action row in two groups: the verbs of the row at the left, and at

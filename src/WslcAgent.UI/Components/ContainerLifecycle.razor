@@ -3,7 +3,8 @@
    and still while it is stopped. Pressing the verb beside it — Stop or Start —
    sets the ring turning in the colour it is heading for and the dot amber, the
    light between; once the header has re-read the container both settle in the
-   new colour. One ring in one size throughout, never a dot swapped for a
+   new colour. For a stop it turns the other way, as everything that shows a
+   stop runs backwards. One ring in one size throughout, never a dot swapped for a
    spinner: that swap changed the width and pushed the button sideways. The dot
    is MudProgressCircular's own content, which it centres itself. Restart is a
    stop and a start, and removing a container stays on the list, whose ⋮ menu
@@ -16,7 +17,7 @@
        dot read as one piece with no hairline of white between them. The dot's
        box is 18px but Material's circle is drawn at radius 10 of 24, so what
        shows is 15px: a hole sized to the box left 1.37px of white each side. *@
-    <MudProgressCircular Size="Size.Small" StrokeWidth="10" Rounded="true" Color="RingColor" Class="wslc-state-ring"
+    <MudProgressCircular Size="Size.Small" StrokeWidth="10" Rounded="true" Color="RingColor" Class="@(Stopping ? "wslc-state-ring wslc-ring-reversed" : "wslc-state-ring")"
                          Indeterminate="Busy" Value="100" title="@(Busy ? "working…" : Container.State)">
         <MudIcon Icon="@Icons.Material.Filled.Circle" Size="Size.Small" Color="DotColor" />
     </MudProgressCircular>

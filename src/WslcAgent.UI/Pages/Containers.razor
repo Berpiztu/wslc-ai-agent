@@ -60,8 +60,11 @@
 
         @if (View == ViewMode.Table)
         {
+            @* A project's rows stand together, its own first, and the line that runs round
+               its cards runs round them here too (Bracket). *@
+            var lines = BracketsOf(Rows.Select(row => row.Value));
             <ListGrid TItem="ListRow<ContainerSummary>" Items="Rows" Loading="Loading" Page="Page" PageChanged="p => Page = p" SortChanged="SortChanged" EmptyText="@EmptyText"
-                      MultiSelection="true" @bind-SelectedItems="Selected">
+                      MultiSelection="true" @bind-SelectedItems="Selected" RowClassFunc="@((row, _) => Bracket(row.Value, lines))">
                 <Columns>
                     <SelectColumn T="ListRow<ContainerSummary>" Size="Size.Small" StickyLeft="true" HeaderClass="@GridColumn.Select" CellClass="@GridColumn.Select" />
                     @* The dot sorts the list by state: running first, then everything stopped. *@
@@ -109,6 +112,20 @@
                                               Failed="@TransferFlow.Failed(moving)" LogTitle="View the transfers" CancelTitle="@CancelTitle(moving)" DismissTitle="Dismiss"
                                               OnLog="@(() => TransferFlow.ShowAsync(Dialogs, context.Item.Value.Id, context.Item.Value.Name))"
                                               OnCancel="@(() => CancelTransfersAsync(moving))" OnDismiss="@(() => DismissTransfersAsync(moving))" />
+                            }
+                            else if (Working.IsBusy(context.Item.Value.Id))
+                            {
+                                @* A verb on the container itself, its own or its project's going through
+                                   it: the bar a run has, moving, since a start or a stop has no percentage.
+                                   What stops it moves the bar from right to left, as its project's runs down. *@
+                                <ProgressCell Lead="@Mark(context.Item.Value)" Name="@context.Item.Value.Name" Indeterminate="true" Status="Working…"
+                                              Reversed="@Working.IsStopping(context.Item.Value.Id)" />
+                            }
+                            else if (Verbs.IsWaiting(context.Item.Value.Id))
+                            {
+                                @* Its project's verb has not got to it yet: the bar whole and still, in the two
+                                   colours of being between two states, as its card's header is. *@
+                                <ProgressCell Lead="@Mark(context.Item.Value)" Name="@context.Item.Value.Name" Pct="100" ShowPct="false" Mixed="true" Status="Waiting its turn" />
                             }
                             else
                             {
@@ -169,11 +186,10 @@
             @* A project's cards stand among the others, each in its own cell: its own card
                first, then its containers', and a line runs round them as one (Bracket). *@
             var cards = Visible;
-            var closing = Closing(cards);
-            var tones = cards.Where(IsGroup).ToDictionary(head => head.Name, head => ToneOf(head.Name), StringComparer.Ordinal);
+            var lines = BracketsOf(cards);
             <CardsGrid TItem="ContainerSummary" Items="cards" Loading="Loading" EmptyText="@EmptyText">
                 <ItemTemplate Context="c">
-                    @if (Bracket(c, closing, tones) is { Length: > 0 } bracket)
+                    @if (Bracket(c, lines) is { Length: > 0 } bracket)
                     {
                         <div class="@bracket">
                             @(IsGroup(c) ? GroupCard(c) : ContainerCard(c))
@@ -222,7 +238,7 @@
     private IReadOnlyList<ImagePullState> _pulls = [];
     private readonly HashSet<string> _reportedLaunches = [];
 
-    /// <summary>Runs still on their way first, as a temporary row each; then every project as a group, and the containers on their own.</summary>
+    /// <summary>Every project as a group and the containers on their own, with the runs still on their way as a temporary row each, last.</summary>
     protected override async Task<IReadOnlyList<ContainerSummary>> LoadAsync()
     {
         var response = await Api.GetContainersAsync(all: !_runningOnly, helpers: _helpers);
@@ -238,13 +254,16 @@
     }
 
     /// <summary>
-    /// The list as it is held: the runs on their own first, then each project
-    /// as its head row followed by its containers and the runs it has under
-    /// way, then the containers on their own. A project stands where its
-    /// oldest container does, so it keeps its place as the rows do; one with no
-    /// container yet (its first save) stands after the runs. Every row of a
-    /// group is given a place between two of the agent's numbers, in order,
-    /// which is how the list keeps them together (<see cref="AgeOf"/>).
+    /// The list as it is held: each project as its head row followed by its
+    /// containers and the runs it has under way, and the containers on their
+    /// own, every one where the agent's number puts it. A project stands
+    /// where its oldest container does, so it keeps its place as the rows do.
+    /// What is new and has no number yet (a project at its first save, a run
+    /// on its own) stands last, which is where its number will leave it once
+    /// it has one: shown first, it stood at the top for a moment and then
+    /// fell to the foot of the list under the eye. Every row of a group is
+    /// given a place between two of the agent's numbers, in order, which is
+    /// how the list keeps them together (<see cref="AgeOf"/>).
     /// </summary>
     private IReadOnlyList<ContainerSummary> Grouped(IReadOnlyList<ContainerSummary> runs, IReadOnlyList<ContainerSummary> containers)
     {
@@ -260,8 +279,9 @@
             rows.AddRange(block);
         }
 
-        // Under 1, the first number the agent gives: before every container.
-        Place(runs.Where(run => run.Project.Length == 0).ToList(), 0.1, 0.4);
+        // After the last number the agent has given, a whole number each: past every row that has one.
+        var newest = containers.Select(container => container.Uid).DefaultIfEmpty(0).Max();
+        var arriving = 0;
 
         var projects = containers.Select(container => container.Project)
             .Concat(_launches.Where(launch => launch.Group.Length > 0 && !launch.Done).Select(launch => launch.Group))
@@ -276,18 +296,15 @@
             var oldest = members.Where(member => member.Uid > 0).Select(member => member.Uid).DefaultIfEmpty(0).Min();
 
             // From a quarter before its oldest container to short of the next number: no other row has a place in there.
-            if (oldest > 0)
-            {
-                Place(ofProject, oldest - 0.25, 0.9);
-            }
-            else
-            {
-                Place(ofProject, 0.6 + (0.3 * index / projects.Count), 0.25 / projects.Count);
-            }
+            Place(ofProject, oldest > 0 ? oldest - 0.25 : newest + ++arriving, 0.9);
         }
 
+        Place(runs.Where(run => run.Project.Length == 0).ToList(), newest + ++arriving, 0.9);
         rows.AddRange(containers.Where(container => container.Project.Length == 0));
-        return rows;
+
+        // In that order here too: a list that cannot be ordered by its numbers (a row the agent
+        // gave none) keeps a new row at the place it comes in, which has to be the last as well.
+        return [.. rows.OrderBy(row => _ages.GetValueOrDefault(row.Id, row.Uid))];
     }
 
     /// <summary>A project's head row: how many of its containers run, and their CPU and memory share added up.</summary>
@@ -346,11 +363,22 @@
     protected override string Folding =>
         $"{Sorted}|{string.Join(',', Items.Where(IsGroup).Where(head => IsOpen(head.Name)).Select(head => head.Name))}";
 
-    /// <summary>The last card each project has among the ones shown: where the line round its cards closes.</summary>
-    private static Dictionary<string, string> Closing(IReadOnlyList<ContainerSummary> cards) =>
-        cards.Where(card => card.Project.Length > 0)
-            .GroupBy(card => card.Project, StringComparer.Ordinal)
-            .ToDictionary(project => project.Key, project => project.Last().Id, StringComparer.Ordinal);
+    /// <summary>What the line round each project is drawn from, for the rows or cards shown: the first and the last it has among them, where the line opens and closes, and how the project is.</summary>
+    private sealed record Brackets(Dictionary<string, string> First, Dictionary<string, string> Last, Dictionary<string, string> Tones);
+
+    /// <summary>
+    /// The first one shown is the project's own, unless a search left it out
+    /// and kept some of its containers: the line then opens at the first of
+    /// those, and is as whole round what is shown.
+    /// </summary>
+    private Brackets BracketsOf(IEnumerable<ContainerSummary> shown)
+    {
+        var projects = shown.Where(row => row.Project.Length > 0).GroupBy(row => row.Project, StringComparer.Ordinal).ToList();
+        return new Brackets(
+            projects.ToDictionary(project => project.Key, project => project.First().Id, StringComparer.Ordinal),
+            projects.ToDictionary(project => project.Key, project => project.Last().Id, StringComparer.Ordinal),
+            projects.ToDictionary(project => project.Key, project => ToneOf(project.Key), StringComparer.Ordinal));
+    }
 
     /// <summary>
     /// Something is being done to the project: its save, a verb going through
@@ -385,10 +413,12 @@
     }
 
     /// <summary>
-    /// The classes of the cell of a card that is a project's (the stylesheet
-    /// draws the line): over and under every one, down the left of the
-    /// project's own card, which is the first, and down the right of the last,
-    /// in the colour of how the project is. A card that is between two
+    /// The classes of what is a project's, the cell of its card or its row in
+    /// the table (the stylesheet draws the line). Round the cards: over and
+    /// under every one, down the left of the first, which is the project's
+    /// own, and down the right of the last. Round the rows: over the first,
+    /// under the last, and down both ends of every one. In the colour of how
+    /// the project is. A card that is between two
     /// states is marked as waiting, which sets its header going from the
     /// stopped tone to the running one and back: the project's own while
     /// anything is being done to it, and a container's while a verb going
@@ -397,14 +427,14 @@
     /// Empty for a container on its own, and in a sorted list, which has no
     /// groups.
     /// </summary>
-    private string Bracket(ContainerSummary card, Dictionary<string, string> closing, Dictionary<string, string> tones) =>
+    private string Bracket(ContainerSummary card, Brackets lines) =>
         Sorted || card.Project.Length == 0
             ? ""
-            : $"wslc-card-bracket {tones.GetValueOrDefault(card.Project, "wslc-bracket-stopped")}"
-              + $"{(IsGroup(card) ? " wslc-bracket-start" : "")}{(closing.GetValueOrDefault(card.Project) == card.Id ? " wslc-bracket-end" : "")}"
+            : $"wslc-bracket {lines.Tones.GetValueOrDefault(card.Project, "wslc-bracket-stopped")}"
+              + $"{(lines.First.GetValueOrDefault(card.Project) == card.Id ? " wslc-bracket-start" : "")}{(lines.Last.GetValueOrDefault(card.Project) == card.Id ? " wslc-bracket-end" : "")}"
               + $"{((IsGroup(card) && IsWorking(card.Project)) || Verbs.IsWaiting(card.Id) ? " wslc-bracket-waiting" : "")}";
 
-    /// <summary>What stands before a row's name: a project's +/−, the mark of a container under its project; nothing for a container on its own, or in a sorted list, which has no groups.</summary>
+    /// <summary>What stands before a row's name: a project's +/−, the step in of a container under its project; nothing for a container on its own, or in a sorted list, which has no groups.</summary>
     private RenderFragment? Mark(ContainerSummary row)
     {
         if (Sorted || row.Project.Length == 0)
@@ -414,7 +444,10 @@
 
         if (!IsGroup(row))
         {
-            return @<MudIcon Icon="@Icons.Material.Filled.SubdirectoryArrowRight" Size="Size.Small" Class="mud-text-secondary flex-shrink-0" />;
+            // Its name stands a step in from its project's +, under the project's name: the + is
+            // kept its place before it, unseen, so the step is exactly the button's. The step
+            // says it is the project's; no mark is added to it.
+            return @<MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" Class="invisible" Disabled="true" aria-hidden="true" />;
         }
 
         var open = IsOpen(row.Name);
@@ -459,7 +492,7 @@
             return Named(head);
         }
 
-        return @<ProgressCell Lead="@Mark(head)" Name="@head.Name" Pct="going.Pct" Status="@going.Step" Mixed="true"
+        return @<ProgressCell Lead="@Mark(head)" Name="@head.Name" Pct="going.Bar" Status="@going.Step" Mixed="true"
                               CancelTitle="Stop after this container" OnCancel="@(() => Verbs.Cancel(head.Name))" />;
     }
 
@@ -490,15 +523,17 @@
                     }
                     else if (Verbs.Of(head.Name) is { } going)
                     {
-                        <ProgressRing Pct="going.Pct" Status="@going.Step" Mixed="true" CancelTitle="Stop after this container" OnCancel="@(() => Verbs.Cancel(head.Name))" />
+                        <ProgressRing Pct="going.Bar" Status="@going.Step" Mixed="true" CancelTitle="Stop after this container" OnCancel="@(() => Verbs.Cancel(head.Name))" />
                     }
                     else if (IsWorking(head.Name))
                     {
                         @* Anything being done to one of its containers, or its own down: the ring turns
-                           where the avatar is, as any card's does, in the project's two colours. The
-                           card is given no key, so the header's own ring leaves this one its place. *@
+                           where the avatar is, as any card's does, in the project's two colours, and
+                           the other way when what is being done is a stop, as that container's own
+                           ring does. The card is given no key, so the header's own ring leaves this
+                           one its place. *@
                         <div class="wslc-progress-ring wslc-progress-mixed" title="Working…">
-                            <MudProgressCircular Class="wslc-progress-ring-dial" Color="Color.Info" Indeterminate="true" />
+                            <MudProgressCircular Class="@($"wslc-progress-ring-dial{(MembersOf(head.Name).Any(member => Working.IsStopping(member.Id)) ? " wslc-ring-reversed" : "")}")" Color="Color.Info" Indeterminate="true" />
                         </div>
                     }
                     else

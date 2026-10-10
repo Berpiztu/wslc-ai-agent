@@ -245,7 +245,9 @@ and the project's verbs. Its **+** opens the rows of its containers under
 it, indented, and they are ordinary container rows: the same columns, the
 same actions, the same tick. They are rows of the same table, not a table
 inside the row, so the columns stay aligned and resizing or reordering one
-moves them all.
+moves them all. The line that runs round a project's cards runs round its
+rows too: over the grouper, under its last container's row and down both
+ends of each, in the same colours.
 
 **The grouper is the Compose file.** What a container's View & edit is to
 a container, the group's is to the project, from its row or its card's

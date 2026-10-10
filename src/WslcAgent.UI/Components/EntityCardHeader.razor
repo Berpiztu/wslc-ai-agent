@@ -21,9 +21,11 @@
         {
             @* A verb running on this row (start, stop, restart, remove): the
                ring turns where the avatar is, as a pull's does. There is no
-               percentage to tell — wslc reports none — so it just turns. *@
+               percentage to tell — wslc reports none — so it just turns: the
+               way a clock does for what brings the row up, and the other way
+               for what brings it down. *@
             <div class="wslc-progress-ring" title="Working…">
-                <MudProgressCircular Class="wslc-progress-ring-dial" Color="Color.Primary" Indeterminate="true" />
+                <MudProgressCircular Class="@(Rows.IsStopping(Key) ? "wslc-progress-ring-dial wslc-ring-reversed" : "wslc-progress-ring-dial")" Color="Color.Primary" Indeterminate="true" />
             </div>
         }
         else if (Avatar is not null)

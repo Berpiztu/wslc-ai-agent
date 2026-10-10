@@ -8,9 +8,17 @@ namespace WslcAgent.UI.Components;
 /// <param name="Step">What it is doing now: "Starting web".</param>
 /// <param name="Done">The containers it has gone through.</param>
 /// <param name="Total">The containers it has to go through.</param>
-public sealed record ProjectWork(string Step, int Done, int Total)
+/// <param name="Verb">The verb: <c>start</c>, <c>stop</c> or <c>restart</c>.</param>
+public sealed record ProjectWork(string Step, int Done, int Total, string Verb)
 {
     public int Pct => Total == 0 ? 0 : Done * 100 / Total;
+
+    /// <summary>
+    /// What its bar and its ring show: how much is done, for a start; how
+    /// much is still up, for a stop, so they run down from whole to nothing
+    /// as the project's containers go, the way a stop reads.
+    /// </summary>
+    public int Bar => Verb == "stop" ? 100 - Pct : Pct;
 }
 
 /// <summary>
@@ -84,7 +92,7 @@ public sealed class ProjectVerbs(WslcAgentApi api, ActivityLine line, BusyRows r
 
         // What is done to each container is the thing to see: the group opens, and stays open.
         groups.Open(project);
-        Set(project, new ProjectWork($"{VerbWords.Gerund(verb)} project {project}", 0, 0));
+        Set(project, new ProjectWork($"{VerbWords.Gerund(verb)} project {project}", 0, 0, verb));
         using var work = line.Begin($"{VerbWords.Gerund(verb)} project {project}");
         try
         {
@@ -138,7 +146,7 @@ public sealed class ProjectVerbs(WslcAgentApi api, ActivityLine line, BusyRows r
             var member = todo[index];
             var step = $"{VerbWords.Gerund(verb)} {member.Name}";
             _waiting.Remove(member.Id);
-            Set(project, new ProjectWork(step, index, todo.Count));
+            Set(project, new ProjectWork(step, index, todo.Count, verb));
             work.Set(step);
             if (verb != "stop" && member.DependsOn.FirstOrDefault(down.Contains) is { } missing)
             {
@@ -309,7 +317,7 @@ public sealed class ProjectVerbs(WslcAgentApi api, ActivityLine line, BusyRows r
     /// <summary>One verb on one container, shown working for as long as a verb is shown and until the list has been read after it; why it failed, or null when it went through.</summary>
     private async Task<string?> TryAsync(ProjectMember member, string verb)
     {
-        rows.Begin(member.Id);
+        rows.Begin(member.Id, verb);
         try
         {
             await VerbSpin.AtLeast(verb switch

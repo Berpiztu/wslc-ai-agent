@@ -235,7 +235,7 @@ public sealed class ComposeReaderTests
                 "",                         // services:
                 ComposeLine.Converted,      //   web:
                 ComposeLine.Ok,             //     image: nginx
-                ComposeLine.Ok,             //     restart: always
+                ComposeLine.Converted,      //     restart: always (the agent's doing, not WSLC's)
                 ComposeLine.Unsupported,    //     privileged: true
                 "",                         //     volumes:
                 ComposeLine.Converted,      //       - ./site:/app

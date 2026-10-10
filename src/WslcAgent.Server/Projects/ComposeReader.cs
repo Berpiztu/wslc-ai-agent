@@ -1117,7 +1117,17 @@ public static partial class ComposeReader
 
             if (RestartPolicyInfo.IsKnown(policy))
             {
-                Mark(at, ComposeLine.Ok, "kept by the agent");
+                // WSLC restarts nothing: the agent does. A policy the file asks for is not taken as
+                // written, then, but turned into something of the agent's, and said so.
+                if (policy == RestartPolicyInfo.No)
+                {
+                    Mark(at, ComposeLine.Ok);
+                }
+                else
+                {
+                    Converted(at, "restarted by the agent, since WSLC has no restart policy");
+                }
+
                 return policy;
             }
 

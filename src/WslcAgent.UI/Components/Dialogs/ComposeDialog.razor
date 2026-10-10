@@ -1,14 +1,16 @@
 @* The Compose window, built as the launch form's is (Run container): the
    main column and the action rail at the right, which stays where it is. The
-   file's field is the launch form's Fill, one line that does not grow, with
-   a field's own button inside it. The three dots open the system's Open
-   dialog, never a window of ours, and leave the file's path in the field; or
-   a path is pasted there; or a whole Compose file is, of which that one line
-   shows the first, since what matters of it is drawn below. Whichever it is,
-   it stays in the field as it came. Once there is a file, the row under it
-   asks for what the file does not say, its context, and beside that field
-   stands Check Compose file: nothing is read until it is pressed, since it
-   is the user who says when. Then the box under them shows the file as the
+   file is given one of two ways, a field each on the first line, each one
+   line that does not grow with a field's own button inside it. Open Compose
+   file: the three dots open the system's Open dialog, never a window of
+   ours, and leave the file's path in the field, or a path is typed there.
+   Paste Compose: a whole Compose file pasted, of which that one line shows
+   the first; its arrow opens the file whole over what is under it, to read
+   and change, and moves nothing. Whichever was given last is the file. Once
+   there is one, the row under it asks for what the file does not say, its
+   context and its variables, and between them stands Check Compose file:
+   nothing is read until it is pressed, since it is the user who says when.
+   Then the box under them shows the file as the
    tree it is (MudBlazor's tree view): its services, networks and volumes as
    branches, each with what is written under it, to open and close. On the
    line of each branch, beside it, is what the agent makes of it: the
@@ -49,62 +51,96 @@
         <div class="wslc-action-body">
             @* The column does not scroll: the list of lines in its middle takes the height the
                fields above and below it leave, and scrolls inside itself. *@
-            <div class="wslc-action-main">
+            <div class="wslc-action-main wslc-labels-large">
                 <MudForm Class="wslc-form-grid flex-shrink-0">
-                    <div class="wslc-span2">
-                        @* A text area of one line: a plain one-line field drops a pasted file's line breaks
-                           before anything can read them. What it shows of a pasted file is its first line. *@
+                    @* The file, one of two ways, a column each: by its path on the agent's machine,
+                       which the three dots find in the system's Open dialog; or pasted. The pasted
+                       file's field is a text area of one line, since a plain one-line field drops a
+                       pasted file's line breaks before anything can read them, and shows its first
+                       line; its arrow opens the file whole over what is under it, to be read
+                       there in colours, as a field's list opens over the form, and moves nothing.
+                       A file opened by its path is shown there too. *@
+                    <div class="wslc-span2 wslc-form-grid">
                         <div class="wslc-field-pick has-note">
-                            <MudTextField @ref="_field" Margin="Margin.Dense" T="string" @bind-Value="_source" @bind-Value:after="TypedAsync" Label="Docker Compose file, or paste" Immediate="true"
-                                          HelperTextOnFocus="true" Variant="Variant.Filled" Lines="1" MaxLines="1" Sizing="InputSizing.Auto"
-                                          HelperText="Example: C:\apps\shop\compose.yaml, opened with the three dots or pasted; or paste the Compose file itself. Then press Check Compose file." />
+                            <MudTextField Margin="Margin.Dense" T="string" @bind-Value="_path" @bind-Value:after="PathTyped" Label="Open Compose file" Immediate="true"
+                                          HelperTextOnFocus="true" Variant="Variant.Filled"
+                                          HelperText="Example: C:\apps\shop\compose.yaml, opened with the three dots or typed. Then press Check Compose file." />
                             <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Open a Compose file" Disabled="_opening" OnClick="OpenAsync" />
                         </div>
-                        @if (_error.Length > 0)
-                        {
-                            <MudText Typo="Typo.caption" Class="mud-error-text">@_error</MudText>
-                        }
+                        <div class="wslc-field-pick has-note wslc-field-one-line">
+                            <MudTextField @ref="_field" Margin="Margin.Dense" T="string" @bind-Value="_pasteLine" @bind-Value:after="PastedAsync" Label="Paste Compose" Immediate="true"
+                                          HelperTextOnFocus="true" Variant="Variant.Filled" Lines="1" MaxLines="1" Sizing="InputSizing.Auto"
+                                          HelperText="Paste the Compose file itself here; the arrow opens it whole, to read. Then press Check Compose file." />
+                            <MudFab Color="Color.Success" StartIcon="@(_editing ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" Size="Size.Small"
+                                    title="@(_editing ? "Close the Compose file" : "Open the Compose file whole")" OnClick="@(() => _editing = !_editing)" />
+                        </div>
+                        <MudPopover Open="_editing" AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft" RelativeWidth="DropdownWidth.Relative" Class="pa-2">
+                            @* The file as it is written, in the box the logs are read in and of one fixed
+                               height, a line a row: its names in one colour, what is written for them in
+                               another, its comments greyed, as an editor shows a YAML file. *@
+                            <div class="wslc-logs-output wslc-picker-list">
+                                @if (_pasted.Trim().Length == 0)
+                                {
+                                    <div class="wslc-log-line wslc-log-empty">@(_path.Trim().Length > 0 ? "The file is read when it is checked: Check Compose file." : "No Compose file yet.")</div>
+                                }
+                                else
+                                {
+                                    @foreach (var line in _pasted.Replace("\r\n", "\n").Split('\n'))
+                                    {
+                                        <div class="wslc-log-line">@FileLine(line)</div>
+                                    }
+                                }
+                            </div>
+                        </MudPopover>
                     </div>
-                    @* What the file does not say and cannot be made up: asked for once there is a file,
-                       with what is already known put in. It takes the grid's first column; the
-                       second holds the verb that reads the file with it. *@
-                    @if (_source.Trim().Length > 0)
+                    @if (_error.Length > 0)
                     {
+                        <div class="wslc-span2">
+                            <MudText Typo="Typo.caption" Class="mud-error-text">@_error</MudText>
+                        </div>
+                    }
+                    @* What the file does not say and cannot be made up, on one line, there from the
+                       start as every field of the window is, with what is already known put in: its context; the verb that reads the
+                       file with it, level with the fields' values; and the file's parameters, its
+                       ${NAME}, a field of several values as Env is in the launch form, whose button
+                       opens the list with a row a variable. Checking the file fills them in. *@
+                        <div class="wslc-span2 wslc-form-grid wslc-form-line wslc-compose-fields">
                         <div class="wslc-field-pick has-note">
-                            <MudTextField Margin="Margin.Dense" T="string" @bind-Value="_context" Label="Context" Immediate="true" HelperTextOnFocus="true"
+                            <MudTextField Margin="Margin.Dense" T="string" @bind-Value="_context" @bind-Value:after="ContextTyped" Label="Context" Immediate="true" HelperTextOnFocus="true"
+                                          Error="@(_contextError.Length > 0)" ErrorText="@_contextError"
                                           Variant="Variant.Filled" HelperText="Example: C:\apps\shop. The folder the file's relative paths, its build and its env_file start from: the file's own when it was opened or its path pasted, or the one given here." />
                             <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick the context folder" OnClick="PickContextAsync" />
                         </div>
-                        <MudStack Row="true" AlignItems="AlignItems.Center">
+                        <div class="wslc-compose-verb">
                             <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FactCheck" OnClick="ConvertAsync">Check Compose file</MudButton>
-                        </MudStack>
-                    }
+                        </div>
+                        <MultiValueField Values="_variables" Label="Variables" Split="ValueList.SplitPairs" Placeholder="NAME=value"
+                                         HelperText="Example: TAG=1.4. The file's ${NAME}, edited as rows with ⋮; Check Compose file, Save and Run read the file with them."
+                                         Hint="One variable per row: NAME=value. These are the ${NAME} the file asks for, each with the value it has now. One left with no value stays as the file and its .env have it." />
+                        </div>
                 </MudForm>
-                @if (_plan is not null)
-                {
-                    <RowsHeader Label="@($"Conversion: {_plan.Name}")" />
-                    <MudPaper id="@_treeId" Outlined="true" Class="wslc-picker-list wslc-fill-scroll pa-2">
+                @* The tree's box is there before any file is: the window opens at its whole size
+                   with everything it has in sight, and the box says what will fill it. *@
+                <RowsHeader Label="@(_plan is null ? "Conversion" : $"Conversion: {_plan.Name}")" />
+                <MudPaper id="@_treeId" Outlined="true" Class="wslc-picker-list wslc-fill-scroll pa-2">
+                    @if (_plan is null)
+                    {
+                        <MudText Typo="Typo.body1" Class="mud-text-secondary">Open or paste a Compose file, then press Check Compose file: the file shows here as a tree, with what each line becomes.</MudText>
+                    }
+                    else
+                    {
                         <MudTreeView T="string" Dense="true" ReadOnly="true" Hover="true" ExpandOnClick="true" Class="wslc-tree-lines">
                             @Branch(FileTree)
                         </MudTreeView>
-                    </MudPaper>
+                    }
+                </MudPaper>
+                @if (_plan is not null)
+                {
                     @foreach (var note in _plan.Notes)
                     {
                         <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">@note</MudAlert>
                     }
                     <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">@_summary</MudText>
-                    @* The file's parameters, its ${NAME}: a field of several values, as Env is in
-                       the launch form, whose button opens the list with a row a variable. *@
-                    @if (_variables.Count > 0)
-                    {
-                        <div class="wslc-form-grid flex-shrink-0">
-                            <div class="wslc-span2">
-                                <MultiValueField Values="_variables" Label="Variables" Split="ValueList.SplitPairs" Placeholder="NAME=value"
-                                                 HelperText="Example: TAG=1.4. The file's ${NAME}, edited as rows with ⋮; Check Compose file, Save and Run read the file with them."
-                                                 Hint="One variable per row: NAME=value. These are the ${NAME} the file asks for, each with the value it has now. One left with no value stays as the file and its .env have it." />
-                            </div>
-                        </div>
-                    }
                 }
             </div>
 
@@ -165,16 +201,27 @@
 
     private string _busyTitle = "";
 
-    /// <summary>What the field shows: a Compose file's path on the agent's machine, or, of a Compose file pasted there, its first line and how long it is.</summary>
-    private string _source = "";
+    /// <summary>The Compose file by its path on the agent's machine; empty when it was pasted. Whichever was given last is the file: a path typed lets go of what was pasted, and a paste of the path.</summary>
+    private string _path = "";
+
+    /// <summary>The Compose file's text, whole: pasted or loaded, and then it is the file; or, of a file given by its path, what it holds, to be shown. Empty for a path not read yet.</summary>
+    private string _pasted = "";
 
     /// <summary>
-    /// The Compose file pasted or loaded as text, whole; empty while the field
-    /// holds a path. One line can show only one of its lines, and left with
-    /// the whole text it showed the last, an empty one: so the text is kept
-    /// here, and the field says its first line.
+    /// What the pasted file's field shows. One line can show only one of a
+    /// file's lines, and left with the whole text it showed the last, an
+    /// empty one: so it says the first, and how many there are.
     /// </summary>
-    private string _pasted = "";
+    private string _pasteLine = "";
+
+    /// <summary>The file stands open whole, over what is under its field.</summary>
+    private bool _editing;
+
+    /// <summary>What the Context field is missing, said on the field itself: a file is not read without it.</summary>
+    private string _contextError = "";
+
+    /// <summary>There is a file to read, either way.</summary>
+    private bool HasFile => _path.Trim().Length > 0 || _pasted.Trim().Length > 0;
 
     /// <summary>Why the field's content could not be read: said under it, as the launch form does.</summary>
     private string _error = "";
@@ -249,14 +296,14 @@
             var stored = await Api.GetStoredProjectAsync(Project);
             if (stored.File.Length > 0)
             {
-                (_source, _pasted, _folder) = (stored.File, "", FolderOf(stored.File));
+                (_path, _folder) = (stored.File, FolderOf(stored.File));
             }
             else
             {
-                (_source, _pasted) = (Shown(stored.Yaml, ""), stored.Yaml);
+                (_pasted, _pasteLine) = (stored.Yaml, LineOf(stored.Yaml));
             }
 
-            _context = stored.Folder;
+            SetContext(stored.Folder);
             _variables.AddRange(stored.Variables);
             await ConvertAsync();
         }
@@ -289,9 +336,8 @@
             }
 
             _folder = FolderOf(opened.Path);
-            _source = opened.Path;
-            _pasted = "";
-            _context = _folder;
+            (_path, _pasted, _pasteLine) = (opened.Path, opened.Yaml, Shown(opened.Yaml, FileName(opened.Path)));
+            SetContext(_folder);
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
         {
@@ -315,7 +361,7 @@
         {
             using var reader = new StreamReader(file.OpenReadStream(LargestFile));
             _pasted = await reader.ReadToEndAsync();
-            _source = Shown(_pasted, file.Name);
+            (_path, _pasteLine) = ("", Shown(_pasted, file.Name));
         }
         catch (IOException ex)
         {
@@ -323,37 +369,73 @@
         }
     }
 
-    /// <summary>
-    /// The field changed. Several lines are a Compose file pasted: it is kept
-    /// whole and the field is left with its first line. Anything else typed
-    /// or pasted over that is the user's new content, and the file kept is
-    /// let go.
-    /// </summary>
-    private async Task TypedAsync()
+    /// <summary>The path changed: it is the file now, and says its own folder, so the context is known without being asked.</summary>
+    private void PathTyped()
     {
-        if (_source.Contains('\n'))
+        if (_path.Trim().Length == 0)
         {
-            _pasted = _source;
-            _source = Shown(_pasted, "");
+            return;
+        }
+
+        (_pasted, _pasteLine) = ("", "");
+        if (FolderOf(_path.Trim().Trim('"')) is { Length: > 0 } folder)
+        {
+            SetContext(folder);
+        }
+    }
+
+    /// <summary>
+    /// The pasted file's field changed. Several lines are a Compose file
+    /// pasted: it is kept whole and the field is left with its first line.
+    /// Anything else typed or pasted over that is the user's new content.
+    /// </summary>
+    private async Task PastedAsync()
+    {
+        if (_pasteLine.Contains('\n'))
+        {
+            _pasted = _pasteLine;
+            _pasteLine = LineOf(_pasted);
 
             // The field has the cursor, and MudBlazor leaves a focused field's text alone
             // when its value changes under it: it has to be told.
             if (_field is not null)
             {
-                await _field.SetTextAsync(_source);
+                await _field.SetTextAsync(_pasteLine);
             }
         }
-        else if (_pasted.Length > 0 && _source != Shown(_pasted, ""))
+        else if (_pasteLine != LineOf(_pasted))
         {
-            _pasted = "";
+            _pasted = _pasteLine;
         }
 
-        // A path says its own folder: the context is known without being asked.
-        if (_pasted.Length == 0 && IsPath(_source) && FolderOf(_source.Trim().Trim('"')) is { Length: > 0 } folder)
+        if (_pasted.Trim().Length > 0)
         {
-            _context = folder;
+            _path = "";
         }
     }
+
+    /// <summary>A file's name, of its path: what the pasted file's field says a file opened by its path is.</summary>
+    private static string FileName(string path) => path[(path.LastIndexOfAny(PathSeparators) + 1)..];
+
+    /// <summary>
+    /// The context is there, or can be: a file given by its path has its own
+    /// folder. Without one the Context field says so itself, in the field's
+    /// own error, and the file is not read: read without it, every relative
+    /// path, build and env_file of the file came out as an error of its own.
+    /// </summary>
+    private bool ContextGiven()
+    {
+        if (_context.Trim().Length == 0 && FolderOf(_path.Trim().Trim('"')) is { Length: > 0 } folder)
+        {
+            SetContext(folder);
+        }
+
+        _contextError = _context.Trim().Length > 0 ? "" : "Fill in the context: the folder the file's relative paths, its build and its env_file start from.";
+        return _contextError.Length == 0;
+    }
+
+    /// <summary>What the pasted file's field says of a text: itself when it is one line, else its first line and how many there are.</summary>
+    private static string LineOf(string text) => text.Contains('\n') ? Shown(text, "") : text;
 
     /// <summary>The folder a file's path is in; empty for a name alone.</summary>
     private static string FolderOf(string path)
@@ -367,7 +449,25 @@
     {
         if (await Pickers.HostFolderAsync(Dialogs, _context) is { } folder)
         {
-            _context = folder;
+            SetContext(folder);
+        }
+    }
+
+    /// <summary>The context was typed: what the field said it was missing no longer holds.</summary>
+    private void ContextTyped() => _contextError = "";
+
+    /// <summary>
+    /// The context, from wherever it comes (a file opened, a path typed, a
+    /// folder picked, a project's own): once there is one, the field no
+    /// longer says it is missing. An error left standing over a context that
+    /// had just been filled in said the opposite of what the field held.
+    /// </summary>
+    private void SetContext(string folder)
+    {
+        _context = folder;
+        if (folder.Trim().Length > 0)
+        {
+            _contextError = "";
         }
     }
 
@@ -390,10 +490,17 @@
         var asked = ++_asked;
         if (Request() is not { } request)
         {
-            (_plan, _error) = (null, "");
+            // The verb is there before any file is: pressed then, it says what it waits for.
+            (_plan, _error) = (null, "Open or paste a Compose file first.");
             return;
         }
 
+        if (!ContextGiven())
+        {
+            return;
+        }
+
+        request = request with { Folder = _context.Trim() };
         try
         {
             var plan = await Api.PlanProjectAsync(request);
@@ -401,6 +508,13 @@
             {
                 (_plan, _summary, _error) = (plan, Summary(plan, request.Path.Length > 0), "");
                 Parameters(plan);
+
+                // A file read by its path is shown as it was read, where a pasted one is.
+                if (request.Path.Length > 0)
+                {
+                    _pasted = string.Join('\n', plan.Lines.Select(line => line.Text));
+                    _pasteLine = Shown(_pasted, FileName(request.Path));
+                }
             }
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
@@ -415,8 +529,7 @@
     /// <summary>The file as the agent is asked for it: by its path when the field holds one, by its text when a file was pasted, with the context either way; null while the field is empty.</summary>
     private ComposePlanRequest? Request()
     {
-        var source = _pasted.Length > 0 ? _pasted : _source;
-        if (source.Trim().Length == 0)
+        if (!HasFile)
         {
             return null;
         }
@@ -425,9 +538,9 @@
         var context = _context.Trim();
         var variables = _variables.Select(pair => pair.Trim()).Where(pair => pair.IndexOf('=') is > 0 and var equals && equals < pair.Length - 1).ToList();
         // Opened from a project, the file is that project's whatever name it gives itself.
-        return _pasted.Length == 0 && IsPath(source)
-            ? new ComposePlanRequest(source.Trim().Trim('"'), Name: Project, Variables: variables, Folder: context)
-            : new ComposePlanRequest(Yaml: source, Name: Project, Variables: variables, Folder: context);
+        return _path.Trim().Length > 0
+            ? new ComposePlanRequest(_path.Trim().Trim('"'), Name: Project, Variables: variables, Folder: context)
+            : new ComposePlanRequest(Yaml: _pasted, Name: Project, Variables: variables, Folder: context);
     }
 
     /// <summary>
@@ -462,6 +575,12 @@
             return;
         }
 
+        if (!ContextGiven())
+        {
+            return;
+        }
+
+        request = request with { Folder = _context.Trim() };
         _error = "";
         Busy("Checking the Compose file…");
         try
@@ -535,22 +654,6 @@
         StateHasChanged();
     }
 
-    /// <summary>
-    /// One line that names a file is a path; anything with line breaks, or
-    /// that names its services, is a Compose file itself.
-    /// </summary>
-    private static bool IsPath(string source)
-    {
-        var text = source.Trim().Trim('"');
-        if (text.Contains('\n') || text.Contains("services:", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        return text.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase) || text.EndsWith(".yml", StringComparison.OrdinalIgnoreCase)
-            || text.IndexOfAny(PathSeparators) >= 0;
-    }
-
     /// <summary>What was read and how its lines came out.</summary>
     private static string Summary(ComposePlan plan, bool isPath)
     {
@@ -587,18 +690,11 @@
     /// <summary>The tree's box, for the wheel: a notch moves it a branch (<c>wslcAgent.stepScroll</c>).</summary>
     private readonly string _treeId = "compose-tree-" + Guid.NewGuid().ToString("N");
 
-    /// <summary>The box on screen has been told so: it is told once, and again when a new box takes its place.</summary>
-    private bool _stepping;
-
+    /// <summary>The box is there from the window's first drawing to its last: it is told once.</summary>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (_plan is null)
+        if (firstRender)
         {
-            _stepping = false;
-        }
-        else if (!_stepping)
-        {
-            _stepping = true;
             await Js.InvokeVoidAsync("wslcAgent.stepScroll", _treeId, ".mud-treeview-item-content");
         }
     }
@@ -714,6 +810,86 @@
         </MudTreeViewItem>;
     }
 
+    /// <summary>
+    /// A line of the file in its two parts: its name, which is the file's
+    /// structure (a key and its colon, a list item's dash), and its value,
+    /// which is what the file's author wrote there and is drawn in italics.
+    /// A line that is a name alone (a section, a service) has no value; a
+    /// list's item or a line of a longer text is all value. The project's
+    /// own line is no line of the file, and is a name.
+    /// </summary>
+    private static (string Name, string Value) Parts(Node node) => node.Line.Number == 0 ? (node.Text, "") : Split(node.Text);
+
+    /// <summary>A line, with nothing before its first character, as its name and its value.</summary>
+    private static (string Name, string Value) Split(string line)
+    {
+        // A list item's dash and the space after it.
+        var from = line.StartsWith('-') ? line.Length - line[1..].TrimStart().Length : 0;
+        var colon = KeyEnd(line, from);
+        return colon < 0 ? (line[..from], line[from..]) : (line[..(colon + 1)], line[(colon + 1)..]);
+    }
+
+    /// <summary>
+    /// A line of the file as it is written, in an editor's colours, the
+    /// theme's own: its name in the info colour, what is written for it in
+    /// the tertiary, a comment greyed. They say what a piece of the line is,
+    /// not how it came out, which is the tree's to say and has its own
+    /// colours (green, amber, red), kept out of here.
+    /// </summary>
+    private static RenderFragment FileLine(string line)
+    {
+        var text = line.TrimStart();
+        if (text.Length == 0)
+        {
+            // A row of its own height: an empty one has none.
+            return @<text>@(" ")</text>;
+        }
+
+        if (text.StartsWith('#'))
+        {
+            return @<span class="mud-text-secondary">@line</span>;
+        }
+
+        var indent = line[..(line.Length - text.Length)];
+        var (name, value) = Split(text);
+        return @<text>@indent<span class="mud-info-text">@name</span><span class="mud-tertiary-text">@value</span></text>;
+    }
+
+    /// <summary>
+    /// Where the key a line starts with ends, at its colon; -1 when it starts
+    /// with none. A key is a plain name or a quoted one, and its colon ends
+    /// the line or has a space after it: the colon of <c>./a:/b</c>, of
+    /// <c>8080:80</c> or of <c>C:\data</c> is no key's.
+    /// </summary>
+    private static int KeyEnd(string line, int from)
+    {
+        var at = from;
+        if (at < line.Length && line[at] is '"' or '\'')
+        {
+            var close = line.IndexOf(line[at], at + 1);
+            if (close < 0)
+            {
+                return -1;
+            }
+
+            at = close + 1;
+        }
+        else
+        {
+            while (at < line.Length && (char.IsLetterOrDigit(line[at]) || line[at] is '_' or '-' or '.'))
+            {
+                at++;
+            }
+
+            if (at == from)
+            {
+                return -1;
+            }
+        }
+
+        return at < line.Length && line[at] == ':' && (at + 1 == line.Length || char.IsWhiteSpace(line[at + 1])) ? at : -1;
+    }
+
     /// <summary>The lines written under a branch, at any depth.</summary>
     private static IEnumerable<ComposeLine> Under(Node node) => node.Children.SelectMany(child => Under(child).Prepend(child.Line));
 
@@ -784,11 +960,15 @@
     private bool _twoLines = true;
 
     /// <summary>
+    /// Every text of a branch is in the application's own typeface and at
+    /// its body size: of the line as the file has it, the value in italics,
+    /// as what is quoted, and its name plain; what the branch becomes in
+    /// bold, since it is what the window is read for.
     /// A branch, after the arrow the tree gives it: its + (or −), which opens
     /// or closes it whole; its verdict's icon; then the file's line, and
     /// under it (or beside it, in one line) what the agent makes of it, in
     /// its verdict's colour. When what is under the branch is worse than what
-    /// it says of itself, a second icon follows the branch's own, and what is
+    /// it says of itself, a second icon follows the line's text, and what is
     /// said goes on with how many lines under it are not as written, in that
     /// colour. A branch that says nothing has the one line. A line with
     /// nothing under it keeps the + its place, so the icons of a list stand
@@ -807,27 +987,32 @@
             {
                 <MudIcon Icon="@Icon(verdict)" Color="@Tone(verdict)" Size="Size.Small" />
             }
-            @if (Inside(node) is { Length: > 0 } inside)
-            {
-                <MudText Typo="Typo.body1" Class="mud-text-secondary">–</MudText>
-                <MudIcon Icon="@Icon(inside)" Color="@Tone(inside)" Size="Size.Small" title="@Changed(node)" />
-            }
             <MudStack Row="@(!_twoLines)" AlignItems="@(_twoLines ? AlignItems.Start : AlignItems.Center)" Spacing="@(_twoLines ? 0 : 1)">
-                <MudText Typo="Typo.body1" Class="wslc-mono">@node.Text</MudText>
+                @* The second icon stands after the line's text, not before it: before it, it pushed
+                   the text of a branch further right than the lines under that branch, which the
+                   tree indents by 17px, and the tree read backwards. *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudText Typo="Typo.body1">@Parts(node).Name<i>@Parts(node).Value</i></MudText>
+                    @if (Inside(node) is { Length: > 0 } inside)
+                    {
+                        <MudText Typo="Typo.body1" Class="mud-text-secondary">–</MudText>
+                        <MudIcon Icon="@Icon(inside)" Color="@Tone(inside)" Size="Size.Small" title="@Changed(node)" />
+                    }
+                </MudStack>
                 @if (node.Line.Verdict.Length > 0)
                 {
                     <MudText Typo="Typo.body1">
-                        <span class="@TextTone(node.Line.Verdict)">@Outcome(node.Line)</span>
+                        <b class="@TextTone(node.Line.Verdict)">@Outcome(node.Line)</b>
                         @if (Inside(node) is { Length: > 0 } worse)
                         {
                             <span class="mud-text-secondary"> – </span>
-                            <span class="@TextTone(worse)">@Changed(node)</span>
+                            <b class="@TextTone(worse)">@Changed(node)</b>
                         }
                     </MudText>
                 }
                 else if (Changed(node) is { Length: > 0 } changed)
                 {
-                    <MudText Typo="Typo.body1" Class="@TextTone(WorstUnder(node))">@changed</MudText>
+                    <MudText Typo="Typo.body1" Class="@TextTone(WorstUnder(node))"><b>@changed</b></MudText>
                 }
             </MudStack>
         </MudStack>;
