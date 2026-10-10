@@ -34,7 +34,20 @@ public static class SystemTools
         var traces = activity.Recent(Math.Clamp(limit, 1, 200));
         return new CliActivityResult($"{traces.Count} recent wslc commands.", traces.Count, traces);
     }
+
+    [McpServerTool(Name = "recent_events", ReadOnly = true)]
+    [Description("What happened lately in the session, newest first, as wslc reported it: containers started, stopped or died (with their exit code), images pulled or removed, networks connected or disconnected, health changes — each with its time, kind, action, id and name. Volumes report no events. The list starts empty when the agent starts or switches session.")]
+    public static RecentEventsResult RecentEvents(
+        IRecentEvents events,
+        [Description("How many events, 1 to 100 (default 20).")] int limit = 20)
+    {
+        var recent = events.Recent(Math.Clamp(limit, 1, 100));
+        return new RecentEventsResult($"{recent.Count} recent events.", recent.Count, recent);
+    }
 }
+
+/// <summary>Result of <c>recent_events</c>.</summary>
+public sealed record RecentEventsResult(string Summary, int Count, IReadOnlyList<WslcEventEntry> Events);
 
 /// <summary>Result of <c>system_info</c>: one line to read, then the whole overview.</summary>
 public sealed record SystemInfoResult(string Summary, SystemOverview Overview);

@@ -4693,10 +4693,11 @@
 }
 
 /* The dashboard's Agent log and File transfers (AgentLog, the transfers card's pieces): a
-   column filling the object's cells, the log's grid and Activity, or the
-   transfers' list, taking what the summary and the filter leave. */
+   column filling the object's cells, the log's grid and Activity, or the transfers' list,
+   taking what the summary and the filter leave. */
 .wslc-dash-log,
-.wslc-dash-transfers {
+.wslc-dash-transfers,
+.wslc-dash-events {
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -4709,6 +4710,101 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow: auto;
+}
+
+/* Recent events (SystemRecentEvents): its title, then the table filling what is left, the
+   table's own container the one thing that scrolls, so its column titles (MudSimpleTable's
+   FixedHeader, sticky in that container) stay where they are and only the events move.
+   With the box around it scrolling, the titles left with the rows. */
+.wslc-dash-events > .wslc-dash-events-box {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.wslc-dash-events > .wslc-dash-events-box > .mud-simple-table {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.wslc-dash-events > .wslc-dash-events-box > .mud-simple-table > .mud-table-container {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+}
+
+/* Its type on the dashboard's ladder, as every dashboard object's text (docs/RULES.md): the
+   title the subtitle, the columns' titles and the rows the caption, each times the object's
+   size and its part's (title, head, rows); bold title and columns by design. The cells'
+   selectors are MudSimpleTable's own (table * tr > th), which set their own size and weight
+   and outranked a plainer one. */
+.wslc-dash-events .wslc-dash-events-title {
+    font-size: calc(var(--mud-typography-subtitle2-size) * var(--wslc-dash-scale, 1) * var(--bz-part-title-scale, 1));
+    font-weight: 700;
+}
+
+.wslc-dash-events .mud-simple-table table * tr > th {
+    font-size: calc(var(--mud-typography-caption-size) * var(--wslc-dash-scale, 1) * var(--bz-part-head-scale, 1));
+    font-weight: 700;
+}
+
+.wslc-dash-events .mud-simple-table table * tr > td,
+.wslc-dash-events .wslc-dash-events-empty {
+    font-size: calc(var(--mud-typography-caption-size) * var(--wslc-dash-scale, 1) * var(--bz-part-rows-scale, 1));
+}
+
+/* Each part's colour, weight, ground and alignment when the properties window sets them;
+   the columns' titles and the rows are boxes (DashboardObjectPart Box). */
+.bz-part-title-color .wslc-dash-events .wslc-dash-events-title {
+    color: var(--bz-part-title-color);
+}
+
+.bz-part-title-weight .wslc-dash-events .wslc-dash-events-title {
+    font-weight: var(--bz-part-title-weight);
+}
+
+.bz-part-head-color .wslc-dash-events .mud-simple-table table * tr > th {
+    color: var(--bz-part-head-color);
+}
+
+.bz-part-head-weight .wslc-dash-events .mud-simple-table table * tr > th {
+    font-weight: var(--bz-part-head-weight);
+}
+
+.bz-part-head-background .wslc-dash-events .mud-simple-table table * tr > th {
+    background-color: var(--bz-part-head-background);
+}
+
+.bz-part-head-align .wslc-dash-events .mud-simple-table table * tr > th {
+    text-align: var(--bz-part-head-align);
+}
+
+.bz-part-head-valign .wslc-dash-events .mud-simple-table table * tr > th {
+    vertical-align: var(--bz-part-head-valign);
+}
+
+.bz-part-rows-color :is(.wslc-dash-events .mud-simple-table table * tr > td, .wslc-dash-events .wslc-dash-events-empty) {
+    color: var(--bz-part-rows-color);
+}
+
+.bz-part-rows-weight :is(.wslc-dash-events .mud-simple-table table * tr > td, .wslc-dash-events .wslc-dash-events-empty) {
+    font-weight: var(--bz-part-rows-weight);
+}
+
+.bz-part-rows-background .wslc-dash-events .mud-simple-table table * tr > td {
+    background-color: var(--bz-part-rows-background);
+}
+
+.bz-part-rows-align :is(.wslc-dash-events .mud-simple-table table * tr > td, .wslc-dash-events .wslc-dash-events-empty) {
+    text-align: var(--bz-part-rows-align);
+}
+
+.bz-part-rows-valign .wslc-dash-events .mud-simple-table table * tr > td {
+    vertical-align: var(--bz-part-rows-valign);
 }
 
 /* The File transfers card's header of its lines and its lines, pieces of

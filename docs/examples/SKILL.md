@@ -144,7 +144,9 @@ says no, or changes the target, do nothing and let the token die.
   memory and disk in one call.
 - **Troubleshoot a container**: `list_containers` → `container_logs` (raise
   `tail` if the cause is not in the last lines) → `container_stats` →
-  `cli_activity` to see the exact `wslc` command and stderr behind an error.
+  `cli_activity` to see the exact `wslc` command and stderr behind an error,
+  and `recent_events` for what `wslc` reported lately (a container that died
+  on its own, with its exit code; one that kept restarting).
   Quote the runtime's own message rather than paraphrasing it.
   `exec_in_container` with read-only commands (`ls`, `cat`, `ps`, `env`) is
   the next step — it is gated, so it needs the user's approval first.

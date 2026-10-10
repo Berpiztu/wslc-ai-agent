@@ -22,6 +22,11 @@ public static class EventEndpoints
         group.MapGet("/status", (WslcEvents events) => new EventStatus(events.Live))
             .WithName("EventStatus");
 
+        // What happened, newest first: the events the agent heard since it began
+        // listening to the session it targets (RecentWslcEvents)
+        group.MapGet("/recent", (RecentWslcEvents recent, int? limit) => recent.Recent(limit ?? 50))
+            .WithName("RecentEvents");
+
         // One notice per message, the first of them a full one: a client that
         // has just arrived has missed whatever came before it.
         group.Map("/stream", async (HttpContext http, WslcEvents events) =>

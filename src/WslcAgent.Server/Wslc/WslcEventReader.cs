@@ -20,7 +20,8 @@ namespace WslcAgent.Server.Wslc;
 /// <para>
 /// It is where the notifications hear what happens:
 /// every container event goes to <see cref="ContainerStops"/> and
-/// <see cref="ContainerHealth"/>, and a stream
+/// <see cref="ContainerHealth"/>, every event to <see cref="RecentWslcEvents"/>
+/// (the Recent events list), and a stream
 /// that died with a session the user did not stop from the agent is a session
 /// lost.
 /// </para>
@@ -29,6 +30,7 @@ public sealed class WslcEventReader(
     IWslcRunner wslc,
     ISessionService sessions,
     WslcEvents events,
+    RecentWslcEvents recent,
     StoppedSessions held,
     ContainerStops stops,
     ContainerHealth health,
@@ -103,6 +105,7 @@ public sealed class WslcEventReader(
             // listening was never reported, and --since cannot fill it either —
             // the event store starts empty with the session.
             events.Publish(ChangeNotice.Everything);
+            recent.Listening(_session);
             events.Live = true;
             _lastWord = "";
             var lasted = Stopwatch.StartNew();
@@ -233,6 +236,7 @@ public sealed class WslcEventReader(
 
         stops.Heard(read);
         health.Heard(read);
+        recent.Heard(read);
         lock (_gate)
         {
             _pending.Add(read.Type);

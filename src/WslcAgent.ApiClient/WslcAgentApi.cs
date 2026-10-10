@@ -332,6 +332,10 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<EventStatus> GetEventStatusAsync(CancellationToken cancellationToken = default) =>
         GetAsync<EventStatus>("api/v1/events/status", cancellationToken);
 
+    /// <summary>The last events the agent heard from <c>wslc events</c>, newest first: what happened, to what and when.</summary>
+    public Task<IReadOnlyList<WslcEventEntry>> GetRecentEventsAsync(int limit = 50, CancellationToken cancellationToken = default) =>
+        GetAsync<IReadOnlyList<WslcEventEntry>>($"api/v1/events/recent?limit={limit}", cancellationToken);
+
     public Task<NativeTerminalResult> OpenNativeHostTerminalAsync(string command = "", CancellationToken cancellationToken = default) =>
         PostJsonAsync<OpenTerminalRequest, NativeTerminalResult>("api/v1/terminal/open-native", new OpenTerminalRequest(command), cancellationToken);
 

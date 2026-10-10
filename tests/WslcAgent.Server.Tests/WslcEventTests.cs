@@ -22,6 +22,7 @@ public sealed class WslcEventTests
         Assert.Equal("8449a1cce27f93", read.Id);
         Assert.Equal(new DateTimeOffset(2026, 9, 22, 19, 33, 11, TimeSpan.FromHours(-5)), read.Time);
         Assert.Equal(137, read.ExitCode);
+        Assert.Equal("jade_wasatch", read.Name);
     }
 
     [Fact]
@@ -37,6 +38,8 @@ public sealed class WslcEventTests
         Assert.Equal("start", read.Action);
         Assert.Equal("5b5c2fad701c", read.Id);
         Assert.Null(read.ExitCode);
+        // The name after a label whose own value has commas and brackets
+        Assert.Equal("open-webui--2", read.Name);
     }
 
     [Fact]
@@ -66,6 +69,7 @@ public sealed class WslcEventTests
         Assert.Equal("health_status: unhealthy", read.Action);
         Assert.Equal("8449a1cce27f93", read.Id);
         Assert.Null(read.ExitCode);
+        Assert.Equal("jade_wasatch", read.Name);
     }
 
     [Fact]

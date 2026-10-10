@@ -297,10 +297,17 @@ The Home page is a dashboard designed by each user, not a fixed screen.
 - **Where it is kept**: with the user on the agent, so every client opens the
   same dashboard, or on the device alone. Either can be copied onto the other.
 - **Design mode**: a toolbox of every object and ready-made card, dragged onto
-  a grid; objects never overlap. Select several with a marquee, group them
+  a grid; objects never overlap. A card's own pieces — a chart's, file
+  transfers', and the header, details, dials, shortcuts and buttons of a
+  container, image, volume or network card — come only with their card: the
+  toolbox does not offer them alone, they never leave it, and removing one
+  hides it. Select several with a marquee, group them
   into a card (Ctrl+G), undo (Ctrl+Z), delete. A floating properties window
   sets each object's source, size, type size, colours, elevation, alignment,
-  margins, the parts it shows and how it widens on a wider screen.
+  margins, the parts it shows and how it widens on a wider screen. Each part
+  takes a size of its own, a part of text its colour and weight, and a part
+  drawn as a box — a table's column titles and rows, as Recent events' — its
+  background and its alignment across and down too.
 - **Drafts**: every change is kept on the device until Save; a lost
   connection or a power cut loses nothing. Leaving with unsaved changes asks
   first.
@@ -309,7 +316,10 @@ The Home page is a dashboard designed by each user, not a fixed screen.
   charts of the host or of any container, with legends; container, image,
   volume and network headers, details, dials, shortcuts and action buttons;
   the session selector; agent, client, `wslc`, Windows and kernel versions;
-  the live events status; the agent's log; file transfers; free text.
+  Live updates (whether the agent hears `wslc`'s events, or the screens read
+  on their own clock); Recent events (what `wslc` reported lately, newest
+  first: containers started, stopped or ended with their exit code, images
+  pulled, networks connected); the agent's log; file transfers; free text.
 - **Ready-made cards**: container, image, volume, network, system, charts.
 - **Alarms**: each measure has a threshold; past it the object turns red and
   blinks. Chosen alarms also show as rings in a status bar on every screen.

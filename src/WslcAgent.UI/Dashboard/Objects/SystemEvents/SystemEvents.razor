@@ -1,19 +1,21 @@
-@* Whether the agent hears wslc's events ("live") or the screens read on
-   their own clock ("screens poll"): the System card's Events reading,
-   standing alone. The stream lives and dies with the session, so it is read
-   again when the agent says the session changed. *@
+@* Live updates: whether the agent hears wslc's events ("live") or the screens
+   read on their own clock ("screens poll"), the System card's reading
+   standing alone. A status, not the events: Recent events lists those (it was
+   called Events, and read as a list that showed nothing). The stream lives and
+   dies with the session, so it is read again when the agent says the session
+   changed. *@
 @namespace WslcAgent.UI.Dashboard.Objects
 @using Berpiztu.Dashboard.Catalogue
 @using Berpiztu.Dashboard.Model
 @inherits WslcObject
-@attribute [DashboardObject("wslc.system-events", "Events", Group = "System", Subgroup = "System", Icon = Icons.Material.Filled.Sensors, Columns = 6, Rows = 4, Background = ThemeColor.BackgroundGray)]
+@attribute [DashboardObject("wslc.system-events", "Live updates", Group = "System", Subgroup = "System", Icon = Icons.Material.Filled.Sensors, Columns = 6, Rows = 4, Background = ThemeColor.BackgroundGray)]
 @attribute [DashboardObjectPart("label", "Label")]
 @attribute [DashboardObjectPart("value", "Value")]
 @inject EventStatusRead Events
 @inject AgentChanges Changes
 
 <div class="@SummaryClass">
-    <SummaryReading Label="Events" Value="@(Events.Value switch { { Live: true } => "live", { Live: false } => "screens poll", null => "…" })" />
+    <SummaryReading Label="Live updates" Value="@(Events.Value switch { { Live: true } => "live", { Live: false } => "screens poll", null => "…" })" />
 </div>
 
 @code {

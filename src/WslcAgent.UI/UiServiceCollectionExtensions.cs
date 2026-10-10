@@ -116,6 +116,7 @@ public static class UiServiceCollectionExtensions
         services.AddScoped<AgentHealthRead>();
         services.AddScoped<SystemInfoRead>();
         services.AddScoped<EventStatusRead>();
+        services.AddScoped<RecentEventsRead>();
         services.AddScoped<AgentDashboardStore>();
         services.AddScoped<DeviceDashboardStore>();
         services.AddScoped<DeviceDashboardDrafts>();

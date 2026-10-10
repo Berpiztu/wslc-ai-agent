@@ -1,0 +1,94 @@
+@* What happened lately, as wslc reported it: the events the agent heard,
+   newest first, each with its time, its kind, what happened (a container's
+   exit code with its end) and the object by name, or by its short id when the
+   event names none. Read again whenever the agent says something changed; an
+   empty list says why it is empty. Live updates, beside it, says whether the
+   agent is listening at all. Its title, its columns' titles and its rows are
+   parts, each with its own colour, weight and size in the properties window;
+   the title can be hidden, and the columns' titles and the rows take a
+   background and an alignment across and down too. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits WslcObject
+@attribute [DashboardObject("wslc.system-recent-events", "Recent events", Group = "System", Subgroup = "System", Icon = Icons.Material.Filled.History, Columns = 16, Rows = 8, Fills = true, Horizontal = HorizontalAlign.Left, Vertical = VerticalAlign.Top, Background = ThemeColor.BackgroundGray)]
+@attribute [DashboardObjectPart("title", "Title", Bold = true, Optional = true)]
+@attribute [DashboardObjectPart("head", "Columns", Bold = true, Box = true)]
+@attribute [DashboardObjectPart("rows", "Rows", Box = true)]
+@inject RecentEventsRead Events
+@inject EventStatusRead Status
+@inject AgentChanges Changes
+
+<div class="@($"{TypeClass} wslc-dash-events")">
+    @if (Shows("title"))
+    {
+        <div class="wslc-dash-events-title">Recent events</div>
+    }
+    @if (Events.Value is not { Count: > 0 } shown)
+    {
+        <div class="wslc-dash-events-empty mud-text-secondary">@EmptyText</div>
+    }
+    else
+    {
+        <div class="wslc-dash-events-box">
+            <MudSimpleTable Dense="true" Hover="true" FixedHeader="true">
+                <thead><tr><th>Time</th><th>Kind</th><th>Event</th><th>Name</th></tr></thead>
+                <tbody>
+                    @foreach (var happened in shown)
+                    {
+                        <tr @key="happened">
+                            <td class="text-nowrap">@When(happened.Time)</td>
+                            <td>@happened.Type</td>
+                            <td>@What(happened)</td>
+                            <td title="@happened.Id">@(happened.Name ?? ShortId(happened.Id))</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </div>
+    }
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Follow(Events);
+        Follow(Status);
+        Changes.Changed += OnAgentChanged;
+        Changes.Start();
+    }
+
+    public override void Dispose()
+    {
+        base.Dispose();
+        Changes.Changed -= OnAgentChanged;
+    }
+
+    /// <summary>A notice about what wslc reports, or the session (a new one starts the list over): read again now.</summary>
+    private void OnAgentChanged(ChangeNotice notice)
+    {
+        if (notice.Touches(ChangeNotice.Container) || notice.Touches(ChangeNotice.Image)
+            || notice.Touches(ChangeNotice.Network) || notice.Touches(ChangeNotice.Session))
+        {
+            _ = Events.RefreshAsync();
+        }
+    }
+
+    private string EmptyText => Events.Value is null
+        ? "Loading…"
+        : Status.Value is { Live: false }
+            ? "The agent is not hearing wslc's events: is the session running?"
+            : "Nothing has happened since the agent began listening to this session.";
+
+    /// <summary>Today's by the time alone, an older one with its day.</summary>
+    private static string When(DateTimeOffset time)
+    {
+        var local = time.ToLocalTime();
+        return local.Date == DateTime.Today ? local.ToString("HH:mm:ss") : local.ToString("dd/MM HH:mm");
+    }
+
+    private static string What(WslcEventEntry happened) =>
+        happened.ExitCode is { } code ? $"{happened.Action} (exit {code})" : happened.Action;
+
+    private static string ShortId(string id) => id.Length > 12 ? id[..12] : id;
+}

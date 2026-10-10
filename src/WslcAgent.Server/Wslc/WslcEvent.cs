@@ -11,7 +11,8 @@ namespace WslcAgent.Server.Wslc;
 /// <param name="Action">What happened to it: <c>start</c>, <c>kill</c>, <c>die</c>, <c>stop</c>, <c>health_status: unhealthy</c>, <c>connect</c>, <c>disconnect</c>, …</param>
 /// <param name="Id">The object the action is about, by its full id.</param>
 /// <param name="ExitCode">A container's exit code, on its <c>die</c> (wslc 3.0.2 on) or its <c>stop</c> (before); null on anything else.</param>
-public sealed record WslcEvent(DateTimeOffset Time, string Type, string Action, string Id, int? ExitCode = null)
+/// <param name="Name">The object's name (its <c>name</c> attribute), for the Recent events list; null when the line has none.</param>
+public sealed record WslcEvent(DateTimeOffset Time, string Type, string Action, string Id, int? ExitCode = null, string? Name = null)
 {
     /// <summary>What the agent tells its clients: kind and action, without the id's noise.</summary>
     public override string ToString() => $"{Type} {Action}";
@@ -31,11 +32,13 @@ public sealed record WslcEvent(DateTimeOffset Time, string Type, string Action, 
 /// brackets of its own — <c>description=User-friendly AI Interface (Supports
 /// Ollama, OpenAI API, ...)</c> — so there is no honest way to split them, and
 /// no need: an event is the notice that a list changed, never the data. The
-/// data comes from the list, as it always has. One exception: the exit code
+/// data comes from the list, as it always has. Two exceptions: the exit code
 /// of a container that ended, which no list keeps and a notification that it
-/// stopped on its own has to say. Up to wslc 3.0.1 it opened the bracket; from
-/// 3.0.2 the attributes come in alphabetical order, so it is looked for as an
-/// attribute of its own, opening the bracket or after a comma.
+/// stopped on its own has to say, and the object's name, which the Recent
+/// events list shows instead of an id. Up to wslc 3.0.1 the exit code opened
+/// the bracket; from 3.0.2 the attributes come in alphabetical order, so each
+/// is looked for as an attribute of its own, opening the bracket or after a
+/// comma.
 /// </summary>
 public static class WslcEventParsing
 {
@@ -57,27 +60,36 @@ public static class WslcEventParsing
         if (!fields[2].EndsWith(':'))
         {
             var attributes = fields.Length > 4 ? string.Join(' ', fields[4..]) : "";
-            return new WslcEvent(time, fields[1], fields[2], fields[3], ExitCodeOf(attributes));
+            return new WslcEvent(time, fields[1], fields[2], fields[3], ExitCodeOf(attributes), AttributeOf(attributes, "name="));
         }
 
-        return fields.Length < 5 ? null : new WslcEvent(time, fields[1], $"{fields[2]} {fields[3]}", fields[4]);
+        return fields.Length < 5
+            ? null
+            : new WslcEvent(time, fields[1], $"{fields[2]} {fields[3]}", fields[4], Name: AttributeOf(fields.Length > 5 ? fields[5] : "", "name="));
     }
 
-    private const string ExitCode = "exitCode=";
-
     /// <summary>The number of the <c>exitCode</c> attribute; null when there is none.</summary>
-    private static int? ExitCodeOf(string attributes)
+    private static int? ExitCodeOf(string attributes) =>
+        int.TryParse(AttributeOf(attributes, "exitCode="), NumberStyles.Integer, CultureInfo.InvariantCulture, out var code) ? code : null;
+
+    /// <summary>
+    /// The value of one attribute (<paramref name="key"/> with its <c>=</c>):
+    /// opening the bracket or after a comma, up to the next comma or the closing
+    /// bracket; null when there is none.
+    /// </summary>
+    private static string? AttributeOf(string attributes, string key)
     {
-        var at = attributes.StartsWith("(" + ExitCode, StringComparison.Ordinal)
+        var at = attributes.StartsWith("(" + key, StringComparison.Ordinal)
             ? 1
-            : attributes.IndexOf(", " + ExitCode, StringComparison.Ordinal);
+            : attributes.IndexOf(", " + key, StringComparison.Ordinal);
         if (at < 0)
         {
             return null;
         }
 
-        var digits = attributes.AsSpan(attributes.IndexOf(ExitCode, at, StringComparison.Ordinal) + ExitCode.Length);
-        var end = digits.IndexOfAny(',', ')');
-        return int.TryParse(end < 0 ? digits : digits[..end], NumberStyles.Integer, CultureInfo.InvariantCulture, out var code) ? code : null;
+        var value = attributes.AsSpan(attributes.IndexOf(key, at, StringComparison.Ordinal) + key.Length);
+        var end = value.IndexOfAny(',', ')');
+        var text = (end < 0 ? value : value[..end]).Trim().ToString();
+        return text.Length > 0 ? text : null;
     }
 }

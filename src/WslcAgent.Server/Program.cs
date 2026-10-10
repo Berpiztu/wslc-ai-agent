@@ -59,6 +59,8 @@ builder.Services.AddSingleton<RestartPolicyStore>();
 builder.Services.AddSingleton<LogClearingStore>();
 builder.Services.AddSingleton<WslcAgent.Server.Resources.ResourceRegistry>();
 builder.Services.AddSingleton<WslcEvents>();
+builder.Services.AddSingleton<RecentWslcEvents>();
+builder.Services.AddSingleton<IRecentEvents>(services => services.GetRequiredService<RecentWslcEvents>());
 builder.Services.AddSingleton<NotificationSettingsStore>();
 builder.Services.AddSingleton<NotificationHistory>();
 builder.Services.AddSingleton<NotificationDeviceStore>();

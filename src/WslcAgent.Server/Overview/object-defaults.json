@@ -419,6 +419,12 @@
       "x": 18,
       "y": 0
     },
+    "wslc.system-recent-events": {
+      "w": 16,
+      "h": 8,
+      "size": "small",
+      "elevation": 1
+    },
     "wslc.system-events": {
       "w": 6,
       "h": 4,
@@ -830,6 +836,12 @@
       "x": 19,
       "y": 3,
       "elevation": 5
+    },
+    "wslc.system-recent-events": {
+      "w": 24,
+      "h": 10,
+      "size": "small",
+      "elevation": 1
     },
     "wslc.system-events": {
       "w": 3,
