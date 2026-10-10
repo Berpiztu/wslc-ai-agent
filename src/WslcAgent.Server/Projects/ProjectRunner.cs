@@ -17,7 +17,9 @@ namespace WslcAgent.Server.Projects;
 /// change is left alone, one that did is recreated through the container's
 /// own recreate (rehearsed first, the old one put back if the new one does
 /// not start), a new one is created, and a container whose service left the
-/// file is removed only when the caller said so. It runs as a job of the
+/// file is removed only when the caller said so. Asked for the images alone
+/// (<see cref="StartBuildAsync"/>), it builds the ones the file's services
+/// are built from and makes nothing else. It runs as a job of the
 /// agent: the caller gets its id at once and asks how it goes. A container it
 /// makes is a Run of its own (<see cref="ContainerLaunches"/>), so the
 /// Containers table shows each one on its way, with its image's pull, its
@@ -38,6 +40,7 @@ public sealed class ProjectRunner(
     WslcEvents events,
     IWslcRunner wslc,
     ProjectStore store,
+    Publishing.PublishingService publishing,
     ILogger<ProjectRunner> logger)
 {
     /// <summary>What a project's row says in the Image column: it is no container's image.</summary>
@@ -65,21 +68,40 @@ public sealed class ProjectRunner(
             services.Where(service => !state.Containers.ContainsKey(service.Name)).Select(service => service.Launch.Name).ToList(),
             services.Where(service => state.Containers.TryGetValue(service.Name, out var existing) && existing.Config != Hash(service)).Select(service => service.Launch.Name).ToList(),
             services.Where(service => state.Containers.TryGetValue(service.Name, out var existing) && existing.Config == Hash(service)).Select(service => service.Launch.Name).ToList(),
-            Orphans(state, services).Select(orphan => orphan.Name).ToList(),
+            Orphans(state, plan).Select(orphan => orphan.Name).ToList(),
             plan.Networks.Where(network => !network.External && !state.Networks.Contains(network.Name)).Select(network => network.Name).ToList(),
             plan.Volumes.Where(volume => !volume.External && !state.Volumes.Contains(volume.Name)).Select(volume => volume.Name).ToList(),
             services.Where(service => service.Build is not null).Select(service => service.Launch.Image).ToList(),
             plan.Unsupported,
-            plan.Warnings);
+            plan.Warnings,
+            // The mark of what it was made from is written by a save and by nothing else: a container
+            // of the project without it was recreated since, by hand.
+            services.Where(service => state.Containers.TryGetValue(service.Name, out var existing) && existing.Config.Length == 0).Select(service => service.Launch.Name).ToList());
     }
 
     /// <summary>Starts the save. The file is read first, so one that cannot be read is refused here and no job is begun.</summary>
     public async Task<ProjectJob> StartAsync(ProjectUpRequest request, CancellationToken cancellationToken = default)
     {
         var plan = await projects.PlanAsync(request.File, cancellationToken);
+        return Begin(plan, (job, stop) => SaveAsync(job, plan, request, stop));
+    }
+
+    /// <summary>
+    /// Starts a build of the images the file's services are built from, and
+    /// of nothing else: no network, no volume, no container, and the file is
+    /// not kept. A job as a save is, with the same row, log and cancel.
+    /// </summary>
+    public async Task<ProjectJob> StartBuildAsync(ProjectBuildRequest request, CancellationToken cancellationToken = default)
+    {
+        var plan = await projects.PlanAsync(request.File, cancellationToken);
+        return Begin(plan, (job, stop) => BuildsAsync(job, plan, request, stop));
+    }
+
+    private ProjectJob Begin(ComposePlan plan, Func<Job, CancellationToken, Task> work)
+    {
         var job = new Job(Guid.NewGuid().ToString("N")[..12], plan.Name);
         _jobs[job.Id] = job;
-        _ = Task.Run(() => RunAsync(job, plan, request), CancellationToken.None);
+        _ = Task.Run(() => RunAsync(job, plan.Name, work), CancellationToken.None);
 
         // Its row is new in the Containers table: every client is told to look.
         events.Publish(new ChangeNotice([ChangeNotice.Container]));
@@ -139,54 +161,12 @@ public sealed class ProjectRunner(
         _jobs.TryRemove(new KeyValuePair<string, Job>(id, job));
     }
 
-    private async Task RunAsync(Job job, ComposePlan plan, ProjectUpRequest request)
+    /// <summary>The job's work to its end, whichever it is: done, cancelled, or failed with why.</summary>
+    private async Task RunAsync(Job job, string project, Func<Job, CancellationToken, Task> work)
     {
-        var stop = job.Cancellation.Token;
         try
         {
-            var state = await StateAsync(plan, stop);
-            var services = plan.Services.Where(service => service.Enabled).ToList();
-            var newNetworks = plan.Networks.Where(network => !state.Networks.Contains(network.Name)).ToList();
-            var newVolumes = plan.Volumes.Where(volume => !state.Volumes.Contains(volume.Name)).ToList();
-            var builds = services.Where(service => service.Build is not null).ToList();
-            var orphans = request.RemoveOrphans ? Orphans(state, services) : new List<Existing>();
-            job.Expect(newNetworks.Count + newVolumes.Count + builds.Count + services.Count + orphans.Count);
-
-            foreach (var network in newNetworks)
-            {
-                await NetworkAsync(job, plan, network, stop);
-            }
-
-            foreach (var volume in newVolumes)
-            {
-                await VolumeAsync(job, plan, volume, stop);
-            }
-
-            foreach (var service in builds)
-            {
-                await BuildAsync(job, service, stop);
-            }
-
-            foreach (var service in services)
-            {
-                if (request.Start)
-                {
-                    await DependenciesAsync(job, plan, service, stop);
-                }
-
-                await ContainerAsync(job, plan, service, state, request.Start, stop);
-            }
-
-            // Never without the caller having been asked: a container is not removed for having left a file.
-            foreach (var orphan in orphans)
-            {
-                job.Say($"Removing {orphan.Name}");
-                await containers.RemoveAsync(orphan.Id, force: true, stop);
-                job.Advance();
-            }
-
-            store.Keep(plan, request.File);
-            job.Say(request.Start ? "Started" : "Saved");
+            await work(job, job.Cancellation.Token);
             job.Finish(ProjectJob.Done, "");
         }
         catch (OperationCanceledException)
@@ -197,13 +177,115 @@ public sealed class ProjectRunner(
         catch (Exception ex)
         {
             // Whatever stops it, the job has to end: a row of the table is waiting on it.
-            logger.LogError("project {Project} failed at '{Step}': {Message}", plan.Name, job.Step, ex.Message);
+            logger.LogError("project {Project} failed at '{Step}': {Message}", project, job.Step, ex.Message);
             job.Note("ERROR", ex.Message);
             job.Finish(ProjectJob.Failed, ex.Message);
         }
 
         events.Publish(new ChangeNotice([ChangeNotice.Container]));
     }
+
+    private async Task SaveAsync(Job job, ComposePlan plan, ProjectUpRequest request, CancellationToken stop)
+    {
+        var state = await StateAsync(plan, stop);
+        var services = plan.Services.Where(service => service.Enabled).ToList();
+        var newNetworks = plan.Networks.Where(network => !state.Networks.Contains(network.Name)).ToList();
+        var newVolumes = plan.Volumes.Where(volume => !state.Volumes.Contains(volume.Name)).ToList();
+        var builds = services.Where(service => service.Build is not null).ToList();
+        var orphans = request.RemoveOrphans ? Orphans(state, plan) : new List<Existing>();
+        job.Expect(newNetworks.Count + newVolumes.Count + builds.Count + services.Count + orphans.Count);
+
+        foreach (var network in newNetworks)
+        {
+            await NetworkAsync(job, plan, network, stop);
+        }
+
+        foreach (var volume in newVolumes)
+        {
+            await VolumeAsync(job, plan, volume, stop);
+        }
+
+        foreach (var same in Together(builds))
+        {
+            await BuildAsync(job, same, stop);
+        }
+
+        foreach (var service in services)
+        {
+            if (request.Start)
+            {
+                await DependenciesAsync(job, plan, service, stop);
+            }
+
+            await ContainerAsync(job, plan, service, state, request.Start, stop);
+        }
+
+        // Never without the caller having been asked: a container is not removed for having left a file.
+        foreach (var orphan in orphans)
+        {
+            job.Say($"Removing {orphan.Name}");
+            await containers.RemoveAsync(orphan.Id, force: true, stop);
+            job.Advance();
+        }
+
+        store.Keep(plan, request.File with { Services = Kept(plan, request, state) });
+        job.Say(request.Start ? "Started" : "Saved");
+    }
+
+    /// <summary>
+    /// The services the project is kept with after this save: what its
+    /// start goes by from now on, and what the Compose window shows ticked.
+    /// Always by name, the ones this save took, whether they were named or
+    /// came from the whole file and its profiles: a project kept "for its
+    /// whole file" showed nothing ticked while one of its services ran,
+    /// which said the opposite of what was there. When the save adds to the
+    /// project (<see cref="ProjectUpRequest.AddServices"/>), with them the
+    /// ones it was kept with before, or, kept with none yet, the ones it has
+    /// a container of.
+    /// </summary>
+    private List<string> Kept(ComposePlan plan, ProjectUpRequest request, State state)
+    {
+        var before = !request.AddServices ? []
+            : store.Read(plan.Name)?.Services is { Count: > 0 } kept ? kept
+            : state.Containers.Keys.AsEnumerable();
+        var all = before
+            .Concat(plan.Services.Where(service => service.Enabled).Select(service => service.Name))
+            .ToHashSet(StringComparer.Ordinal);
+
+        // In the file's order, and only what the file still has: a name it lost would be refused at the next reading.
+        return [.. plan.Services.Select(service => service.Name).Where(all.Contains)];
+    }
+
+    private async Task BuildsAsync(Job job, ComposePlan plan, ProjectBuildRequest request, CancellationToken stop)
+    {
+        var builds = plan.Services.Where(service => service.Enabled && service.Build is not null).ToList();
+        if (builds.Count == 0)
+        {
+            job.Say("Nothing to build: no service of the file has a build");
+            return;
+        }
+
+        job.Expect(builds.Count);
+        foreach (var same in Together(builds))
+        {
+            await BuildAsync(job, same, stop, request.NoCache, request.Pull);
+        }
+
+        job.Say("Built");
+    }
+
+    /// <summary>
+    /// The services to build, those built from the same thing together: the
+    /// same context, Dockerfile, target and arguments make the same image,
+    /// whatever each service calls it, so it is built once and given every
+    /// one of their names. A file with four services on one Dockerfile was
+    /// built four times over, and with no cache each time from nothing.
+    /// </summary>
+    private static List<List<ComposeService>> Together(IEnumerable<ComposeService> builds) =>
+        builds
+            .GroupBy(service => string.Join('\n', new[] { service.Build!.Context, service.Build.Dockerfile, service.Build.Target }.Concat(service.Build.Args)), StringComparer.Ordinal)
+            .Select(same => same.ToList())
+            .ToList();
 
     private async Task NetworkAsync(Job job, ComposePlan plan, ComposeNetwork network, CancellationToken stop)
     {
@@ -229,18 +311,31 @@ public sealed class ProjectRunner(
         job.Advance();
     }
 
-    /// <summary><c>build --progress plain --tag IMAGE [--file] [--target] [--build-arg]… CONTEXT</c>, its output into the job's log. The Dockerfile is the context's, as Compose reads it.</summary>
-    private async Task BuildAsync(Job job, ComposeService service, CancellationToken stop)
+    /// <summary>
+    /// <c>build --progress plain --tag IMAGE… [--file] [--target] [--no-cache] [--pull] [--build-arg]… CONTEXT</c>,
+    /// its output into the job's log: one build for the services built from
+    /// the same thing (<see cref="Together"/>), with a <c>--tag</c> for each
+    /// of their images. The Dockerfile is the context's, as Compose reads it.
+    /// </summary>
+    private async Task BuildAsync(Job job, IReadOnlyList<ComposeService> same, CancellationToken stop, bool noCache = false, bool pull = false)
     {
-        var build = service.Build!;
-        job.Say($"Building {service.Launch.Image}");
+        var build = same[0].Build!;
+        var images = same.Select(service => service.Launch.Image).Distinct(StringComparer.Ordinal).ToList();
+        job.Say($"Building {string.Join(", ", images)}");
         var dockerfile = build.Dockerfile.Length == 0 || Path.IsPathFullyQualified(build.Dockerfile)
             ? build.Dockerfile
             : Path.GetFullPath(Path.Combine(build.Context, build.Dockerfile));
-        var args = new List<string> { "build", "--progress", "plain" }
-            .Option("--tag", service.Launch.Image)
+        var args = new List<string> { "build", "--progress", "plain" };
+        foreach (var image in images)
+        {
+            args.Option("--tag", image);
+        }
+
+        args
             .Option("--file", dockerfile)
-            .Option("--target", build.Target);
+            .Option("--target", build.Target)
+            .Flag("--no-cache", noCache)
+            .Flag("--pull", pull);
         foreach (var value in build.Args)
         {
             args.Option("--build-arg", value);
@@ -249,7 +344,12 @@ public sealed class ProjectRunner(
         args.Add(build.Context);
         job.Note("DEBUG", "wslc " + string.Join(' ', args));
         await wslc.StreamAsync(args, job.Add, stop);
-        job.Advance();
+
+        // The job counts a build a service: the one build is all of theirs.
+        foreach (var _ in same)
+        {
+            job.Advance();
+        }
     }
 
     /// <summary>What the service waits for before it starts: a dependency healthy, or run to its end.</summary>
@@ -289,14 +389,25 @@ public sealed class ProjectRunner(
         var launch = service.Launch with { Project = $"{plan.Name}/{service.Name}", ProjectConfig = Hash(service), Start = start };
         if (!state.Containers.TryGetValue(service.Name, out var existing))
         {
-            job.Say($"{(start ? "Starting" : "Creating")} {launch.Name}");
-            await LaunchedAsync(launches.Enqueue(launch), stop);
+            // Created, and then started, as Compose does it, and not run in one step: a container
+            // that cannot start (its port is taken) is then left made and stopped, to be started once
+            // what was in its way is gone, where a run that fails leaves nothing behind at all.
+            // wslc takes a port at the start, not at the create: one that is taken does not stop the create.
+            job.Say($"Creating {launch.Name}");
+            await LaunchedAsync(launches.Enqueue(launch with { Start = false }), stop);
+            if (start)
+            {
+                job.Say($"Starting {launch.Name}");
+                await containers.StartAsync(launch.Name, stop);
+            }
         }
         else if (existing.Config != launch.ProjectConfig)
         {
             // Not stopped half way: a recreate cut short could leave neither the old container nor the new one.
+            // The file is what the container is made from again, whatever was changed in it by hand;
+            // the names it is published on stay, since a Compose file has no way to say them.
             job.Say($"Recreating {existing.Name}");
-            await containers.RecreateAsync(existing.Id, launch, CancellationToken.None);
+            await containers.RecreateAsync(existing.Id, publishing.Keeping(existing.Name, launch), CancellationToken.None);
             stop.ThrowIfCancellationRequested();
         }
         else if (start && !existing.Running)
@@ -355,8 +466,14 @@ public sealed class ProjectRunner(
     }
 
     /// <summary>The project's containers whose service the file no longer has, or leaves out.</summary>
-    private static List<Existing> Orphans(State state, List<ComposeService> services) =>
-        state.Containers.Values.Where(existing => services.All(service => service.Name != existing.Service)).ToList();
+    /// <summary>
+    /// The project's containers whose service the file no longer has. Of the
+    /// whole file, not of what this save takes of it: a service left out by
+    /// its profiles, or not among the ones asked for by name, is still the
+    /// file's, and its container is nobody's orphan.
+    /// </summary>
+    private static List<Existing> Orphans(State state, ComposePlan plan) =>
+        state.Containers.Values.Where(existing => plan.Services.All(service => service.Name != existing.Service)).ToList();
 
     /// <summary>The service as it was read, in a few characters: what its container carries, and what a later save compares.</summary>
     private static string Hash(ComposeService service)

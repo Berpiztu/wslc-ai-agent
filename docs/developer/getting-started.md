@@ -201,6 +201,14 @@ The Windows client, `dist\wslc-ai-client.msi`:
 .\build-client-installer.ps1 -NoBump
 ```
 
+The Compose command on its own, `dist\wslc-compose.exe`, one file with its
+runtime inside (the agent's installer already carries the command; this one
+is for a machine that has no agent, [wslc-compose](../compose/wslc-compose.md)):
+
+```powershell
+.\build-wslc-compose.ps1
+```
+
 The Android client, `dist\wslc-ai-client.apk`:
 
 ```powershell

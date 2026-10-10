@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Berpiztu.Dashboard/Berpiztu.Dashboard.csproj" />
+    <Project Path="src/Berpiztu.Wslc.Compose/Berpiztu.Wslc.Compose.csproj" />
     <Project Path="src/WslcAgent.ApiClient/WslcAgent.ApiClient.csproj" />
     <Project Path="src/WslcAgent.App/WslcAgent.App.csproj" />
     <Project Path="src/WslcAgent.Mcp/WslcAgent.Mcp.csproj" />

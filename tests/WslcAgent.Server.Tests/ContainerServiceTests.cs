@@ -24,7 +24,7 @@ public sealed class ContainerServiceTests
         var restarter = new ContainerRestarter(runner, policies, NullLogger<ContainerRestarter>.Instance);
         var publishing = new Publishing.PublishingService(publications, new Publishing.PublishingSettingsStore(options), networks, new FakePublishedPlugin(), NullLogger<Publishing.PublishingService>.Instance);
         return new ContainerService(runner, networks, policies, publications, publishing, restarter, registry, new ContainerRecreations(), new ImageUpdatesUnderWay(), new WslcEvents(),
-            new ProjectDependencies(new ProjectStore(options), new ProjectService(), runner), NullLogger<ContainerService>.Instance);
+            new ProjectDependencies(new ProjectStore(options), new ProjectService(), runner), new StartFailures(), NullLogger<ContainerService>.Instance);
     }
 
     [Fact]

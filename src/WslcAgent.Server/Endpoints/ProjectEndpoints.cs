@@ -28,6 +28,10 @@ public static class ProjectEndpoints
         group.MapPost("/up", (ProjectUpRequest request, ProjectRunner runner, CancellationToken ct) => runner.StartAsync(request, ct))
             .WithName("UpProject");
 
+        // The images the file's services are built from, and nothing else: a job as the save is.
+        group.MapPost("/build", (ProjectBuildRequest request, ProjectRunner runner, CancellationToken ct) => runner.StartBuildAsync(request, ct))
+            .WithName("BuildProject");
+
         group.MapGet("/jobs/{id}", (string id, ProjectRunner runner) => runner.Get(id))
             .WithName("ProjectJob");
 

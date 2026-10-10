@@ -14,13 +14,15 @@ namespace WslcAgent.Server.Projects;
 /// <param name="Profiles">The profiles asked for.</param>
 /// <param name="ReadFile">A file's text by its full path, null when it is not there: how an <c>env_file</c> is read.</param>
 /// <param name="ListFolder">The entries of a folder by its full path, null when it is not a folder there: how a link inside a mounted folder is found. Not given, no folder is looked into.</param>
+/// <param name="Services">The services asked for by name: they are taken, with the ones they depend on, and no other, whatever the profiles say. None, the profiles decide.</param>
 public sealed record ComposeSource(
     string Name,
     string Folder,
     IReadOnlyDictionary<string, string> Variables,
     IReadOnlyCollection<string> Profiles,
     Func<string, string?> ReadFile,
-    Func<string, IReadOnlyList<HostEntry>?>? ListFolder = null);
+    Func<string, IReadOnlyList<HostEntry>?>? ListFolder = null,
+    IReadOnlyCollection<string>? Services = null);
 
 /// <summary>An entry of a folder of the agent's machine, as the reader needs it to place a mount.</summary>
 /// <param name="Name">Its name.</param>
@@ -157,6 +159,9 @@ public static partial class ComposeReader
         private string _reading = "";
 
         private string _project = "";
+
+        /// <summary>The services taken because they were asked for by name, or one of those depends on them; null when none was named, and the profiles decide.</summary>
+        private HashSet<string>? _asked;
         private Dictionary<string, object?> _networks = new();
         private Dictionary<string, object?> _volumes = new();
 
@@ -207,6 +212,7 @@ public static partial class ComposeReader
                 }
             }
 
+            _asked = Asked(Map(root.GetValueOrDefault("services")));
             var services = new List<ComposeService>();
             foreach (var pair in Map(root.GetValueOrDefault("services")))
             {
@@ -243,6 +249,45 @@ public static partial class ComposeReader
 
             var ordered = InStartOrder(services);
             return new ComposePlan(_project, file, ordered, _usedNetworks.Values.ToList(), _usedVolumes.Values.ToList(), _unsupported, _notNeeded, _warnings, Lines(yaml), _notes, _variables.Values.ToList());
+        }
+
+        /// <summary>
+        /// The services to take when some were asked for by name: those, and
+        /// the ones they depend on, and theirs. Read from the file as
+        /// written, before any service is: whether a service is taken has to
+        /// be known when its own lines are read. A name the file does not
+        /// have is refused, since nothing would be done and no one told.
+        /// </summary>
+        private HashSet<string>? Asked(Dictionary<string, object?> services)
+        {
+            if (source.Services is not { Count: > 0 } named)
+            {
+                return null;
+            }
+
+            if (named.FirstOrDefault(name => !services.ContainsKey(name)) is { } unknown)
+            {
+                throw new ArgumentException($"The file has no service '{unknown}'. Its services: {string.Join(", ", services.Keys)}.");
+            }
+
+            var taken = new HashSet<string>(StringComparer.Ordinal);
+            var next = new Queue<string>(named);
+            while (next.TryDequeue(out var name))
+            {
+                if (!taken.Add(name) || !services.TryGetValue(name, out var service))
+                {
+                    continue;
+                }
+
+                // depends_on is a list of names, or a map by name with the condition under each.
+                var needs = Map(service).GetValueOrDefault("depends_on");
+                foreach (var needed in needs is Dictionary<string, object?> byName ? byName.Keys.ToList() : Texts(needs))
+                {
+                    next.Enqueue(needed);
+                }
+            }
+
+            return taken;
         }
 
         // ---- what is said of the file, line by line
@@ -474,14 +519,17 @@ public static partial class ComposeReader
                 }
             }
 
-            var enabled = profiles.Count == 0 || profiles.Any(profile => source.Profiles.Contains(profile));
+            // Asked for by name, a service is taken whatever its profiles: naming it is asking for it.
+            var enabled = _asked?.Contains(name) ?? (profiles.Count == 0 || profiles.Any(profile => source.Profiles.Contains(profile)));
             if (enabled)
             {
                 Mark(at, containerName.Length > 0 ? ComposeLine.Ok : ComposeLine.Converted, containerName.Length > 0 ? $"container {launch.Name}" : $"→ container {launch.Name}");
             }
             else
             {
-                Mark(at, ComposeLine.Warning, $"left out: none of its profiles was asked for ({string.Join(", ", profiles)})");
+                Mark(at, ComposeLine.Warning, _asked is not null
+                    ? "left out: not among the services asked for"
+                    : $"left out: none of its profiles was asked for ({string.Join(", ", profiles)})");
             }
 
             return new ComposeService(name, launch, dependsOn, build, profiles, enabled);

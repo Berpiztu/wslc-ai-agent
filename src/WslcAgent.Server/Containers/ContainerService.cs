@@ -27,6 +27,7 @@ public sealed partial class ContainerService(
     ImageUpdatesUnderWay updates,
     WslcEvents events,
     ProjectDependencies dependencies,
+    StartFailures failures,
     ILogger<ContainerService> logger) : IContainerService
 {
     private const string MetadataLabel = "com.microsoft.wsl.container.metadata=";
@@ -50,7 +51,7 @@ public sealed partial class ContainerService(
         var owned = rows.Where(c => !IsHelper(c.Name)).ToList();
         var uids = registry.Reconcile(Resources.ResourceRegistry.Container, [.. owned.Select(c => (c.Id, c.Name))], complete: all);
         var containers = recreations.Overlay([.. (helpers ? rows : owned).Select(c => c with { Uid = uids.GetValueOrDefault(c.Id) })], complete: all);
-        var annotated = updates.Annotate(publications.Annotate(policies.Annotate(containers)));
+        var annotated = failures.Annotate(updates.Annotate(publications.Annotate(policies.Annotate(containers))));
         return new ContainerListResponse(annotated, Aggregate(annotated));
     }
 
@@ -58,8 +59,28 @@ public sealed partial class ContainerService(
     public async Task StartAsync(string container, CancellationToken cancellationToken = default)
     {
         await dependencies.RequireRunningAsync(WslcArgs.Require(container, "container"), cancellationToken);
-        await wslc.RunAsync(["container", "start", WslcArgs.Require(container, "container")], cancellationToken: cancellationToken);
+        await StartedAsync(container, () => wslc.RunAsync(["container", "start", WslcArgs.Require(container, "container")], cancellationToken: cancellationToken));
         policies.SetDesired(container, RestartPolicyInfo.Running);
+    }
+
+    /// <summary>
+    /// A start or a restart, with why it failed kept for the container when
+    /// <c>wslc</c> refuses it (<see cref="StartFailures"/>), and what was
+    /// kept let go when it goes well.
+    /// </summary>
+    private async Task StartedAsync(string container, Func<Task> start)
+    {
+        try
+        {
+            await start();
+        }
+        catch (WslcException ex)
+        {
+            failures.Failed(container, ex.Message);
+            throw;
+        }
+
+        failures.Started(container);
     }
 
     /// <summary><c>wslc container stop</c>; a project's container is not stopped while another of the project that depends on it still runs (409).</summary>
@@ -74,7 +95,7 @@ public sealed partial class ContainerService(
     public async Task RestartAsync(string container, CancellationToken cancellationToken = default)
     {
         await dependencies.RequireRunningAsync(WslcArgs.Require(container, "container"), cancellationToken);
-        await restarter.RestartAsync(container, cancellationToken);
+        await StartedAsync(container, () => restarter.RestartAsync(container, cancellationToken));
     }
 
     public async Task KillAsync(string container, CancellationToken cancellationToken = default)
@@ -280,6 +301,15 @@ public sealed partial class ContainerService(
         args.Add(WslcArgs.Require(container, "container"));
         var result = await wslc.RunAsync(args, cancellationToken: cancellationToken);
         var text = result.Stderr.Length > 0 ? result.Stderr.TrimEnd() + "\n" + result.Stdout : result.Stdout;
+
+        // A start that failed left nothing in the container's own logs: it never ran. The whole
+        // reading (not the lines since a moment, nor the stamped one a view places itself by) ends
+        // with what happened, written as the agent's log writes a line, which the logs view colours.
+        if (since.Length == 0 && !timestamps && failures.Of(container) is { } failure)
+        {
+            text = $"{text.TrimEnd()}\n{failure.At:yyyy-MM-dd HH:mm:ss} | ERROR    | The container could not start: {failure.Why}\n".TrimStart('\n');
+        }
+
         return new ContainerLogs(text);
     }
 

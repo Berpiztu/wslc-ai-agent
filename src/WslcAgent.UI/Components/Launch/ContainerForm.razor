@@ -865,6 +865,20 @@
             return;
         }
 
+        // A container of a project is made from the project's Compose file: what is changed here
+        // lasts until the project is saved again, and the user is told before, not after.
+        if (Mode == LaunchMode.Edit && request.Project.Split('/')[0] is { Length: > 0 } project)
+        {
+            Idle();
+            if (!await DialogFlow.ConfirmAsync(Dialogs, "Container of a project",
+                    $"{Named} belongs to project {project}, and its settings come from the project's Compose file.\n\n"
+                    + "The next time the project is saved, it is recreated as the file says and what is changed here is lost. "
+                    + "The names it is published on are kept.\n\nSave the change?", "Save"))
+            {
+                return;
+            }
+        }
+
         Busy(Mode == LaunchMode.Edit
             ? $"Recreating {Named}: the new settings are rehearsed first, then the container is replaced. This can take a minute."
             : start ? $"Starting {Named}…" : $"Creating {Named}…");

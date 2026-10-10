@@ -117,6 +117,17 @@
                         <MultiValueField Values="_variables" Label="Variables" Split="ValueList.SplitPairs" Placeholder="NAME=value"
                                          HelperText="Example: TAG=1.4. The file's ${NAME}, edited as rows with ⋮; Check Compose file, Save and Run read the file with them."
                                          Hint="One variable per row: NAME=value. These are the ${NAME} the file asks for, each with the value it has now. One left with no value stays as the file and its .env have it." />
+                        @* Which of the file's services to take, when it keeps some behind a profile: the
+                           same field of several values, whose list is the file's own profiles to tick
+                           once the file has been checked. *@
+                        <MultiValueField Values="_profiles" Label="Profiles" Split="ValueList.Split" Placeholder="profile" Choices="Profiles"
+                                         HelperText="Example: web-only. The profiles to take the services of, ticked with ⋮; a service with profiles is left out unless one of them is here."
+                                         Hint="A service the file gives profiles to is left out unless one of its profiles is ticked; one with none is always taken. Check Compose file, Save and Run read the file with them." />
+                        @* Or the services themselves, by name: the same field again, its list the
+                           file's services. What `up web` is at a terminal. *@
+                        <MultiValueField Values="_services" Label="Services" Split="ValueList.Split" Placeholder="service" Choices="ServiceNames"
+                                         HelperText="Example: web. Only these services, ticked with ⋮, and the ones they depend on; none ticked, the whole file."
+                                         Hint="With services ticked, only they are taken, and the ones they depend on, whatever the profiles say: the others are left as they are. With none ticked the whole file is taken and the profiles decide. Check Compose file, Save and Run read the file with them." />
                         </div>
                 </MudForm>
                 @* The tree's box is there before any file is: the window opens at its whole size
@@ -248,6 +259,19 @@
     /// <summary>The file's parameters, <c>NAME=value</c>: the ${NAME} it asks for, known once it has been checked, with the values to read it with.</summary>
     private readonly List<string> _variables = [];
 
+    /// <summary>The profiles asked for: a service with profiles is taken when one of them is here.</summary>
+    private readonly List<string> _profiles = [];
+
+    /// <summary>The services asked for by name: only they are taken, with the ones they depend on. None, the whole file.</summary>
+    private readonly List<string> _services = [];
+
+    /// <summary>The services the file has, once it has been read: what the Services field offers to tick.</summary>
+    private IReadOnlyList<string> ServiceNames => _plan is null ? [] : [.. _plan.Services.Select(service => service.Name)];
+
+    /// <summary>The profiles the file has, once it has been read: what the Profiles field offers to tick.</summary>
+    private IReadOnlyList<string> Profiles =>
+        _plan is null ? [] : [.. _plan.Services.SelectMany(service => service.Profiles).Distinct(StringComparer.Ordinal)];
+
     /// <summary>
     /// The folder the file's relative paths, its build and its env_file start
     /// from. The file does not say it: it comes from where the file was
@@ -305,6 +329,8 @@
 
             SetContext(stored.Folder);
             _variables.AddRange(stored.Variables);
+            _profiles.AddRange(stored.Profiles);
+            _services.AddRange(stored.Services ?? []);
             await ConvertAsync();
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
@@ -538,9 +564,11 @@
         var context = _context.Trim();
         var variables = _variables.Select(pair => pair.Trim()).Where(pair => pair.IndexOf('=') is > 0 and var equals && equals < pair.Length - 1).ToList();
         // Opened from a project, the file is that project's whatever name it gives itself.
+        var profiles = _profiles.Select(profile => profile.Trim()).Where(profile => profile.Length > 0).ToList();
+        var services = _services.Select(service => service.Trim()).Where(service => service.Length > 0).ToList();
         return _path.Trim().Length > 0
-            ? new ComposePlanRequest(_path.Trim().Trim('"'), Name: Project, Variables: variables, Folder: context)
-            : new ComposePlanRequest(Yaml: _pasted, Name: Project, Variables: variables, Folder: context);
+            ? new ComposePlanRequest(_path.Trim().Trim('"'), Name: Project, Variables: variables, Profiles: profiles, Folder: context, Services: services)
+            : new ComposePlanRequest(Yaml: _pasted, Name: Project, Variables: variables, Profiles: profiles, Folder: context, Services: services);
     }
 
     /// <summary>
@@ -632,7 +660,13 @@
         Add("Volumes to create", preview.Volumes);
         Add("Images to build", preview.Builds);
         Add("Containers to create", preview.Create);
-        Add("Containers to recreate, since their service changed (rehearsed first; the old one is kept if the new one does not start)", preview.Recreate);
+        // Apart, and said for what it is: these are not recreated because the file changed, and
+        // the user who changed them has to hear that the change goes.
+        var edited = preview.Edited ?? [];
+        Add("Containers to recreate, since their service changed (rehearsed first; the old one is kept if the new one does not start)",
+            [.. preview.Recreate.Except(edited)]);
+        Add("Containers changed by hand since the file made them: they are recreated as the file says, and what was changed in them is lost. "
+            + "The names they are published on are kept", edited);
         Add("Containers left as they are", preview.Keep);
         Add("Asked for by the file and not given", preview.Unsupported);
         return string.Join("\n\n", lines);

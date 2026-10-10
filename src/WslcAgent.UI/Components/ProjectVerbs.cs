@@ -9,7 +9,8 @@ namespace WslcAgent.UI.Components;
 /// <param name="Done">The containers it has gone through.</param>
 /// <param name="Total">The containers it has to go through.</param>
 /// <param name="Verb">The verb: <c>start</c>, <c>stop</c> or <c>restart</c>.</param>
-public sealed record ProjectWork(string Step, int Done, int Total, string Verb)
+/// <param name="Failed">It is over and did not get to its end: what is kept is where it got to, for its row and its card to go on showing until it is dismissed or another verb begins.</param>
+public sealed record ProjectWork(string Step, int Done, int Total, string Verb, bool Failed = false)
 {
     public int Pct => Total == 0 ? 0 : Done * 100 / Total;
 
@@ -63,8 +64,20 @@ public sealed class ProjectVerbs(WslcAgentApi api, ActivityLine line, BusyRows r
     /// </summary>
     public Func<Task>? ReadList { get; set; }
 
-    /// <summary>The verb going through the project now; null when none is.</summary>
+    /// <summary>The verb going through the project now, or the last one when it failed and has not been dismissed; null when neither.</summary>
     public ProjectWork? Of(string project) => _going.GetValueOrDefault(project);
+
+    /// <summary>A verb is going through the project now: one that failed and is only still shown is not.</summary>
+    public bool IsGoing(string project) => _going.GetValueOrDefault(project) is { Failed: false };
+
+    /// <summary>Lets go of a verb that failed and was left on the project to be seen.</summary>
+    public void Dismiss(string project)
+    {
+        if (_going.GetValueOrDefault(project) is { Failed: true })
+        {
+            End(project);
+        }
+    }
 
     /// <summary>
     /// The container is one a verb going through its project will get to and
@@ -76,7 +89,7 @@ public sealed class ProjectVerbs(WslcAgentApi api, ActivityLine line, BusyRows r
     /// <summary>Stops going through the project after the container it is on: the ones not reached are left as they are.</summary>
     public void Cancel(string project)
     {
-        if (_going.ContainsKey(project))
+        if (IsGoing(project))
         {
             _cancelled.Add(project);
         }
@@ -85,10 +98,13 @@ public sealed class ProjectVerbs(WslcAgentApi api, ActivityLine line, BusyRows r
     /// <summary><c>start</c>, <c>stop</c> or <c>restart</c> on the project's containers; ends when the last one has been gone through. A second verb on a project that has one going is not begun.</summary>
     public async Task RunAsync(string project, string verb)
     {
-        if (_going.ContainsKey(project))
+        if (IsGoing(project))
         {
             return;
         }
+
+        // Where it stopped, when it does not get to its end: left on the project instead of its progress going.
+        ProjectWork? stuck = null;
 
         // What is done to each container is the thing to see: the group opens, and stays open.
         groups.Open(project);
@@ -101,12 +117,13 @@ public sealed class ProjectVerbs(WslcAgentApi api, ActivityLine line, BusyRows r
             // Already as asked: nothing to do to them, and they are not counted. A restart is
             // of what runs: a container left stopped was stopped for a reason, and stays so.
             var todo = (verb == "stop" ? Enumerable.Reverse(members) : members)
-                .Where(member => verb == "start" ? !member.Running : member.Running)
+                .Where(member => verb == "start" ? !member.Running && member.Taken : member.Running)
                 .ToList();
             var failed = await ThroughAsync(project, todo, verb, work);
             if (failed.Count > 0)
             {
                 work.Fail($"project {project}: {verb} left {failed.Count} undone.\n{string.Join("\n", failed)}");
+                stuck = new ProjectWork($"{verb} left {failed.Count} of {todo.Count} undone. {string.Join(" ", failed)}", todo.Count - failed.Count, todo.Count, verb, Failed: true);
             }
             else if (_cancelled.Contains(project))
             {
@@ -123,7 +140,7 @@ public sealed class ProjectVerbs(WslcAgentApi api, ActivityLine line, BusyRows r
         }
         finally
         {
-            End(project);
+            End(project, stuck);
         }
     }
 
@@ -165,11 +182,24 @@ public sealed class ProjectVerbs(WslcAgentApi api, ActivityLine line, BusyRows r
         return failed;
     }
 
-    /// <summary>The verb on the project is over: its progress goes.</summary>
-    private void End(string project)
+    /// <summary>
+    /// The verb on the project is over: its progress goes. Unless it did not
+    /// get to its end (<paramref name="stuck"/>): then where it got to stays
+    /// on the project, as a failure, so it is seen by whoever was not looking
+    /// at the line that said it.
+    /// </summary>
+    private void End(string project, ProjectWork? stuck = null)
     {
         _cancelled.Remove(project);
-        _going.Remove(project);
+        if (stuck is null)
+        {
+            _going.Remove(project);
+        }
+        else
+        {
+            _going[project] = stuck;
+        }
+
         Changed?.Invoke();
     }
 
@@ -264,7 +294,7 @@ public sealed class ProjectVerbs(WslcAgentApi api, ActivityLine line, BusyRows r
             ? $"{dependents[0].Name} depends on {container.Name}, and is running.\n\nStopping {container.Name} stops {dependents[0].Name} too. Stop both?"
             : $"These containers depend on {container.Name}, and are running:\n\n{string.Join("\n", dependents.Select(dependent => "• " + dependent.Name))}\n\n"
               + $"Stopping {container.Name} stops them too. Stop them all?";
-        if (!await DialogFlow.ConfirmAsync(dialogs, "Stop container", question, "Stop", destructive: true) || _going.ContainsKey(container.Project))
+        if (!await DialogFlow.ConfirmAsync(dialogs, "Stop container", question, "Stop", destructive: true) || IsGoing(container.Project))
         {
             return false;
         }

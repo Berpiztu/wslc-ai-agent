@@ -732,6 +732,10 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<ProjectJob> StartProjectAsync(ProjectUpRequest request, CancellationToken cancellationToken = default) =>
         PostJsonAsync<ProjectUpRequest, ProjectJob>("api/v1/projects/up", request, cancellationToken);
 
+    /// <summary>Builds the images a Compose file's services are built from, and nothing else, as a job of the agent to follow as a save is.</summary>
+    public Task<ProjectJob> BuildProjectAsync(ProjectBuildRequest request, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<ProjectBuildRequest, ProjectJob>("api/v1/projects/build", request, cancellationToken);
+
     public Task<ProjectJob> GetProjectJobAsync(string id, CancellationToken cancellationToken = default) =>
         GetAsync<ProjectJob>($"api/v1/projects/jobs/{Escape(id)}", cancellationToken);
 

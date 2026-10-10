@@ -171,7 +171,16 @@ publishing and cleaning up need them on.
     or not supported (and why), so nothing the file asks for is dropped
     unseen. On the line of **Context** and **Check Compose file**,
     **Variables** holds the file's parameters, every `${NAME}` it asks for
-    with the value it was read as, to set before it is saved. The rail holds the Run form's two verbs: **Save** creates the project
+    with the value it was read as, to set before it is saved, and
+    **Profiles** the profiles to take the services of: its ⋮ lists the
+    file's own profiles to tick, and a service the file keeps behind a
+    profile is left out unless one of its profiles is ticked. **Services**
+    is the same for the services themselves: tick some and only they are
+    taken, with the ones they depend on, whatever the profiles say (what
+    `up web` is at a terminal); tick none and the whole file is. Both are
+    kept with the project, and its **Start** goes by them: what was saved
+    is what comes up again, and a container of the project that was left
+    out of that save stays as it is. The rail holds the Run form's two verbs: **Save** creates the project
     (its networks and volumes, the images it builds, a container a service)
     and leaves it stopped, **Run** also starts it, in the order the services
     depend on each other. Both say first what they are about to do, and then
@@ -184,8 +193,11 @@ publishing and cleaning up need them on.
     its log until it is dismissed. A project stays in the list as a
     group: one row with its name, how many of its containers run and their
     CPU and memory share added up, whose **+** opens its containers' rows
-    under it; in cards, its own card followed by its containers' cards, in
-    the same cells as any other card. A line runs round them as one, round
+    under it (a project of one container shows it always, and has no **+**);
+    in cards, its own card followed by its containers' cards, in
+    the same cells as any other card. The project's own row and card are
+    named `NAME-compose` and carry a soft tertiary tone (the whole row, the
+    card's body), which tell them from a container's at a glance. A line runs round them as one, round
     its rows in the table as round its cards, green
     with every container running, blue with none, and striped in both with
     some; while something is being done to the project the line is striped
@@ -207,14 +219,29 @@ publishing and cleaning up need them on.
     to work without it. A container's own verb shows its project working
     with it, and each container shows as it is the moment its turn is
     over. Its other verbs open its Compose file in this same window, and remove the
-    project (its volumes only when asked about them apart). Containers on
+    project (its volumes only when asked about them apart). They are laid
+    out as a container's: start or stop, restart, a **⋮** menu (the Compose
+    file, and its text copied to the clipboard) and remove; a card has the
+    Compose file as a button of its own at its left end. Containers on
     their own stand beside the groups as before; sorted by a column, the
     list is every container in that order, without groups. On a
     project that exists they apply the file to it: a service that did not
     change is left alone, one that did is recreated (rehearsed first, the
     old one kept if the new one does not start), a new one is created, and a
-    container whose service left the file is removed only after asking
-    ([the plan](compose/emulate.md)).
+    container whose service left the file is removed only after asking. A
+    container of a project changed by hand is put back as the file says by
+    the next save, which names it apart before it does, as editing it warns
+    too; the names it is published on are kept. A container that could
+    not start (its port is taken) is left made and stopped, its card's body
+    in red with why, and its logs end with that same line; and a verb on
+    the project that did not get to its end leaves its ring where it
+    stopped, in red (one of two started: 50 %), until it is dismissed
+    ([the plan](compose/emulate.md)). The same from a terminal:
+    **`wslc-compose`**, installed with the agent and on the `PATH`, takes
+    Compose's own commands (`build`, `up`, `down`, `start`, `stop`,
+    `restart`, `ps`, `ls`, `config`) and asks this machine's agent, with no
+    login, in colour on a terminal
+    ([wslc-compose](compose/wslc-compose.md)).
   - **Checked before it runs**: names in use, ports taken, missing networks,
     a command that listens on another port than the one published. Errors
     show on their fields.

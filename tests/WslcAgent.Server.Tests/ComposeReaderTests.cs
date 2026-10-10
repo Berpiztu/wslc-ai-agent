@@ -210,6 +210,41 @@ public sealed class ComposeReaderTests
         Assert.Empty(plan.Unsupported);
     }
 
+    /// <summary>
+    /// <c>up web</c>: the service named is taken though its profile was not
+    /// asked for, with what it depends on, and the one that has no profile,
+    /// which would otherwise always be taken, is left out with the rest.
+    /// </summary>
+    [Fact]
+    public void Services_asked_for_by_name_are_taken_with_what_they_depend_on_and_no_other()
+    {
+        const string file = """
+            services:
+              bot:
+                image: app
+              web:
+                image: app
+                profiles: [web-only]
+                depends_on:
+                  db:
+                    condition: service_started
+              db:
+                image: postgres
+                profiles: [data]
+              telegram:
+                image: app
+                profiles: [telegram-only]
+            """;
+
+        var plan = ComposeReader.Read(file, Source() with { Services = ["web"] });
+
+        Assert.Equal(["db", "web"], plan.Services.Where(service => service.Enabled).Select(service => service.Name).Order().ToArray());
+        Assert.Contains(plan.Lines, line => line.Text.Trim() == "bot:" && line.Note == "left out: not among the services asked for");
+
+        var unknown = Assert.Throws<ArgumentException>(() => ComposeReader.Read(file, Source() with { Services = ["wep"] }));
+        Assert.Contains("no service 'wep'", unknown.Message);
+    }
+
     /// <summary>The plan is read beside the file: a verdict on the wrong line says the wrong thing of what the user wrote.</summary>
     [Fact]
     public void Every_line_that_says_something_is_given_its_verdict()

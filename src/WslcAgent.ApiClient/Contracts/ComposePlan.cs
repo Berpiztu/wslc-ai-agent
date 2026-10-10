@@ -9,6 +9,7 @@ namespace WslcAgent.ApiClient.Contracts;
 /// <param name="Name">The project's name; empty takes the file's own <c>name</c>, then its folder's.</param>
 /// <param name="Variables">Variables for <c>${NAME}</c>, <c>KEY=value</c> each; they win over the folder's <c>.env</c>.</param>
 /// <param name="Profiles">The profiles asked for: a service with profiles is left out unless one of them is here.</param>
+/// <param name="Services">The services asked for by name: they are taken, with the ones they depend on, and every other is left out, whatever the profiles say. A name the file does not have is refused. None, the whole file is read and the profiles decide.</param>
 /// <param name="Folder">The context: the folder of the agent's machine the file's relative paths, its <c>build</c>, its <c>.env</c> and its <c>env_file</c> start from. Empty takes the folder the file is in; a file given as text has none unless it is said here.</param>
 public sealed record ComposePlanRequest(
     string Path = "",
@@ -16,7 +17,8 @@ public sealed record ComposePlanRequest(
     string Name = "",
     IReadOnlyList<string>? Variables = null,
     IReadOnlyList<string>? Profiles = null,
-    string Folder = "");
+    string Folder = "",
+    IReadOnlyList<string>? Services = null);
 
 /// <summary>Body of <c>POST /api/v1/projects/open</c>: where Windows' Open dialog starts.</summary>
 /// <param name="Folder">A folder of the agent's machine, usually that of the file opened last; empty leaves it to Windows.</param>
@@ -72,7 +74,24 @@ public sealed record ComposeVariable(string Name, string Value, bool Set);
 /// <param name="File">The file, as for a plan.</param>
 /// <param name="Start">Start the containers, in the order they depend on each other (Run); false creates them and leaves them stopped (Save).</param>
 /// <param name="RemoveOrphans">Remove the project's containers whose service the file no longer has. Never assumed: the user is asked first.</param>
-public sealed record ProjectUpRequest(ComposePlanRequest File, bool Start = false, bool RemoveOrphans = false);
+/// <param name="AddServices">
+/// The services this save takes are added to the ones the project is kept
+/// with, and do not take their place: how a command line brings up one more
+/// service of a project (<c>up web</c>, and later <c>up</c>), where a window
+/// that shows the whole choice sets it as it is shown. Either way the
+/// project is kept with its services by name, the ones the save took even
+/// when none was named: it is what its window shows ticked.
+/// </param>
+public sealed record ProjectUpRequest(ComposePlanRequest File, bool Start = false, bool RemoveOrphans = false, bool AddServices = false);
+
+/// <summary>
+/// Body of <c>POST /api/v1/projects/build</c>: a Compose file whose images
+/// to build, and nothing else of it made.
+/// </summary>
+/// <param name="File">The file, as for a plan.</param>
+/// <param name="NoCache">Build every layer again, taking nothing an earlier build left.</param>
+/// <param name="Pull">Ask the registry for the base images again, instead of taking the ones on the machine.</param>
+public sealed record ProjectBuildRequest(ComposePlanRequest File, bool NoCache = false, bool Pull = false);
 
 /// <summary>
 /// What saving a Compose file would do, with nothing done: what the question
@@ -81,7 +100,8 @@ public sealed record ProjectUpRequest(ComposePlanRequest File, bool Start = fals
 /// </summary>
 /// <param name="Exists">The project is already on the machine: the save applies the file to it.</param>
 /// <param name="Create">Services with no container yet.</param>
-/// <param name="Recreate">Services whose container was made from something else than the file says now.</param>
+/// <param name="Recreate">Services whose container was made from something else than the file says now: the file changed, or (<paramref name="Edited"/>) the container did.</param>
+/// <param name="Edited">Those of <paramref name="Recreate"/> whose container was changed by hand since the file made it (View &amp; edit): the save puts it back as the file says, and what was changed is lost, the names it is published on apart. Null from an agent too old to say.</param>
 /// <param name="Keep">Services whose container is as the file says.</param>
 /// <param name="Orphans">The project's containers whose service the file no longer has: removed only if the user says so.</param>
 /// <param name="Networks">Networks to create.</param>
@@ -98,9 +118,10 @@ public sealed record ProjectPreview(
     IReadOnlyList<string> Volumes,
     IReadOnlyList<string> Builds,
     IReadOnlyList<string> Unsupported,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    IReadOnlyList<string>? Edited = null);
 
-/// <summary>A project's save under way, or over: <c>POST /api/v1/projects/up</c> answers it at once, <c>GET /api/v1/projects/jobs/{id}</c> as it goes.</summary>
+/// <summary>A project's save, or a build of its images, under way or over: <c>POST /api/v1/projects/up</c> and <c>/projects/build</c> answer it at once, <c>GET /api/v1/projects/jobs/{id}</c> as it goes.</summary>
 /// <param name="Step">What it is doing now, in words for the window that waits.</param>
 /// <param name="Log">Every step so far, and what the builds printed.</param>
 /// <param name="Error">Why it stopped; empty while it runs and once it is done.</param>
@@ -119,13 +140,15 @@ public sealed record ProjectJob(string Id, string Name, string State, string Ste
 /// <param name="Yaml">Its text as it was then.</param>
 /// <param name="Variables">The variables it was read with, <c>KEY=value</c> each.</param>
 /// <param name="Profiles">The profiles it was read with.</param>
-public sealed record StoredProject(string Name, string File, string Folder, string Yaml, IReadOnlyList<string> Variables, IReadOnlyList<string> Profiles, DateTimeOffset SavedAt);
+/// <param name="Services">The services it was saved for by name, when it was not for the whole file: what the project's start goes by. Null or none, the whole file.</param>
+public sealed record StoredProject(string Name, string File, string Folder, string Yaml, IReadOnlyList<string> Variables, IReadOnlyList<string> Profiles, DateTimeOffset SavedAt, IReadOnlyList<string>? Services = null);
 
 /// <summary>A container of a project; rows of <c>GET /api/v1/projects/{name}/containers</c>, in the order the project's services start in.</summary>
 /// <param name="Id">The container's id, as the containers list gives it.</param>
 /// <param name="Service">Its service in the project's Compose file.</param>
 /// <param name="DependsOn">The services its own depends on, by the file kept with the project: it is not started when one of them did not start.</param>
-public sealed record ProjectMember(string Id, string Name, string Service, bool Running, IReadOnlyList<string> DependsOn);
+/// <param name="Taken">Its service is one the project was saved for: of the profiles and the services it was saved with. A start of the project starts these and leaves the others as they are.</param>
+public sealed record ProjectMember(string Id, string Name, string Service, bool Running, IReadOnlyList<string> DependsOn, bool Taken = true);
 
 /// <summary>Body of <c>POST /api/v1/projects/{name}/down</c>.</summary>
 /// <param name="Volumes">Remove the project's volumes too, and what they hold. Never assumed: the user is asked first.</param>

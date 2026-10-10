@@ -8,15 +8,17 @@
    and its cross becomes Dismiss, as the row does. One that ended well, for as
    long as it is still listed, has the ring whole and its cross in the success
    colour, as the row does. A project's ring, while a verb goes through its
-   containers, is drawn in the two colours of its line (Mixed). *@
+   containers, is drawn in the two colours of its line (Mixed); when the verb
+   does not get to its end the ring stays where it stopped, in the error
+   colour, with the percentage it reached (KeepPct). *@
 
 <div class="wslc-progress-ring @(Mixed ? "wslc-progress-mixed" : "")" title="@Status">
     @* A failed ring is drawn whole, as the row's bar is: at the percentage it had
        when it failed, often 0, there was no ring at all, only the mark inside it. *@
     @* Info, the blue of the "created" chip beside it: Primary sank into the dark header. *@
     <MudProgressCircular Class="wslc-progress-ring-dial" Color="@(Done ? Color.Success : Failed ? Color.Error : Color.Info)"
-                         Indeterminate="@(Running && Pct <= 0)" Value="@(Running ? Pct : 100)" Min="0" Max="100">
-        <MudText Typo="Typo.caption">@(Failed ? "!" : Done ? "100%" : $"{Pct}%")</MudText>
+                         Indeterminate="@(Running && Pct <= 0)" Value="@(Running || Stuck ? Pct : 100)" Min="0" Max="100">
+        <MudText Typo="Typo.caption">@(Failed && !Stuck ? "!" : Done ? "100%" : $"{Pct}%")</MudText>
     </MudProgressCircular>
     @* The column is as tall as the ring; the magnifier sits at its top and the cross
        at its bottom (the stylesheet), as far apart as the ring allows. The cross is
@@ -43,6 +45,9 @@
 
     [Parameter] public bool Failed { get; set; }
 
+    /// <summary>The failure is of work that says how far it got (a verb through a project's containers): the ring stays where it stopped, with its percentage, and not whole with a mark.</summary>
+    [Parameter] public bool KeepPct { get; set; }
+
     /// <summary>It ended well and is still listed: drawn whole in the success colour, its cross closing it.</summary>
     [Parameter] public bool Done { get; set; }
 
@@ -66,4 +71,6 @@
     [Parameter] public EventCallback OnDismiss { get; set; }
 
     private bool Running => !Failed && !Done;
+
+    private bool Stuck => Failed && KeepPct;
 }

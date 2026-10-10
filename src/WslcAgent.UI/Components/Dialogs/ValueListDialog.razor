@@ -1,7 +1,11 @@
 @* The one list editor: a repeatable value per row, the volume-rows look inside
    a dialog. Title row holds Save and Close, the rows head holds Add, and only
    the boxed list scrolls, so the dialog opens at one size and keeps it whatever
-   the row count. Returns the edited values. *@
+   the row count. Returns the edited values. A field whose values are of a
+   known set (a Compose file's profiles) hands the set over (Choices): the
+   list is then a row a choice with its tick, nothing to type and nothing to
+   add, and a value the field holds that is not of the set keeps its row,
+   ticked, so saving never drops what was written by hand. *@
 
 <MudDialog>
     <TitleContent>
@@ -11,17 +15,32 @@
         </DialogTitle>
     </TitleContent>
     <DialogContent>
-        <RowsHeader Label="@Label" OnAdd="Add" />
-        <MudPaper Outlined="true" Class="wslc-picker-list pa-2">
-            @for (var index = 0; index < _rows.Count; index++)
-            {
-                var row = index;
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-1">
-                    <MudTextField T="string" @bind-Value="_rows[row]" Placeholder="@Placeholder" Immediate="true" Variant="Variant.Filled" Margin="Margin.Dense" />
-                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error" Class="wslc-row-remove" title="Remove row" OnClick="@(() => _rows.RemoveAt(row))" />
-                </MudStack>
-            }
-        </MudPaper>
+        @if (Choices.Count > 0)
+        {
+            <RowsHeader Label="@Label" />
+            <MudPaper Outlined="true" Class="wslc-picker-list pa-2">
+                @foreach (var choice in _offered)
+                {
+                    <div>
+                        <SquareCheckBox Value="@_ticked.Contains(choice)" ValueChanged="@(on => Tick(choice, on))" Label="@choice" />
+                    </div>
+                }
+            </MudPaper>
+        }
+        else
+        {
+            <RowsHeader Label="@Label" OnAdd="Add" />
+            <MudPaper Outlined="true" Class="wslc-picker-list pa-2">
+                @for (var index = 0; index < _rows.Count; index++)
+                {
+                    var row = index;
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-1">
+                        <MudTextField T="string" @bind-Value="_rows[row]" Placeholder="@Placeholder" Immediate="true" Variant="Variant.Filled" Margin="Margin.Dense" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error" Class="wslc-row-remove" title="Remove row" OnClick="@(() => _rows.RemoveAt(row))" />
+                    </MudStack>
+                }
+            </MudPaper>
+        }
         @if (Hint.Length > 0)
         {
             <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">@Hint</MudText>
@@ -44,7 +63,34 @@
 
     [Parameter] public string Hint { get; set; } = "";
 
-    protected override void OnInitialized() => _rows = [.. Values];
+    /// <summary>The set the values are of, when there is one: the list is then ticks, not rows to type.</summary>
+    [Parameter] public IReadOnlyList<string> Choices { get; set; } = [];
+
+    /// <summary>What there is to tick: the set, and after it what the field holds that is not of it.</summary>
+    private List<string> _offered = [];
+
+    private readonly HashSet<string> _ticked = new(StringComparer.Ordinal);
+
+    protected override void OnInitialized()
+    {
+        _rows = [.. Values];
+        _offered = [.. Choices.Concat(Values).Distinct(StringComparer.Ordinal)];
+        _ticked.UnionWith(Values);
+    }
+
+    private void Tick(string choice, bool on)
+    {
+        if (on)
+        {
+            _ticked.Add(choice);
+        }
+        else
+        {
+            _ticked.Remove(choice);
+        }
+
+        Dialog.StateHasChanged();
+    }
 
     private void Add()
     {
@@ -52,7 +98,9 @@
         Dialog.StateHasChanged();
     }
 
-    /// <summary>Blank rows are dropped.</summary>
+    /// <summary>Blank rows are dropped; of a set, the ticked ones, in the set's order.</summary>
     private void Save() =>
-        Dialog.Close(DialogResult.Ok<IReadOnlyList<string>>([.. _rows.Select(r => r.Trim()).Where(r => r.Length > 0)]));
+        Dialog.Close(DialogResult.Ok<IReadOnlyList<string>>(Choices.Count > 0
+            ? [.. _offered.Where(_ticked.Contains)]
+            : [.. _rows.Select(r => r.Trim()).Where(r => r.Length > 0)]));
 }

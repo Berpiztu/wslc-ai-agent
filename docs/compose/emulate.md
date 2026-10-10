@@ -198,6 +198,19 @@ another name first, and the old container put back if the new one does not
 start. Containers of the project that the file no longer names are listed
 and removed only when asked.
 
+A new container is created and then started, two steps, not run in one:
+`wslc` takes a published port at the start and not at the create, so a
+container whose port is taken fails at its start and is left made and
+stopped, as Compose leaves it, where a `run` that fails leaves nothing.
+
+The file is what a project's container is made from. One changed by hand
+(View & edit) stays in its project and loses the `config` label, which is
+how the next save knows: it is recreated as the file says, and the question
+before the save names it apart and says its changes are lost. Editing one
+says so too, before it saves. One thing is kept through that recreate: the
+names the container is published on, and the publishing network they need,
+since a Compose file has no key to say them.
+
 ### 4. The rest of the life cycle
 
 | Verb | What it does |
@@ -224,6 +237,9 @@ and removed only when asked.
   machine, or paste one; the plan is shown before **Up**.
 - **Skill**: a section so an assistant handed a Compose file uses
   `parse_compose` first and reports the not-supported list.
+- **Command line**: `wslc-compose`, installed with the agent and on the
+  user's `PATH`, with Compose's own commands and options over the same API
+  ([wslc-compose.md](wslc-compose.md)).
 
 ### The project on the Containers page
 
@@ -245,7 +261,9 @@ and the project's verbs. Its **+** opens the rows of its containers under
 it, indented, and they are ordinary container rows: the same columns, the
 same actions, the same tick. They are rows of the same table, not a table
 inside the row, so the columns stay aligned and resizing or reordering one
-moves them all. The line that runs round a project's cards runs round its
+moves them all. A project of one container shows it always and has no
+**+**: folded, it was a row that looked like a container and had none of a
+container's verbs. The line that runs round a project's cards runs round its
 rows too: over the grouper, under its last container's row and down both
 ends of each, in the same colours.
 

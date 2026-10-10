@@ -102,6 +102,28 @@ public sealed partial class PublishingService(
     }
 
     /// <summary>
+    /// A launch request with the names a container is published on kept in
+    /// it, and the publishing network they need among its networks: for a
+    /// recreate from something that cannot say them (a project's save: a
+    /// Compose file has no key for a public name), which would otherwise
+    /// unpublish the container as if the user had asked. The request as it
+    /// is for a container that is not published.
+    /// </summary>
+    public ContainerLaunchRequest Keeping(string container, ContainerLaunchRequest request)
+    {
+        var rows = RowsOf(container);
+        if (rows.Count == 0)
+        {
+            return request;
+        }
+
+        var network = settings.Get().Network;
+        var among = request.ConnectNetworks.Select(n => n.Split(' ', 2)[0].Trim()).Prepend(request.Network.Trim())
+            .Contains(network, StringComparer.OrdinalIgnoreCase);
+        return request with { PublicNames = rows, ConnectNetworks = among ? request.ConnectNetworks : [.. request.ConnectNetworks, network] };
+    }
+
+    /// <summary>
     /// Before a container is created, run or recreated with public names: every
     /// row well formed, no name held by another container, the publishing
     /// network among the form's networks, and that network there. A save that

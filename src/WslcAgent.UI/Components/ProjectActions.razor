@@ -1,15 +1,28 @@
-@* A project's actions, in its row and in its card: [start or stop] [restart]
-   [Compose file] [down], the container's own row of verbs for the whole
-   project. Start, stop and restart go through its containers in the order its
-   services start in, one at a time (ProjectVerbs), so the container being
-   started or stopped shows it as it does for its own verb, and the
-   project's row its progress. The Compose file is the project's own: the Compose window
-   on the file it was brought up from, to read it, and to apply it again once
-   it has changed. Down removes the project, after asking, and its volumes
-   only after asking about them apart. *@
+@* A project's actions, in its row and in its card, laid out as a container's
+   are: [start or stop] [restart] [⋮ more] [down]. Start, stop and restart go
+   through its containers in the order its services start in, one at a time
+   (ProjectVerbs), so the container being started or stopped shows it as it
+   does for its own verb, and the project's row its progress. The Compose
+   file is the project's own: the Compose window on the file it was brought up
+   from, to read it, and to apply it again once it has changed. Down removes
+   the project, after asking, and its volumes only after asking about them
+   apart.
+   A card has room a table row has not, so it leads with the verb most reached
+   for, the Compose file, at its left end, where a container's card has its
+   own View & edit, and keeps the row's verbs at the far end (Shortcuts). The
+   menu is the whole list minus what the view already has within reach, as a
+   container's is, and is where a project's further verbs go. *@
 @inherits EntityActionsBase
 @inject ProjectVerbs Verbs
+@inject IJSRuntime Js
 
+<div class="@(Shortcuts ? "wslc-row-verbs" : "")">
+@if (Shortcuts)
+{
+    <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center" Class="wslc-row-shortcuts">
+        <MudIconButton Icon="@Icons.Material.Filled.EditNote" Size="Size.Small" title="Compose file: view it, and apply it again" Disabled="Locked" OnClick="FileAsync" />
+    </MudStack>
+}
 <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center">
     @if (Running)
     {
@@ -23,10 +36,17 @@
     }
     <MudIconButton Icon="@Icons.Material.Filled.RestartAlt" Size="Size.Small" Color="Color.Warning" title="Restart the project's containers"
                    Disabled="Locked" OnClick="@(() => VerbAsync("restart"))" />
-    <MudIconButton Icon="@Icons.Material.Filled.EditNote" Size="Size.Small" title="Compose file: view it, and apply it again" Disabled="Locked" OnClick="FileAsync" />
+    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" title="More actions" Disabled="Locked" OpenChanged="MenuOpenChanged">
+        @if (!Shortcuts)
+        {
+            <MudMenuItem Icon="@Icons.Material.Filled.EditNote" OnClick="FileAsync">Compose file</MudMenuItem>
+        }
+        <MudMenuItem Icon="@Icons.Material.Filled.ContentCopy" OnClick="CopyFileAsync">Copy Compose file</MudMenuItem>
+    </MudMenu>
     <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="Down: remove the project"
                    Disabled="Locked" OnClick="DownAsync" />
 </MudStack>
+</div>
 
 @code {
     /// <summary>The project's name.</summary>
@@ -44,10 +64,13 @@
     /// <summary>The project is being saved: every verb shows, none can be pressed.</summary>
     [Parameter] public bool Saving { get; set; }
 
+    /// <summary>In a card: the Compose file as a button of its own at the left end, and out of the menu.</summary>
+    [Parameter] public bool Shortcuts { get; set; }
+
     protected override string Key => RowKey;
 
     /// <summary>Greyed while a verb goes through the project's containers, as while it is being saved.</summary>
-    private bool Locked => Busy || Saving || Verbs.Of(Project) is not null;
+    private bool Locked => Busy || Saving || Verbs.IsGoing(Project);
 
     /// <summary>Start, stop or restart, a container at a time (<see cref="ProjectVerbs"/>); the list is read again at its end.</summary>
     private async Task VerbAsync(string verb)
@@ -63,6 +86,22 @@
                 new DialogParameters<Dialogs.ComposeDialog> { { d => d.Project, Project } }, large: true))
         {
             await Changed.InvokeAsync();
+        }
+    }
+
+    /// <summary>The Compose file kept with the project, as text on the clipboard: to paste into a file, or into another agent's Compose window.</summary>
+    private async Task CopyFileAsync()
+    {
+        using var work = Activity.Begin($"Copying the Compose file of {Project}");
+        try
+        {
+            var stored = await Api.GetStoredProjectAsync(Project);
+            await Js.InvokeVoidAsync("navigator.clipboard.writeText", stored.Yaml);
+            work.Done("Compose file copied");
+        }
+        catch (Exception ex) when (ex is ApiClient.AgentApiException or HttpRequestException or JSException)
+        {
+            work.Fail($"Failed to copy: {ex.Message}");
         }
     }
 

@@ -41,8 +41,20 @@ public sealed class ProjectLifecycle(
     {
         var plan = await dependencies.PlanAsync(name, cancellationToken);
         return [.. (await MembersAsync(name, plan, cancellationToken))
-            .Select(member => new ProjectMember(member.Id, member.Name, member.Service, member.IsRunning, [.. ProjectDependencies.Needs(plan, member.Service)]))];
+            .Select(member => new ProjectMember(member.Id, member.Name, member.Service, member.IsRunning, [.. ProjectDependencies.Needs(plan, member.Service)], Taken(plan, member.Service)))];
     }
+
+    /// <summary>
+    /// The service is one the project was saved for: of the profiles and the
+    /// services its file was kept with. A start of the project is of these:
+    /// what the user saved is what comes up again, and a container of the
+    /// project that was left out of that save (another profile's, a service
+    /// not among the ones asked for) is left as it is. With no file kept, or
+    /// a service the file no longer has, there is nothing to go by, and the
+    /// container is taken.
+    /// </summary>
+    private static bool Taken(ComposePlan? plan, string service) =>
+        plan?.Services.FirstOrDefault(other => other.Name == service)?.Enabled ?? true;
 
     public async Task<ProjectResult> VerbAsync(string name, string verb, CancellationToken cancellationToken = default)
     {
@@ -70,7 +82,7 @@ public sealed class ProjectLifecycle(
             var failures = failed.Count;
             await TryAsync(member.Name, done, failed, () => verb switch
             {
-                Start => member.IsRunning ? Task.CompletedTask : containers.StartAsync(member.Id, cancellationToken),
+                Start => member.IsRunning || !Taken(plan, member.Service) ? Task.CompletedTask : containers.StartAsync(member.Id, cancellationToken),
                 Stop => member.IsRunning ? containers.StopAsync(member.Id, cancellationToken) : Task.CompletedTask,
                 // A restart is of what runs: a container left stopped was stopped for a reason, and stays so.
                 Restart => member.IsRunning ? containers.RestartAsync(member.Id, cancellationToken) : Task.CompletedTask,

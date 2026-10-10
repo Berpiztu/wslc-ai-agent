@@ -180,7 +180,8 @@ public sealed partial class ProjectService : IProjectService
             }
         }
 
-        return new ComposeSource(request.Name, folder, variables, (request.Profiles ?? []).ToHashSet(StringComparer.Ordinal), ReadFile, ListFolder);
+        var services = (request.Services ?? []).Select(name => name.Trim()).Where(name => name.Length > 0).ToHashSet(StringComparer.Ordinal);
+        return new ComposeSource(request.Name, folder, variables, (request.Profiles ?? []).ToHashSet(StringComparer.Ordinal), ReadFile, ListFolder, services);
     }
 
     private static string? ReadFile(string path) => File.Exists(path) ? File.ReadAllText(path) : null;

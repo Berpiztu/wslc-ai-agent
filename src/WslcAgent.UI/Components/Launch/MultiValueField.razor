@@ -37,11 +37,14 @@
     /// <summary>How a hand-typed line becomes values: <see cref="ValueList.Split"/> or <see cref="ValueList.SplitPairs"/>.</summary>
     [Parameter, EditorRequired] public Func<string, List<string>> Split { get; set; } = ValueList.Split;
 
+    /// <summary>The set the values are of, when the form knows it (a Compose file's profiles): the button's list is then ticks to set, not rows to type.</summary>
+    [Parameter] public IReadOnlyList<string> Choices { get; set; } = [];
+
     private void Typed(string text) => Replace(Split(text));
 
     private async Task EditAsync()
     {
-        if (await DialogFlow.EditValuesAsync(Dialogs, $"Edit {Label}", Label, Values, Placeholder, Hint) is { } edited)
+        if (await DialogFlow.EditValuesAsync(Dialogs, $"Edit {Label}", Label, Values, Placeholder, Hint, Choices) is { } edited)
         {
             Replace(edited);
         }

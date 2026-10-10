@@ -1,6 +1,7 @@
 @* The one card for list pages in cards view. Header (EntityCardHeader: avatar,
    title, subtitle, an optional badge on the right) and the actions row share
-   the tinted tone of the table header and pager; the body carries the data.
+   the tinted tone of the table header and pager; the body carries the data,
+   on the card's own surface unless the page gives it a soft tone (BodyTone).
    The header is a component of its own so a resource's card on the
    dashboard wears the same one. *@
 @implements IDisposable
@@ -8,7 +9,8 @@
 
 <MudCard Elevation="Style.Applied.CardElevation" Outlined="Style.Applied.CardOutlined" Square="Style.Applied.CardSquare" Class="wslc-card d-flex flex-column" Style="height: 100%">
     <EntityCardHeader Title="@Title" Subtitle="@Subtitle" AvatarText="@AvatarText" AvatarColor="AvatarColor" Avatar="Avatar" Key="@Key" HeaderActions="HeaderActions" Tone="Tone" />
-    <MudCardContent Class="flex-grow-1">
+    @* A failure is said at the rows' own share, a kind of card at the soft one: an alarm has to be louder than a label. *@
+    <MudCardContent Class="flex-grow-1" Style="@CardTone.Style(BodyTone, BodyTone == Color.Error ? CardTone.Share : CardTone.Soft)" title="@BodyTitle">
         @ChildContent
     </MudCardContent>
     @if (Actions is not null)
@@ -39,6 +41,12 @@
 
     /// <summary>The header's and the actions row's background, saying the row's state (<see cref="CardTone"/>); null for the card's own tone.</summary>
     [Parameter] public Color? Tone { get; set; }
+
+    /// <summary>The body's background, a soft tone of a palette colour that says what kind of card it is (a project's, among its containers'); null for the card's own.</summary>
+    [Parameter] public Color? BodyTone { get; set; }
+
+    /// <summary>What the body's tone says, in words, for whoever rests the pointer on it: why a container did not start.</summary>
+    [Parameter] public string BodyTitle { get; set; } = "";
 
     [Parameter] public RenderFragment? ChildContent { get; set; }
 

@@ -65,6 +65,11 @@
       <!-- Read by the agent as Wslc:ClientPackagesPath; removed on uninstall. -->
       <IniFile Id="PackagesFolderIni" Action="addLine" Directory="INSTALLFOLDER" Name="wslc-ai-agent.ini"
                Section="Wslc" Key="ClientPackagesPath" Value="[WSLC_PACKAGESFOLDER]" />
+      <!-- wslc-compose.exe is in the install folder: on the user's PATH it is
+           a command in any terminal opened from now on. The user's own PATH,
+           as everything this installer writes is the user's; the entry goes
+           with the uninstall. -->
+      <Environment Id="AgentFolderOnPath" Name="PATH" Value="[INSTALLFOLDER]" Part="last" Action="set" System="no" Permanent="no" />
       <RemoveFolder Id="RemoveAgentFolder" Directory="INSTALLFOLDER" On="uninstall" />
     </Component>
 

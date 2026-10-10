@@ -4,12 +4,14 @@
 .DESCRIPTION
     Bumps the agent version (Directory.Build.props, patch), publishes
     WslcAgent.Server self-contained for win-x64 with the Blazor UI inside,
+    with wslc-compose.exe beside it and its tray icon under tray\,
     adds LICENSE and the third-party notices, and wraps the payload with WiX.
     The MSI installs under %LOCALAPPDATA%\WSLC-AI-Agent, asks for the bind
     host and port in its wizard (WSLC_BINDHOST / WSLC_AGENTPORT properties,
     defaults 127.0.0.1 / 8069), stores them under HKCU, registers the logon
-    task that starts the agent now and at every logon, and adds a Start Menu
-    shortcut to the dashboard URL.
+    task that starts the agent now and at every logon, adds a Start Menu
+    shortcut to the dashboard URL, and puts the install folder on the user's
+    PATH, so wslc-compose is a command in any terminal.
     The wizard also asks for the package folder, where the agent finds its own
     newer installer and the clients' (WSLC_PACKAGESFOLDER, written to
     wslc-ai-agent.ini beside the agent). It offers this checkout's dist, where
@@ -56,6 +58,18 @@ if (Test-Path -LiteralPath $Stage) { Remove-Item -Recurse -Force -LiteralPath $S
 New-Item -ItemType Directory -Force -Path $Stage | Out-Null
 
 $Output = @(Get-WslcAgentDotnetOutput)
+
+# The command line for Compose files (wslc-compose.exe), beside the agent and
+# on the agent's own .NET runtime instead of a second copy of it: a few files
+# of its own in the agent's folder. Published before the agent, so that every
+# file the two have in common is the agent's once the agent is published over
+# it, and nothing of the agent's is ever replaced by this.
+$Compose = Join-Path $RepoRoot "src\Berpiztu.Wslc.Compose\Berpiztu.Wslc.Compose.csproj"
+Write-Host "Publishing wslc-compose (self-contained win-x64)..." -ForegroundColor Cyan
+Write-Verbose "dotnet publish $Compose -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false $Output -o $Stage"
+& dotnet publish $Compose -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -nologo @Output -o $Stage
+if ($LASTEXITCODE -ne 0) { throw "dotnet publish of wslc-compose failed with exit code $LASTEXITCODE" }
+if (-not (Test-Path -LiteralPath (Join-Path $Stage "wslc-compose.exe"))) { throw "Publish produced no wslc-compose.exe in $Stage" }
 
 Write-Host "Publishing WSLC AI Agent $version (self-contained win-x64)..." -ForegroundColor Cyan
 Write-Verbose "dotnet publish $Project -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false $Output -o $Stage"

@@ -12,13 +12,20 @@ namespace WslcAgent.UI.Components;
 public static class CardTone
 {
     /// <summary>How much of the colour the pastel takes over the surface.</summary>
-    private const int Share = 25;
+    public const int Share = 25;
 
     /// <summary>A container's tone: green while it runs; none otherwise, the rows keeping their own.</summary>
     public static Color? Of(ContainerSummary container) => container.IsRunning ? Color.Success : null;
 
-    /// <summary>The style that paints a row in the tone; null for none, the row keeping its own.</summary>
-    public static string? Style(Color? tone) => tone is { } color
-        ? $"background-color: color-mix(in srgb, var(--mud-palette-{color.ToString().ToLowerInvariant()}) {Share}%, var(--mud-palette-surface))"
+    /// <summary>
+    /// How much of the colour a card's body takes: half the rows' share. A
+    /// body holds text to read, and it stands between two rows that are
+    /// toned already, which it has to stay lighter than.
+    /// </summary>
+    public const int Soft = 12;
+
+    /// <summary>The style that paints a row in the tone, or with <paramref name="share"/> a body in a lighter one; null for none, the row keeping its own.</summary>
+    public static string? Style(Color? tone, int share = Share) => tone is { } color
+        ? $"background-color: color-mix(in srgb, var(--mud-palette-{color.ToString().ToLowerInvariant()}) {share}%, var(--mud-palette-surface))"
         : null;
 }

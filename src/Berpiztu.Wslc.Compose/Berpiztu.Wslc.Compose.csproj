@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- wslc-compose: Compose files on WSLC from the command line. A client of
+       the agent as the web UI and the MCP tools are: it reads the command
+       line, asks the agent over /api/v1 and prints what it answers, and has
+       no rules of its own. Installed beside the agent, on its runtime, and
+       on the user's PATH. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>wslc-compose</AssemblyName>
+    <RootNamespace>Berpiztu.Wslc.Compose</RootNamespace>
+    <ApplicationIcon>..\WslcAgent.Server\wslc-ai-agent.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WslcAgent.ApiClient\WslcAgent.ApiClient.csproj" />
+  </ItemGroup>
+
+</Project>

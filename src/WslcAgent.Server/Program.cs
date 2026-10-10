@@ -76,6 +76,7 @@ builder.Services.AddHostedService<WslcEventReader>();
 builder.Services.AddSingleton<RestartPolicyReconciler>();
 builder.Services.AddHostedService<RestartReconciler>();
 builder.Services.AddSingleton<ContainerRecreations>();
+builder.Services.AddSingleton<StartFailures>();
 builder.Services.AddSingleton<IContainerService, ContainerService>();
 builder.Services.AddSingleton<ILaunchChecks, LaunchChecks>();
 builder.Services.AddSingleton<IContainerBackups, ContainerBackups>();

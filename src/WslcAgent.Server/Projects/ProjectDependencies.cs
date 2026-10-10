@@ -23,7 +23,7 @@ public sealed class ProjectDependencies(ProjectStore store, IProjectService proj
         try
         {
             return store.Read(name) is { } stored
-                ? await projects.PlanAsync(new ComposePlanRequest(Yaml: stored.Yaml, Name: stored.Name, Variables: stored.Variables, Profiles: stored.Profiles, Folder: stored.Folder), cancellationToken)
+                ? await projects.PlanAsync(new ComposePlanRequest(Yaml: stored.Yaml, Name: stored.Name, Variables: stored.Variables, Profiles: stored.Profiles, Folder: stored.Folder, Services: stored.Services), cancellationToken)
                 : null;
         }
         catch (Exception ex) when (ex is ArgumentException or IOException)
@@ -50,7 +50,12 @@ public sealed class ProjectDependencies(ProjectStore store, IProjectService proj
             return;
         }
 
-        foreach (var needed in Needs(await PlanAsync(starting.Project, cancellationToken), starting.Service))
+        // What it waits for to have run to its end is not asked to be running: it is over, as it should be.
+        var plan = await PlanAsync(starting.Project, cancellationToken);
+        var running = plan?.Services.FirstOrDefault(other => other.Name == starting.Service)?.DependsOn
+            .Where(dependency => dependency.Condition != ComposeDependency.Completed)
+            .Select(dependency => dependency.Service) ?? [];
+        foreach (var needed in running)
         {
             var dependency = rows.FirstOrDefault(row => row.Project == starting.Project && row.Service == needed);
             if (dependency is not { IsRunning: true })

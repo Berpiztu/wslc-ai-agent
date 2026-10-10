@@ -722,8 +722,10 @@
     background-color: var(--mud-palette-surface);
 }
 
-.wslc-fill > .mud-table.mud-table-striped .mud-table-body .mud-table-row:nth-of-type(odd) .mud-table-cell.sticky-left,
-.wslc-fill > .mud-table.mud-table-striped .mud-table-body .mud-table-row:nth-of-type(odd) .mud-table-cell.sticky-right {
+/* Not on a project's own row, which has a tone of its own on every cell: the
+   stripe over it would leave its pinned cells a shade apart from the rest. */
+.wslc-fill > .mud-table.mud-table-striped .mud-table-body .mud-table-row:nth-of-type(odd):not(.wslc-bracket-project) .mud-table-cell.sticky-left,
+.wslc-fill > .mud-table.mud-table-striped .mud-table-body .mud-table-row:nth-of-type(odd):not(.wslc-bracket-project) .mud-table-cell.sticky-right {
     background-image: linear-gradient(var(--mud-palette-table-striped), var(--mud-palette-table-striped));
 }
 
@@ -2648,14 +2650,15 @@
 }
 
 /* The Compose window's line under its file: the context, the verb that reads
-   the file with it, and the file's variables. The two fields share the width
-   and the verb takes what its words need. The verb stands level with the
+   the file with it, the file's variables, the profiles to take and the
+   services asked for by name. The four fields share the width and the verb
+   takes what its words need. The verb stands level with the
    fields' values: a field is taller than its value by the note under it, the
    line a picker's button gives back to stay level (.wslc-field-pick.has-note,
    above), so the verb's cell gives the same line back and centres in what is
    left. */
 .wslc-form-grid.wslc-form-line.wslc-compose-fields {
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
 }
 
 .wslc-compose-fields > .wslc-compose-verb {
@@ -4143,6 +4146,13 @@
     position: relative;
 }
 
+/* A project's own row among its containers': the soft tertiary its card's
+   body has (CardTone.Soft, the same share), on every cell, the pinned ones
+   too, which are painted apart to cover what scrolls under them. */
+.wslc-fill > .mud-table .mud-table-body .mud-table-row.wslc-bracket-project > .mud-table-cell {
+    background-color: color-mix(in srgb, var(--mud-palette-tertiary) 12%, var(--mud-palette-surface));
+}
+
 .wslc-fill > .mud-table .mud-table-body .mud-table-row.wslc-bracket.wslc-bracket-running > .mud-table-cell {
     --wslc-bracket: var(--mud-palette-success);
 }
@@ -4234,10 +4244,25 @@
    under it down and takes the card's height with it, so the whole page moves
    while a container comes up. The line is cut instead and the whole of it is in
    the tooltip. */
-.wslc-card-texts > .mud-typography {
+.wslc-card-texts > .mud-typography,
+.wslc-card-members > .mud-typography {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* A project card's containers, a name a line. The box is as tall as what a
+   container's card says in words (ContainerCardTexts: four lines of the body's
+   type and one of the caption's), from the theme's own sizes and line heights,
+   so a project's card is as tall as its containers' whether it has one of them
+   or thirty; past that the box scrolls, and the card never grows. */
+.wslc-card-members {
+    /* Beside the +/− that shows the containers' cards: the list takes what is left of the line, and gives way. */
+    flex: 1 1 auto;
+    min-width: 0;
+    height: calc(4 * var(--mud-typography-body2-size) * var(--mud-typography-body2-lineheight)
+        + var(--mud-typography-caption-size) * var(--mud-typography-caption-lineheight));
+    overflow-y: auto;
 }
 
 .wslc-card-dials {

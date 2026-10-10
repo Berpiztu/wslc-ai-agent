@@ -25,7 +25,7 @@ public sealed partial class ProjectStore(IOptions<WslcOptions> options)
         Directory.CreateDirectory(folder);
         File.WriteAllText(Path.Combine(folder, FileName), string.Join('\n', plan.Lines.Select(line => line.Text)));
         File.WriteAllText(Path.Combine(folder, AboutName), JsonSerializer.Serialize(
-            new About(plan.Name, plan.File, file.Folder, file.Variables ?? [], file.Profiles ?? [], DateTimeOffset.UtcNow), Json));
+            new About(plan.Name, plan.File, file.Folder, file.Variables ?? [], file.Profiles ?? [], DateTimeOffset.UtcNow, file.Services ?? []), Json));
     }
 
     /// <summary>The file kept for a project; null when none is (a project whose containers were made on another agent, or before the file was kept).</summary>
@@ -39,7 +39,7 @@ public sealed partial class ProjectStore(IOptions<WslcOptions> options)
             return null;
         }
 
-        return new StoredProject(name, kept.File ?? "", kept.Folder ?? "", File.ReadAllText(file), kept.Variables ?? [], kept.Profiles ?? [], kept.SavedAt);
+        return new StoredProject(name, kept.File ?? "", kept.Folder ?? "", File.ReadAllText(file), kept.Variables ?? [], kept.Profiles ?? [], kept.SavedAt, kept.Services ?? []);
     }
 
     /// <summary>Whether a file is kept for any project at all.</summary>
@@ -69,5 +69,5 @@ public sealed partial class ProjectStore(IOptions<WslcOptions> options)
     [GeneratedRegex(@"^[a-z0-9][a-z0-9_-]*$")]
     private static partial Regex ProjectName();
 
-    private sealed record About(string Name, string? File, string? Folder, IReadOnlyList<string>? Variables, IReadOnlyList<string>? Profiles, DateTimeOffset SavedAt);
+    private sealed record About(string Name, string? File, string? Folder, IReadOnlyList<string>? Variables, IReadOnlyList<string>? Profiles, DateTimeOffset SavedAt, IReadOnlyList<string>? Services = null);
 }

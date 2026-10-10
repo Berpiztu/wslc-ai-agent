@@ -339,10 +339,20 @@
     /// being asked while a search is on (what it found is inside), while the
     /// project is being saved or its save failed, and while a verb goes
     /// through its containers: what is being done to each container is the
-    /// thing to see then.
+    /// thing to see then. A project of one container is always open
+    /// (<see cref="IsSingle"/>).
     /// </summary>
     private bool IsOpen(string project) =>
-        Search.Length > 0 || Groups.IsOpen(project) || SavingOf(project) is { Done: false } || Verbs.Of(project) is not null;
+        Search.Length > 0 || IsSingle(project) || Groups.IsOpen(project) || SavingOf(project) is { Done: false } || Verbs.IsGoing(project);
+
+    /// <summary>
+    /// The project has one container and no more. Folded, it was a row that
+    /// looked like a container and had none of a container's verbs (its
+    /// logs, its console, its files): the one thing the user came for was
+    /// behind a +. With one row to hide there is nothing to fold, so its
+    /// container stands in sight and the project's row has no + to press.
+    /// </summary>
+    private bool IsSingle(string project) => MembersOf(project).Count == 1;
 
     /// <summary>
     /// A container of a project is shown after its project's row, or card,
@@ -388,7 +398,7 @@
     /// is done to the project, which shows it as its own work.
     /// </summary>
     private bool IsWorking(string project) =>
-        Verbs.Of(project) is not null
+        Verbs.IsGoing(project)
         || SavingOf(project) is { Active: true }
         || Working.IsBusy(GroupPrefix + project)
         || MembersOf(project).Any(member => Working.IsBusy(member.Id) || member.IsRecreating || member.IsUpdating || LaunchOf(member) is { Active: true });
@@ -432,9 +442,9 @@
             ? ""
             : $"wslc-bracket {lines.Tones.GetValueOrDefault(card.Project, "wslc-bracket-stopped")}"
               + $"{(lines.First.GetValueOrDefault(card.Project) == card.Id ? " wslc-bracket-start" : "")}{(lines.Last.GetValueOrDefault(card.Project) == card.Id ? " wslc-bracket-end" : "")}"
-              + $"{((IsGroup(card) && IsWorking(card.Project)) || Verbs.IsWaiting(card.Id) ? " wslc-bracket-waiting" : "")}";
+              + $"{((IsGroup(card) && IsWorking(card.Project)) || Verbs.IsWaiting(card.Id) ? " wslc-bracket-waiting" : "")}{(IsGroup(card) ? " wslc-bracket-project" : "")}";
 
-    /// <summary>What stands before a row's name: a project's +/−, the step in of a container under its project; nothing for a container on its own, or in a sorted list, which has no groups.</summary>
+    /// <summary>What stands before a row's name: a project's +/− when it has containers to fold, the step in of a container under its project; nothing for a container on its own, or in a sorted list, which has no groups.</summary>
     private RenderFragment? Mark(ContainerSummary row)
     {
         if (Sorted || row.Project.Length == 0)
@@ -442,11 +452,12 @@
             return null;
         }
 
-        if (!IsGroup(row))
+        if (!IsGroup(row) || IsSingle(row.Name))
         {
-            // Its name stands a step in from its project's +, under the project's name: the + is
-            // kept its place before it, unseen, so the step is exactly the button's. The step
-            // says it is the project's; no mark is added to it.
+            // A container's name stands a step in from its project's +, under the project's name:
+            // the + is kept its place before it, unseen, so the step is exactly the button's. The
+            // step says it is the project's; no mark is added to it. A project of one container
+            // keeps the place too and has no + in it: a button that folds nothing is worse than none.
             return @<MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" Class="invisible" Disabled="true" aria-hidden="true" />;
         }
 
@@ -455,18 +466,26 @@
                                title="@(open ? "Hide the project's containers" : "Show the project's containers")" OnClick="@(() => Groups.Toggle(row.Name))" />;
     }
 
+    /// <summary>
+    /// What a row is called on screen: a container's name; a project's with
+    /// <c>-compose</c> after it, in its row and on its card alike, which says
+    /// what it is among rows that are containers. Its name stays the
+    /// project's wherever it is used and not shown.
+    /// </summary>
+    private static string Titled(ContainerSummary row) => IsGroup(row) ? $"{row.Name}-compose" : row.Name;
+
     /// <summary>A row's name, after its mark when it has one.</summary>
     private RenderFragment Named(ContainerSummary row)
     {
         if (Mark(row) is not { } mark)
         {
-            return @<text>@row.Name</text>;
+            return @<text>@Titled(row)</text>;
         }
 
         return @<div class="wslc-progress-cell">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Wrap="Wrap.NoWrap">
                 @mark
-                <span class="wslc-progress-name">@row.Name</span>
+                <span class="wslc-progress-name">@Titled(row)</span>
             </MudStack>
         </div>;
     }
@@ -479,7 +498,7 @@
             return GoingName(head);
         }
 
-        return @<ProgressCell Lead="@Mark(head)" Name="@head.Name" Pct="saving.Pct" Status="@saving.Status" Failed="@(!saving.Active && !saving.Done)" Done="saving.Done"
+        return @<ProgressCell Lead="@Mark(head)" Name="@Titled(head)" Pct="saving.Pct" Status="@saving.Status" Failed="@(!saving.Active && !saving.Done)" Done="saving.Done"
                               LogTitle="View project progress" CancelTitle="Cancel project" DismissTitle="Dismiss project"
                               OnLog="@(() => ShowLaunchLogAsync(saving))" OnCancel="@(() => CancelLaunchAsync(saving))" OnDismiss="@(() => DismissLaunchAsync(saving))" />;
     }
@@ -492,13 +511,14 @@
             return Named(head);
         }
 
-        return @<ProgressCell Lead="@Mark(head)" Name="@head.Name" Pct="going.Bar" Status="@going.Step" Mixed="true"
-                              CancelTitle="Stop after this container" OnCancel="@(() => Verbs.Cancel(head.Name))" />;
+        return @<ProgressCell Lead="@Mark(head)" Name="@Titled(head)" Pct="going.Bar" Status="@going.Step" Mixed="@(!going.Failed)" Failed="going.Failed"
+                              CancelTitle="Stop after this container" OnCancel="@(() => Verbs.Cancel(head.Name))" OnDismiss="@(() => Verbs.Dismiss(head.Name))" />;
     }
 
-    private RenderFragment GroupActions(ContainerSummary head) =>
+    /// <summary>A project's verbs: the row's in the table, and in its card (<paramref name="shortcuts"/>) with the Compose file as a button of its own at the left, as a container's card has its own.</summary>
+    private RenderFragment GroupActions(ContainerSummary head, bool shortcuts = false) =>
         @<ProjectActions Project="@head.Name" RowKey="@head.Id" Containers="@NamesOf(head.Name)" Running="head.IsRunning"
-                         Saving="@(SavingOf(head.Name) is { Active: true })" Changed="RefreshAsync" />;
+                         Saving="@(SavingOf(head.Name) is { Active: true })" Changed="RefreshAsync" Shortcuts="shortcuts" />;
 
     /// <summary>
     /// A project's own card, a card as any other: its name, how many of its
@@ -509,10 +529,9 @@
     /// that only turns for a verb on one container.
     /// </summary>
     private RenderFragment GroupCard(ContainerSummary head) =>
-        @<EntityCard Title="@head.Name" Subtitle="@head.Image" AvatarColor="@StateColors.For(head.State)" Tone="@CardTone.Of(head)">
+        @<EntityCard Title="@Titled(head)" Subtitle="@head.Image" AvatarColor="@StateColors.For(head.State)" Tone="@CardTone.Of(head)" BodyTone="Color.Tertiary">
                 <HeaderActions>
                     <StateChip State="@head.State" />
-                    @Mark(head)
                 </HeaderActions>
                 <Avatar>
                     @if (SavingOf(head.Name) is { } saving)
@@ -523,7 +542,10 @@
                     }
                     else if (Verbs.Of(head.Name) is { } going)
                     {
-                        <ProgressRing Pct="going.Bar" Status="@going.Step" Mixed="true" CancelTitle="Stop after this container" OnCancel="@(() => Verbs.Cancel(head.Name))" />
+                        @* A verb that did not get to its end stays there, where it stopped: half of two containers
+                           started is a ring at 50 %, in the error colour, until its cross lets it go. *@
+                        <ProgressRing Pct="going.Bar" Status="@going.Step" Mixed="@(!going.Failed)" Failed="going.Failed" KeepPct="true"
+                                      CancelTitle="Stop after this container" OnCancel="@(() => Verbs.Cancel(head.Name))" OnDismiss="@(() => Verbs.Dismiss(head.Name))" />
                     }
                     else if (IsWorking(head.Name))
                     {
@@ -542,16 +564,33 @@
                     }
                 </Avatar>
                 <ChildContent>
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@(string.Join(", ", NamesOf(head.Name)))</MudText>
+                    @* Its containers, a name a line, in a box as tall as a container card's own
+                       lines: the project's card is as tall as theirs however many it has, and the
+                       box scrolls, not the card. One that is not running is written fainter.
+                       The +/− that shows and hides their cards stands beside the list it is about,
+                       not at the far end of the header; a project of one container has none. *@
+                    <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="1" Wrap="Wrap.NoWrap">
+                        @if (!IsSingle(head.Name))
+                        {
+                            @Mark(head)
+                        }
+                        <div class="wslc-card-members">
+                            @foreach (var member in MembersOf(head.Name))
+                            {
+                                <MudText Typo="Typo.body2" Class="@(member.IsRunning ? "" : "mud-text-secondary")" title="@($"{member.Name}: {member.State}")">@member.Name</MudText>
+                            }
+                        </div>
+                    </MudStack>
                 </ChildContent>
                 <Actions>
-                    @GroupActions(head)
+                    @GroupActions(head, shortcuts: true)
                 </Actions>
             </EntityCard>;
 
     /// <summary>A container's card, the same on its own and after its project's card.</summary>
     private RenderFragment ContainerCard(ContainerSummary c) =>
-        @<EntityCard Title="@c.Name" Subtitle="@c.Image" AvatarColor="@StateColors.For(c.State)" Key="@c.Id" Tone="@CardTone.Of(c)">
+        @<EntityCard Title="@c.Name" Subtitle="@c.Image" AvatarColor="@StateColors.For(c.State)" Key="@c.Id" Tone="@CardTone.Of(c)"
+                     BodyTone="@(c.StartError.Length > 0 ? Color.Error : null)" BodyTitle="@(c.StartError.Length > 0 ? $"Could not start: {c.StartError}" : "")">
                         <HeaderActions>
                             <StateChip State="@c.State" />
                         </HeaderActions>

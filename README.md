@@ -104,6 +104,7 @@ architecture button).
 | `Berpiztu.Dashboard` | The dashboard and its designer, a Razor class library on MudBlazor that knows nothing of WSLC. |
 | `WslcAgent.Tray` | The agent's icon beside the clock (`wslc-ai-agent-tray.exe`): a click opens its page in the browser; its menu and its notifications. |
 | `WslcAgent.Toasts` | The agent's notifications as Windows toasts, shared by the tray and the Windows client. |
+| `Berpiztu.Wslc.Compose` | Compose files from the command line (`wslc-compose.exe`): Compose's own commands, answered by the agent. Installed with it. |
 
 One UI, one language, one API contract.
 
@@ -335,6 +336,7 @@ All scripts live in the repository root and work from any current directory.
 | `build-agent-installer.ps1` | `dist\wslc-ai-agent.msi`: self-contained agent with the UI inside. |
 | `build-client-installer.ps1` | `dist\wslc-ai-client.msi`: the Windows client. |
 | `build-client-apk.ps1` | `dist\wslc-ai-client.apk`, arm64-v8a, signed. `build-client-apk-full.ps1` bundles every ABI. |
+| `build-wslc-compose.ps1` | `dist\wslc-compose.exe`: the Compose command as one file with its runtime inside, for a machine with no agent of its own. The agent's installer carries its own copy. |
 
 The three installer scripts count every build as a fourth part of the last
 release's version (`1.0.27.1`, `1.0.27.2`…), in `private\version.props` (never

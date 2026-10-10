@@ -100,9 +100,9 @@ public static class DialogFlow
         return result is { Canceled: false, Data: TItem item } ? item : null;
     }
 
-    /// <summary>The list editor behind a multi-value field; the edited values, or null when closed.</summary>
+    /// <summary>The list editor behind a multi-value field; the edited values, or null when closed. With <paramref name="choices"/>, the set the values are of, it is a list of ticks.</summary>
     public static async Task<IReadOnlyList<string>?> EditValuesAsync(
-        IDialogService dialogs, string title, string label, IReadOnlyList<string> values, string placeholder, string hint)
+        IDialogService dialogs, string title, string label, IReadOnlyList<string> values, string placeholder, string hint, IReadOnlyList<string>? choices = null)
     {
         var parameters = new DialogParameters<Dialogs.ValueListDialog>
         {
@@ -110,6 +110,7 @@ public static class DialogFlow
             { d => d.Label, label },
             { d => d.Placeholder, placeholder },
             { d => d.Hint, hint },
+            { d => d.Choices, choices ?? [] },
         };
         var reference = await dialogs.ShowAsync<Dialogs.ValueListDialog>(title, parameters, Small);
         var result = await reference.Result;

@@ -24,6 +24,7 @@ src/
   WslcAgent.ApiClient  Contracts (records) and a typed HttpClient for /api/v1.
   WslcAgent.Mcp        MCP tool types and the interfaces they need from the host.
   Berpiztu.Dashboard   The Home dashboard's engine: a Razor Class Library on MudBlazor only, with nothing of WSLC's.
+  Berpiztu.Wslc.Compose  Compose files from the command line, a client of /api/v1 installed beside the agent. Exe: wslc-compose.exe
 tests/
   WslcAgent.Server.Tests   Integration tests over WebApplicationFactory.
 packaging/

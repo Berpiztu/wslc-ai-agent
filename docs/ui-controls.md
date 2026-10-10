@@ -441,7 +441,11 @@ Body lines are `Typo.body2` with the label in bold; secondary lines
   or variables survive View & edit; a hand-typed line is read back with the
   field's own rule — `ValueList.Split` for plain values, `ValueList.SplitPairs`
   for `KEY=value` ones, where a line splits on commas only when every chunk
-  starts a new key (`MSG=hello, world` stays one value).
+  starts a new key (`MSG=hello, world` stays one value). A field whose
+  values are of a known set gives it as `Choices` (the Compose window's
+  Profiles, the file's own): the ⋮ then opens the same editor as a list of
+  ticks (`SquareCheckBox`), with nothing to type or add, and a value typed
+  by hand that is not of the set keeps its row, ticked.
 - Terminal (`TerminalView`): the command field, Connect / Reconnect, Clear and
   the session state on one toolbar row, xterm.js filling the rest
   (`wslc-terminal` / `wslc-terminal-pane`). It is mounted with its tab or its
