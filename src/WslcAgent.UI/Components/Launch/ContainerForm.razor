@@ -235,8 +235,13 @@
     private bool _busy;
     private string _busyTitle = "";
 
-    /// <summary>What the check or the failed launch said about one field: shown in that field instead of its example.</summary>
-    private readonly Dictionary<string, string> _fields = new(StringComparer.Ordinal);
+    /// <summary>
+    /// What the check or the failed launch said about one field, and what the
+    /// field held then: shown in that field instead of its example, for as long
+    /// as the field still holds it. A name in use is no longer said of a name
+    /// that has been changed.
+    /// </summary>
+    private readonly Dictionary<string, (string Message, string Value)> _fields = new(StringComparer.Ordinal);
 
     /// <summary>What is about no field in particular: shown above the fields.</summary>
     private readonly List<(Severity Severity, string Text)> _general = [];
@@ -726,9 +731,35 @@
         }
     }
 
-    private bool Has(string field) => _fields.ContainsKey(field);
+    private bool Has(string field) => Error(field) is not null;
 
-    private string? Error(string field) => _fields.GetValueOrDefault(field);
+    private string? Error(string field) => _fields.TryGetValue(field, out var said) && said.Value == ValueOf(field) ? said.Message : null;
+
+    /// <summary>What a field holds now, as one text: an error said of it stands while this is what it was said of.</summary>
+    private string ValueOf(string field) => field switch
+    {
+        LaunchFields.Image => Form.Image,
+        LaunchFields.Name => Form.Name,
+        LaunchFields.Publish => string.Join('\n', Form.Publish),
+        LaunchFields.Volumes => string.Join('\n', Form.Mounts.Select(mount => mount.Spec)),
+        LaunchFields.Env => string.Join('\n', Form.Env),
+        LaunchFields.Networks => string.Join('\n', Form.Networks.Select(network => $"{network.Name} {network.Ip} {network.Aliases}")),
+        LaunchFields.PublicNames => string.Join('\n', Form.PublicNames),
+        LaunchFields.Entrypoint => Form.Entrypoint,
+        LaunchFields.Command => Form.Command,
+        LaunchFields.Workdir => Form.Workdir,
+        LaunchFields.User => Form.User,
+        LaunchFields.RestartPolicy => Form.RestartPolicy,
+        LaunchFields.StopTimeout => Form.StopTimeout,
+        LaunchFields.HealthCmd => Form.HealthCmd,
+        LaunchFields.HealthInterval => Form.HealthInterval,
+        LaunchFields.HealthTimeout => Form.HealthTimeout,
+        LaunchFields.HealthRetries => Form.HealthRetries,
+        LaunchFields.HealthStartPeriod => Form.HealthStartPeriod,
+        LaunchFields.Memory => Form.Memory,
+        LaunchFields.Cpus => Form.Cpus,
+        _ => "",
+    };
 
     private void ClearMessages()
     {
@@ -743,7 +774,7 @@
         {
             if (severity == Severity.Error && finding.Field != LaunchFields.General)
             {
-                _fields[finding.Field] = _fields.TryGetValue(finding.Field, out var already) ? $"{already} {finding.Message}" : finding.Message;
+                _fields[finding.Field] = (_fields.TryGetValue(finding.Field, out var already) ? $"{already.Message} {finding.Message}" : finding.Message, ValueOf(finding.Field));
             }
             else
             {
@@ -773,6 +804,12 @@
     /// </summary>
     private async Task SubmitAsync(bool start)
     {
+        // What the last attempt said goes first, and is painted away with the
+        // veil below: MudForm takes a field still marked as an error for an
+        // invalid one, so a name refused once kept Save and Run from going any
+        // further, whatever was done about it.
+        ClearMessages();
+
         // The veil at the press, painted before anything is asked of the agent:
         // on a slower machine the checks take seconds, and a button that shows
         // nothing for that long looks as if it did nothing.
@@ -835,7 +872,6 @@
             return null;
         }
 
-        ClearMessages();
         var request = Form.ToRequest() with { Start = start };
         return await CheckedAsync(request, start) && await ConfirmVerbAsync(start) ? request : null;
     }
