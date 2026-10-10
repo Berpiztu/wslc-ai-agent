@@ -52,6 +52,14 @@ public static class LoginEndpoints
         api.MapPost("/login/api-token", (AgentLogin login) => new ApiTokenResult(login.RenewApiToken()))
             .WithName("RenewApiToken");
 
+        // The token as it is, shown again in Settings whenever it is wanted:
+        // behind the same sign-in as every call, never public
+        api.MapGet("/login/api-token", (AgentLogin login) =>
+                login.ApiToken is { Length: > 0 } token
+                    ? Results.Ok(new ApiTokenResult(token))
+                    : Results.Problem("No API token has been created yet.", statusCode: StatusCodes.Status404NotFound, title: "No API token"))
+            .WithName("GetApiToken");
+
         return api;
     }
 

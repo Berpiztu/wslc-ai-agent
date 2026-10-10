@@ -128,6 +128,22 @@ public sealed class AgentLogin
         return token;
     }
 
+    /// <summary>
+    /// The API token as it is, for Settings to show again: it is kept as it is
+    /// (every call compares it), and one forgotten meant a new one and changing
+    /// it in every script and client that used it. Empty when there is none.
+    /// </summary>
+    public string ApiToken
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _stored.ApiToken;
+            }
+        }
+    }
+
     public bool ApiTokenMatches(string token)
     {
         lock (_gate)

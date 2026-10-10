@@ -62,7 +62,9 @@ from the start, with its skill included for Claude, Hermes, OpenClaw, etc.
   supports it, a confirmation step otherwise.
 - **A skill** that teaches the assistant how to work with WSLC, served by the
   agent itself and **installed with one click** into Claude Code, Hermes Agent
-  or OpenClaw, on this machine or another over SSH.
+  or OpenClaw, on this machine or another over SSH. Settings > MCP says how to
+  update it: the same install after the agent is updated, and for Hermes the
+  command that registers the server again so its new tools are enabled.
 - Setup guides and ready configurations for each assistant.
 - **Architecture diagrams** of the agent, the terminal, the network and MCP,
   one click away on every screen.
@@ -318,8 +320,9 @@ The Home page is a dashboard designed by each user, not a fixed screen.
   the session selector; agent, client, `wslc`, Windows and kernel versions;
   Live updates (whether the agent hears `wslc`'s events, or the screens read
   on their own clock); Recent events (what `wslc` reported lately, newest
-  first: containers started, stopped or ended with their exit code, images
-  pulled, networks connected); the agent's log; file transfers; free text.
+  first: containers started, stopped or ended with their exit code, networks
+  connected or disconnected, health changes); the agent's log; file transfers;
+  free text.
 - **Ready-made cards**: container, image, volume, network, system, charts.
 - **Alarms**: each measure has a threshold; past it the object turns red and
   blinks. Chosen alarms also show as rings in a status bar on every screen.

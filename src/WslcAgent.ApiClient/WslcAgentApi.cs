@@ -193,6 +193,10 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<ApiTokenResult> RenewApiTokenAsync(CancellationToken cancellationToken = default) =>
         PostJsonAsync<object?, ApiTokenResult>("api/v1/login/api-token", null, cancellationToken);
 
+    /// <summary>The current API token, to show again; a 404 problem when none has been created.</summary>
+    public Task<ApiTokenResult> GetApiTokenAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<ApiTokenResult>("api/v1/login/api-token", cancellationToken);
+
     // Saved logins (the host browser pane's picker, edited in Settings)
 
     public Task<IReadOnlyList<SavedLogin>> GetSavedLoginsAsync(CancellationToken cancellationToken = default) =>

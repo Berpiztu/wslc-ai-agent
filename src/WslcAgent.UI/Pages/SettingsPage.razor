@@ -70,14 +70,20 @@
             <MudPaper Outlined="true" Class="pa-4">
                 <MudText Typo="Typo.h6">API token</MudText>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
-                    For scripts and AI agents that reach the API or the MCP endpoint from another machine: send it as
-                    <span class="wslc-mono">Authorization: Bearer &lt;token&gt;</span>. It is shown once; a new one replaces the old.
+                    For scripts and AI agents that reach the agent from another machine — any call to its API, the MCP endpoint
+                    among them: send it as <span class="wslc-mono">Authorization: Bearer &lt;token&gt;</span>. It opens the whole
+                    API, as a signed-in user would, so keep it as you would the password. The browser and the native clients sign in
+                    with the login instead. It stays here to copy whenever it is needed; a new one replaces it, and the old one stops
+                    working everywhere it was used.
                 </MudText>
                 <MudText Typo="Typo.body2" Class="mb-2">Now: <b>@(_status.ApiToken ? "configured" : "not set — only this machine and signed-in clients can connect")</b></MudText>
-                @if (_newToken is not null)
+                @* The token itself, always in sight: shown only once before, so one
+                   forgotten meant a new one and changing it in every script and client
+                   that used it. *@
+                @if (_token is not null)
                 {
                     <div class="wslc-field-pick">
-                        <MudTextField T="string" Value="_newToken" Label="New API token" ReadOnly="true" Variant="Variant.Filled" Margin="Margin.Dense" Class="wslc-mono" />
+                        <MudTextField T="string" Value="_token" Label="API token" ReadOnly="true" Variant="Variant.Filled" Margin="Margin.Dense" Class="wslc-mono" />
                         <MudFab Color="Color.Info" StartIcon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" title="Copy the token" OnClick="CopyTokenAsync" />
                     </div>
                 }
@@ -108,7 +114,8 @@
             <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
                 The agent serves MCP itself for AI clients (Claude Code, Hermes, OpenClaw): they register the URL below and
                 copy the skill, nothing else is installed. On this machine the URL needs no credentials; from anywhere else a
-                client sends <span class="wslc-mono">Authorization: Bearer &lt;token&gt;</span>, the API token above.
+                client sends <span class="wslc-mono">Authorization: Bearer &lt;token&gt;</span> with the API token of the
+                Security tab — the agent's one key for scripts and AI agents, which opens the whole API, not only MCP.
                 Skill and client setup: <span class="wslc-mono">mcp-skill/skills/wslc/INSTALL.md</span>.
             </MudText>
             @if (_mcp is null)
@@ -118,7 +125,7 @@
             else
             {
                 <div class="wslc-field-pick mb-2">
-                    <MudTextField T="string" Value="_mcp.LocalUrl" Label="Local URL" ReadOnly="true" Variant="Variant.Filled" Margin="Margin.Dense" Class="wslc-mono" />
+                    <MudTextField T="string" Value="@McpUrl" Label="URL" ReadOnly="true" Variant="Variant.Filled" Margin="Margin.Dense" Class="wslc-mono" />
                     <MudFab Color="Color.Info" StartIcon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" title="Copy the URL" OnClick="CopyMcpUrlAsync" />
                 </div>
                 <MudText Typo="Typo.body2" Class="mb-2">
@@ -246,6 +253,34 @@
                         <div class="wslc-mono">@run.Command</div>
                         <div class="wslc-mono">@run.Output</div>
                     </MudAlert>
+                }
+                @* Updating: the skill comes with the agent, so once the agent is
+                   updated the same install brings the new one; a file copied into
+                   the client's folder is never recorded, so it is no update. Hermes
+                   also keeps the tools it enabled when the server was registered,
+                   so a newer agent's tools stay off until it is registered again. *@
+                <MudText Typo="Typo.subtitle2" Class="mt-4">Updating</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    The skill comes with the agent: after the agent is updated, <b>Run the install</b> again and the client
+                    replaces its copy with the one this agent serves. Copying <span class="wslc-mono">SKILL.md</span> into the
+                    client's folder is not an update: the client does not record it.
+                    @if (_skillClient == "Hermes")
+                    {
+                        <text>
+                            Hermes also keeps the tools it enabled when the server was registered: the tools a newer agent adds stay
+                            off until it is registered again (answer Y to enabling all of them). From another machine, the entry
+                            needs the header with the API token of the Security tab too (<span class="wslc-mono">mcp-skill/skills/wslc/INSTALL.md</span>, §3).
+                        </text>
+                    }
+                </MudText>
+                @if (_skillClient == "Hermes")
+                {
+                    <div class="wslc-field-pick mt-2">
+                        <MudTextField T="string" Value="@HermesRegisterAgain" Label="Register the server again, on the machine where Hermes is" ReadOnly="true"
+                                      Variant="Variant.Filled" Margin="Margin.Dense" Class="wslc-mono" />
+                        <MudFab Color="Color.Info" StartIcon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" title="Copy the commands"
+                                OnClick="@(() => CopyAsync(HermesRegisterAgain, "Commands copied"))" />
+                    </div>
                 }
             }
         </MudPaper>
@@ -878,7 +913,7 @@
     private string _username = "";
     private string _password = "";
     private string _confirm = "";
-    private string? _newToken;
+    private string? _token;
     private bool _busy;
     private McpStatus? _mcp;
     private bool _mcpBusy;
@@ -921,6 +956,17 @@
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
         {
             Snackbar.Add(ex.Message, Severity.Error);
+        }
+
+        try
+        {
+            // The token itself, shown again; an agent older than GET /login/api-token
+            // answers 404 and the field stays away, as it did before
+            _token = _status?.ApiToken == true ? (await Api.GetApiTokenAsync()).Token : null;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _token = null;
         }
 
         try
@@ -971,7 +1017,7 @@
         _busy = true;
         try
         {
-            _newToken = (await Api.RenewApiTokenAsync()).Token;
+            _token = (await Api.RenewApiTokenAsync()).Token;
             await LoadAsync();
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
@@ -1261,6 +1307,20 @@
             : command;
 
     /// <summary>
+    /// Hermes' server removed and added again, with the profile chosen (its own
+    /// command) and the address that machine reaches this agent by: how a newer
+    /// agent's tools get enabled there.
+    /// </summary>
+    private string HermesRegisterAgain
+    {
+        get
+        {
+            var hermes = _hermesProfile.Trim() is { Length: > 0 } profile ? profile : "hermes";
+            return $"{hermes} mcp remove wslc && {hermes} mcp add wslc --url {McpUrl}";
+        }
+    }
+
+    /// <summary>
     /// Runs that client's own installer and shows what it answered. Nothing is
     /// copied: the client records the skill the way it records any other.
     /// </summary>
@@ -1290,9 +1350,20 @@
     /// <summary>The agent hands out its own copy, so the file is never older than the tools.</summary>
     private void DownloadSkill() => Navigation.NavigateTo(Api.McpSkillDownloadUrl().ToString(), forceLoad: true);
 
-    private Task CopyMcpUrlAsync() => CopyAsync(_mcp?.LocalUrl ?? "", "MCP URL copied");
+    private Task CopyMcpUrlAsync() => CopyAsync(McpUrl, "MCP URL copied");
 
-    private Task CopyTokenAsync() => CopyAsync(_newToken ?? "", "API token copied");
+    /// <summary>
+    /// The URL a client registers, at the address the skill's lines are written
+    /// with: the page's own when it was opened through the public name, the one
+    /// typed for another machine, or the agent's loopback on this one. The
+    /// agent's loopback alone was shown before, an IP and a port no client
+    /// elsewhere can reach, while the skill's lines named the public address.
+    /// </summary>
+    private string McpUrl => _mcp is null
+        ? ""
+        : _mcp.SkillAddress.Trim().TrimEnd('/') is { Length: > 0 } address ? $"{address}/api/v1/mcp" : _mcp.LocalUrl;
+
+    private Task CopyTokenAsync() => CopyAsync(_token ?? "", "API token copied");
 
     /// <summary>One clipboard for every copy on this page, each saying what it did.</summary>
     private async Task CopyAsync(string text, string said)

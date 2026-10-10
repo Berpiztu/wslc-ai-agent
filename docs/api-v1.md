@@ -38,7 +38,8 @@ ends every session) and the API token.
 | POST | `/login/session` | `LoginResult` and the cookie, for a caller already let in | none |
 | POST | `/logout` | 204; the cookie is deleted | none |
 | PUT | `/login/credentials` `{ username, password }` | 204; every earlier session ends | none |
-| POST | `/login/api-token` | `ApiTokenResult { token }`, shown once; the previous token stops working | none |
+| POST | `/login/api-token` | `ApiTokenResult { token }`, a new token; the previous one stops working | none |
+| GET | `/login/api-token` | `ApiTokenResult { token }`, the current token as it is, for Settings to show again (one forgotten meant a new one and changing it everywhere it was used); a 404 problem when none has been created. Behind the same sign-in as every call: a session, the agent's own machine, or the token itself | none |
 | GET | `/saved-logins` | `SavedLogin[] { id, title, user, password }`, by title: the host browser pane's picker, edited in Settings | none (the passwords are for the person at the pane, not for an AI agent) |
 | POST | `/saved-logins` | body `SavedLoginInput { title, user, password }`; 201 `SavedLogin`; 400 without a title, 409 when the title (any case) is taken. Kept in `saved-logins.json`, user and password encrypted with the agent's data protection keys (DPAPI on Windows) | none |
 | PUT | `/saved-logins/{id}` | body `SavedLoginInput`; `SavedLogin`, 404 unknown, 400 / 409 as above | none |
@@ -193,7 +194,7 @@ ends every session) and the API token.
 | POST | `/sessions/start` `{ name }` | `SessionActionResult { changed, message, sessions }`; an empty name means the session the agent targets. the session itself is left alone when it already runs; 409 with the reason when it cannot be started (a reserved `wslc-cli-…` store that did not open, or an elevated `wslc-cli-admin-…` one). Either way the restart policy is applied in it, as the agent's own start-up does, and `message` names the containers it started (`changed` is true when the session was started or anything came back with it). A session that was terminated is running again by itself with the next command while everything inside it stays down, which is why the already-running answer applies the policy too; a session other than the one the agent targets is started without it | `images --format json` with no session of its own (opening the default store opens or creates it), then `system session enter --name NAME PATH` for a store of the user’s own, reading `system info` after each, then one `container start` per enrolled container |
 | POST | `/sessions/stop` `{ name }` | `SessionActionResult`; an empty name means the session the agent targets. Everything running in that session stops with it; one already stopped is left alone (`changed` false) | `--session NAME system session terminate`, and the flag matters: with none, "the default session will be terminated" and not the one that was asked for |
 | GET | `/events/status` | `{ live }`: true while the agent has `wslc events` open and is being told what changes | none |
-| GET | `/events/recent?limit=50` | `WslcEventEntry[] { time, type, action, id, name, exitCode }`, newest first, at most `limit` (1 to 100): the events the agent heard from `wslc events` — a container started, stopped or died (`exitCode` on its end), an image pulled or removed, a network connected, a health change. `name` is the object's when the event carries one, null otherwise. Kept in memory, the last 100; the list starts over when the agent starts and when it begins listening to another session, whose events are not this one's. The dashboard's Recent events and the `recent_events` tool read it | none (the stream `/events/stream` already holds) |
+| GET | `/events/recent?limit=50` | `WslcEventEntry[] { time, type, action, id, name, exitCode }`, newest first, at most `limit` (1 to 100): the events the agent heard from `wslc events` — a container started, stopped, killed or died (`exitCode` on its end), a network connected or disconnected, a health change, an image's own. `name` is the object's when the event carries one, null otherwise. Kept in memory, the last 100; the list starts over when the agent starts and when it begins listening to another session, whose events are not this one's. The dashboard's Recent events and the `recent_events` tool read it | none (the stream `/events/stream` already holds) |
 | GET | `/events/stream` | **WebSocket**. One `ChangeNotice { kinds[], complete }` per message: the kinds of thing that changed, so a screen reads its list instead of asking on a clock. The first message a client gets is always `complete`, and so is the first after the agent loses the stream — a stopped session takes its containers down without announcing one of them. `kinds` are `container`, `image`, `network`; a volume is never reported. `session` is the agent's own: a session was started, stopped or chosen from any client, or the event stream died with it (stopped from a terminal too), and every client reads the sessions again — no client polls them. `agent-update` is the agent's own as well: its update was announced, cancelled, is waiting or is installing, and every client reads `GET /agent/update` to show or take down the countdown. `notification` is the agent's own too: it raised a notification, and whoever shows them (the tray icon) reads `GET /notifications?after=` | `events`, kept open for as long as the agent runs and opened again when the session it belongs to aborts it |
 | GET | `/notifications?after=N` | `NotificationList { notifications[AgentNotification { id, time, kind, severity, title, text, link, action }], latest }`: those raised after id N, oldest first (the last 200 are kept, in `notifications-history.json`), and the last id raised; `after` omitted is 0, all kept. `kind` is one of `host-disk`, `host-memory`, `host-cpu`, `container-memory`, `container-cpu`, `container-stopped`, `container-not-restarted`, `container-unhealthy`, `job-failed`, `job-finished`, `update-failed`, `update-installed`, `update-announced`, `update-cancelled`, `session-lost`; `severity` `error`, `warning` or `info`; `link` the list it opens, relative to the agent; `action` its one button, done without opening the application (`cancel-update`, on `update-announced`), empty for none. docs/notifications/spec.md | none |
 | GET | `/notifications/settings` | `NotificationSettings { hostDisk, hostMemory, hostCpu, containerMemory, containerCpu: { on, percent, minutes }, containerStopped, containerNotRestarted, jobFailed, jobFinished, updateFailed, updateInstalled, sessionLost, recovered, updateAnnounced, updateCancelled, containerUnhealthy }`: Settings › Notifications, kept in `notifications.json`; the defaults until it exists, and the last three on when a saved file lacks them. `containerStopped` is a container's `die` (wslc 3.0.2 on) or `stop` (before) with no `kill` of it first; `containerUnhealthy` its `health_status: unhealthy` (wslc 3.0.2 on), and `recovered` also says when it is healthy again | none |
@@ -273,7 +274,7 @@ Notes
   app or a tool, whether or not the session itself had to be started: stopping
   a session takes every container in it down, the start-up pass is long past,
   and the session itself is back on its own with the next command.
-- MCP tools mirror these, served at `/api/v1/mcp` (36 today): `health`,
+- MCP tools mirror these, served at `/api/v1/mcp` (54 today): `health`,
   `system_info`, `cli_activity`, `recent_events`, `home_overview`, `list_sessions`,
   `switch_session`, `start_session`, `stop_session`, `list_containers`,
   `inspect_container`, `container_logs`, `container_stats`,
@@ -281,11 +282,15 @@ Notes
   `create_container`, `start_container`, `stop_container`,
   `restart_container`, `set_restart_policy`, `exec_in_container`,
   `kill_container` and `remove_container`, `list_images`, `inspect_image`,
-  `pull_image`, `tag_image`, `push_image`, `save_image`, `list_volumes`,
-  `create_volume`, `inspect_volume`, `volume_containers`, `list_networks`,
+  `pull_image`, `tag_image`, `push_image`, `save_image`, `remove_image`,
+  `prune_images`, `list_volumes`, `create_volume`, `inspect_volume`,
+  `volume_containers`, `remove_volume`, `prune_volumes`, `list_networks`,
   `create_network`, `connect_container_to_network`,
   `disconnect_container_from_network`, `inspect_network`, `network_topology`,
-  `pull_status`, `parse_run_command` and `run_command_line`.
+  `remove_network`, `pull_status`, `list_notifications`,
+  `get_notification_settings`, `set_notification_settings`,
+  `list_publications`, `publish_container_port`, `unpublish_hostname`,
+  `setup_publishing`, `parse_run_command` and `run_command_line`.
   `kill_container`, `remove_container`, `exec_in_container`, `stop_session`,
   `remove_image`, `remove_volume`, `remove_network`, `prune_images` and
   `prune_volumes` are gated: a client that can show an approval prompt is asked
