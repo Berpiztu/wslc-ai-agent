@@ -150,6 +150,19 @@ public sealed record StoredProject(string Name, string File, string Folder, stri
 /// <param name="Taken">Its service is one the project was saved for: of the profiles and the services it was saved with. A start of the project starts these and leaves the others as they are.</param>
 public sealed record ProjectMember(string Id, string Name, string Service, bool Running, IReadOnlyList<string> DependsOn, bool Taken = true);
 
+/// <summary>
+/// Answer of <c>GET /api/v1/projects/{name}/logs</c>: what the project's
+/// containers wrote, as one log, in the order it was written.
+/// </summary>
+public sealed record ProjectLogs(IReadOnlyList<ProjectLogLine> Lines);
+
+/// <summary>A line of a project's logs.</summary>
+/// <param name="Container">The container that wrote it, by name: what the line is said by.</param>
+/// <param name="Service">Its service in the project's Compose file.</param>
+/// <param name="Time">When, as <c>wslc</c> stamps it (RFC 3339 to the nanosecond, UTC): what the lines are ordered by, and what a reader asks the next lines after. Empty for a line that carries none.</param>
+/// <param name="Text">The line as written.</param>
+public sealed record ProjectLogLine(string Container, string Service, string Time, string Text);
+
 /// <summary>Body of <c>POST /api/v1/projects/{name}/down</c>.</summary>
 /// <param name="Volumes">Remove the project's volumes too, and what they hold. Never assumed: the user is asked first.</param>
 public sealed record ProjectDownRequest(bool Volumes = false);

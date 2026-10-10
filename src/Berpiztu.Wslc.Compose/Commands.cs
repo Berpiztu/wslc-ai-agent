@@ -31,6 +31,7 @@ internal sealed partial class Commands(AgentConnection agent, Arguments argument
         "start" => VerbAsync("start", "Started"),
         "stop" => VerbAsync("stop", "Stopped"),
         "restart" => VerbAsync("restart", "Restarted"),
+        "logs" => LogsAsync(),
         "ps" => PsAsync(),
         "ls" => LsAsync(),
         "version" => VersionAsync(),
@@ -236,7 +237,105 @@ internal sealed partial class Commands(AgentConnection agent, Arguments argument
             return Program.Ok;
         }
 
-        return await new JobFollower(Api, interrupt, Built(plan)).FollowAsync(await Api.StartProjectAsync(up, Stop));
+        // From this moment: what the containers wrote before this up is not this up's to show.
+        var began = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffffff00Z", System.Globalization.CultureInfo.InvariantCulture);
+        var ended = await new JobFollower(Api, interrupt, Built(plan)).FollowAsync(await Api.StartProjectAsync(up, Stop));
+
+        // Detached, or with nothing started, or cancelled: it comes back here. Otherwise it stays
+        // with the containers it brought up, as Compose's up does, showing what they write; and
+        // when not all of them came up, with the ones that did, since those are running and worth
+        // watching, and the command still ends as the failure it was.
+        if (!up.Start || arguments.Has(Arguments.Detach) || ended == Program.Interrupted)
+        {
+            return ended;
+        }
+
+        return ended == Program.Ok || (await TakenAsync(preview.Name, whole: false)).Any(member => member.Running)
+            ? await AttachedAsync(preview.Name, began, ended)
+            : ended;
+    }
+
+    /// <summary>
+    /// An up that was not detached: the logs of the services it brought up,
+    /// from the moment it began and as they are written, until they have all
+    /// ended or Ctrl+C, which stops them, as it does under Compose (a second
+    /// one leaves them as they are and comes back). <paramref name="ended"/>
+    /// is how the up itself went, which is how the command ends when the
+    /// containers end by themselves: an up that left one of them down is
+    /// still a failure after the others have been watched.
+    /// </summary>
+    private async Task<int> AttachedAsync(string project, string since, int ended)
+    {
+        var stream = await StreamAsync(project, whole: false);
+        Terminal.Aside(ended == Program.Ok
+            ? "Attached to the logs. Ctrl+C stops the containers; up -d comes back at once and leaves them running."
+            : "Not all of them came up. Attached to the logs of the ones that did. Ctrl+C stops them.");
+        interrupt.TakeNext(() => Volatile.Write(ref _stopAsked, 1));
+        await stream.ReadAsync(0, Stop, since);
+        await stream.FollowAsync(async () => Volatile.Read(ref _stopAsked) == 1 || !(await TakenAsync(project, whole: false)).Any(member => member.Running), Stop);
+        if (Volatile.Read(ref _stopAsked) == 0)
+        {
+            return ended;
+        }
+
+        Terminal.Warning("Stopping…");
+        if (arguments.Services.Count > 0)
+        {
+            await ServicesVerbAsync(project, "stop", "Stopped", whole: false);
+        }
+        else
+        {
+            Said(await Api.ProjectVerbAsync(project, "stop", Stop), "Stopped");
+        }
+
+        return Program.Interrupted;
+    }
+
+    /// <summary>Set by the Ctrl+C that ends an attached up: its containers are to be stopped.</summary>
+    private int _stopAsked;
+
+    /// <summary>
+    /// The project's containers this command is about: of the services
+    /// named, or all of them. A name the project has no container of is
+    /// refused, unless less than the whole of them will do
+    /// (<paramref name="whole"/> false): after an up that did not make them
+    /// all, the ones there are.
+    /// </summary>
+    private async Task<List<ProjectMember>> TakenAsync(string project, bool whole = true)
+    {
+        var members = await Api.GetProjectContainersAsync(project, Stop);
+        if (whole && arguments.Services.FirstOrDefault(name => members.All(member => member.Service != name)) is { } missing)
+        {
+            throw new CommandFailed($"Project {project} has no container of service '{missing}'. Its services with one: {string.Join(", ", members.Select(member => member.Service))}.");
+        }
+
+        return [.. members.Where(member => arguments.Services.Count == 0 || arguments.Services.Contains(member.Service, StringComparer.Ordinal))];
+    }
+
+    /// <summary>The logs of those containers, ready to be read: each line said by its container unless asked otherwise, in a column as wide as the longest name.</summary>
+    private async Task<ProjectLogStream> StreamAsync(string project, bool whole = true)
+    {
+        var stream = new ProjectLogStream(Api, project, arguments.Services, prefix: !arguments.Has(Arguments.NoLogPrefix), timestamps: arguments.Has(Arguments.Timestamps));
+        stream.Names((await TakenAsync(project, whole)).Select(member => member.Name));
+        return stream;
+    }
+
+    /// <summary>
+    /// The project's logs, or those of the services named: what there is,
+    /// the last lines of each container when a tail is asked for, and with
+    /// <c>--follow</c> what is written from then on, until Ctrl+C.
+    /// </summary>
+    private async Task<int> LogsAsync()
+    {
+        var project = await _file.ProjectNameAsync(Stop);
+        var stream = await StreamAsync(project);
+        await stream.ReadAsync(arguments.Tail, Stop, arguments.Since);
+        if (arguments.Has(Arguments.Follow))
+        {
+            await stream.FollowAsync(() => Task.FromResult(false), Stop);
+        }
+
+        return Program.Ok;
     }
 
     private async Task<int> DownAsync()
@@ -284,15 +383,9 @@ internal sealed partial class Commands(AgentConnection agent, Arguments argument
     /// one whose service depends on a stopped one is not started, and says
     /// which.
     /// </summary>
-    private async Task<int> ServicesVerbAsync(string project, string verb, string done)
+    private async Task<int> ServicesVerbAsync(string project, string verb, string done, bool whole = true)
     {
-        var members = await Api.GetProjectContainersAsync(project, Stop);
-        if (arguments.Services.FirstOrDefault(name => members.All(member => member.Service != name)) is { } missing)
-        {
-            throw new CommandFailed($"Project {project} has no container of service '{missing}'. Its services with one: {string.Join(", ", members.Select(member => member.Service))}.");
-        }
-
-        var asked = members.Where(member => arguments.Services.Contains(member.Service, StringComparer.Ordinal)).ToList();
+        var asked = await TakenAsync(project, whole);
         foreach (var member in verb == "stop" ? Enumerable.Reverse(asked) : asked)
         {
             await (verb switch

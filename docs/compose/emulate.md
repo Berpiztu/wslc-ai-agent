@@ -366,7 +366,8 @@ Each one is usable on its own and ends with something to try.
    `.Service`, from its labels). Left of what the section above describes:
    a group never cut by the pager, groups sorted as groups (sorted by a
    column, the list is flat), the grouper's tick ticking its containers,
-   Export, and the services' logs in one view.
+   and Export. (The services' logs in one view are written: the project's
+   Logs, and `wslc-compose logs`.)
 4. **What is left of the project.** The MCP tools (`compose_up`,
    `compose_down`, `list_projects`, behind the approval gate), and each
    service of the Compose window's table opened in the Run form before the

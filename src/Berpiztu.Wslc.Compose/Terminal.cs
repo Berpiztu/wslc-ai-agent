@@ -22,6 +22,7 @@ internal static class Terminal
     public const string Green = "\e[92m";
     public const string Yellow = "\e[93m";
     public const string Cyan = "\e[96m";
+    public const string Magenta = "\e[95m";
 
     private const string Reset = "\e[0m";
     private const string EraseRight = "\e[K";

@@ -54,9 +54,10 @@ A development agent is reached the same way:
 |---|---|---|
 | `config` | Prints the file, each line followed by what the agent makes of it as a comment (`# converted: …`, `# NOT SUPPORTED: …`), so the output is still the file. Nothing is run. `-q` prints nothing of the file, as Compose's does; `--services`, `--profiles`, `--images`, `--volumes` and `--variables` print that list instead, a name a line | `POST /projects/plan` |
 | `build` | Builds the images the file's services are built from, one after another, and makes nothing else: no network, no volume, no container. Services built from the same context and Dockerfile are built once, and the image takes each one's name. Followed line by line, with what the build prints. `--no-cache` builds every layer again; `--pull` asks the registry for the base images again | `POST /projects/build`, `GET /projects/jobs/{id}` |
-| `up` | Saves the file as a project and starts it: on a project that exists, only what changed is recreated. Followed line by line until it ends. `--no-start` creates the containers and leaves them stopped; `--remove-orphans` removes the project's containers whose service the file no longer has (they are named, and kept, without it); `-d` and `--build` are taken and not needed: it comes back once the containers are up, and it always builds the images of the services that have a `build`, from the cache where nothing changed | `POST /projects/preview`, `/projects/up`, `GET /projects/jobs/{id}` |
+| `up` | Saves the file as a project and starts it: on a project that exists, only what changed is recreated. Followed line by line until it ends. `--no-start` creates the containers and leaves them stopped; `--remove-orphans` removes the project's containers whose service the file no longer has (they are named, and kept, without it); Without `-d` it then stays with the containers it brought up and shows their logs as they are written, each line said by its container, until they have all ended or Ctrl+C, which stops them; with `-d` it comes back once they are up. When one of them could not start, it stays with the ones that run all the same, and ends as the failure it was. `--build` is taken and not needed: it always builds the images of the services that have a `build`, from the cache where nothing changed | `POST /projects/preview`, `/projects/up`, `GET /projects/jobs/{id}` |
 | `down` | Stops and removes the project's containers and its networks; `-v` its volumes too | `POST /projects/{name}/down` |
 | `start`, `stop`, `restart` | The verb on the project's containers, in the order its services depend on each other. A restart is of the ones that run | `POST /projects/{name}/start`, `/stop`, `/restart` |
+| `logs` | What the project's containers wrote, as one log in the order it was written, each line said by its container, the names in a column and each in its colour. `-f` goes on showing what is written, until Ctrl+C; `-n N` begins with the last N lines of each container (all of them without it); `-t` adds the moment of each line; `--since` reads from a moment on; `--no-log-prefix` prints the lines alone. With services' names, theirs alone. A container that could not start says so there | `GET /projects/{name}/logs` |
 | `ps` | The project's containers: name, image, service, status, ports | `GET /containers` |
 | `ls` | The projects, each with how many of its containers are in each state | `GET /containers` |
 | `version` | The version of `wslc-compose` and of the agent it talks to | `GET /health` |
@@ -88,9 +89,8 @@ not have is refused. Against an agent older than this (API level 10) a
 `build` or an `up` with names is refused too: that agent would not see the
 names and would bring up the whole project.
 
-Not there yet, and said so when asked for: `logs`, `pull`, `exec` and the
-rest of Compose's commands, and services' names after `down`, `ps` and
-`config`.
+Not there yet, and said so when asked for: `pull`, `exec` and the rest of
+Compose's commands, and services' names after `down`, `ps` and `config`.
 
 ## Options
 
@@ -123,8 +123,8 @@ gets one of three things:
   `--variables`, `version --short`. `config -q` is Compose's: the file is
   read and judged and nothing of it is printed.
 - **Taken, with nothing to do**, since what it asks for is what happens
-  anyway or is about an output this command does not have: `up -d`,
-  `--build`, `--quiet-pull`, `--no-log-prefix`, `--attach`, `-y`; `build
+  anyway or is about a choice this command does not offer: `up --build`,
+  `--quiet-pull`, `--attach`, `-y`; `build
   -q`, `--with-dependencies`; `ps -a`, `--no-trunc`; `--compatibility`,
   `--parallel`.
 - **Not there yet**: the command says so on the error stream (`--wait is
@@ -172,6 +172,15 @@ did not answer, `2` the command line asks for something it does not have,
 
 Ctrl+C during an `up` cancels the work on the agent, as the cross of the
 project's row does, and waits for the agent to say it stopped; a second one
-comes back at once and leaves it to the agent. A project that fails to come
+comes back at once and leaves it to the agent. Once the containers are up
+and their logs are being shown (an `up` without `-d`), Ctrl+C stops the
+containers, as it does under Compose, and a second one leaves them running
+and comes back. During a `logs -f` it only ends the following.
+
+An `up` without `-d` that could not start every container says which one
+and why, and then shows the logs of the ones that are running, the failed
+one's line among them, as it would have had they all come up. It comes back
+only when none of them runs. Its exit code is still `1` when those
+containers end by themselves, and `130` when Ctrl+C stopped them. A project that fails to come
 up leaves no row behind on the Containers page: its whole log was printed
 where it was asked for.

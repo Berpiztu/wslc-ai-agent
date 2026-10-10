@@ -53,6 +53,11 @@ public static class ProjectEndpoints
         group.MapPost("/{name}/restart", (string name, ProjectLifecycle lifecycle, CancellationToken ct) => lifecycle.VerbAsync(name, ProjectLifecycle.Restart, ct))
             .WithName("RestartProject");
 
+        // The project's logs as one, each line said by its container: a whole reading, or the lines after one already read.
+        group.MapGet("/{name}/logs", (string name, ProjectLifecycle lifecycle, CancellationToken ct, int tail = 200, string since = "", string services = "") =>
+                lifecycle.LogsAsync(name, tail, since, services.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), ct))
+            .WithName("ProjectLogs");
+
         // Removes the project's containers and networks; its volumes only when the body says so.
         group.MapPost("/{name}/down", (string name, ProjectDownRequest? request, ProjectLifecycle lifecycle, CancellationToken ct) =>
                 lifecycle.DownAsync(name, request?.Volumes ?? false, ct))

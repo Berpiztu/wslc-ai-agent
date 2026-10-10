@@ -12,7 +12,7 @@ internal static class HelpText
         The ones below are done. Of the rest, some ask for what already happens and change
         nothing; the others are not there yet, and the command says so and goes on without them.
 
-        After build, up, start, stop and restart, the names of services: the command is then
+        After build, up, start, stop, restart and logs, the names of services: the command is then
         of those alone. Up and build take with them the services they depend on, and a service
         named is taken whatever its profiles.
 
@@ -24,6 +24,7 @@ internal static class HelpText
           start     Start the project's containers, in the order its services depend on each other.
           stop      Stop the project's containers.
           restart   Restart the project's containers that are running.
+          logs      Show what the project's containers wrote, as one log; -f to follow it.
           ps        List the project's containers.
           ls        List the projects.
           version   The version of wslc-compose and of the agent it talks to.
@@ -48,11 +49,19 @@ internal static class HelpText
               --pull                   Ask the registry for the base images again.
 
         Of 'up':
-          -d, --detach                 Taken and not needed: up comes back once the containers are up.
+          -d, --detach                 Come back once the containers are up. Without it, up stays and shows their
+                                       logs as they are written; Ctrl+C then stops them.
               --build                  Taken and not needed: up always builds the images of the services that
                                        have a build, from the cache where nothing changed.
               --no-start               Create the containers and leave them stopped.
               --remove-orphans         Remove the project's containers whose service the file no longer has.
+
+        Of 'logs':
+          -f, --follow                 Go on showing what is written, until Ctrl+C.
+          -n, --tail N                 Begin with the last N lines of each container. Without it: all of them.
+          -t, --timestamps             Each line with the moment it was written.
+              --since TIME             From that moment on (RFC 3339, or Unix seconds).
+              --no-log-prefix          The lines alone, not said by their containers.
 
         Of 'down':
           -v, --volumes                Remove the project's volumes too, and what they hold.

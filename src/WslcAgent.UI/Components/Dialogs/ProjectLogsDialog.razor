@@ -1,0 +1,37 @@
+@* A project's logs as one, in the window a container's logs open in and drawn
+   by the same view (LogsView, read through its Read): what each of its
+   containers wrote, in the order it was written, each line said by its
+   container, the names in a column, with the view's rail (search, wrap,
+   autorefresh, refresh, jump to end, copy). The agent puts the containers'
+   logs together (GET /projects/{name}/logs), so the lines of several are in
+   order in time and not one container's after another's. *@
+@inject WslcAgentApi Api
+
+<MudDialog ContentClass="wslc-dialog-action">
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <LogsView Read="ReadAsync" />
+    </DialogContent>
+</MudDialog>
+
+@code {
+    /// <summary>The lines of each container the view begins with: the view's own default for a container, for each of the project's.</summary>
+    private const int Tail = 200;
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    /// <summary>The project's name.</summary>
+    [Parameter, EditorRequired] public string Project { get; set; } = "";
+
+    /// <summary>What the view shows: the project's logs as they are now, a line each, said by its container.</summary>
+    private async Task<string> ReadAsync()
+    {
+        var lines = (await Api.GetProjectLogsAsync(Project, Tail)).Lines;
+        var width = lines.Select(line => line.Container.Length).DefaultIfEmpty(0).Max();
+        return string.Join('\n', lines.Select(line => $"{line.Container.PadRight(width)} | {line.Text}"));
+    }
+}

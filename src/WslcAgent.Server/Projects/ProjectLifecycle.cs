@@ -22,8 +22,11 @@ public sealed class ProjectLifecycle(
     INetworkService networks,
     IVolumeService volumes,
     ProjectStore store,
+    Containers.StartFailures failures,
     WslcEvents events)
 {
+    /// <summary>What a line a container wrote begins with when <c>wslc</c> stamps it: <c>2026-10-10T14:26:54.726523128Z</c> and a space.</summary>
+    private const int StampLength = 30;
     public const string Start = "start";
     public const string Stop = "stop";
     public const string Restart = "restart";
@@ -55,6 +58,59 @@ public sealed class ProjectLifecycle(
     /// </summary>
     private static bool Taken(ComposePlan? plan, string service) =>
         plan?.Services.FirstOrDefault(other => other.Name == service)?.Enabled ?? true;
+
+    /// <summary>
+    /// The project's logs as one: what each of its containers wrote, said by
+    /// the container, in the order it was written, which is the order of the
+    /// stamps <c>wslc</c> puts on each line. <paramref name="tail"/> is the
+    /// last lines of each container (0: all). <paramref name="since"/>, a
+    /// stamp one of these lines carried, keeps the lines after it, exactly:
+    /// <c>wslc</c> tells seconds apart and no finer, so what it gives back of
+    /// that second is dropped here, and whoever follows the logs gets each
+    /// line once. <paramref name="services"/> keeps the containers of those.
+    /// A container that could not start has nothing of its own to show, and
+    /// says so here, in its place in time.
+    /// </summary>
+    public async Task<ProjectLogs> LogsAsync(string name, int tail, string since, IReadOnlyCollection<string> services, CancellationToken cancellationToken = default)
+    {
+        var plan = await dependencies.PlanAsync(name, cancellationToken);
+        var members = (await MembersAsync(name, plan, cancellationToken)).Where(member => services.Count == 0 || services.Contains(member.Service));
+        var lines = new List<ProjectLogLine>();
+        foreach (var member in members)
+        {
+            string written;
+            try
+            {
+                written = (await containers.LogsAsync(member.Id, tail, timestamps: true, cancellationToken, since)).Text;
+            }
+            catch (WslcException)
+            {
+                // Gone since the list was read, or with no log to give: the others still have theirs.
+                written = "";
+            }
+
+            var time = "";
+            foreach (var line in written.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => line.TrimEnd('\r')))
+            {
+                // A line with no stamp of its own goes on from the one before it, and stands with it.
+                var stamped = line.Length >= StampLength && line[10] == 'T' && line[StampLength - 1] == 'Z';
+                time = stamped ? line[..StampLength] : time;
+                lines.Add(new ProjectLogLine(member.Name, member.Service, time, stamped ? line[StampLength..].TrimStart(' ') : line));
+            }
+
+            if (failures.Of(member.Id) is { } failure)
+            {
+                lines.Add(new ProjectLogLine(member.Name, member.Service, failure.At.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffffff00Z", System.Globalization.CultureInfo.InvariantCulture),
+                    $"The container could not start: {failure.Why}"));
+            }
+        }
+
+        // Stamps of one form and one zone: in order as texts, they are in order in time. A stable
+        // sort, so the lines of one container that share a stamp keep the order they were written in.
+        return new ProjectLogs([.. lines
+            .Where(line => since.Length == 0 || string.CompareOrdinal(line.Time, since) > 0)
+            .OrderBy(line => line.Time, StringComparer.Ordinal)]);
+    }
 
     public async Task<ProjectResult> VerbAsync(string name, string verb, CancellationToken cancellationToken = default)
     {

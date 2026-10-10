@@ -218,11 +218,13 @@ publishing and cleaning up need them on.
     stops them first; and removing one warns that they will not be able
     to work without it. A container's own verb shows its project working
     with it, and each container shows as it is the moment its turn is
-    over. Its other verbs open its Compose file in this same window, and remove the
+    over. Its **Logs** are its containers' as one, in the window a
+    container's logs open in: what each wrote, in the order it was written,
+    each line said by its container. Its other verbs open its Compose file in this same window, and remove the
     project (its volumes only when asked about them apart). They are laid
     out as a container's: start or stop, restart, a **⋮** menu (the Compose
-    file, and its text copied to the clipboard) and remove; a card has the
-    Compose file as a button of its own at its left end. Containers on
+    file, its logs, and its text copied to the clipboard) and remove; a card
+    has the Compose file and the logs as buttons of their own at its left end. Containers on
     their own stand beside the groups as before; sorted by a column, the
     list is every container in that order, without groups. On a
     project that exists they apply the file to it: a service that did not
@@ -249,8 +251,9 @@ publishing and cleaning up need them on.
     ([the plan](compose/emulate.md)). The same from a terminal:
     **`wslc-compose`**, installed with the agent and on the `PATH`, takes
     Compose's own commands (`build`, `up`, `down`, `start`, `stop`,
-    `restart`, `ps`, `ls`, `config`) and asks this machine's agent, with no
-    login, in colour on a terminal
+    `restart`, `logs`, `ps`, `ls`, `config`) and asks this machine's agent,
+    with no login, in colour on a terminal; an `up` without `-d` stays and
+    shows the containers' logs as they are written
     ([wslc-compose](compose/wslc-compose.md)).
   - **Checked before it runs**: names in use, ports taken, missing networks,
     a command that listens on another port than the one published. Errors

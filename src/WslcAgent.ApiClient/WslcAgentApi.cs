@@ -755,6 +755,16 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<ProjectResult> ProjectVerbAsync(string name, string verb, CancellationToken cancellationToken = default) =>
         ReadAsync<ProjectResult>(HttpMethod.Post, $"api/v1/projects/{Escape(name)}/{Escape(verb)}", cancellationToken);
 
+    /// <summary>
+    /// A project's logs as one, each line said by its container, in the
+    /// order written: the last <paramref name="tail"/> lines of each
+    /// container (0: all), or with <paramref name="since"/>, the stamp of a
+    /// line already read, the lines after it. <paramref name="services"/>
+    /// keeps the containers of those services.
+    /// </summary>
+    public Task<ProjectLogs> GetProjectLogsAsync(string name, int tail = 200, string since = "", IEnumerable<string>? services = null, CancellationToken cancellationToken = default) =>
+        GetAsync<ProjectLogs>($"api/v1/projects/{Escape(name)}/logs?tail={tail}&since={Escape(since)}&services={Escape(string.Join(',', services ?? []))}", cancellationToken);
+
     /// <summary>Removes a project's containers and networks, and its volumes only when <paramref name="volumes"/> says so.</summary>
     public Task<ProjectResult> DownProjectAsync(string name, bool volumes, CancellationToken cancellationToken = default) =>
         PostJsonAsync<ProjectDownRequest, ProjectResult>($"api/v1/projects/{Escape(name)}/down", new ProjectDownRequest(volumes), cancellationToken);
