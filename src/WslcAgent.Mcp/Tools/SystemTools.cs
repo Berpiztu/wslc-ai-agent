@@ -36,7 +36,7 @@ public static class SystemTools
     }
 
     [McpServerTool(Name = "recent_events", ReadOnly = true)]
-    [Description("What happened lately in the session, newest first, as wslc reported it: containers started, stopped or died (with their exit code), images pulled or removed, networks connected or disconnected, health changes — each with its time, kind, action, id and name. Volumes report no events. The list starts empty when the agent starts or switches session.")]
+    [Description("What happened lately in the session, newest first, as wslc reported it: containers started, stopped, killed or died (with their exit code), networks connected or disconnected, health changes, images' own events — each with its time, kind, action, id and name. Volumes report no events. The list starts empty when the agent starts or switches session.")]
     public static RecentEventsResult RecentEvents(
         IRecentEvents events,
         [Description("How many events, 1 to 100 (default 20).")] int limit = 20)

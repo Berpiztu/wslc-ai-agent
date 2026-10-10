@@ -1,6 +1,6 @@
 ---
 name: wslc
-description: Operate a WSLC (Windows Subsystem for Linux Container) host through the WSLC AI Agent MCP tools - list, inspect, run, create, start, stop, restart and remove containers, read logs and stats, exec commands, pull, tag, push and save images, manage volumes, networks and sessions, and explain failures from the agent's CLI activity. Use whenever the user talks about containers, images, volumes, networks or sessions on a WSLC host.
+description: Operate a WSLC (Windows Subsystem for Linux Container) host through the WSLC AI Agent MCP tools - list, inspect, run, create, start, stop, restart and remove containers, read logs and stats, exec commands, pull, tag, push and save images, manage volumes, networks and sessions, explain failures from the agent's CLI activity, and say what happened lately from wslc's own events. Use whenever the user talks about containers, images, volumes, networks or sessions on a WSLC host.
 ---
 
 # WSLC skill
@@ -144,8 +144,14 @@ says no, or changes the target, do nothing and let the token die.
   memory and disk in one call.
 - **Troubleshoot a container**: `list_containers` → `container_logs` (raise
   `tail` if the cause is not in the last lines) → `container_stats` →
-  `cli_activity` to see the exact `wslc` command and stderr behind an error.
+  `cli_activity` to see the exact `wslc` command and stderr behind an error,
+  and `recent_events` for what `wslc` reported lately (a container that died
+  on its own, with its exit code; one that kept restarting).
   Quote the runtime's own message rather than paraphrasing it.
+- **What happened?** ("why did it stop", "what changed while I was away"):
+  `recent_events` → for a container that ended, its `die` and `exitCode`, then
+  `container_logs` on it for the cause. Events cover the agent's current
+  session since the agent began listening to it; older history is not there.
   `exec_in_container` with read-only commands (`ls`, `cat`, `ps`, `env`) is
   the next step — it is gated, so it needs the user's approval first.
 - **Restart something**: `restart_container` (stop then start). If the start
@@ -159,18 +165,27 @@ says no, or changes the target, do nothing and let the token die.
   1. `list_containers` — refuse to reuse a `name` that exists; propose another.
   2. `list_volumes` — create the volume with `create_volume` if the user
      wants a named volume that does not exist yet.
-  3. `run_container` with one `request` object: `{"image": "nginx:latest",
+  3. `check_container_launch` with the `request` object of step 4 — read-only, it
+     runs nothing: errors would stop the launch (a name in use, a host port
+     taken, a network or host path that does not exist, a value in the wrong
+     shape), warnings are worth telling the user (a published port the
+     command does not name, an image that is not local). Fix the errors with
+     the user before going on; each finding names the field it is about.
+  4. `run_container` with the same `request` object: `{"image": "nginx:latest",
      "name": "web", "publish": ["8080:80"], "volumes":
      ["html:/usr/share/nginx/html"], "restartPolicy": "unless-stopped"}`. It
      pulls the image when missing and waits for the container.
-  4. `container_logs` on the new container, then report the exact name, state
+  5. `container_logs` on the new container, then report the exact name, state
      and `host->container` ports.
   Always pass a `name`: without one the result cannot identify the new
   container. Ports are `host:container`; `env` entries are `KEY=value`; a
   volume source is a volume name or a host path. The rest of the object is
   the Run form's own fields: `command`, `entrypoint`, `memory`, `cpus`,
   `workdir`, `user`, `network`, `ip`, `networkAliases`, `connectNetworks`,
-  `stopTimeout`, `noHealthcheck` or the `health*` fields, and `start`.
+  `stopTimeout`, `noHealthcheck` or the `health*` fields, `gpus` (true passes
+  every GPU of the machine, `--gpus all`: WSLC takes all of them or none; a
+  GPU workload needs it, and the agent keeps it when the container is
+  recreated), and `start`.
   `create_container` takes the same object and leaves it stopped.
 - **Prepare without starting**: `create_container` (image must be local:
   `pull_image` first), then `start_container` when the user says so.
@@ -178,7 +193,8 @@ says no, or changes the target, do nothing and let the token die.
   whatever continuations it carries: pass it **verbatim** to
   `parse_run_command`, which reads it exactly as the agent's own Run form does.
   Report the image, name, ports, volumes, networks and the `unsupported` list —
-  flags this runtime has no equivalent for (`--add-host`, `--gpus`,
+  flags this runtime has no equivalent for (`--add-host`, `--gpus` in any form
+  but `all` — `--gpus all` is read as `gpus` —,
   `--hostname`, `--dns`, `--label`, `--privileged`, `--rm`, `-it`) are not a
   failure, they are a thing the user has to be told once. Check
   `list_containers` for the parsed name before going on. Then
@@ -240,9 +256,25 @@ says no, or changes the target, do nothing and let the token die.
   from the list itself; a stopped container reads `0.00%` / `0B`.
 - `container_logs` returns the tail as text; ask for a larger `tail` only when
   needed, and never paste a whole log back to the user — quote the lines that
-  matter.
+  matter. It reads what wslc keeps, which is the whole history until the
+  container is removed: a Clear in the agent's log viewer hides lines there
+  only, so lines the user cleared still come back here.
+- A row of `list_containers` with `updatingTo` set is a container whose image
+  is being updated: that image is being pulled (`pull_status` has its
+  progress), and the agent recreates the container on it when the pull ends.
+  Leave it alone meanwhile — no restart, stop or remove — and tell the user
+  it is updating.
 - `cli_activity` rows are newest first and carry the exact command line, its
   exit code and its stderr: that is the evidence behind any failure.
+- `recent_events` answers `{ summary, count, events }`, newest first, each
+  event `{ time, type, action, id, name, exitCode }`: `type` is `container`,
+  `image` or `network` (volumes report no events); `action` is wslc's own —
+  `start`, `stop`, `kill`, `die`, `connect`, `disconnect`,
+  `health_status: unhealthy`… A `die` with a non-zero `exitCode` is a container
+  that ended on its own, not one the user stopped. `name` is null when the
+  event carries none: name the object by its short id then. The agent keeps
+  the last 100, and the list starts empty when the agent starts or listens to
+  another session — an empty list means nothing happened since, not an error.
 - A gated tool called without `confirm` answers with `confirmationRequired`,
   `action`, `confirmToken` and `message` — that is not a failure, it is the
   approval request of §5. `disabled: true` instead means the operator turned
