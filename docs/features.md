@@ -8,7 +8,7 @@ agents alike.
 ## At a glance
 
 - **An MCP agent for WSLC, skill included for Claude, Hermes, OpenClaw, etc.**
-  - 53 MCP tools: your AI assistant runs your containers; destructive actions are off by default, and once switched on each one asks your approval
+  - 54 MCP tools: your AI assistant runs your containers; destructive actions are off by default, and once switched on each one asks your approval
   - Its skill, which teaches the assistant WSLC, installed with one click into Claude Code, Hermes Agent or OpenClaw
   - A small Windows program that sits next to `wslc`, Microsoft's container CLI, and runs it for you
   - Runs in the background of your Windows session: close the browser and the apps, and its jobs, restart policies, alarms and notifications go on
@@ -52,7 +52,7 @@ from the start, with its skill included for Claude, Hermes, OpenClaw, etc.
 
 ### MCP and AI assistants
 
-- **An MCP server** in the agent (`/api/v1/mcp`) with 53 tools: containers,
+- **An MCP server** in the agent (`/api/v1/mcp`) with 54 tools: containers,
   images, volumes, networks, sessions, publishing, notifications, logs and
   the machine's state, and the paste of a `docker run` line.
 - **Destructive tools off by default**: removing, pruning, killing, running a
