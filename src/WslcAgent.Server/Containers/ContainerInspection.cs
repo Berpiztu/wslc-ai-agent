@@ -47,30 +47,18 @@ public sealed record ContainerInspection(
         var ports = PortBindings(hostConfig, networkSettings, root);
         var mounts = MountsOf(root, hostConfig);
         var network = hostConfig.GetString("NetworkMode") is "default" or "" ? "" : hostConfig.GetString("NetworkMode");
-        var form = new ContainerLaunchRequest
+        var form = ConfigFields(image, config) with
         {
-            Image = image,
             Name = name,
-            Command = CommandOf(config),
-            Entrypoint = Words(config, "Entrypoint"),
             Memory = BytesLimit(Prop(hostConfig, "Memory", out var mem) && mem.ValueKind == JsonValueKind.Number ? mem.GetInt64() : 0),
             Cpus = Cpus(hostConfig),
             Publish = ports.Select(PublishSpec).ToList(),
             Volumes = mounts.Where(m => m.Source.Length > 0).Select(m => $"{m.Source}:{m.Destination}{(m.Mode == "ro" ? ":ro" : "")}").ToList(),
-            Workdir = config.GetString("WorkingDir"),
-            Env = Strings(config, "Env"),
             Network = network,
             Ip = StaticIp(networkSettings, network),
             NetworkAliases = Aliases(networkSettings, id, name, config.GetString("Hostname")),
             ConnectNetworks = ExtraNetworks(networkSettings, network),
-            User = config.GetString("User"),
             StopTimeout = FirstNumber(config, hostConfig, "StopTimeout"),
-            HealthCmd = HealthCommand(config, out var noHealthcheck),
-            HealthInterval = Duration(config, "Interval"),
-            HealthTimeout = Duration(config, "Timeout"),
-            HealthStartPeriod = Duration(config, "StartPeriod"),
-            HealthRetries = HealthRetries(config),
-            NoHealthcheck = noHealthcheck,
             Start = stateName == "running",
         };
 
@@ -87,6 +75,31 @@ public sealed record ContainerInspection(
             Form: form,
             Json: JsonSerializer.Serialize(root, new JsonSerializerOptions { WriteIndented = true }));
     }
+
+    /// <summary>
+    /// What an image sets for every container made from it, read from the first
+    /// object of <c>wslc image inspect</c>: its <c>Config</c> is the section a
+    /// container's own carries, with what the user asked for on top.
+    /// </summary>
+    public static ContainerLaunchRequest ImageFields(string image, WslcResult result) =>
+        ConfigFields(image, Child(WslcJson.ParseRows(result.Stdout).FirstOrDefault(), "Config"));
+
+    /// <summary>The launch fields a <c>Config</c> section holds, an image's or a container's: variables, command, entrypoint, working folder, user and health check.</summary>
+    private static ContainerLaunchRequest ConfigFields(string image, JsonElement config) => new()
+    {
+        Image = image,
+        Command = CommandOf(config),
+        Entrypoint = Words(config, "Entrypoint"),
+        Workdir = config.GetString("WorkingDir"),
+        Env = Strings(config, "Env"),
+        User = config.GetString("User"),
+        HealthCmd = HealthCommand(config, out var noHealthcheck),
+        HealthInterval = Duration(config, "Interval"),
+        HealthTimeout = Duration(config, "Timeout"),
+        HealthStartPeriod = Duration(config, "StartPeriod"),
+        HealthRetries = HealthRetries(config),
+        NoHealthcheck = noHealthcheck,
+    };
 
     /// <summary>A property of an object, or false: inspect leaves whole sections null (<c>Healthcheck</c>, <c>PortBindings</c>) and undefined elements throw on lookup.</summary>
     private static bool Prop(JsonElement element, string name, out JsonElement value)

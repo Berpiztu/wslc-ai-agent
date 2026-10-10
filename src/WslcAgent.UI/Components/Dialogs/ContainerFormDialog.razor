@@ -1,13 +1,12 @@
 @* The launch form as a dialog: Run and Create from the Containers page, View & edit
    from a row. The content is a fixed-height column: the fields scroll, the
-   rail at the right stays where it is. The title carries the image as a badge,
-   on Run the magnifier that opens that image's pull
-   console, and Close, which leaves the window, asking first when something was
-   typed. The rail's Cancel is the other thing: it puts the edits back and stays
-   here. *@
+   rail at the right stays where it is. The title carries the image as a badge
+   and Close, which leaves the window, asking first when something was typed.
+   A pull the form asked for (to show what the image sets) is drawn beside
+   Close while it lasts: the ring with its percentage, its output and its
+   cancel, as Containers and Images draw a pull. The rail's Cancel is the other
+   thing: it puts the edits back and stays here. *@
 @using WslcAgent.UI.Components.Launch
-@inject IDialogService Dialogs
-@inject ISnackbar Snackbar
 
 <MudDialog ContentClass="wslc-dialog-action">
     <TitleContent>
@@ -19,16 +18,24 @@
                 }
             </Info>
             <ChildContent>
-                @if (Mode == LaunchMode.Run)
+                @* The slot is as tall as the ring from the start, so the window is the same
+                   size with the ring and without it. *@
+                @if (Mode != LaunchMode.Edit)
                 {
-                    <MudIconButton Icon="@Icons.Material.Filled.Subject" Size="Size.Small" title="View the pull output for this image" OnClick="ViewPullAsync" />
+                    <div class="wslc-title-ring-slot">
+                        @if (_form?.Pull is { } pull)
+                        {
+                            <ProgressRing Pct="pull.Pct" Status="@ContainerForm.PullStatus(pull)" Failed="@(pull.State != "running")"
+                                          OnLog="@(() => _form.ShowPullLogAsync())" OnCancel="@(() => _form.CancelPullAsync())" OnDismiss="@(() => _form.DismissPullAsync())" />
+                        }
+                    </div>
                 }
                 <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="CloseAsync">Close</MudButton>
             </ChildContent>
         </DialogTitle>
     </TitleContent>
     <DialogContent>
-        <ContainerForm @ref="_form" Mode="Mode" Form="Form" SourceId="@SourceId" MainClass="wslc-fill-scroll" OnImageChanged="@(() => Dialog.StateHasChanged())"
+        <ContainerForm @ref="_form" Mode="Mode" Form="Form" SourceId="@SourceId" MainClass="wslc-fill-scroll" OnImageChanged="@(() => Dialog.StateHasChanged())" OnPullChanged="@(() => Dialog.StateHasChanged())"
                        OnDone="@(id => Dialog.Close(DialogResult.Ok(id)))" />
     </DialogContent>
 </MudDialog>
@@ -51,17 +58,5 @@
         {
             Dialog.Cancel();
         }
-    }
-
-    /// <summary>The console of the image typed or picked.</summary>
-    private Task ViewPullAsync()
-    {
-        if (Form.Image.Length == 0)
-        {
-            Snackbar.Add("Type or pick an image first", Severity.Error);
-            return Task.CompletedTask;
-        }
-
-        return PullFlow.ShowLogAsync(Dialogs, Form.Image);
     }
 }

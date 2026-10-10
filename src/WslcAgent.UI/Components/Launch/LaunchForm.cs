@@ -160,6 +160,78 @@ public sealed class LaunchForm
         Networks.AddRange(other.Networks);
     }
 
+    /// <summary>
+    /// What the image sets goes into the fields the form leaves empty, and its
+    /// variables after the form's own: a variable the form names keeps the
+    /// form's value. So the form shows what the container will run with, as
+    /// View &amp; edit does once it exists, and any of it can be changed first.
+    /// An entrypoint of the form's own drops the image's command, as the
+    /// runtime does.
+    /// </summary>
+    public void ApplyImageDefaults(ContainerLaunchRequest image)
+    {
+        var named = Env.Select(EnvKey).ToHashSet(StringComparer.Ordinal);
+        Env.AddRange(image.Env.Where(pair => !named.Contains(EnvKey(pair))));
+
+        if (Entrypoint.Trim().Length == 0)
+        {
+            Entrypoint = image.Entrypoint;
+            if (Command.Trim().Length == 0)
+            {
+                Command = image.Command;
+            }
+        }
+
+        if (Workdir.Trim().Length == 0)
+        {
+            Workdir = image.Workdir;
+        }
+
+        if (User.Trim().Length == 0)
+        {
+            User = image.User;
+        }
+
+        if (!NoHealthcheck && HealthCmd.Trim().Length == 0)
+        {
+            (HealthCmd, HealthInterval, HealthTimeout, HealthRetries, HealthStartPeriod) =
+                (image.HealthCmd, image.HealthInterval, image.HealthTimeout, image.HealthRetries, image.HealthStartPeriod);
+        }
+    }
+
+    /// <summary>
+    /// Takes back what <see cref="ApplyImageDefaults"/> put in and nobody
+    /// changed, before another image's is read: a value of the image left
+    /// would pass for the user's and win over the new image's own.
+    /// </summary>
+    public void DropImageDefaults(ContainerLaunchRequest image)
+    {
+        Env.RemoveAll(pair => image.Env.Contains(pair.Trim()));
+        Command = Unless(Command, image.Command);
+        Entrypoint = Unless(Entrypoint, image.Entrypoint);
+        Workdir = Unless(Workdir, image.Workdir);
+        User = Unless(User, image.User);
+        if (image.HealthCmd.Length > 0 && HealthCmd.Trim() == image.HealthCmd)
+        {
+            HealthCmd = "";
+            HealthInterval = Unless(HealthInterval, image.HealthInterval);
+            HealthTimeout = Unless(HealthTimeout, image.HealthTimeout);
+            HealthRetries = Unless(HealthRetries, image.HealthRetries);
+            HealthStartPeriod = Unless(HealthStartPeriod, image.HealthStartPeriod);
+        }
+    }
+
+    /// <summary>The name of a <c>KEY=value</c> pair.</summary>
+    private static string EnvKey(string pair)
+    {
+        var text = pair.Trim();
+        var equals = text.IndexOf('=');
+        return equals < 0 ? text : text[..equals];
+    }
+
+    /// <summary>The value, or empty when it is still the image's.</summary>
+    private static string Unless(string value, string images) => value.Trim() == images ? "" : value;
+
     public static LaunchForm From(ContainerLaunchRequest request)
     {
         var form = new LaunchForm

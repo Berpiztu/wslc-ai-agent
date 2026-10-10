@@ -258,10 +258,12 @@ public sealed class ContainerLaunchTests
 
         Assert.NotNull(parse.Request);
         Assert.Equal("always", parse.Request.RestartPolicy);
-        Assert.Equal(["-it", "--add-host=host.docker.internal:host-gateway", "--pull missing"], parse.Unsupported);
+        Assert.Equal(["-it", "--pull missing"], parse.Unsupported);
+        Assert.Equal(["--add-host=host.docker.internal:host-gateway"], parse.NotNeeded);
         Assert.Equal(
-            "Read as a wslc run. Filled: image ghcr.io/open-webui/open-webui:main, name open-webui, 1 port(s), 1 volume(s). Not supported here: -it, --add-host=host.docker.internal:host-gateway, --pull missing.",
+            "Read as a wslc run. Filled: image ghcr.io/open-webui/open-webui:main, name open-webui, 1 port(s), 1 volume(s). Not needed here, WSLC containers reach the host by that name already: --add-host=host.docker.internal:host-gateway. Not supported here: -it, --pull missing.",
             parse.Summary);
+        Assert.Equal(["--add-host db:10.0.0.5"], RunCommandLine.Parse("docker run --add-host db:10.0.0.5 --add-host host.wslc.internal:host-gateway alpine").Unsupported);
         Assert.Equal("Paste a command first.", RunCommandLine.Parse("  ").Summary);
     }
 

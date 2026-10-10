@@ -10,6 +10,12 @@ namespace WslcAgent.ApiClient;
 /// <param name="FromDocker">The line was a <c>docker run</c>, read as the wslc one.</param>
 public sealed record RunCommandParse(ContainerLaunchRequest? Request, IReadOnlyList<string> Unsupported, string Error, bool FromDocker = false)
 {
+    /// <summary>
+    /// Flags that ask for what WSLC gives every container already: named so the
+    /// user knows they were read, and no reason to flag the line.
+    /// </summary>
+    public IReadOnlyList<string> NotNeeded { get; init; } = [];
+
     /// <summary>The status line: what was read, what was filled, what has no field here.</summary>
     public string Summary => Request is null
         ? Error
@@ -22,6 +28,7 @@ public sealed record RunCommandParse(ContainerLaunchRequest? Request, IReadOnlyL
           + (Request.Env.Count > 0 ? $", {Request.Env.Count} env var(s)" : "")
           + (Request.Command.Length > 0 ? ", command" : "")
           + "."
+          + (NotNeeded.Count > 0 ? $" Not needed here, WSLC containers reach the host by that name already: {string.Join(", ", NotNeeded)}." : "")
           + (Unsupported.Count > 0 ? $" Not supported here: {string.Join(", ", Unsupported)}." : "");
 }
 
@@ -38,6 +45,15 @@ public static partial class RunCommandLine
 
     /// <summary>Flags known to take a value the form has no field for.</summary>
     private static readonly HashSet<string> UnsupportedValueFlags = ["--hostname", "-h", "--dns", "--label", "-l"];
+
+    /// <summary>
+    /// The names a WSLC container reaches its host by, with no flag (seen in
+    /// wslc 3.0.2): docker's <c>--add-host=host.docker.internal:host-gateway</c>
+    /// asks for what is already there.
+    /// </summary>
+    private static readonly HashSet<string> HostNames = new(StringComparer.OrdinalIgnoreCase) { "host.docker.internal", "host.wslc.internal" };
+
+    private const string HostGateway = "host-gateway";
 
     /// <summary>Every flag the form fills from a value.</summary>
     private static readonly HashSet<string> ValueFlags =
@@ -67,6 +83,7 @@ public static partial class RunCommandLine
         var networks = new List<string>();
         var aliases = new List<string>();
         var unsupported = new List<string>();
+        var notNeeded = new List<string>();
         var noHealthcheck = false;
         var gpus = false;
         var command = new List<string>();
@@ -107,15 +124,10 @@ public static partial class RunCommandLine
             // An unknown flag takes a value only when the next word is not a flag; both are named.
             if (!ValueFlags.Contains(flag) && !UnsupportedValueFlags.Contains(flag))
             {
-                if (inlineValue is null && i + 1 < words.Count && !words[i + 1].StartsWith('-'))
-                {
-                    unsupported.Add($"{flag} {words[++i]}");
-                }
-                else
-                {
-                    unsupported.Add(word);
-                }
-
+                var written = inlineValue is null && i + 1 < words.Count && !words[i + 1].StartsWith('-')
+                    ? $"{flag} {words[++i]}"
+                    : word;
+                (IsHostAlreadyNamed(flag, inlineValue ?? written[flag.Length..].Trim()) ? notNeeded : unsupported).Add(written);
                 continue;
             }
 
@@ -130,7 +142,7 @@ public static partial class RunCommandLine
             }
             else
             {
-                return new RunCommandParse(null, unsupported, $"{flag} has no value.", fromDocker);
+                return new RunCommandParse(null, unsupported, $"{flag} has no value.", fromDocker) { NotNeeded = notNeeded };
             }
 
             switch (flag)
@@ -167,7 +179,7 @@ public static partial class RunCommandLine
 
         if (image.Length == 0)
         {
-            return new RunCommandParse(null, unsupported, "No image reference found.", fromDocker);
+            return new RunCommandParse(null, unsupported, "No image reference found.", fromDocker) { NotNeeded = notNeeded };
         }
 
         var request = new ContainerLaunchRequest
@@ -200,7 +212,7 @@ public static partial class RunCommandLine
             NoHealthcheck = noHealthcheck,
             Gpus = gpus,
         };
-        return new RunCommandParse(request, unsupported, "", fromDocker);
+        return new RunCommandParse(request, unsupported, "", fromDocker) { NotNeeded = notNeeded };
     }
 
     /// <summary>
@@ -318,6 +330,18 @@ public static partial class RunCommandLine
         }
 
         return fromDocker;
+    }
+
+    /// <summary><c>--add-host name:host-gateway</c> for a name WSLC answers itself; any other host entry has no equivalent.</summary>
+    private static bool IsHostAlreadyNamed(string flag, string value)
+    {
+        if (flag != "--add-host")
+        {
+            return false;
+        }
+
+        var colon = value.IndexOf(':');
+        return colon > 0 && HostNames.Contains(value[..colon]) && value[(colon + 1)..] == HostGateway;
     }
 
     private static (string Flag, string? Value) SplitFlag(string word)

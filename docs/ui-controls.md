@@ -498,6 +498,12 @@ Body lines are `Typo.body2` with the label in bold; secondary lines
   turn in this client, which a cross simply takes out of the queue), and the
   ring's own cross asks once and stops them all — a row that grows with each
   file makes the table dance.
+  A pull asked from a dialog is drawn in that dialog's title, beside Close
+  (the launch form's, `ContainerFormDialog`): the same `ProgressRing`, its two
+  verbs one over the other at its right as in a card, kept inside the ring's
+  own height since a title row cuts what leaves it. Its place is kept from
+  the moment the dialog opens (`wslc-title-ring-slot`), so the window never
+  changes size.
   What the client itself carries goes in two queues, one each way
   (`FileTransfers`), one file at a time and first in, first served: a batch
   never interleaves with the next, an upload does not hold a download back,

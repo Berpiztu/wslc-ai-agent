@@ -26,7 +26,18 @@ public sealed class PullActivity(WslcAgentApi api, ActivityLine line)
         _followed.TryGetValue(image, out var ended) && (ended is null || DateTimeOffset.UtcNow - ended < ListedAfterEnd);
 
     /// <summary>Starts the pull and says so; one the agent refuses is the caller's to show (the dialog keeps it).</summary>
-    public async Task StartAsync(string reference)
+    public async Task StartAsync(string reference) => _ = await BeginAsync(reference, said: null);
+
+    /// <summary>
+    /// Starts the pull and waits for its end, for a caller that goes on with
+    /// the image: true when it was pulled. Each state of it is handed to
+    /// <paramref name="said"/> too, for a window that covers the activity line
+    /// and draws the pull itself, as the lists do.
+    /// </summary>
+    public async Task<bool> PullAsync(string reference, Action<ImagePullState> said) => await await BeginAsync(reference, said);
+
+    /// <summary>The pull started, and the task that follows it to its end.</summary>
+    private async Task<Task<bool>> BeginAsync(string reference, Action<ImagePullState>? said)
     {
         var work = line.Begin($"Pulling {reference}");
         ImagePullState started;
@@ -41,7 +52,8 @@ public sealed class PullActivity(WslcAgentApi api, ActivityLine line)
         }
 
         _followed[started.Image] = null;
-        _ = FollowAsync(started.Image, work);
+        said?.Invoke(started);
+        return FollowAsync(started.Image, work, said);
     }
 
     /// <summary>
@@ -49,7 +61,7 @@ public sealed class PullActivity(WslcAgentApi api, ActivityLine line)
     /// listed for 5 s once it worked, so one that took two seconds is still
     /// seen ending; one no longer listed at all ended well.
     /// </summary>
-    private async Task FollowAsync(string image, ActivityWork work)
+    private async Task<bool> FollowAsync(string image, ActivityWork work, Action<ImagePullState>? said)
     {
         // Whatever ends the following, the line is left.
         using var following = work;
@@ -71,6 +83,7 @@ public sealed class PullActivity(WslcAgentApi api, ActivityLine line)
             {
                 case { State: "running" }:
                     work.Set(pull.Pct > 0 ? $"Pulling {image} {pull.Pct}%" : $"Pulling {image}");
+                    said?.Invoke(pull);
                     continue;
                 case { State: "error" }:
                     work.Fail($"Pull of {image} failed: {(pull.Error.Length > 0 ? pull.Error : pull.Status)}");
@@ -84,8 +97,14 @@ public sealed class PullActivity(WslcAgentApi api, ActivityLine line)
                     break;
             }
 
+            // One no longer listed ended well, and has no state left to hand over.
+            if (pull is not null)
+            {
+                said?.Invoke(pull);
+            }
+
             _followed[image] = DateTimeOffset.UtcNow;
-            return;
+            return pull is null or { State: not ("error" or "cancelled") };
         }
     }
 }

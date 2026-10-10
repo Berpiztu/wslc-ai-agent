@@ -20,6 +20,9 @@ public static class ImageEndpoints
         group.MapGet("/inspect", (string reference, IImageService images, CancellationToken ct) => images.InspectAsync(reference, ct))
             .WithName("InspectImage");
 
+        group.MapGet("/defaults", (string reference, IImageService images, CancellationToken ct) => images.DefaultsAsync(reference, ct))
+            .WithName("ImageDefaults");
+
         group.MapPost("/pull", async Task<NoContent> (PullImageRequest request, IImageService images, CancellationToken ct) =>
             {
                 await images.PullAsync(request.Reference, request.AllTags, ct);

@@ -133,7 +133,18 @@ publishing and cleaning up need them on.
   mounts, environment, networks with static addresses, entrypoint, command,
   working folder, user, restart policy, memory and CPU limits, health check.
   - **Paste a command**: a `docker run` or `wslc run` line, even across
-    several lines, fills the form; flags it cannot use are named.
+    several lines, fills the form; flags it cannot use are named, and so is
+    one WSLC does not need: `--add-host=host.docker.internal:host-gateway`,
+    since a container reaches the host by that name, and by
+    `host.wslc.internal`, with no flag.
+  - **What the image sets, shown before it runs**: once the image is known
+    (a paste, the picker, a loaded file, a name typed), the form shows the
+    variables, command, entrypoint, working folder, user and health check
+    the image itself carries, in the fields left empty, to change before the
+    container is made; what the form already says wins. An image that is
+    not on the machine has to be pulled for that: the form asks first, and
+    shows the pull as the lists do, in the window's title beside Close: a
+    ring with its percentage, and beside it its output and its cancel.
   - **Checked before it runs**: names in use, ports taken, missing networks,
     a command that listens on another port than the one published. Errors
     show on their fields.

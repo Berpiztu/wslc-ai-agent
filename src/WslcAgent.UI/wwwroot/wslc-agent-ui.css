@@ -264,6 +264,27 @@
     height: 40px;
 }
 
+/* A dialog's title that draws a pull (the launch form's) keeps the ring's place
+   from the moment it opens: the slot is as tall as the dial above (40px) with
+   or without a ring in it, so the title row, and the window with it, never
+   changes height when a pull starts or ends. The two verbs stand one over the
+   other at the ring's right, as in a card, but inside the ring's own height:
+   a card's header has 8px above and below for them to stand in (the rule
+   under this one) and a title row cuts what leaves it. They fit: each is
+   18px (1px of padding twice and a 1rem icon) and two are 36 of the 40. */
+.mud-dialog .wslc-title-ring-slot {
+    display: flex;
+    align-items: center;
+    min-height: 40px;
+}
+
+.mud-dialog .wslc-title-ring-slot .wslc-progress-ring .wslc-progress-ring-verbs {
+    height: auto;
+    min-height: 40px;
+    align-self: stretch;
+    margin: 0;
+}
+
 /* The pair stands one over the other, the magnifier pushed to the top and the
    cross to the bottom, and the cross, always the last, keeps its place when the
    magnifier goes (a run that failed after its pull). Measured: the header is

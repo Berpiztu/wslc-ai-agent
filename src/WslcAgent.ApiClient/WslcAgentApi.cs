@@ -720,6 +720,10 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<ImageInspect> GetImageInspectAsync(string reference, CancellationToken cancellationToken = default) =>
         GetAsync<ImageInspect>($"api/v1/images/inspect?reference={Escape(reference)}", cancellationToken);
 
+    /// <summary>What a local image sets for every container made from it; <c>Local</c> false when it has to be pulled first.</summary>
+    public Task<ImageDefaults> GetImageDefaultsAsync(string reference, CancellationToken cancellationToken = default) =>
+        GetAsync<ImageDefaults>($"api/v1/images/defaults?reference={Escape(reference)}", cancellationToken);
+
     public Task PullImageAsync(string reference, bool allTags = false, CancellationToken cancellationToken = default) =>
         PostJsonAsync("api/v1/images/pull", new PullImageRequest(reference, allTags), cancellationToken);
 

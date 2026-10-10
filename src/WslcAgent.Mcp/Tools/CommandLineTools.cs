@@ -16,7 +16,7 @@ namespace WslcAgent.Mcp.Tools;
 public static class CommandLineTools
 {
     [McpServerTool(Name = "parse_run_command", ReadOnly = true, Idempotent = true)]
-    [Description("Read a pasted docker run / wslc run line into the fields run_container takes, without running anything. Answers the launch request, the flags this runtime has no equivalent for (unsupported), whether the line was a docker one, and a one-line summary. Use it before run_command_line to show the user what would happen.")]
+    [Description("Read a pasted docker run / wslc run line into the fields run_container takes, without running anything. Answers the launch request, the flags this runtime has no equivalent for (unsupported), those it does not need because WSLC gives it already (notNeeded: --add-host=host.docker.internal:host-gateway, the host is reached by that name and by host.wslc.internal with no flag), whether the line was a docker one, and a one-line summary. Use it before run_command_line to show the user what would happen.")]
     public static RunCommandParse ParseRunCommand(
         [Description("The pasted line, verbatim: several lines and \\ continuations are fine.")] string commandLine) =>
         RunCommandLine.Parse(commandLine);
@@ -43,6 +43,7 @@ public static class CommandLineTools
         {
             launch,
             unsupported = parse.Unsupported,
+            notNeeded = parse.NotNeeded,
             fromDocker = parse.FromDocker,
             summary = parse.Summary,
         };

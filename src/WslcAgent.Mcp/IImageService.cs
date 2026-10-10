@@ -11,6 +11,9 @@ public interface IImageService
     /// <summary><c>wslc image inspect REFERENCE</c>: the raw JSON, indented.</summary>
     Task<ImageInspect> InspectAsync(string reference, CancellationToken cancellationToken = default);
 
+    /// <summary>What a local image sets for every container made from it, as launch fields; an image that is not on the machine says so and nothing else.</summary>
+    Task<ImageDefaults> DefaultsAsync(string reference, CancellationToken cancellationToken = default);
+
     /// <summary><c>wslc image pull [--all-tags] REFERENCE</c>. Slow: minutes for a large image.</summary>
     Task PullAsync(string reference, bool allTags = false, CancellationToken cancellationToken = default);
 

@@ -43,6 +43,19 @@ public sealed class ImageService(IWslcRunner wslc, ContainerUsageScanner usage, 
         return new ImageInspect(reference, json);
     }
 
+    public async Task<ImageDefaults> DefaultsAsync(string reference, CancellationToken cancellationToken = default)
+    {
+        // Asked of the catalog first: an image that is not here is an answer, not the CLI's failure.
+        var image = WslcArgs.Require(reference, "image reference");
+        if (!ContainerLaunches.IsLocal((await ListAsync(cancellationToken)).Images, image))
+        {
+            return new ImageDefaults(false, new ContainerLaunchRequest { Image = image });
+        }
+
+        var result = await wslc.RunAsync(["image", "inspect", image, "--format", "json"], cancellationToken: cancellationToken);
+        return new ImageDefaults(true, ContainerInspection.ImageFields(image, result));
+    }
+
     public Task PullAsync(string reference, bool allTags = false, CancellationToken cancellationToken = default) =>
         wslc.RunAsync(new List<string> { "image", "pull" }.Flag("--all-tags", allTags).Append(ImageReference.Normalize(WslcArgs.Require(reference, "image reference"))).ToList(), PullTimeout, cancellationToken);
 

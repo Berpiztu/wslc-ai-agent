@@ -193,10 +193,13 @@ says no, or changes the target, do nothing and let the token die.
   whatever continuations it carries: pass it **verbatim** to
   `parse_run_command`, which reads it exactly as the agent's own Run form does.
   Report the image, name, ports, volumes, networks and the `unsupported` list —
-  flags this runtime has no equivalent for (`--add-host`, `--gpus` in any form
-  but `all` — `--gpus all` is read as `gpus` —,
+  flags this runtime has no equivalent for (`--add-host` with an address,
+  `--gpus` in any form but `all` — `--gpus all` is read as `gpus` —,
   `--hostname`, `--dns`, `--label`, `--privileged`, `--rm`, `-it`) are not a
-  failure, they are a thing the user has to be told once. Check
+  failure, they are a thing the user has to be told once. The `notNeeded` list
+  is what WSLC gives already: `--add-host=host.docker.internal:host-gateway`
+  is one, since every container reaches the Windows host as
+  `host.docker.internal` and as `host.wslc.internal` with no flag. Check
   `list_containers` for the parsed name before going on. Then
   `run_command_line` with the same line: a `create` line prepares the container
   and leaves it stopped. Never rewrite the flags by hand, and never run `docker`
