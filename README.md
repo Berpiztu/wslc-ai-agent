@@ -16,6 +16,16 @@ products are **WSLC AI Agent** (the agent, `wslc-ai-agent.exe`) and
 
 ## Features
 
+- **New: Compose on WSLC, with the `wslc-compose` command. `wslc` cannot
+  run a Compose file yet; the agent runs yours today, from the command line
+  and from the web and the apps.**
+  `wslc-compose up -d`: Compose's own command line (`config`, `build`, `up`,
+  `down`, `start`, `stop`, `restart`, `logs`, `ps`, `ls`), installed with
+  the agent and on your `PATH`. The same file opens in the web interface and
+  the clients as a project: checked line by line before anything runs
+  (taken, converted or not supported), then started, stopped and watched as
+  one group of containers, with one log
+  ([docs/compose/wslc-compose.md](docs/compose/wslc-compose.md)).
 - **An MCP agent for WSLC, skill included for Claude, Hermes, OpenClaw,
   etc.**: 55 tools, the destructive ones off by default and asking your
   approval once switched on, and a skill installed with one click. One Windows program beside `wslc` that runs in

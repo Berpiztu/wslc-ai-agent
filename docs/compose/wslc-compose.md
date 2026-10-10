@@ -91,6 +91,8 @@ names and would bring up the whole project.
 
 Not there yet, and said so when asked for: `pull`, `exec` and the rest of
 Compose's commands, and services' names after `down`, `ps` and `config`.
+The whole list of what is missing is at the end:
+[Not there yet](#not-there-yet).
 
 ## Options
 
@@ -184,3 +186,40 @@ only when none of them runs. Its exit code is still `1` when those
 containers end by themselves, and `130` when Ctrl+C stopped them. A project that fails to come
 up leaves no row behind on the Containers page: its whole log was printed
 where it was asked for.
+
+## Not there yet
+
+Compose on WSLC is new, and this is what it still lacks. We are working on
+it; none of it fails in silence, each is said where it is met.
+
+**Commands.** `pull`, `push`, `exec`, `run`, `kill`, `rm`, `create`,
+`pause`, `unpause`, `top`, `events`, `images`, `port` and `cp`: the command
+answers that it has none yet (exit code `2`). Services' names after `down`,
+`ps` and `config`.
+
+**Options.** The ones listed above as *Not there yet*
+([Every option Compose has](#every-option-compose-has)): they are taken,
+said on the error stream, and the command goes on without them.
+
+**Several files as one.** More than one `-f`, a `compose.override.yaml`
+beside the file (the plan says it is there and was not read), `include` and
+`extends`. One file is read, whole.
+
+**In the file.** `secrets` and `configs`, `pull_policy`, and a `volumes`
+entry of type `tmpfs` in the long form (the short `tmpfs:` key is taken).
+`config` names each of them on its line, as it does everything else that is
+not taken.
+
+**From an AI agent.** Over MCP a Compose file can be read and judged
+(`parse_compose`); bringing a project up or down (`compose_up`,
+`compose_down`, `list_projects`, behind the approval gate) is not written
+yet.
+
+**On the Containers page.** A project's group can be cut by the pager, the
+list sorted by a column is flat, the group's tick does not tick its
+containers, and there is no Export of a project.
+
+What will not come from us is what `wslc run` has no flag for
+(`privileged`, `cap_add`, `network_mode: host` and the others): the list,
+and why, is in [emulate.md](emulate.md#cannot-be-done). `config` names them
+before anything runs.

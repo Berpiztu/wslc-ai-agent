@@ -3,7 +3,8 @@
 Part 1 is the analysis: what each product does, feature by feature, with
 sources. Part 2 is the article for X, built only on what Part 1 verifies.
 
-Facts as of 9 October 2026.
+Facts as of 9 October 2026; what is said of Compose, as of 10 October 2026,
+when the agent began to run Compose files.
 
 ---
 
@@ -94,7 +95,7 @@ that agent runs, with the destructive part off until you allow it.
 | Network map (networks as hubs, containers as nodes with addresses) | **Yes** | — |
 | VHD volumes with size; session VHDX compaction | **Yes** | — |
 | Restart policies | Kept by the agent (`wslc` has none) | Kept by Docker Engine |
-| **Compose** (multi-container stacks) | **No**: `wslc` has no Compose yet; Microsoft has announced `compose up` as planned | **Yes** |
+| **Compose** (multi-container stacks) | **Yes, by the agent**: `wslc` has no Compose yet (Microsoft has announced `compose up` as planned), so the agent reads the Compose file and brings it up itself. From a terminal with **`wslc-compose`**, Compose's own command line (`config`, `build`, `up`, `down`, `start`, `stop`, `restart`, `logs`, `ps`, `ls`); from the web and the apps as a project, a group of containers with its own verbs and one log. Every line of the file is given its verdict before anything runs: taken, converted or not supported. Not there yet: several files as one (`compose.override.yaml`, `include`, `extends`), `secrets` and `configs`, `pull` and `exec`, and what `wslc run` has no flag for ([wslc-compose](../compose/wslc-compose.md#not-there-yet)) | **Yes**, the whole of it |
 | Kubernetes | No | Yes |
 | Extensions marketplace | No | Yes |
 | Image security scanning | No | Docker Scout |
@@ -136,8 +137,13 @@ that agent runs, with the destructive part off until you allow it.
 
 Said plainly, because the article must hold up:
 
-1. **Compose.** Multi-container stacks are everyday work, and `wslc` cannot
-   run a `compose.yaml` yet. It is the biggest gap.
+1. **Compose, the whole of it.** The agent runs a `compose.yaml` now
+   ([wslc-compose](../compose/wslc-compose.md)), where `wslc` alone cannot.
+   Docker's Compose is complete and has years of other people's files behind
+   it; ours is new and still lacks several files read as one
+   (`compose.override.yaml`, `include`, `extends`), `secrets` and `configs`,
+   `pull` and `exec`, and whatever `wslc run` has no flag for (`privileged`,
+   `cap_add`, `network_mode: host`).
 2. **Ecosystem**: Kubernetes, Extensions, Scout, Build Cloud, Testcontainers,
    Model Runner, Hub integration.
 3. **macOS and Linux.** WSLC is Windows only.
@@ -249,6 +255,10 @@ back after a reboot, as they would on Docker.
 - **Update an image** and keep every setting of the container.
 - **Paste any `docker run` line**: it is checked before it runs (names in use,
   ports taken, missing networks).
+- **Compose files**: `wslc` has no Compose, so the agent runs yours itself.
+  `wslc-compose up -d` from a terminal, with Compose's own command line, or
+  the same file from the web and the apps as a project: one group of
+  containers, started, stopped and read as one.
 - A **network map**, **VHD volumes**, **disk compaction**, files inside images
   and volumes, transfers that keep running, and the history of every command.
 
@@ -261,9 +271,13 @@ back after a reboot, as they would on Docker.
 
 ### Being honest
 
-Need **Compose** today? Stay on Docker Desktop: `wslc` cannot run a
-`compose.yaml` yet (Microsoft has it planned). Need Kubernetes, macOS, Scout
-or Extensions? Docker has them.
+Need **Compose**? We have it now: the agent runs your `compose.yaml`, with
+the `wslc-compose` command or from the web and the apps. Try your file
+first: `wslc-compose config` says, line by line, what is taken, what is
+converted and what is not supported, before anything runs. It is new, and
+Docker's is complete: several files read as one, `secrets`, `configs`,
+`pull` and `exec` are not there yet. Need Kubernetes, macOS, Scout or
+Extensions? Docker has them.
 
 If you run containers on Windows and want them **free, native, on your phone,
 published in one switch and driven by your AI agent**, Docker Desktop is no

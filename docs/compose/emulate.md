@@ -1,12 +1,16 @@
-# Compose files on WSLC: a plan
+# Compose files on WSLC: how the agent does it
 
 `wslc` has no Compose. Its commands stop at one container, one network, one
 volume (`wslc --help`, 3.0.2), and Microsoft has only announced `compose up`
 as planned. Most real applications are published as a `compose.yaml`, so
-today they cannot be brought up on WSLC without rewriting them by hand.
+with `wslc` alone they cannot be brought up without rewriting them by hand.
 
-This plan is for the agent to read a Compose file and bring it up itself,
-with the pieces it already has. Nothing here is built yet.
+So the agent reads a Compose file and brings it up itself, with the pieces
+it already had. This is the design it was written from, kept up as it was
+built: what is written is said as it is, and what is not yet is named where
+it stands and gathered in [Phases](#phases). How to use it from a terminal
+is in [wslc-compose.md](wslc-compose.md); from the screens, in
+[features.md](../features.md).
 
 ## The idea
 
@@ -66,16 +70,9 @@ label `ai.berpiztu.wslc.launch`, and reads from there for View & edit and
 for every recreate: nothing set at launch is lost when a container is
 edited.
 
-### `wslc` can, the launch request cannot yet
+### Written for Compose
 
-| Compose | `wslc` |
-|---|---|
-| `volumes` in the long form, of type `tmpfs` | `--mount`, `--tmpfs` |
-| `pull_policy` | `--pull` (the agent pulls an image that is not local itself, before the run) |
-
-### New work
-
-| Compose | What has to be written |
+| Compose | How it is done |
 |---|---|
 | The file itself | A YAML reader (YamlDotNet, MIT) and the Compose model |
 | `${VAR}`, `${VAR:-default}`, `.env` | Interpolation before the model is read |
@@ -84,8 +81,19 @@ edited.
 | `depends_on`, with `service_healthy` and `service_completed_successfully` | Start order, and waiting on `HealthStatus` or the exit code |
 | The project | A name, and the containers, networks and volumes that belong to it |
 | `up` on a project that already runs | Telling which services changed |
-| `profiles` | Services left out unless their profile is asked for |
+| `profiles` | Services left out unless their profile is asked for, or they are asked for by name |
+
+### Not written yet
+
+The reader names each of these on its line as `(not yet)`, and the rest of
+the file is brought up without it.
+
+| Compose | What it would take |
+|---|---|
+| `volumes` in the long form, of type `tmpfs` | `--mount`, `--tmpfs` (the short `tmpfs:` key is taken) |
+| `pull_policy` | `--pull` (the agent pulls an image that is not local itself, before the run) |
 | `secrets`, `configs` from files | Read-only bind mounts at the path Compose gives them |
+| `compose.override.yaml`, `include`, `extends`, several files | Merged before the model is read, as Compose does |
 
 ### Cannot be done
 
@@ -118,14 +126,14 @@ ComposeReader.Read(yaml, source) -> ComposePlan
   Services[]    name, ContainerLaunchRequest, DependsOn[], Build?, Profiles[], Enabled
   Networks[]    key, name, subnet, gateway, internal, external
   Volumes[]     key, name, driver, options, external
-  Unsupported[] "web: privileged", "db: labels (not yet)"...
+  Unsupported[] "web: privileged", "db: secrets (not yet)"...
   NotNeeded[]   "web: extra_hosts host.docker.internal:host-gateway"
   Warnings[]    "The variable TAG is not set: read as empty."
 ```
 
 Every key of a service the reader does not take is named in `Unsupported`,
 so a key nobody thought of is said, not lost. `(not yet)` marks what only
-the agent does not send yet (the keys of phase 4).
+the agent does not send yet (`pull_policy`, `secrets`, `configs`).
 
 The plan also carries the file itself, `Lines[]`, each line with its
 verdict: taken as written, converted (and into what), not supported (and
@@ -134,10 +142,12 @@ written on, a merged one (`<<`) included, so the plan screen shows the file
 in one column and what becomes of each line in the other, and is read as the
 file is.
 
-Several files (`compose.yaml` plus `compose.override.yaml`) merge before
-parsing, as Compose does. The reader is where a mistake goes unseen, so it
-is the part with tests: real files from well-known projects, read and
-compared with what they should produce.
+One file is read. Several files (`compose.yaml` plus
+`compose.override.yaml`) are to merge before parsing, as Compose does; until
+they do, the plan says that an override is beside the file and was not
+read. The reader is where a mistake goes unseen, so it is the part with
+tests (`ComposeReaderTests`): files read and compared with what they should
+produce.
 
 ### 2. What belongs together
 
@@ -186,7 +196,10 @@ a cancel, every client sees it, and it goes on with the browser closed.
    one. Errors stop it; warnings and the not-supported list are shown and
    asked about.
 3. Create the networks and volumes that are missing.
-4. Pull or build the images, several at a time.
+4. Build the images, one after another, the services built from the same
+   context, Dockerfile, target and arguments as one build whose image takes
+   each one's name. An image that is not local is pulled by its container's
+   own launch, as any Run's is.
 5. Start the services in `depends_on` order, each wave waiting for what it
    depends on: started, healthy, or finished with exit code 0.
 6. Enrol each service's restart policy with the agent.
@@ -226,22 +239,26 @@ since a Compose file has no key to say them.
 | `start`, `stop`, `restart` | The same verbs on every service, in order |
 | `ps` | The project's containers with state, health and ports |
 | `logs` | The services' logs in one view, each line with its service |
-| `pull`, `build` | The images alone, without starting anything |
+| `build` | The images alone, without starting anything |
+| `pull` | The same for the images that are pulled. Not written yet |
 
 ### 5. API, MCP and UI
 
-- **API**: `/api/v1/projects`: list, plan (read a file and answer the
-  plan, nothing run), up, down, start, stop, restart, logs. In
-  `docs/api-v1.md`, and `ApiCompatibility.Level` raised.
-- **MCP**: `parse_compose` (read only, the plan), `compose_up`,
-  `compose_down`, `list_projects`, `project_logs`. `compose_down` and an
-  `up` that would recreate or remove a container are destructive: off until
-  switched on, then through the approval gate, as remove and prune are.
+- **API**: `/api/v1/projects`: plan (read a file and answer the plan,
+  nothing run), preview, up, build, a job's state, and by project its file,
+  its containers, start, stop, restart, logs and down. In
+  [api-v1.md](../api-v1.md). The projects themselves are read from the
+  containers' labels (`GET /containers`).
+- **MCP**: `parse_compose` (read only, the plan) is written. `compose_up`,
+  `compose_down`, `list_projects` and `project_logs` are not yet.
+  `compose_down` and an `up` that would recreate or remove a container are
+  destructive: off until switched on, then through the approval gate, as
+  remove and prune are.
 - **UI**: no page of its own. A project is shown where its containers
   already are, on the Containers page, as a group
   (see [The project on the Containers page](#the-project-on-the-containers-page)).
   New project: a verb of that page; pick a Compose file on the agent's
-  machine, or paste one; the plan is shown before **Up**.
+  machine, or paste one; the plan is shown before **Save** or **Run**.
 - **Skill**: a section so an assistant handed a Compose file uses
   `parse_compose` first and reports the not-supported list.
 - **Command line**: `wslc-compose`, installed with the agent and on the
@@ -287,9 +304,11 @@ header:
   and brings it up: the same `up` as before, rehearsal and way back
   included. A file that came from a path is written back there as well.
 - **Export** hands the file out, with its `.env`, to take the project to
-  another machine.
+  another machine. Not written yet: the project's menu copies the Compose
+  file to the clipboard.
 
-What follows from that, in both views:
+What follows from that, in both views (the pager, the sorting and the
+grouper's tick are not written yet: [Phases](#phases), 3):
 
 - Containers that belong to no project stand as they do today, beside the
   groups.
@@ -305,9 +324,10 @@ What follows from that, in both views:
 
 ## Phases
 
-Each one is usable on its own and ends with something to try.
+Each one is usable on its own and ends with something to try. The first
+three are written; the last two say what is left.
 
-1. **Read and show.** *Written, on the branch `emulate-compose`.* The
+1. **Read and show.** *Written.* The
    reader, its tests, `POST /api/v1/projects/plan` and `parse_compose`. On
    screen, the **Compose** verb of the Containers page opens a window built
    as the Run form is. Its one field, **Docker Compose file, or paste**, is
@@ -329,7 +349,7 @@ Each one is usable on its own and ends with something to try.
    Compose files are named. Not read yet: a
    `compose.override.yaml` beside the file (the plan says so), `include` and
    `extends`.
-2. **Save and Run.** *Written, on the branch `emulate-compose`.* The
+2. **Save and Run.** *Written.* The
    Compose window's rail has the Run form's two verbs. `ProjectRunner`
    (`POST /api/v1/projects/preview`, `/up`, `GET /projects/jobs/{id}`) does
    the work as a job of the agent: labels, networks, volumes, `build`, a
@@ -351,7 +371,7 @@ Each one is usable on its own and ends with something to try.
    no container: the place the project's group takes in phase 3. The file's
    `${NAME}` variables are listed under the conversion (**Variables**), each
    with the value it was read as, to set before the save.
-3. **The project in the list.** *Written, on the branch `emulate-compose`.*
+3. **The project in the list.** *Written, but for what its last lines name.*
    The group on the Containers page, in rows and in cards
    (`Containers.razor`: a head row a project, its containers under it while
    it is open, kept together by the place each is given; in cards the
@@ -368,31 +388,34 @@ Each one is usable on its own and ends with something to try.
    column, the list is flat), the grouper's tick ticking its containers,
    and Export. (The services' logs in one view are written: the project's
    Logs, and `wslc-compose logs`.)
-4. **What is left of the project.** The MCP tools (`compose_up`,
-   `compose_down`, `list_projects`, behind the approval gate), and each
-   service of the Compose window's table opened in the Run form before the
-   project is saved.
-   A mount WSLC cannot make as written is converted by the reader
+4. **What is left of the project.** *Not written yet:* the MCP tools
+   (`compose_up`, `compose_down`, `list_projects`, `project_logs`, behind
+   the approval gate), and each service of the Compose window's tree opened
+   in the Run form before the project is saved.
+   *Written:* a mount WSLC cannot make as written is converted by the reader
    (`ComposeReader.Unlinked`): WSLC does not follow a Windows junction or
    symbolic link inside a mounted folder, so a mount the file puts over one
    fails at start (`openat2 …: operation not permitted`). The link is
    mounted from its real folder, and the folder that holds it as its
    entries, one mount each, down to the link. The line says so, and that an
    entry added to that folder later needs the project saved again.
-5. **What is left.** Long mounts and `pull_policy`, then `profiles`, and
-   `secrets` and `configs` as mounts. (The flags the request lacked, labels,
-   host and domain names, DNS, tmpfs, shm size, ulimits and stop signal, are
-   in the launch form: written with phase 1.)
+5. **What is left of the file.** *Not written yet:* a `tmpfs` mount in the
+   long form, `pull_policy`, `secrets` and `configs` as mounts, and several
+   files read as one (`compose.override.yaml`, `include`, `extends`, more
+   than one `-f`). (`profiles`, and services asked for by name, are written.
+   So are the flags the request lacked, labels, host and domain names, DNS,
+   tmpfs, shm size, ulimits and stop signal, which are in the launch form
+   since phase 1.) What the command line lacks is in
+   [wslc-compose.md](wslc-compose.md#not-there-yet).
 
-## Decisions to take
+## Decisions
 
 1. **Where the file comes from.** The agent always keeps its own copy with
-   the project (above). What is open is where a file may come from. A path
-   on the agent's machine keeps relative paths and `build` working, and is
-   the case Compose was made for. A pasted or uploaded file has no folder:
-   bind mounts with relative paths and `build` cannot work from it.
-   Proposed: both, with those two things named as not available for a file
-   that has no folder.
+   the project (above). A path on the agent's machine keeps relative paths
+   and `build` working, and is the case Compose was made for. A pasted or
+   uploaded file has no folder: bind mounts with relative paths and `build`
+   cannot work from it. Taken: both, with those two things named as not
+   available for a file that has no folder.
 2. **Its name in the product.** "Projects" (what Compose calls them), with
    "Compose file" for the file. Nothing is named after Docker.
 3. **When Microsoft ships `compose up`.** The reader, the plan, the labels
@@ -407,5 +430,5 @@ Each one is usable on its own and ends with something to try.
 
 The comparison with Docker Desktop
 ([wslc-ai-agent-vs-docker-desktop.md](../features/wslc-ai-agent-vs-docker-desktop.md))
-names Compose as the biggest gap. After phase 2 that line reads "Compose
-files, read and run by the agent".
+named Compose as the biggest gap. It now says that the agent runs Compose
+files, and what of Compose is not there yet.

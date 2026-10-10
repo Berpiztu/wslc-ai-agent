@@ -248,7 +248,7 @@ publishing and cleaning up need them on.
     line, another device): its ring stays in red at how many of its
     containers run (one of two: 50 %) until its cross lets the failure go,
     for every client
-    ([the plan](compose/emulate.md)). The same from a terminal:
+    ([how the agent does it](compose/emulate.md)). The same from a terminal:
     **`wslc-compose`**, installed with the agent and on the `PATH`, takes
     Compose's own commands (`build`, `up`, `down`, `start`, `stop`,
     `restart`, `logs`, `ps`, `ls`, `config`) and asks this machine's agent,
