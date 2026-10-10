@@ -8,6 +8,7 @@ using WslcAgent.ApiClient.Contracts;
 using WslcAgent.Mcp;
 using WslcAgent.Server.Containers;
 using WslcAgent.Server.Host;
+using WslcAgent.Server.Projects;
 
 namespace WslcAgent.Server.Endpoints;
 
@@ -33,15 +34,24 @@ public static class ContainerEndpoints
             .WithName("CheckContainerLaunch");
 
         // Run as a job the agent owns: the image is pulled first when it is not local.
-        group.MapGet("/launches", (ContainerLaunches launches) => launches.List())
+        // A project being saved is a row of the same table: its own first, then the runs it starts.
+        group.MapGet("/launches", (ContainerLaunches launches, ProjectRunner projects) => (IReadOnlyList<ContainerLaunch>)[.. projects.Rows(), .. launches.List()])
             .WithName("ContainerLaunches");
 
         group.MapPost("/launches", (ContainerLaunchRequest request, ContainerLaunches launches) => launches.Enqueue(request))
             .WithName("LaunchContainer");
 
-        group.MapPost("/launches/{id}/cancel", NoContent (string id, ContainerLaunches launches) =>
+        group.MapPost("/launches/{id}/cancel", NoContent (string id, ContainerLaunches launches, ProjectRunner projects) =>
             {
-                launches.Cancel(id);
+                if (projects.Owns(id))
+                {
+                    projects.Cancel(id);
+                }
+                else
+                {
+                    launches.Cancel(id);
+                }
+
                 return TypedResults.NoContent();
             })
             .WithName("CancelContainerLaunch");
@@ -51,9 +61,17 @@ public static class ContainerEndpoints
             .WithName("ContainerLaunchRequest");
 
         // A failed run is remembered until dismissed, a cancelled one a while; the row's cross forgets it now (409 while it still runs).
-        group.MapDelete("/launches/{id}", NoContent (string id, ContainerLaunches launches) =>
+        group.MapDelete("/launches/{id}", NoContent (string id, ContainerLaunches launches, ProjectRunner projects) =>
             {
-                launches.Dismiss(id);
+                if (projects.Owns(id))
+                {
+                    projects.Dismiss(id);
+                }
+                else
+                {
+                    launches.Dismiss(id);
+                }
+
                 return TypedResults.NoContent();
             })
             .WithName("DismissContainerLaunch");

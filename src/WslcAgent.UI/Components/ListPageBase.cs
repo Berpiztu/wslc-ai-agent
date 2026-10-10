@@ -38,7 +38,7 @@ public abstract class ListPageBase<TItem> : ComponentBase, IDisposable
     private ViewMode _view = ViewMode.Table;
     private int _page;
     private IReadOnlyList<ListRow<TItem>> _rows = [];
-    private (IReadOnlyList<TItem>? Items, string Search) _rowsOf;
+    private (IReadOnlyList<TItem>? Items, string Search, string Folding) _rowsOf;
 
     [Inject] protected WslcAgentApi Api { get; set; } = default!;
 
@@ -148,10 +148,22 @@ public abstract class ListPageBase<TItem> : ComponentBase, IDisposable
         }
     }
 
-    /// <summary>Rows after the search box, in the order the table was left in.</summary>
+    /// <summary>Rows after the search box, in the order the table was left in, without the ones the page keeps folded away.</summary>
     protected IReadOnlyList<TItem> Visible => InTableOrder(string.IsNullOrWhiteSpace(Search)
-        ? Items
-        : Items.Where(item => Matches(item, Search)).ToList());
+        ? Items.Where(IsShown).ToList()
+        : Items.Where(item => IsShown(item) && Matches(item, Search)).ToList());
+
+    /// <summary>
+    /// Whether a row the list holds is drawn. All are, unless the page keeps
+    /// some folded away: a group's rows while the group is closed.
+    /// </summary>
+    protected virtual bool IsShown(TItem item) => true;
+
+    /// <summary>What <see cref="IsShown"/> answers from, as one text: the grid's rows are built again when it changes.</summary>
+    protected virtual string Folding => "";
+
+    /// <summary>The user sorted the table by a column.</summary>
+    protected bool Sorted => _sort is not null;
 
     /// <summary>
     /// The sort the user set on the table, kept by the page so the cards show
@@ -182,10 +194,11 @@ public abstract class ListPageBase<TItem> : ComponentBase, IDisposable
         get
         {
             // Built once per load or search, not per render: the grid takes a new list as new data.
-            if (!ReferenceEquals(_rowsOf.Items, Items) || _rowsOf.Search != Search)
+            var folding = Folding;
+            if (!ReferenceEquals(_rowsOf.Items, Items) || _rowsOf.Search != Search || _rowsOf.Folding != folding)
             {
                 _rows = Visible.Select(item => new ListRow<TItem>(KeyOf(item), item)).ToList();
-                _rowsOf = (Items, Search);
+                _rowsOf = (Items, Search, folding);
             }
 
             return _rows;
@@ -394,14 +407,26 @@ public abstract class ListPageBase<TItem> : ComponentBase, IDisposable
     /// running, and the row kept the id of a container that no longer existed.
     /// Several asks in the meantime are one more read, not several.
     /// </summary>
-    private async Task RefreshAsync(bool polling)
+    private Task RefreshAsync(bool polling)
     {
-        if (Loading)
+        // Whoever asks meanwhile waits for the same end: the read under way and
+        // the one asked for after it. A caller that goes on once the list has been
+        // read (a project's verb, a container at a time) would otherwise go on
+        // with the list as it was.
+        if (_reading is { IsCompleted: false } reading)
         {
             _readAgain = true;
-            return;
+            return reading;
         }
 
+        return _reading = ReadUntilCurrentAsync(polling);
+    }
+
+    /// <summary>The read under way, with every read asked for while it lasts.</summary>
+    private Task? _reading;
+
+    private async Task ReadUntilCurrentAsync(bool polling)
+    {
         do
         {
             _readAgain = false;

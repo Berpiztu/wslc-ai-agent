@@ -1,8 +1,12 @@
 @page "/containers"
+@using System.Globalization
 @using WslcAgent.UI.Components.Launch
 @inherits ListPageBase<ContainerSummary>
 @inject OpenDetails Open
 @inject FileTransfers Transfers
+@inject ProjectGroups Groups
+@inject ProjectVerbs Verbs
+@inject BusyRows Working
 
 <PageShell Title="Containers" RequiresSession="true">
     <TopbarSearch>
@@ -19,6 +23,17 @@
         <ContainersVerbs Changed="RefreshAsync" />
     </Verbs>
     <ChildContent>
+        @* The two colours a project's ring is drawn in while a verb goes through its
+           containers (the stylesheet points the ring's stroke here): the success colour
+           into the primary, the two its line has. It takes no room. *@
+        <svg class="wslc-progress-mix-defs" aria-hidden="true" focusable="false">
+            <defs>
+                <linearGradient id="wslc-progress-mix" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0.3" style="stop-color: var(--mud-palette-success)" />
+                    <stop offset="0.7" style="stop-color: var(--mud-palette-primary)" />
+                </linearGradient>
+            </defs>
+        </svg>
         <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap" Spacing="2" Class="wslc-toolbar mb-1 flex-shrink-0">
             <PageStats>
                 <PageStat Label="CPU" Value="@CpuText" />
@@ -53,16 +68,23 @@
                     <TemplateColumn T="ListRow<ContainerSummary>" Title="" Sortable="true" SortBy="@(r => r.Value.IsRunning ? 0 : 1)"
                                     Resizable="false" StickyLeft="true" HeaderClass="@GridColumn.Bullet" CellClass="@GridColumn.Bullet">
                         <CellTemplate>
-                            <StateDot Active="context.Item.Value.IsRunning" Title="running" Key="@context.Item.Value.Id" />
+                            <StateDot Active="context.Item.Value.IsRunning" Title="running" Key="@context.Item.Value.Id"
+                                      Working="@(IsGroup(context.Item.Value) && IsWorking(context.Item.Value.Name))" />
                         </CellTemplate>
                     </TemplateColumn>
                     <PropertyColumn T="ListRow<ContainerSummary>" TProperty="string" Property="c => c.Value.Name" Title="Name" StickyLeft="true" HeaderClass="@GridColumn.Width(18)" CellClass="@GridColumn.Width(18)">
                         <CellTemplate>
-                            @if (LaunchOf(context.Item.Value) is { } launch)
+                            @* A project's row is its group's head: its +/− opens its containers'
+                               rows under it, which carry a mark before their names. *@
+                            @if (IsGroup(context.Item.Value))
                             {
-                                <ProgressCell Name="@launch.Name" Pct="launch.Pct" Status="@launch.Status" Failed="@(!launch.Active)" LogAfterFailure="false"
-                                              LogTitle="View run progress" CancelTitle="Cancel run" DismissTitle="Dismiss run"
-                                              OnLog="@(() => PullFlow.ShowLogAsync(Dialogs, launch.Image))" OnCancel="@(() => CancelLaunchAsync(launch))"
+                                @GroupName(context.Item.Value)
+                            }
+                            else if (LaunchOf(context.Item.Value) is { } launch)
+                            {
+                                <ProgressCell Lead="@Mark(context.Item.Value)" Name="@launch.Name" Pct="launch.Pct" Status="@launch.Status" Failed="@(!launch.Active && !launch.Done)" Done="launch.Done" LogAfterFailure="@launch.IsProject"
+                                              LogTitle="@($"View {KindOf(launch)} progress")" CancelTitle="@($"Cancel {KindOf(launch)}")" DismissTitle="@($"Dismiss {KindOf(launch)}")"
+                                              OnLog="@(() => ShowLaunchLogAsync(launch))" OnCancel="@(() => CancelLaunchAsync(launch))"
                                               OnDismiss="@(() => DismissLaunchAsync(launch))" />
                             }
                             else if (UpdateOf(context.Item.Value) is { } update)
@@ -70,7 +92,7 @@
                                 @* Its image update pulling the new image: the pull's bar on
                                    the container that was asked to update, not only on the
                                    image. *@
-                                <ProgressCell Name="@context.Item.Value.Name" Pct="update.Pct" Status="@UpdateStatus(update)" Failed="@(update.State != "running")"
+                                <ProgressCell Lead="@Mark(context.Item.Value)" Name="@context.Item.Value.Name" Pct="update.Pct" Status="@UpdateStatus(update)" Failed="@(update.State is "error" or "cancelled")" Done="@(update.State == "success")"
                                               LogTitle="View the update's pull" CancelTitle="Cancel the update" DismissTitle="Dismiss"
                                               OnLog="@(() => PullFlow.ShowLogAsync(Dialogs, update.Image, finished: update.State != "running"))"
                                               OnCancel="@(() => CancelUpdateAsync(update.Image))" OnDismiss="RefreshAsync" />
@@ -83,14 +105,14 @@
                                    console to open — a transfer is bytes, not output — so
                                    the row has its percentage and its cross and nothing
                                    else. *@
-                                <ProgressCell Name="@context.Item.Value.Name" Pct="@TransferFlow.Pct(moving)" Status="@TransferFlow.Status(moving)"
+                                <ProgressCell Lead="@Mark(context.Item.Value)" Name="@context.Item.Value.Name" Pct="@TransferFlow.Pct(moving)" Status="@TransferFlow.Status(moving)"
                                               Failed="@TransferFlow.Failed(moving)" LogTitle="View the transfers" CancelTitle="@CancelTitle(moving)" DismissTitle="Dismiss"
                                               OnLog="@(() => TransferFlow.ShowAsync(Dialogs, context.Item.Value.Id, context.Item.Value.Name))"
                                               OnCancel="@(() => CancelTransfersAsync(moving))" OnDismiss="@(() => DismissTransfersAsync(moving))" />
                             }
                             else
                             {
-                                @context.Item.Value.Name
+                                @Named(context.Item.Value)
                             }
                         </CellTemplate>
                     </PropertyColumn>
@@ -116,7 +138,7 @@
                         <CellTemplate>@Dash(context.Item.Value.DiskIo)</CellTemplate>
                     </PropertyColumn>
                     <PropertyColumn T="ListRow<ContainerSummary>" TProperty="string" Property="c => c.Value.Id" Title="ID" HeaderClass="@GridColumn.Width(13)" CellClass="@($"{GridColumn.Width(13)} mud-text-secondary")">
-                        <CellTemplate>@(LaunchOf(context.Item.Value) is null ? context.Item.Value.Id : "pending")</CellTemplate>
+                        <CellTemplate>@(IsGroup(context.Item.Value) ? "project" : LaunchOf(context.Item.Value) is null ? context.Item.Value.Id : "pending")</CellTemplate>
                     </PropertyColumn>
                     <PropertyColumn T="ListRow<ContainerSummary>" TProperty="string" Property="c => c.Value.RestartPolicy" Title="Restart" HeaderClass="@GridColumn.Stretch(5)" CellClass="@GridColumn.Stretch(5)">
                         <CellTemplate>@Dash(context.Item.Value.RestartPolicy)</CellTemplate>
@@ -125,7 +147,11 @@
                 <Actions>
                     <TemplateColumn T="ListRow<ContainerSummary>" Title="Actions" Sortable="false" Resizable="false" DragAndDropEnabled="false" StickyRight="true" HeaderClass="@GridColumn.Actions" CellClass="@GridColumn.Actions">
                         <CellTemplate>
-                            @if (LaunchOf(context.Item.Value) is { Phase: "error" } launch)
+                            @if (IsGroup(context.Item.Value))
+                            {
+                                @GroupActions(context.Item.Value)
+                            }
+                            else if (LaunchOf(context.Item.Value) is { Phase: "error", IsProject: false } launch)
                             {
                                 @EditLaunchButton(launch)
                             }
@@ -140,53 +166,23 @@
         }
         else
         {
-            <CardsGrid TItem="ContainerSummary" Items="Visible" Loading="Loading" EmptyText="@EmptyText">
+            @* A project's cards stand among the others, each in its own cell: its own card
+               first, then its containers', and a line runs round them as one (Bracket). *@
+            var cards = Visible;
+            var closing = Closing(cards);
+            var tones = cards.Where(IsGroup).ToDictionary(head => head.Name, head => ToneOf(head.Name), StringComparer.Ordinal);
+            <CardsGrid TItem="ContainerSummary" Items="cards" Loading="Loading" EmptyText="@EmptyText">
                 <ItemTemplate Context="c">
-                    <EntityCard Title="@c.Name" Subtitle="@c.Image" AvatarColor="@StateColors.For(c.State)" Key="@c.Id" Tone="@CardTone.Of(c)">
-                        <HeaderActions>
-                            <StateChip State="@c.State" />
-                        </HeaderActions>
-                        <Avatar>
-                            @if (LaunchOf(c) is { } launch)
-                            {
-                                <ProgressRing Pct="launch.Pct" Status="@launch.Status" Failed="@(!launch.Active)" LogAfterFailure="false"
-                                              LogTitle="View run progress" CancelTitle="Cancel run" DismissTitle="Dismiss run"
-                                              OnLog="@(() => PullFlow.ShowLogAsync(Dialogs, launch.Image))" OnCancel="@(() => CancelLaunchAsync(launch))"
-                                              OnDismiss="@(() => DismissLaunchAsync(launch))" />
-                            }
-                            else if (UpdateOf(c) is { } update)
-                            {
-                                <ProgressRing Pct="update.Pct" Status="@UpdateStatus(update)" Failed="@(update.State != "running")"
-                                              LogTitle="View the update's pull" CancelTitle="Cancel the update" DismissTitle="Dismiss"
-                                              OnLog="@(() => PullFlow.ShowLogAsync(Dialogs, update.Image, finished: update.State != "running"))"
-                                              OnCancel="@(() => CancelUpdateAsync(update.Image))" OnDismiss="RefreshAsync" />
-                            }
-                            else if (TransfersOf(c) is { Count: > 0 } moving)
-                            {
-                                <ProgressRing Pct="@TransferFlow.Pct(moving)" Status="@TransferFlow.Status(moving)" Failed="@TransferFlow.Failed(moving)"
-                                              LogTitle="View the transfers" CancelTitle="@CancelTitle(moving)" DismissTitle="Dismiss"
-                                              OnLog="@(() => TransferFlow.ShowAsync(Dialogs, c.Id, c.Name))"
-                                              OnCancel="@(() => CancelTransfersAsync(moving))" OnDismiss="@(() => DismissTransfersAsync(moving))" />
-                            }
-                            else
-                            {
-                                <MudAvatar Color="@StateColors.For(c.State)" Variant="Variant.Filled">@(c.Name is { Length: > 0 } name ? name[..1].ToUpperInvariant() : "?")</MudAvatar>
-                            }
-                        </Avatar>
-                        <ChildContent>
-                            <ContainerCardBody Container="c" />
-                        </ChildContent>
-                        <Actions>
-                            @if (LaunchOf(c) is { Phase: "error" } launch)
-                            {
-                                @EditLaunchButton(launch)
-                            }
-                            else
-                            {
-                                <ContainerActions Container="c" Launching="@(LaunchOf(c) is not null)" Changed="RefreshAsync" Shortcuts="true" />
-                            }
-                        </Actions>
-                    </EntityCard>
+                    @if (Bracket(c, closing, tones) is { Length: > 0 } bracket)
+                    {
+                        <div class="@bracket">
+                            @(IsGroup(c) ? GroupCard(c) : ContainerCard(c))
+                        </div>
+                    }
+                    else
+                    {
+                        @ContainerCard(c)
+                    }
                 </ItemTemplate>
             </CardsGrid>
         }
@@ -211,6 +207,12 @@
     private static string MemoryUsed(string usage) => usage.Split('/')[0].Trim();
 
     private const string LaunchPrefix = "launch:";
+
+    /// <summary>The row that stands for a project, the head of its group: no container of its own, its name the project's.</summary>
+    private const string GroupPrefix = ProjectVerbs.RowPrefix;
+
+    /// <summary>Where each row of a group stands in the list (see <see cref="Grouped"/>); a row not here stands by its own number.</summary>
+    private readonly Dictionary<string, double> _ages = new(StringComparer.Ordinal);
     private static readonly TimeSpan JobsEvery = TimeSpan.FromSeconds(1);
 
     private IReadOnlyList<ContainerLaunch> _launches = [];
@@ -220,7 +222,7 @@
     private IReadOnlyList<ImagePullState> _pulls = [];
     private readonly HashSet<string> _reportedLaunches = [];
 
-    /// <summary>Runs still on their way first, as a temporary row each.</summary>
+    /// <summary>Runs still on their way first, as a temporary row each; then every project as a group, and the containers on their own.</summary>
     protected override async Task<IReadOnlyList<ContainerSummary>> LoadAsync()
     {
         var response = await Api.GetContainersAsync(all: !_runningOnly, helpers: _helpers);
@@ -229,9 +231,342 @@
         _transfers = await Api.GetContainerTransfersAsync();
         _pulls = response.Containers.Any(row => row.IsUpdating) ? await Api.GetImagePullsAsync() : [];
         ReportFinishedLaunches();
-        var rows = _launches.Where(l => l.Phase != "done")
-            .Select(l => new ContainerSummary(LaunchPrefix + l.Id, l.Name, l.Image, l.Active ? "created" : "error", l.Status, "", "", "", [], "", "", "", ""));
-        return [.. rows, .. response.Containers];
+        var runs = _launches.Where(l => !l.IsProject && !l.Done)
+            .Select(l => new ContainerSummary(LaunchPrefix + l.Id, l.Name, l.Image, l.Active ? "created" : "error", l.Status, "", "", "", [], "", "", "", "", Project: l.Group))
+            .ToList();
+        return Grouped(runs, response.Containers);
+    }
+
+    /// <summary>
+    /// The list as it is held: the runs on their own first, then each project
+    /// as its head row followed by its containers and the runs it has under
+    /// way, then the containers on their own. A project stands where its
+    /// oldest container does, so it keeps its place as the rows do; one with no
+    /// container yet (its first save) stands after the runs. Every row of a
+    /// group is given a place between two of the agent's numbers, in order,
+    /// which is how the list keeps them together (<see cref="AgeOf"/>).
+    /// </summary>
+    private IReadOnlyList<ContainerSummary> Grouped(IReadOnlyList<ContainerSummary> runs, IReadOnlyList<ContainerSummary> containers)
+    {
+        _ages.Clear();
+        var rows = new List<ContainerSummary>();
+        void Place(IReadOnlyList<ContainerSummary> block, double from, double room)
+        {
+            for (var index = 0; index < block.Count; index++)
+            {
+                _ages[block[index].Id] = from + (room * index / block.Count);
+            }
+
+            rows.AddRange(block);
+        }
+
+        // Under 1, the first number the agent gives: before every container.
+        Place(runs.Where(run => run.Project.Length == 0).ToList(), 0.1, 0.4);
+
+        var projects = containers.Select(container => container.Project)
+            .Concat(_launches.Where(launch => launch.Group.Length > 0 && !launch.Done).Select(launch => launch.Group))
+            .Where(name => name.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        for (var index = 0; index < projects.Count; index++)
+        {
+            var name = projects[index];
+            var members = containers.Where(container => container.Project == name).OrderBy(container => container.Uid).ToList();
+            List<ContainerSummary> ofProject = [GroupRow(name, members), .. members, .. runs.Where(run => run.Project == name)];
+            var oldest = members.Where(member => member.Uid > 0).Select(member => member.Uid).DefaultIfEmpty(0).Min();
+
+            // From a quarter before its oldest container to short of the next number: no other row has a place in there.
+            if (oldest > 0)
+            {
+                Place(ofProject, oldest - 0.25, 0.9);
+            }
+            else
+            {
+                Place(ofProject, 0.6 + (0.3 * index / projects.Count), 0.25 / projects.Count);
+            }
+        }
+
+        rows.AddRange(containers.Where(container => container.Project.Length == 0));
+        return rows;
+    }
+
+    /// <summary>A project's head row: how many of its containers run, and their CPU and memory share added up.</summary>
+    private ContainerSummary GroupRow(string name, IReadOnlyList<ContainerSummary> members)
+    {
+        var running = members.Count(member => member.IsRunning);
+        var measured = members.Where(member => member.CpuPercent.Length > 0).ToList();
+        return new ContainerSummary(GroupPrefix + name, name,
+            _runningOnly ? $"{running} running" : $"{running} of {members.Count} running",
+            running > 0 ? "running" : "exited", "", "", "", "", [], "", "", "", "",
+            CpuPercent: measured.Count > 0 ? Sum(measured, member => member.CpuPercent) : "",
+            MemPercent: measured.Count > 0 ? Sum(measured, member => member.MemPercent) : "",
+            Project: name);
+    }
+
+    /// <summary>Percentages as <c>wslc stats</c> prints them, added up and written the same way.</summary>
+    private static string Sum(IEnumerable<ContainerSummary> rows, Func<ContainerSummary, string> reading) =>
+        rows.Sum(row => Percents.Parse(reading(row))).ToString("0.00", CultureInfo.InvariantCulture) + "%";
+
+    private static bool IsGroup(ContainerSummary row) => row.Id.StartsWith(GroupPrefix, StringComparison.Ordinal);
+
+    /// <summary>A project's containers and the runs it has under way, as the list holds them.</summary>
+    private List<ContainerSummary> MembersOf(string project) => Items.Where(row => row.Project == project && !IsGroup(row)).ToList();
+
+    private IReadOnlyList<string> NamesOf(string project) => MembersOf(project).Select(member => member.Name).ToList();
+
+    /// <summary>The project's save, while the agent lists it: under way, just ended, or failed and not dismissed.</summary>
+    private ContainerLaunch? SavingOf(string project) => _launches.FirstOrDefault(launch => launch.IsProject && launch.Group == project);
+
+    /// <summary>
+    /// A group shows its containers when the user opened it, and without
+    /// being asked while a search is on (what it found is inside), while the
+    /// project is being saved or its save failed, and while a verb goes
+    /// through its containers: what is being done to each container is the
+    /// thing to see then.
+    /// </summary>
+    private bool IsOpen(string project) =>
+        Search.Length > 0 || Groups.IsOpen(project) || SavingOf(project) is { Done: false } || Verbs.Of(project) is not null;
+
+    /// <summary>
+    /// A container of a project is shown after its project's row, or card,
+    /// while that group is open. Sorted by a column, the list is every
+    /// container in that order and no group: a head row has no value of its
+    /// own to be sorted by.
+    /// </summary>
+    protected override bool IsShown(ContainerSummary row)
+    {
+        if (Sorted)
+        {
+            return !IsGroup(row);
+        }
+
+        return IsGroup(row) || row.Project.Length == 0 || IsOpen(row.Project);
+    }
+
+    protected override string Folding =>
+        $"{Sorted}|{string.Join(',', Items.Where(IsGroup).Where(head => IsOpen(head.Name)).Select(head => head.Name))}";
+
+    /// <summary>The last card each project has among the ones shown: where the line round its cards closes.</summary>
+    private static Dictionary<string, string> Closing(IReadOnlyList<ContainerSummary> cards) =>
+        cards.Where(card => card.Project.Length > 0)
+            .GroupBy(card => card.Project, StringComparer.Ordinal)
+            .ToDictionary(project => project.Key, project => project.Last().Id, StringComparer.Ordinal);
+
+    /// <summary>
+    /// Something is being done to the project: its save, a verb going through
+    /// its containers, its own down, or anything at all on one of its
+    /// containers (a start, a stop, a restart, a removal, a run on its way, a
+    /// recreate, an image update). What is done to a container of a project
+    /// is done to the project, which shows it as its own work.
+    /// </summary>
+    private bool IsWorking(string project) =>
+        Verbs.Of(project) is not null
+        || SavingOf(project) is { Active: true }
+        || Working.IsBusy(GroupPrefix + project)
+        || MembersOf(project).Any(member => Working.IsBusy(member.Id) || member.IsRecreating || member.IsUpdating || LaunchOf(member) is { Active: true });
+
+    /// <summary>
+    /// How a project is, as the class its cards' line is coloured by: every
+    /// container running, none, or some. A run still on its way is no
+    /// container yet, and is not counted. While something is being done to
+    /// it (<see cref="IsWorking"/>) it is on its way from one to the other,
+    /// and is drawn as some.
+    /// </summary>
+    private string ToneOf(string project)
+    {
+        if (IsWorking(project))
+        {
+            return "wslc-bracket-partial";
+        }
+
+        var containers = MembersOf(project).Where(member => LaunchOf(member) is null).ToList();
+        var running = containers.Count(container => container.IsRunning);
+        return running == 0 ? "wslc-bracket-stopped" : running == containers.Count ? "wslc-bracket-running" : "wslc-bracket-partial";
+    }
+
+    /// <summary>
+    /// The classes of the cell of a card that is a project's (the stylesheet
+    /// draws the line): over and under every one, down the left of the
+    /// project's own card, which is the first, and down the right of the last,
+    /// in the colour of how the project is. A card that is between two
+    /// states is marked as waiting, which sets its header going from the
+    /// stopped tone to the running one and back: the project's own while
+    /// anything is being done to it, and a container's while a verb going
+    /// through the project has not got to it yet. The one whose turn it is
+    /// turns its ring instead, and then keeps the tone its turn left it in.
+    /// Empty for a container on its own, and in a sorted list, which has no
+    /// groups.
+    /// </summary>
+    private string Bracket(ContainerSummary card, Dictionary<string, string> closing, Dictionary<string, string> tones) =>
+        Sorted || card.Project.Length == 0
+            ? ""
+            : $"wslc-card-bracket {tones.GetValueOrDefault(card.Project, "wslc-bracket-stopped")}"
+              + $"{(IsGroup(card) ? " wslc-bracket-start" : "")}{(closing.GetValueOrDefault(card.Project) == card.Id ? " wslc-bracket-end" : "")}"
+              + $"{((IsGroup(card) && IsWorking(card.Project)) || Verbs.IsWaiting(card.Id) ? " wslc-bracket-waiting" : "")}";
+
+    /// <summary>What stands before a row's name: a project's +/−, the mark of a container under its project; nothing for a container on its own, or in a sorted list, which has no groups.</summary>
+    private RenderFragment? Mark(ContainerSummary row)
+    {
+        if (Sorted || row.Project.Length == 0)
+        {
+            return null;
+        }
+
+        if (!IsGroup(row))
+        {
+            return @<MudIcon Icon="@Icons.Material.Filled.SubdirectoryArrowRight" Size="Size.Small" Class="mud-text-secondary flex-shrink-0" />;
+        }
+
+        var open = IsOpen(row.Name);
+        return @<MudIconButton Icon="@(open ? Icons.Material.Filled.Remove : Icons.Material.Filled.Add)" Size="Size.Small"
+                               title="@(open ? "Hide the project's containers" : "Show the project's containers")" OnClick="@(() => Groups.Toggle(row.Name))" />;
+    }
+
+    /// <summary>A row's name, after its mark when it has one.</summary>
+    private RenderFragment Named(ContainerSummary row)
+    {
+        if (Mark(row) is not { } mark)
+        {
+            return @<text>@row.Name</text>;
+        }
+
+        return @<div class="wslc-progress-cell">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Wrap="Wrap.NoWrap">
+                @mark
+                <span class="wslc-progress-name">@row.Name</span>
+            </MudStack>
+        </div>;
+    }
+
+    /// <summary>A project's name in its row: while the agent lists its save, the row is that save's, with its progress, its log and its cancel.</summary>
+    private RenderFragment GroupName(ContainerSummary head)
+    {
+        if (SavingOf(head.Name) is not { } saving)
+        {
+            return GoingName(head);
+        }
+
+        return @<ProgressCell Lead="@Mark(head)" Name="@head.Name" Pct="saving.Pct" Status="@saving.Status" Failed="@(!saving.Active && !saving.Done)" Done="saving.Done"
+                              LogTitle="View project progress" CancelTitle="Cancel project" DismissTitle="Dismiss project"
+                              OnLog="@(() => ShowLaunchLogAsync(saving))" OnCancel="@(() => CancelLaunchAsync(saving))" OnDismiss="@(() => DismissLaunchAsync(saving))" />;
+    }
+
+    /// <summary>A project's name while a verb goes through its containers: how far it has got, and the cross that stops it there.</summary>
+    private RenderFragment GoingName(ContainerSummary head)
+    {
+        if (Verbs.Of(head.Name) is not { } going)
+        {
+            return Named(head);
+        }
+
+        return @<ProgressCell Lead="@Mark(head)" Name="@head.Name" Pct="going.Pct" Status="@going.Step" Mixed="true"
+                              CancelTitle="Stop after this container" OnCancel="@(() => Verbs.Cancel(head.Name))" />;
+    }
+
+    private RenderFragment GroupActions(ContainerSummary head) =>
+        @<ProjectActions Project="@head.Name" RowKey="@head.Id" Containers="@NamesOf(head.Name)" Running="head.IsRunning"
+                         Saving="@(SavingOf(head.Name) is { Active: true })" Changed="RefreshAsync" />;
+
+    /// <summary>
+    /// A project's own card, a card as any other: its name, how many of its
+    /// containers run, the +/− that shows their cards after it, the project's
+    /// verbs, and its containers named in its body. While something is being
+    /// done to it its avatar is a ring in its two colours: its save's, a
+    /// verb's going through its containers with how far it has got, or one
+    /// that only turns for a verb on one container.
+    /// </summary>
+    private RenderFragment GroupCard(ContainerSummary head) =>
+        @<EntityCard Title="@head.Name" Subtitle="@head.Image" AvatarColor="@StateColors.For(head.State)" Tone="@CardTone.Of(head)">
+                <HeaderActions>
+                    <StateChip State="@head.State" />
+                    @Mark(head)
+                </HeaderActions>
+                <Avatar>
+                    @if (SavingOf(head.Name) is { } saving)
+                    {
+                        <ProgressRing Pct="saving.Pct" Status="@saving.Status" Failed="@(!saving.Active && !saving.Done)" Done="saving.Done"
+                                      LogTitle="View project progress" CancelTitle="Cancel project" DismissTitle="Dismiss project"
+                                      OnLog="@(() => ShowLaunchLogAsync(saving))" OnCancel="@(() => CancelLaunchAsync(saving))" OnDismiss="@(() => DismissLaunchAsync(saving))" />
+                    }
+                    else if (Verbs.Of(head.Name) is { } going)
+                    {
+                        <ProgressRing Pct="going.Pct" Status="@going.Step" Mixed="true" CancelTitle="Stop after this container" OnCancel="@(() => Verbs.Cancel(head.Name))" />
+                    }
+                    else if (IsWorking(head.Name))
+                    {
+                        @* Anything being done to one of its containers, or its own down: the ring turns
+                           where the avatar is, as any card's does, in the project's two colours. The
+                           card is given no key, so the header's own ring leaves this one its place. *@
+                        <div class="wslc-progress-ring wslc-progress-mixed" title="Working…">
+                            <MudProgressCircular Class="wslc-progress-ring-dial" Color="Color.Info" Indeterminate="true" />
+                        </div>
+                    }
+                    else
+                    {
+                        <MudAvatar Color="@StateColors.For(head.State)" Variant="Variant.Filled">@(head.Name[..1].ToUpperInvariant())</MudAvatar>
+                    }
+                </Avatar>
+                <ChildContent>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@(string.Join(", ", NamesOf(head.Name)))</MudText>
+                </ChildContent>
+                <Actions>
+                    @GroupActions(head)
+                </Actions>
+            </EntityCard>;
+
+    /// <summary>A container's card, the same on its own and after its project's card.</summary>
+    private RenderFragment ContainerCard(ContainerSummary c) =>
+        @<EntityCard Title="@c.Name" Subtitle="@c.Image" AvatarColor="@StateColors.For(c.State)" Key="@c.Id" Tone="@CardTone.Of(c)">
+                        <HeaderActions>
+                            <StateChip State="@c.State" />
+                        </HeaderActions>
+                        <Avatar>
+                            @if (LaunchOf(c) is { } launch)
+                            {
+                                <ProgressRing Pct="launch.Pct" Status="@launch.Status" Failed="@(!launch.Active && !launch.Done)" Done="launch.Done" LogAfterFailure="@launch.IsProject"
+                                              LogTitle="@($"View {KindOf(launch)} progress")" CancelTitle="@($"Cancel {KindOf(launch)}")" DismissTitle="@($"Dismiss {KindOf(launch)}")"
+                                              OnLog="@(() => ShowLaunchLogAsync(launch))" OnCancel="@(() => CancelLaunchAsync(launch))"
+                                              OnDismiss="@(() => DismissLaunchAsync(launch))" />
+                            }
+                            else if (UpdateOf(c) is { } update)
+                            {
+                                <ProgressRing Pct="update.Pct" Status="@UpdateStatus(update)" Failed="@(update.State is "error" or "cancelled")" Done="@(update.State == "success")"
+                                              LogTitle="View the update's pull" CancelTitle="Cancel the update" DismissTitle="Dismiss"
+                                              OnLog="@(() => PullFlow.ShowLogAsync(Dialogs, update.Image, finished: update.State != "running"))"
+                                              OnCancel="@(() => CancelUpdateAsync(update.Image))" OnDismiss="RefreshAsync" />
+                            }
+                            else if (TransfersOf(c) is { Count: > 0 } moving)
+                            {
+                                <ProgressRing Pct="@TransferFlow.Pct(moving)" Status="@TransferFlow.Status(moving)" Failed="@TransferFlow.Failed(moving)"
+                                              LogTitle="View the transfers" CancelTitle="@CancelTitle(moving)" DismissTitle="Dismiss"
+                                              OnLog="@(() => TransferFlow.ShowAsync(Dialogs, c.Id, c.Name))"
+                                              OnCancel="@(() => CancelTransfersAsync(moving))" OnDismiss="@(() => DismissTransfersAsync(moving))" />
+                            }
+                            else
+                            {
+                                <MudAvatar Color="@StateColors.For(c.State)" Variant="Variant.Filled">@(c.Name is { Length: > 0 } name ? name[..1].ToUpperInvariant() : "?")</MudAvatar>
+                            }
+                        </Avatar>
+                        <ChildContent>
+                            <ContainerCardBody Container="c" />
+                        </ChildContent>
+                        <Actions>
+                            @if (LaunchOf(c) is { Phase: "error", IsProject: false } launch)
+                            {
+                                @EditLaunchButton(launch)
+                            }
+                            else
+                            {
+                                <ContainerActions Container="c" Launching="@(LaunchOf(c) is not null)" Changed="RefreshAsync" Shortcuts="true" />
+                            }
+                        </Actions>
+                    </EntityCard>;
+
+    /// <summary>Which groups this device left open, read with the view before the list is first drawn.</summary>
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        await Groups.ReadyAsync();
     }
 
     protected override void OnInitialized()
@@ -244,11 +579,33 @@
         _ = FollowJobsAsync(PageClosing);
         // The queue is this client's, not the agent's, so no poll hears about
         // it: a file chosen or let go changes a row this second, not next one.
+        // So is a verb going through a project's containers.
         Transfers.QueueChanged += OnQueueChanged;
-        PageClosing.Register(() => Transfers.QueueChanged -= OnQueueChanged);
+        Verbs.Changed += OnQueueChanged;
+        Verbs.ReadList = ReadForVerbsAsync;
+        Working.Changed += OnQueueChanged;
+        PageClosing.Register(() =>
+        {
+            Transfers.QueueChanged -= OnQueueChanged;
+            Verbs.Changed -= OnQueueChanged;
+            Verbs.ReadList = null;
+            Working.Changed -= OnQueueChanged;
+        });
     }
 
     private void OnQueueChanged() => _ = InvokeAsync(StateHasChanged);
+
+    /// <summary>
+    /// A project's verb has gone through one container and waits for the
+    /// list to be read: that container then shows as it is (running and
+    /// green, or stopped and no longer so) before the verb goes on to the
+    /// next, and the project is not through before its last one shows it.
+    /// </summary>
+    private Task ReadForVerbsAsync() => InvokeAsync(async () =>
+    {
+        await RefreshAsync();
+        StateHasChanged();
+    });
 
     /// <summary>The pull this container's image update waits for, while it does; one not listed yet is about to start.</summary>
     private ImagePullState? UpdateOf(ContainerSummary row) =>
@@ -270,6 +627,13 @@
 
     private ContainerLaunch? LaunchOf(ContainerSummary row) =>
         row.Id.StartsWith(LaunchPrefix, StringComparison.Ordinal) ? _launches.FirstOrDefault(l => LaunchPrefix + l.Id == row.Id) : null;
+
+    /// <summary>What a row on its way is, in its buttons' words: a project being saved from its Compose file, or a container's run.</summary>
+    private static string KindOf(ContainerLaunch launch) => launch.IsProject ? "project" : "run";
+
+    /// <summary>The console a row on its way opens: a project's own log, kept once it failed since it says why, or the pull its run waits on.</summary>
+    private Task ShowLaunchLogAsync(ContainerLaunch launch) =>
+        launch.IsProject ? ProjectFlow.ShowLogAsync(Dialogs, launch) : PullFlow.ShowLogAsync(Dialogs, launch.Image);
 
     /// <summary>
     /// What this container's row has to show: files on the move, either way
@@ -295,7 +659,8 @@
             while (await timer.WaitForNextTickAsync(cancellationToken))
             {
                 var updating = Items.Any(row => row.IsUpdating);
-                if (!_launches.Any(l => l.Active) && !_transfers.Any(t => t.Active) && !updating)
+                // One that ended well is followed until the agent lets go of it: its row says so until then.
+                if (!_launches.Any(l => l.Active || l.Done) && !_transfers.Any(t => t.Active) && !updating)
                 {
                     continue;
                 }
@@ -319,8 +684,11 @@
                 }
 
                 // An update's pull that ended: the row goes on to its recreate, which the list shows.
+                // A run that appeared (a project's save starts one a container) has no row until the list is read.
                 if (Ended(launches, _launches, l => l.Id, l => l.Active) || Ended(transfers, _transfers, t => t.Id, t => t.Active)
-                    || Ended(pulls, _pulls, p => p.Image, p => p.State == "running"))
+                    || Ended(pulls, _pulls, p => p.Image, p => p.State == "running")
+                    || Ended(launches, _launches, l => l.Id, l => l.Done)
+                    || _launches.Any(now => launches.All(before => before.Id != now.Id)))
                 {
                     await InvokeAsync(RefreshAsync);
                 }
@@ -340,10 +708,10 @@
     private static bool Ended<T>(IReadOnlyList<T> before, IReadOnlyList<T> now, Func<T, string> id, Func<T, bool> active) =>
         before.Where(active).Any(job => !now.Any(fresh => id(fresh) == id(job) && active(fresh)));
 
-    /// <summary>What a finished run had to adjust (the notes the form showed when it waited), and a failure, once each, on the activity line.</summary>
+    /// <summary>What a finished run had to adjust (the notes the form showed when it waited), and a failure, once each, on the activity line. A project's end is said by whoever asked for it (<see cref="ProjectActivity"/>).</summary>
     private void ReportFinishedLaunches()
     {
-        foreach (var launch in _launches.Where(l => !l.Active && _reportedLaunches.Add(l.Id)))
+        foreach (var launch in _launches.Where(l => !l.Active && !l.IsProject && _reportedLaunches.Add(l.Id)))
         {
             if (launch.Phase == "error")
             {
@@ -358,6 +726,13 @@
 
     private async Task CancelLaunchAsync(ContainerLaunch launch)
     {
+        if (launch.IsProject)
+        {
+            await ProjectFlow.CancelAsync(Dialogs, Api, Snackbar, launch.Id);
+            await RefreshAsync();
+            return;
+        }
+
         if (!await DialogFlow.ConfirmAsync(Dialogs, "Cancel run", "Cancel this run?", "Cancel run", destructive: true))
         {
             return;
@@ -439,17 +814,19 @@
         await RefreshAsync();
     }
 
-    protected override bool Matches(ContainerSummary c, string search) => Has(c.Name, search) || Has(c.Image, search) || Has(c.Id, search);
+    /// <summary>A project's row matches by its name, or by any of its containers: what was found is shown under it.</summary>
+    protected override bool Matches(ContainerSummary c, string search) =>
+        Has(c.Name, search) || Has(c.Image, search) || Has(c.Id, search) || (IsGroup(c) && MembersOf(c.Name).Any(member => Matches(member, search)));
 
     protected override string KeyOf(ContainerSummary c) => c.Id;
 
     /// <summary>A change to a container recreates it under a new id; its number in the agent's registry is what stays, and so does its place.</summary>
     protected override string PlaceOf(ContainerSummary c) => c.Uid > 0 ? $"uid:{c.Uid}" : c.Id;
 
-    protected override double AgeOf(ContainerSummary c, IReadOnlyList<ContainerSummary> rows) => c.Uid;
+    protected override double AgeOf(ContainerSummary c, IReadOnlyList<ContainerSummary> rows) => _ages.GetValueOrDefault(c.Id, c.Uid);
 
-    /// <summary>A container being recreated is left out of Start, Stop and Remove on the selection, as its own verbs are greyed.</summary>
-    protected override bool CanAct(ContainerSummary c) => !c.IsRecreating;
+    /// <summary>A container being recreated is left out of Start, Stop and Remove on the selection, as its own verbs are greyed; a project's row is no container, and has its own verbs.</summary>
+    protected override bool CanAct(ContainerSummary c) => !c.IsRecreating && !IsGroup(c);
 
     protected override string NameOf(ContainerSummary c) => c.Name;
 

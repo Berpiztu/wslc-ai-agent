@@ -1,5 +1,6 @@
 using WslcAgent.ApiClient;
 using WslcAgent.ApiClient.Contracts;
+using WslcAgent.Server.Projects;
 using WslcAgent.Server.Wslc;
 
 namespace WslcAgent.Server.Containers;
@@ -38,7 +39,27 @@ public static class LaunchArgs
             .Option("--network", request.Network)
             .Option("--ip", AllowsStaticIp(request.Network) ? request.Ip : "");
         Repeat(args, "--network-alias", request.NetworkAliases);
-        args.Option("--user", request.User)
+        args.Option("--hostname", request.Hostname)
+            .Option("--domainname", request.Domainname);
+        Repeat(args, "--dns", request.Dns);
+        Repeat(args, "--dns-search", request.DnsSearch);
+        Repeat(args, "--dns-option", request.DnsOptions);
+        Repeat(args, "--tmpfs", request.Tmpfs);
+        args.Option("--shm-size", request.ShmSize);
+        Repeat(args, "--ulimit", request.Ulimits);
+        Repeat(args, "--label", request.Labels.Where(label => !LaunchMemo.IsOwn(label)));
+
+        // A container a Compose file brought up says so on itself: its project, its
+        // service, and the service as its file had it when it was made.
+        var (project, service) = ProjectLabels.Split(request.Project);
+        args.Option("--label", project.Length > 0 ? $"{ProjectLabels.Project}={project}" : "")
+            .Option("--label", project.Length > 0 ? $"{ProjectLabels.Service}={service}" : "")
+            .Option("--label", project.Length > 0 && request.ProjectConfig.Length > 0 ? $"{ProjectLabels.Config}={request.ProjectConfig}" : "");
+
+        // What inspect will not say back goes on the container itself, for whoever reads it next.
+        args.Option("--label", LaunchMemo.Of(request))
+            .Option("--user", request.User)
+            .Option("--stop-signal", request.StopSignal)
             .Option("--stop-timeout", request.StopTimeout);
         if (request.NoHealthcheck)
         {

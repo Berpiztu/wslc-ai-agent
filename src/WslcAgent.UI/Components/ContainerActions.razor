@@ -10,6 +10,7 @@
 @inject WslcAgent.UI.Links.IClientLinks Links
 @inject HttpClient Http
 @inject SimulatedRemote Simulated
+@inject ProjectVerbs Verbs
 
 @* A card has room a table row has not, so it leads with the verbs most
    reached for — details, edit, update image, exec, files, browser, its
@@ -40,17 +41,17 @@
     @if (Container.IsRunning)
     {
         <MudIconButton Icon="@Icons.Material.Filled.Stop" Size="Size.Small" Color="Color.Primary" title="Stop"
-                       Disabled="Locked" OnClick="@(() => RunAsync(Container.Name, "stop", ct => Api.StopContainerAsync(Container.Id, ct)))" />
+                       Disabled="Locked" OnClick="StopAsync" />
     }
     else
     {
         <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" Color="Color.Success" title="Start"
-                       Disabled="Locked" OnClick="@(() => RunAsync(Container.Name, "start", ct => Api.StartContainerAsync(Container.Id, ct)))" />
+                       Disabled="Locked" OnClick="@(() => StartAsync("start", ct => Api.StartContainerAsync(Container.Id, ct)))" />
     }
     @* Restart beside start and stop, in amber: the third thing anyone does to a
        container, and it was two clicks deep in the menu. In the table row too. *@
     <MudIconButton Icon="@Icons.Material.Filled.RestartAlt" Size="Size.Small" Color="Color.Warning" title="Restart"
-                   Disabled="Locked" OnClick="@(() => RunAsync(Container.Name, "restart", ct => Api.RestartContainerAsync(Container.Id, ct)))" />
+                   Disabled="Locked" OnClick="@(() => StartAsync("restart", ct => Api.RestartContainerAsync(Container.Id, ct)))" />
     <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" title="More actions" Disabled="Locked" OpenChanged="MenuOpenChanged">
         @* The menu is the whole list minus whatever this view already has within
            reach: on a card those verbs are buttons a centimetre away, and a menu
@@ -93,7 +94,7 @@
         <MudMenuItem Icon="@Icons.Material.Filled.Bolt" OnClick="@(() => RunAsync(Container.Name, "kill", ct => Api.KillContainerAsync(Container.Id, ct)))">Kill</MudMenuItem>
     </MudMenu>
     <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="Remove"
-                   Disabled="Locked" OnClick="@(() => RemoveAsync("container", $"{Container.Name} ({Container.Id})", ct => Api.RemoveContainerAsync(Container.Id, force: true, ct)))" />
+                   Disabled="Locked" OnClick="RemoveContainerAsync" />
 </MudStack>
 }
 </div>
@@ -120,6 +121,47 @@
     /// its verbs stand where they will be, greyed until it exists.
     /// </summary>
     private bool Locked => Busy || Container.IsRecreating || Container.IsUpdating || Launching;
+
+    /// <summary>Start or restart; a container of a project whose dependency is not running is told so in a window, and nothing is asked of the agent.</summary>
+    private async Task StartAsync(string verb, Func<CancellationToken, Task> call)
+    {
+        if (await Verbs.CanStartAsync(Dialogs, Container, verb))
+        {
+            await VerbAsync(verb, call);
+        }
+    }
+
+    /// <summary>Remove; when others of its project depend on it, the question says they will not be able to work without it.</summary>
+    private async Task RemoveContainerAsync()
+    {
+        var what = $"{Container.Name} ({Container.Id})";
+        Task Remove(CancellationToken ct) => Api.RemoveContainerAsync(Container.Id, force: true, ct);
+        if (await Verbs.ConfirmRemoveAsync(Dialogs, Container) is not { } confirmed)
+        {
+            await RemoveAsync("container", what, Remove);
+        }
+        else if (confirmed)
+        {
+            await RunAsync(what, "remove", Remove);
+        }
+    }
+
+    /// <summary>Stop; a container of a project that others of it depend on is stopped after them, once the user has said so, as one piece of work on the project.</summary>
+    private async Task StopAsync()
+    {
+        if (await Verbs.StopWithDependentsAsync(Dialogs, Container) is null)
+        {
+            await VerbAsync("stop", ct => Api.StopContainerAsync(Container.Id, ct));
+        }
+        else
+        {
+            await Changed.InvokeAsync();
+        }
+    }
+
+    /// <summary>Start, stop or restart: shown working for as long as a verb is shown (<see cref="VerbSpin"/>).</summary>
+    private Task VerbAsync(string verb, Func<CancellationToken, Task> call) =>
+        RunAsync(Container.Name, verb, ct => VerbSpin.AtLeast(call(ct), ct));
 
     /// <summary>The launch form pre-filled from inspect; saving removes and recreates.</summary>
     private async Task EditAsync()

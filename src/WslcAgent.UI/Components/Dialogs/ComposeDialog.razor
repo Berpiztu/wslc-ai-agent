@@ -1,0 +1,844 @@
+@* The Compose window, built as the launch form's is (Run container): the
+   main column and the action rail at the right, which stays where it is. The
+   file's field is the launch form's Fill, one line that does not grow, with
+   a field's own button inside it. The three dots open the system's Open
+   dialog, never a window of ours, and leave the file's path in the field; or
+   a path is pasted there; or a whole Compose file is, of which that one line
+   shows the first, since what matters of it is drawn below. Whichever it is,
+   it stays in the field as it came. Once there is a file, the row under it
+   asks for what the file does not say, its context, and beside that field
+   stands Check Compose file: nothing is read until it is pressed, since it
+   is the user who says when. Then the box under them shows the file as the
+   tree it is (MudBlazor's tree view): its services, networks and volumes as
+   branches, each with what is written under it, to open and close. On the
+   line of each branch, beside it, is what the agent makes of it: the
+   verdict as the branch's coloured icon, and in words after the line, in the
+   same colour, what it becomes or why it is not given: green as written,
+   amber changed into something else, red not given. A branch that says nothing of its own
+   carries the worst verdict under it and how many lines under it are not
+   as written, so a closed branch still says what is inside. The box has the
+   launch form's list editor's name over it and one fixed height that
+   scrolls, and the note at the foot. The project is the tree's first branch
+   and every line of the file is under it. A branch's arrow opens and closes
+   that branch alone, what is under it staying as it stood; beside the arrow
+   its + opens it with everything under it, and is then a − that closes all
+   of it. A file just read
+   opens as far as its list of services, each of them closed. A branch whose
+   own line was taken as written, with lines under it that were not, shows
+   both: its own verdict, and after it the worst of those under it. A branch is one
+   line and never more: a line too long for the box scrolls the box sideways,
+   which two lines a branch leave few of. At the agent's machine it is the agent that opens the dialog, on
+   its desktop, so the file comes with its path; from any other device the
+   browser opens it and hands over the file's text, which goes into the field
+   as a paste does. Close is on the title line. Opened from a project's row
+   (Project), it opens on the file kept with that project, already read: the
+   place the project's Compose file is seen, and applied again. *@
+@inject WslcAgentApi Api
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+@inject ProjectActivity Projects
+@inject IJSRuntime Js
+
+<MudDialog ContentClass="wslc-dialog-action wslc-dialog-tall">
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <div class="wslc-action-body">
+            @* The column does not scroll: the list of lines in its middle takes the height the
+               fields above and below it leave, and scrolls inside itself. *@
+            <div class="wslc-action-main">
+                <MudForm Class="wslc-form-grid flex-shrink-0">
+                    <div class="wslc-span2">
+                        @* A text area of one line: a plain one-line field drops a pasted file's line breaks
+                           before anything can read them. What it shows of a pasted file is its first line. *@
+                        <div class="wslc-field-pick has-note">
+                            <MudTextField @ref="_field" Margin="Margin.Dense" T="string" @bind-Value="_source" @bind-Value:after="TypedAsync" Label="Docker Compose file, or paste" Immediate="true"
+                                          HelperTextOnFocus="true" Variant="Variant.Filled" Lines="1" MaxLines="1" Sizing="InputSizing.Auto"
+                                          HelperText="Example: C:\apps\shop\compose.yaml, opened with the three dots or pasted; or paste the Compose file itself. Then press Check Compose file." />
+                            <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Open a Compose file" Disabled="_opening" OnClick="OpenAsync" />
+                        </div>
+                        @if (_error.Length > 0)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-error-text">@_error</MudText>
+                        }
+                    </div>
+                    @* What the file does not say and cannot be made up: asked for once there is a file,
+                       with what is already known put in. It takes the grid's first column; the
+                       second holds the verb that reads the file with it. *@
+                    @if (_source.Trim().Length > 0)
+                    {
+                        <div class="wslc-field-pick has-note">
+                            <MudTextField Margin="Margin.Dense" T="string" @bind-Value="_context" Label="Context" Immediate="true" HelperTextOnFocus="true"
+                                          Variant="Variant.Filled" HelperText="Example: C:\apps\shop. The folder the file's relative paths, its build and its env_file start from: the file's own when it was opened or its path pasted, or the one given here." />
+                            <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick the context folder" OnClick="PickContextAsync" />
+                        </div>
+                        <MudStack Row="true" AlignItems="AlignItems.Center">
+                            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FactCheck" OnClick="ConvertAsync">Check Compose file</MudButton>
+                        </MudStack>
+                    }
+                </MudForm>
+                @if (_plan is not null)
+                {
+                    <RowsHeader Label="@($"Conversion: {_plan.Name}")" />
+                    <MudPaper id="@_treeId" Outlined="true" Class="wslc-picker-list wslc-fill-scroll pa-2">
+                        <MudTreeView T="string" Dense="true" ReadOnly="true" Hover="true" ExpandOnClick="true" Class="wslc-tree-lines">
+                            @Branch(FileTree)
+                        </MudTreeView>
+                    </MudPaper>
+                    @foreach (var note in _plan.Notes)
+                    {
+                        <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">@note</MudAlert>
+                    }
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">@_summary</MudText>
+                    @* The file's parameters, its ${NAME}: a field of several values, as Env is in
+                       the launch form, whose button opens the list with a row a variable. *@
+                    @if (_variables.Count > 0)
+                    {
+                        <div class="wslc-form-grid flex-shrink-0">
+                            <div class="wslc-span2">
+                                <MultiValueField Values="_variables" Label="Variables" Split="ValueList.SplitPairs" Placeholder="NAME=value"
+                                                 HelperText="Example: TAG=1.4. The file's ${NAME}, edited as rows with ⋮; Check Compose file, Save and Run read the file with them."
+                                                 Hint="One variable per row: NAME=value. These are the ${NAME} the file asks for, each with the value it has now. One left with no value stays as the file and its .env have it." />
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+
+            @* The action rail, as the launch form draws it. From another device Load is the
+               browser's file input (the file chosen is not shown here: MudBlazor's own chip
+               would push the rail out of line), which the field's button opens as well. *@
+            <div class="wslc-action-rail wslc-files-rail" role="toolbar">
+                @if (_atAgent)
+                {
+                    <MudIconButton Color="Color.Success" Icon="@Icons.Material.Filled.UploadFile" Size="Size.Small" Variant="Variant.Filled"
+                                   title="Load a Compose file" Disabled="_opening" OnClick="OpenAsync" />
+                }
+                else
+                {
+                    <MudFileUpload @ref="_upload" T="IBrowserFile" FilesChanged="LoadFileAsync" Accept=".yaml,.yml">
+                        <CustomContent>
+                            <MudIconButton Color="Color.Success" Icon="@Icons.Material.Filled.UploadFile" Size="Size.Small" Variant="Variant.Filled"
+                                           title="Load a Compose file" OnClick="@context.OpenFilePickerAsync" />
+                        </CustomContent>
+                        <SelectedTemplate></SelectedTemplate>
+                    </MudFileUpload>
+                }
+                @* Save and Run, the launch form's two verbs with its colours: Save makes the
+                   project's containers and leaves them stopped, Run makes and starts them. On a
+                   project that exists both apply the file to it. *@
+                <MudIconButton Color="Color.Primary" Icon="@Icons.Material.Filled.Save" Size="Size.Small" Variant="Variant.Filled"
+                               title="Save: create the project's networks, volumes, images and containers, left stopped; on a project that exists, apply the file to it" Disabled="_busy" OnClick="@(() => SubmitAsync(start: false))" />
+                <MudIconButton Color="Color.Success" Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" Variant="Variant.Filled"
+                               title="Run: save the project and start its containers, in the order they depend on each other" Disabled="_busy" OnClick="@(() => SubmitAsync(start: true))" />
+                @* How a branch is drawn, a rail toggle as the logs' Wrap is: off, the file's line and
+                   what it becomes side by side; on, one under the other, which asks for less width. *@
+                <MudIconButton Icon="@Icons.Material.Filled.WrapText" Color="@RailToggle.Color(_twoLines)" Class="@RailToggle.Class(_twoLines)" Size="Size.Small" Variant="Variant.Filled"
+                               title="@(_twoLines ? "Two lines a branch: the file's line, and under it what it becomes. Click for one line" : "One line a branch: the file's line, and beside it what it becomes. Click for two lines")"
+                               OnClick="@(() => _twoLines = !_twoLines)" />
+            </div>
+
+            @* The veil while the agent works, as the launch form's: what is being done. *@
+            <MudOverlay Visible="_busy" Absolute="true" DarkBackground="true" AutoClose="false" LockScroll="false" ZIndex="10">
+                <MudPaper Class="pa-4" Elevation="4">
+                    <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                        <MudProgressCircular Color="Color.Info" Size="Size.Large" Indeterminate="true" />
+                        <MudText Typo="Typo.subtitle1" role="status">@_busyTitle</MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudOverlay>
+        </div>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    /// <summary>A Compose file is text of a few kilobytes: one larger than this is not one, and is not read into the page.</summary>
+    private const long LargestFile = 1024 * 1024;
+
+    private static readonly char[] PathSeparators = ['\\', '/'];
+
+    /// <summary>The agent is checking the file or taking the save: the veil is up for that moment, and it says which.</summary>
+    private bool _busy;
+
+    private string _busyTitle = "";
+
+    /// <summary>What the field shows: a Compose file's path on the agent's machine, or, of a Compose file pasted there, its first line and how long it is.</summary>
+    private string _source = "";
+
+    /// <summary>
+    /// The Compose file pasted or loaded as text, whole; empty while the field
+    /// holds a path. One line can show only one of its lines, and left with
+    /// the whole text it showed the last, an empty one: so the text is kept
+    /// here, and the field says its first line.
+    /// </summary>
+    private string _pasted = "";
+
+    /// <summary>Why the field's content could not be read: said under it, as the launch form does.</summary>
+    private string _error = "";
+
+    /// <summary>What was read and how its lines came out: the note at the list's foot.</summary>
+    private string _summary = "";
+
+    private ComposePlan? _plan;
+
+    /// <summary>Counts the conversions asked for: an answer that is no longer the last one's is dropped.</summary>
+    private int _asked;
+
+    /// <summary>The folder of the last file opened on the agent: where its Open dialog starts next time.</summary>
+    private string _folder = "";
+
+    /// <summary>The user sits at the agent's machine: the agent can put Windows' Open dialog in front of them.</summary>
+    private bool _atAgent;
+
+    /// <summary>The agent's Open dialog is on the desktop: one at a time.</summary>
+    private bool _opening;
+
+    private MudTextField<string>? _field;
+
+    /// <summary>The file's parameters, <c>NAME=value</c>: the ${NAME} it asks for, known once it has been checked, with the values to read it with.</summary>
+    private readonly List<string> _variables = [];
+
+    /// <summary>
+    /// The folder the file's relative paths, its build and its env_file start
+    /// from. The file does not say it: it comes from where the file was
+    /// opened, or the user gives it for a file that was pasted.
+    /// </summary>
+    private string _context = "";
+
+    /// <summary>The browser's file input, from another device: the field's button opens it as the rail's does.</summary>
+    private MudFileUpload<IBrowserFile>? _upload;
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    /// <summary>
+    /// A project that is already on the machine, opened from its row: the
+    /// window opens on the Compose file kept with it, read at once, and a
+    /// save from here applies the file to that project, under its name.
+    /// </summary>
+    [Parameter] public string Project { get; set; } = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _atAgent = (await Api.GetLoginStatusAsync()).Local;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            // Not known: the browser's own dialog works from anywhere.
+        }
+
+        if (Project.Length > 0)
+        {
+            await OpenStoredAsync();
+        }
+    }
+
+    /// <summary>
+    /// The project's own file into the window. One that came from a path is
+    /// read from there again, so what was changed in it since is what is
+    /// shown; one that was pasted is the text kept with the project.
+    /// </summary>
+    private async Task OpenStoredAsync()
+    {
+        try
+        {
+            var stored = await Api.GetStoredProjectAsync(Project);
+            if (stored.File.Length > 0)
+            {
+                (_source, _pasted, _folder) = (stored.File, "", FolderOf(stored.File));
+            }
+            else
+            {
+                (_source, _pasted) = (Shown(stored.Yaml, ""), stored.Yaml);
+            }
+
+            _context = stored.Folder;
+            _variables.AddRange(stored.Variables);
+            await ConvertAsync();
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _error = $"{ex.Message} Open or paste the project's Compose file to apply it.";
+        }
+    }
+
+    /// <summary>The system's Open dialog: the agent's own at its machine, whose file comes with its path; the browser's from anywhere else.</summary>
+    private async Task OpenAsync()
+    {
+        if (!_atAgent)
+        {
+            if (_upload is not null)
+            {
+                await _upload.OpenFilePickerAsync();
+            }
+
+            return;
+        }
+
+        _opening = true;
+        try
+        {
+            var opened = await Api.OpenComposeFileAsync(_folder);
+            if (opened.Path.Length == 0)
+            {
+                return;
+            }
+
+            _folder = FolderOf(opened.Path);
+            _source = opened.Path;
+            _pasted = "";
+            _context = _folder;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"Load failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _opening = false;
+        }
+    }
+
+    /// <summary>The file chosen in the browser's dialog: a file of this device, which comes as its text and goes into the field as a paste does.</summary>
+    private async Task LoadFileAsync(IBrowserFile? file)
+    {
+        if (file is null)
+        {
+            return;
+        }
+
+        try
+        {
+            using var reader = new StreamReader(file.OpenReadStream(LargestFile));
+            _pasted = await reader.ReadToEndAsync();
+            _source = Shown(_pasted, file.Name);
+        }
+        catch (IOException ex)
+        {
+            Snackbar.Add($"Load failed: {ex.Message}", Severity.Error);
+        }
+    }
+
+    /// <summary>
+    /// The field changed. Several lines are a Compose file pasted: it is kept
+    /// whole and the field is left with its first line. Anything else typed
+    /// or pasted over that is the user's new content, and the file kept is
+    /// let go.
+    /// </summary>
+    private async Task TypedAsync()
+    {
+        if (_source.Contains('\n'))
+        {
+            _pasted = _source;
+            _source = Shown(_pasted, "");
+
+            // The field has the cursor, and MudBlazor leaves a focused field's text alone
+            // when its value changes under it: it has to be told.
+            if (_field is not null)
+            {
+                await _field.SetTextAsync(_source);
+            }
+        }
+        else if (_pasted.Length > 0 && _source != Shown(_pasted, ""))
+        {
+            _pasted = "";
+        }
+
+        // A path says its own folder: the context is known without being asked.
+        if (_pasted.Length == 0 && IsPath(_source) && FolderOf(_source.Trim().Trim('"')) is { Length: > 0 } folder)
+        {
+            _context = folder;
+        }
+    }
+
+    /// <summary>The folder a file's path is in; empty for a name alone.</summary>
+    private static string FolderOf(string path)
+    {
+        var cut = path.LastIndexOfAny(PathSeparators);
+        return cut > 0 ? path[..cut] : "";
+    }
+
+    /// <summary>The context, chosen in the host's folder picker, as a bind mount's folder is in the launch form.</summary>
+    private async Task PickContextAsync()
+    {
+        if (await Pickers.HostFolderAsync(Dialogs, _context) is { } folder)
+        {
+            _context = folder;
+        }
+    }
+
+    /// <summary>What one line says of a whole file: where it came from, or its first line that says something, and how many lines it has.</summary>
+    private static string Shown(string text, string name)
+    {
+        var lines = text.Replace("\r\n", "\n").TrimEnd('\n').Split('\n');
+        var first = name.Length > 0 ? name : lines.FirstOrDefault(line => line.Trim().Length > 0)?.Trim() ?? "";
+        return $"{first} … ({lines.Length} lines{(name.Length > 0 ? "" : " pasted")})";
+    }
+
+    /// <summary>
+    /// Check Compose file, and nothing before it: what the field holds, read. A path is read by the agent, with the
+    /// folder its relative paths start from; a pasted file is read as its text.
+    /// The table under the field is the answer; a failure is said under the
+    /// field and leaves no table.
+    /// </summary>
+    private async Task ConvertAsync()
+    {
+        var asked = ++_asked;
+        if (Request() is not { } request)
+        {
+            (_plan, _error) = (null, "");
+            return;
+        }
+
+        try
+        {
+            var plan = await Api.PlanProjectAsync(request);
+            if (asked == _asked)
+            {
+                (_plan, _summary, _error) = (plan, Summary(plan, request.Path.Length > 0), "");
+                Parameters(plan);
+            }
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            if (asked == _asked)
+            {
+                (_plan, _error) = (null, ex.Message);
+            }
+        }
+    }
+
+    /// <summary>The file as the agent is asked for it: by its path when the field holds one, by its text when a file was pasted, with the context either way; null while the field is empty.</summary>
+    private ComposePlanRequest? Request()
+    {
+        var source = _pasted.Length > 0 ? _pasted : _source;
+        if (source.Trim().Length == 0)
+        {
+            return null;
+        }
+
+        // A variable left with no value is not sent: it stays as the file and its .env have it.
+        var context = _context.Trim();
+        var variables = _variables.Select(pair => pair.Trim()).Where(pair => pair.IndexOf('=') is > 0 and var equals && equals < pair.Length - 1).ToList();
+        // Opened from a project, the file is that project's whatever name it gives itself.
+        return _pasted.Length == 0 && IsPath(source)
+            ? new ComposePlanRequest(source.Trim().Trim('"'), Name: Project, Variables: variables, Folder: context)
+            : new ComposePlanRequest(Yaml: source, Name: Project, Variables: variables, Folder: context);
+    }
+
+    /// <summary>
+    /// The file's parameters into the Variables field: every ${NAME} it asks
+    /// for, with the value the user gave it here, or else the one it was read
+    /// with. A variable the file no longer names leaves the list.
+    /// </summary>
+    private void Parameters(ComposePlan plan)
+    {
+        var given = _variables
+            .Select(pair => pair.Trim())
+            .Where(pair => pair.IndexOf('=') > 0)
+            .ToDictionary(pair => pair[..pair.IndexOf('=')], pair => pair[(pair.IndexOf('=') + 1)..], StringComparer.Ordinal);
+        _variables.Clear();
+        _variables.AddRange(plan.Variables.Select(variable => $"{variable.Name}={(given.TryGetValue(variable.Name, out var own) && own.Length > 0 ? own : variable.Value)}"));
+    }
+
+    /// <summary>
+    /// Save or Run, as the launch form's: what it would do is asked of the
+    /// agent and put to the user first, a container to remove is asked about
+    /// apart and never assumed. Then the agent takes the save as a job of its
+    /// own and the window closes at once, as a Run's does: nobody waits in
+    /// front of it. The Containers table shows each container on its way, and
+    /// the title bar's activity line how the whole goes. Only what stops the
+    /// save from being begun (a file that cannot be read) comes back here.
+    /// </summary>
+    private async Task SubmitAsync(bool start)
+    {
+        if (Request() is not { } request)
+        {
+            _error = "Open or paste a Compose file first.";
+            return;
+        }
+
+        _error = "";
+        Busy("Checking the Compose file…");
+        try
+        {
+            var preview = await Api.PreviewProjectAsync(new ProjectUpRequest(request, start));
+            Idle();
+            if (!await DialogFlow.ConfirmAsync(Dialogs, start ? "Run project" : "Save project", Question(preview, start), start ? "Run" : "Save"))
+            {
+                return;
+            }
+
+            var remove = preview.Orphans.Count > 0 && await DialogFlow.ConfirmAsync(Dialogs, "Remove containers",
+                $"These containers belong to project {preview.Name} and their services are no longer in the file:\n\n{Listed(preview.Orphans)}\n\n"
+                + "Remove them? What they hold is lost unless it is in a volume. Cancel leaves them as they are and goes on with the rest.",
+                "Remove", destructive: true);
+
+            Busy($"{(start ? "Starting" : "Saving")} project {preview.Name}…");
+            await Projects.StartAsync(new ProjectUpRequest(request, start, remove), preview.Name);
+            Dialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            Idle();
+        }
+    }
+
+    /// <summary>What the save is about to do, in the words of the question: every container named, and what the file asks for that will not be given.</summary>
+    private static string Question(ProjectPreview preview, bool start)
+    {
+        var lines = new List<string>
+        {
+            preview.Exists
+                ? $"Apply the file to project {preview.Name}, which is already on this machine{(start ? ", and start it" : "")}?"
+                : $"{(start ? "Create and start" : "Create")} project {preview.Name}{(start ? "" : ", left stopped")}?",
+        };
+        void Add(string what, IReadOnlyList<string> names)
+        {
+            if (names.Count > 0)
+            {
+                lines.Add($"{what}:\n{Listed(names)}");
+            }
+        }
+
+        Add("Networks to create", preview.Networks);
+        Add("Volumes to create", preview.Volumes);
+        Add("Images to build", preview.Builds);
+        Add("Containers to create", preview.Create);
+        Add("Containers to recreate, since their service changed (rehearsed first; the old one is kept if the new one does not start)", preview.Recreate);
+        Add("Containers left as they are", preview.Keep);
+        Add("Asked for by the file and not given", preview.Unsupported);
+        return string.Join("\n\n", lines);
+    }
+
+    private static string Listed(IEnumerable<string> names) => string.Join("\n", names.Select(name => "• " + name));
+
+    // Both paint at once: a click paints by itself only at its first wait and at its end.
+    private void Busy(string title)
+    {
+        _busy = true;
+        _busyTitle = title;
+        StateHasChanged();
+    }
+
+    private void Idle()
+    {
+        _busy = false;
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// One line that names a file is a path; anything with line breaks, or
+    /// that names its services, is a Compose file itself.
+    /// </summary>
+    private static bool IsPath(string source)
+    {
+        var text = source.Trim().Trim('"');
+        if (text.Contains('\n') || text.Contains("services:", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return text.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase) || text.EndsWith(".yml", StringComparison.OrdinalIgnoreCase)
+            || text.IndexOfAny(PathSeparators) >= 0;
+    }
+
+    /// <summary>What was read and how its lines came out.</summary>
+    private static string Summary(ComposePlan plan, bool isPath)
+    {
+        int Count(string verdict) => plan.Lines.Count(line => line.Verdict == verdict);
+        var starting = plan.Services.Count(service => service.Enabled);
+        return $"{(isPath ? "Read as a file" : "Read as a pasted Compose file")}, project {plan.Name}: {starting} service(s) would start"
+            + (starting < plan.Services.Count ? $", {plan.Services.Count - starting} left out by profiles" : "")
+            + $". Lines: {Count(ComposeLine.Ok)} as written, {Count(ComposeLine.Converted)} converted, {Count(ComposeLine.Unsupported)} not supported"
+            + (Count(ComposeLine.Warning) > 0 ? $", {Count(ComposeLine.Warning)} to look at" : "")
+            + ". Nothing has been started.";
+    }
+
+    /// <summary>A line of the file that says something to convert: a comment or an empty line says nothing to the agent, and has no branch.</summary>
+    private static bool Says(ComposeLine line) => line.Text.Trim().Length > 0 && !line.Text.TrimStart().StartsWith('#');
+
+    /// <summary>A line of the file as a branch of its tree, with the lines written under it.</summary>
+    private sealed class Node(ComposeLine line)
+    {
+        public ComposeLine Line { get; } = line;
+
+        /// <summary>How far in the line is written: what is further in is under it.</summary>
+        public int Indent { get; } = line.Text.Length - line.Text.TrimStart().Length;
+
+        /// <summary>An item of a list (<c>- value</c>): it may stand as far in as the key the list is of, and is under it all the same.</summary>
+        public bool IsItem { get; } = line.Text.TrimStart().StartsWith('-');
+
+        public List<Node> Children { get; } = [];
+
+        public string Text => Line.Text.Trim();
+    }
+
+    private (ComposePlan? Plan, Node? Root) _tree;
+
+    /// <summary>The tree's box, for the wheel: a notch moves it a branch (<c>wslcAgent.stepScroll</c>).</summary>
+    private readonly string _treeId = "compose-tree-" + Guid.NewGuid().ToString("N");
+
+    /// <summary>The box on screen has been told so: it is told once, and again when a new box takes its place.</summary>
+    private bool _stepping;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_plan is null)
+        {
+            _stepping = false;
+        }
+        else if (!_stepping)
+        {
+            _stepping = true;
+            await Js.InvokeVoidAsync("wslcAgent.stepScroll", _treeId, ".mud-treeview-item-content");
+        }
+    }
+
+    /// <summary>The branches that stand open; every other is closed, and each keeps how it stands whatever is done to the one over it.</summary>
+    private readonly HashSet<Node> _open = [];
+
+    /// <summary>
+    /// The plan's file as a tree, built once a plan: the project, which no
+    /// line of the file is, and under it the file's lines. A new plan is a
+    /// new tree, and it opens as far as its list of services, networks and
+    /// volumes: each of those is closed, to be opened by whoever wants to see
+    /// inside it, since what is inside them is most of the file.
+    /// </summary>
+    private Node FileTree
+    {
+        get
+        {
+            if (!ReferenceEquals(_tree.Plan, _plan) || _tree.Root is null)
+            {
+                var project = new Node(new ComposeLine(0, $"Project {_plan?.Name}", "", ""));
+                project.Children.AddRange(Tree((_plan?.Lines ?? []).Where(Says)));
+                _tree = (_plan, project);
+                _open.Clear();
+                _open.Add(project);
+                _open.UnionWith(project.Children);
+            }
+
+            return _tree.Root!;
+        }
+    }
+
+    /// <summary>
+    /// The branch's own arrow: it opens and closes that branch alone. What
+    /// is under it stays as it stood, so a branch closed and opened again is
+    /// found as it was left, and one never opened shows the lines right
+    /// under it and no further.
+    /// </summary>
+    private void Toggle(Node node, bool open)
+    {
+        if (open)
+        {
+            _open.Add(node);
+        }
+        else
+        {
+            _open.Remove(node);
+        }
+    }
+
+    /// <summary>The branches under a branch, at any depth: the lines that have lines of their own.</summary>
+    private static IEnumerable<Node> BranchesUnder(Node node) =>
+        node.Children.Where(child => child.Children.Count > 0).SelectMany(child => BranchesUnder(child).Prepend(child));
+
+    /// <summary>The branch is open down to its last line.</summary>
+    private bool IsWhole(Node node) => _open.Contains(node) && BranchesUnder(node).All(_open.Contains);
+
+    /// <summary>The branch's + and −: + opens it with everything under it, down to the last line; −, which it is once all of that is open, closes all of it.</summary>
+    private void ToggleWhole(Node node)
+    {
+        if (IsWhole(node))
+        {
+            _open.Remove(node);
+            _open.ExceptWith(BranchesUnder(node));
+        }
+        else
+        {
+            _open.Add(node);
+            _open.UnionWith(BranchesUnder(node));
+        }
+    }
+
+    /// <summary>
+    /// The lines as the tree their indentation writes: a line is under the
+    /// last one written less far in than itself. A list's items written as
+    /// far in as their key (YAML allows both) are under that key too.
+    /// </summary>
+    private static List<Node> Tree(IEnumerable<ComposeLine> lines)
+    {
+        var roots = new List<Node>();
+        var open = new Stack<Node>();
+        foreach (var line in lines)
+        {
+            var node = new Node(line);
+            while (open.Count > 0 && (open.Peek().Indent > node.Indent || (open.Peek().Indent == node.Indent && !(node.IsItem && !open.Peek().IsItem))))
+            {
+                open.Pop();
+            }
+
+            (open.Count > 0 ? open.Peek().Children : roots).Add(node);
+            open.Push(node);
+        }
+
+        return roots;
+    }
+
+    /// <summary>A branch and those under it, open when it stands so.</summary>
+    private RenderFragment Branch(Node node)
+    {
+        // A line with nothing under it is given no children at all: MudBlazor draws the arrow of
+        // a branch for any item that has child content, even an empty one.
+        if (node.Children.Count == 0)
+        {
+            return @<MudTreeViewItem T="string" CanExpand="false" BodyContent="@Body(node)" />;
+        }
+
+        return @<MudTreeViewItem T="string" BodyContent="@Body(node)"
+                                 Expanded="@_open.Contains(node)" ExpandedChanged="@(open => Toggle(node, open))">
+            @foreach (var child in node.Children)
+            {
+                @Branch(child)
+            }
+        </MudTreeViewItem>;
+    }
+
+    /// <summary>The lines written under a branch, at any depth.</summary>
+    private static IEnumerable<ComposeLine> Under(Node node) => node.Children.SelectMany(child => Under(child).Prepend(child.Line));
+
+    /// <summary>The worst verdict of the lines under a branch; empty when it has none, or they say nothing.</summary>
+    private static string WorstUnder(Node node) => Under(node).Select(line => line.Verdict).MaxBy(Rank) ?? "";
+
+    /// <summary>The verdict a branch's icon shows: its own, or the worst of those under it when it says nothing itself.</summary>
+    private static string Worst(Node node) => node.Line.Verdict.Length > 0 ? node.Line.Verdict : WorstUnder(node);
+
+    /// <summary>
+    /// What is under a branch when it is worse than what the branch says of
+    /// itself: a service taken as written with lines under it that were
+    /// changed, or not given. The branch then shows both, its own verdict and
+    /// this one after it, so one that stands closed does not read as all
+    /// well. Empty when the branch's own icon already says it.
+    /// </summary>
+    private static string Inside(Node node) =>
+        node.Line.Verdict.Length > 0 && WorstUnder(node) is var under && Rank(under) > Math.Max(Rank(node.Line.Verdict), Rank(ComposeLine.NotNeeded)) ? under : "";
+
+    private static int Rank(string verdict) => verdict switch
+    {
+        ComposeLine.Unsupported => 5,
+        ComposeLine.Warning => 4,
+        ComposeLine.Converted => 3,
+        ComposeLine.NotNeeded => 2,
+        ComposeLine.Ok => 1,
+        _ => 0,
+    };
+
+    /// <summary>How many of the lines under a branch are not as written, by kind; empty when all are.</summary>
+    private static string Changed(Node node)
+    {
+        var under = Under(node).ToList();
+        string Count(string verdict, string words) => under.Count(line => line.Verdict == verdict) is > 0 and var count ? $"{count} {words}" : "";
+        return string.Join(" · ", new[] { Count(ComposeLine.Unsupported, "not supported"), Count(ComposeLine.Warning, "to look at"), Count(ComposeLine.Converted, "converted") }.Where(text => text.Length > 0));
+    }
+
+    /// <summary>What the agent makes of a line, in words: the verdict, then what it becomes or why.</summary>
+    private static string Outcome(ComposeLine line) => line.Verdict switch
+    {
+        ComposeLine.Ok => line.Note.Length > 0 ? $"OK: {line.Note}" : "OK",
+        ComposeLine.Converted => line.Note,
+        ComposeLine.Unsupported => line.Note.Length > 0 ? $"Not supported: {line.Note}" : "Not supported",
+        ComposeLine.NotNeeded => line.Note.Length > 0 ? $"Not needed: {line.Note}" : "Not needed",
+        _ => line.Note,
+    };
+
+    /// <summary>The theme's colour for a verdict: green taken as written, amber changed into something else (converted, or to look at), red not given.</summary>
+    private static Color Tone(string verdict) => verdict switch
+    {
+        ComposeLine.Ok => Color.Success,
+        ComposeLine.Converted => Color.Warning,
+        ComposeLine.Unsupported => Color.Error,
+        ComposeLine.Warning => Color.Warning,
+        _ => Color.Default,
+    };
+
+    /// <summary>The colour of what is said of a verdict (MudBlazor's own text classes).</summary>
+    private static string TextTone(string verdict) => Tone(verdict) switch
+    {
+        Color.Success => "mud-success-text",
+        Color.Warning => "mud-warning-text",
+        Color.Error => "mud-error-text",
+        _ => "mud-text-secondary",
+    };
+
+    /// <summary>A branch is drawn in two lines: the file's, and under it what it becomes. Off, the two are side by side.</summary>
+    private bool _twoLines = true;
+
+    /// <summary>
+    /// A branch, after the arrow the tree gives it: its + (or −), which opens
+    /// or closes it whole; its verdict's icon; then the file's line, and
+    /// under it (or beside it, in one line) what the agent makes of it, in
+    /// its verdict's colour. When what is under the branch is worse than what
+    /// it says of itself, a second icon follows the branch's own, and what is
+    /// said goes on with how many lines under it are not as written, in that
+    /// colour. A branch that says nothing has the one line. A line with
+    /// nothing under it keeps the + its place, so the icons of a list stand
+    /// one under another. A press on the + is not the row's, which the tree
+    /// would take as a press on its arrow.
+    /// </summary>
+    private RenderFragment<MudTreeViewItem<string>> Body(Node node) => item =>
+        @<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mud-treeview-item-label">
+            <span @onclick:stopPropagation="true">
+                <MudIconButton Icon="@(IsWhole(node) ? Icons.Material.Filled.Remove : Icons.Material.Filled.Add)" Size="Size.Small"
+                               Class="@(node.Children.Count == 0 ? "invisible" : null)" Disabled="@(node.Children.Count == 0)"
+                               title="@(IsWhole(node) ? "Close this branch and everything under it" : "Open this branch and everything under it")"
+                               OnClick="@(() => ToggleWhole(node))" />
+            </span>
+            @if (Worst(node) is { Length: > 0 } verdict)
+            {
+                <MudIcon Icon="@Icon(verdict)" Color="@Tone(verdict)" Size="Size.Small" />
+            }
+            @if (Inside(node) is { Length: > 0 } inside)
+            {
+                <MudText Typo="Typo.body1" Class="mud-text-secondary">–</MudText>
+                <MudIcon Icon="@Icon(inside)" Color="@Tone(inside)" Size="Size.Small" title="@Changed(node)" />
+            }
+            <MudStack Row="@(!_twoLines)" AlignItems="@(_twoLines ? AlignItems.Start : AlignItems.Center)" Spacing="@(_twoLines ? 0 : 1)">
+                <MudText Typo="Typo.body1" Class="wslc-mono">@node.Text</MudText>
+                @if (node.Line.Verdict.Length > 0)
+                {
+                    <MudText Typo="Typo.body1">
+                        <span class="@TextTone(node.Line.Verdict)">@Outcome(node.Line)</span>
+                        @if (Inside(node) is { Length: > 0 } worse)
+                        {
+                            <span class="mud-text-secondary"> – </span>
+                            <span class="@TextTone(worse)">@Changed(node)</span>
+                        }
+                    </MudText>
+                }
+                else if (Changed(node) is { Length: > 0 } changed)
+                {
+                    <MudText Typo="Typo.body1" Class="@TextTone(WorstUnder(node))">@changed</MudText>
+                }
+            </MudStack>
+        </MudStack>;
+
+    /// <summary>The verdict as the field's icon, in its colour.</summary>
+    private static string Icon(string verdict) => verdict switch
+    {
+        ComposeLine.Ok => Icons.Material.Filled.CheckCircle,
+        ComposeLine.Converted => Icons.Material.Filled.SwapHoriz,
+        ComposeLine.Unsupported => Icons.Material.Filled.Cancel,
+        ComposeLine.Warning => Icons.Material.Filled.Warning,
+        _ => Icons.Material.Filled.RemoveCircleOutline,
+    };
+}

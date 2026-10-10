@@ -2431,6 +2431,35 @@
     min-height: 0;
 }
 
+/* The same in a window that takes the screen's whole height (the Compose
+   file's tree): its content asks for the screen's height and is given what
+   MudBlazor's dialog has left, its own margin and the title taken off, since
+   a dialog's content gives way and the dialog itself never passes its
+   maximum. */
+.mud-dialog .wslc-dialog-action.wslc-dialog-tall {
+    height: 100vh;
+}
+
+/* A tree whose branches are a line each and never more (the Compose file's):
+   what a branch says does not wrap, the tree is as wide as its longest line,
+   and a line longer than the box scrolls the box sideways instead of being
+   cut or folded. */
+.wslc-tree-lines.mud-treeview {
+    width: max-content;
+    min-width: 100%;
+}
+
+.wslc-tree-lines .mud-treeview-item-content {
+    white-space: nowrap;
+}
+
+/* What a branch says stands right after its line, not at the far end of a
+   row as wide as the tree's longest line: MudBlazor lets the line's text
+   take the row's spare width, which pushed what it says away from it. */
+.wslc-tree-lines .mud-treeview-item-label {
+    flex-grow: 0;
+}
+
 /* Every dialog reads as a frame and what it holds, as Logs and Exec always did
    (the owner's request of 1 October 2026): the title, the edges round the
    content and the rail keep the dialog's surface, and the content sits on the
@@ -3951,6 +3980,92 @@
     grid-template-columns: repeat(auto-fill, minmax(min(21rem, 100%), 1fr));
     gap: 8px;
     align-items: start;
+}
+
+/* A project's cards stand in the cards area among the others, each in its own
+   cell, and a line runs round them as one: over and under every one of them,
+   down the left of the first (the project's own card) and down the right of
+   the last. Each cell reaches half the grid's 8px gap out on every side, so
+   the line is not broken between two cards, and gives that 4px back as the
+   2px line and 2px of air, so its card stands where any other does and is as
+   wide. The cells are as tall as their row, so the line under them is one.
+   The line says how the project is: the success colour with every container
+   running, the primary with none, and stripes of the two with some. */
+.wslc-cards-grid > .wslc-card-bracket {
+    --wslc-bracket: var(--mud-palette-primary);
+    align-self: stretch;
+    margin: -4px;
+    padding: 2px;
+    border-block: 2px solid var(--wslc-bracket);
+    border-inline: 2px solid transparent;
+}
+
+.wslc-cards-grid > .wslc-card-bracket.wslc-bracket-running {
+    --wslc-bracket: var(--mud-palette-success);
+}
+
+.wslc-cards-grid > .wslc-card-bracket.wslc-bracket-start {
+    border-inline-start-color: var(--wslc-bracket);
+}
+
+.wslc-cards-grid > .wslc-card-bracket.wslc-bracket-end {
+    border-inline-end-color: var(--wslc-bracket);
+}
+
+/* A project's work in the two colours of its line, while a verb goes through
+   its containers: the ring's stroke painted from the page's gradient (the
+   success colour into the primary), the row's bar from the same two. The
+   gradient's own element takes no room. */
+.wslc-progress-mix-defs {
+    position: absolute;
+    width: 0;
+    height: 0;
+}
+
+.wslc-progress-ring.wslc-progress-mixed .mud-progress-circular-circle {
+    stroke: url(#wslc-progress-mix);
+}
+
+.wslc-progress-cell.wslc-progress-mixed .mud-progress-linear .mud-progress-linear-bar {
+    background-image: linear-gradient(90deg, var(--mud-palette-success), var(--mud-palette-primary));
+}
+
+/* A card of a project that is between two states: the project's own while
+   something is being done to it, and a container's while a verb going through
+   the project has not got to it yet. Its header and its actions row, which
+   carry the card's tone, go from the stopped tone (the rows' own) to the
+   running one (CardTone's green, the same mix) and back for as long as that
+   lasts; then they take the tone of how it is left. An animation paints over
+   the tone the card carries inline. A turn takes what a turn of MudBlazor's
+   ring takes, 1.4s, so the two move as one. */
+@keyframes wslc-card-working {
+    0%, 100% { background-color: var(--wslc-header-tone); }
+    50% { background-color: color-mix(in srgb, var(--mud-palette-success) 25%, var(--mud-palette-surface)); }
+}
+
+.wslc-cards-grid > .wslc-card-bracket.wslc-bracket-waiting > .wslc-card > .mud-card-header,
+.wslc-cards-grid > .wslc-card-bracket.wslc-bracket-waiting > .wslc-card > .mud-card-actions {
+    animation: wslc-card-working 1.4s ease-in-out infinite;
+}
+
+/* Stripes: the border is painted from a gradient, which takes every side that
+   has a width, so the sides a cell does not close are given none. The widths
+   are top, right, bottom, left. */
+.wslc-cards-grid > .wslc-card-bracket.wslc-bracket-partial {
+    border-image: repeating-linear-gradient(135deg, var(--mud-palette-success) 0 6px, var(--mud-palette-primary) 6px 12px) 2;
+    border-image-width: 2px 0;
+}
+
+.wslc-cards-grid > .wslc-card-bracket.wslc-bracket-partial.wslc-bracket-start {
+    border-image-width: 2px 0 2px 2px;
+}
+
+.wslc-cards-grid > .wslc-card-bracket.wslc-bracket-partial.wslc-bracket-end {
+    border-image-width: 2px 2px 2px 0;
+}
+
+.wslc-cards-grid > .wslc-card-bracket.wslc-bracket-partial.wslc-bracket-start.wslc-bracket-end {
+    border-image-width: 2px;
 }
 
 /* A card's action row in two groups: the verbs of the row at the left, and at

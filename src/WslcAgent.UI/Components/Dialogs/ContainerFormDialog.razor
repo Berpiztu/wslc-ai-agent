@@ -25,7 +25,7 @@
                     <div class="wslc-title-ring-slot">
                         @if (_form?.Pull is { } pull)
                         {
-                            <ProgressRing Pct="pull.Pct" Status="@ContainerForm.PullStatus(pull)" Failed="@(pull.State != "running")"
+                            <ProgressRing Pct="pull.Pct" Status="@ContainerForm.PullStatus(pull)" Failed="@(pull.State is "error" or "cancelled")" Done="@(pull.State == "success")"
                                           OnLog="@(() => _form.ShowPullLogAsync())" OnCancel="@(() => _form.CancelPullAsync())" OnDismiss="@(() => _form.DismissPullAsync())" />
                         }
                     </div>

@@ -195,7 +195,7 @@ says no, or changes the target, do nothing and let the token die.
   Report the image, name, ports, volumes, networks and the `unsupported` list —
   flags this runtime has no equivalent for (`--add-host` with an address,
   `--gpus` in any form but `all` — `--gpus all` is read as `gpus` —,
-  `--hostname`, `--dns`, `--label`, `--privileged`, `--rm`, `-it`) are not a
+  `--privileged`, `--cap-add`, `--rm`, `-it`) are not a
   failure, they are a thing the user has to be told once. The `notNeeded` list
   is what WSLC gives already: `--add-host=host.docker.internal:host-gateway`
   is one, since every container reaches the Windows host as
@@ -204,6 +204,20 @@ says no, or changes the target, do nothing and let the token die.
   `run_command_line` with the same line: a `create` line prepares the container
   and leaves it stopped. Never rewrite the flags by hand, and never run `docker`
   or `wslc` in a shell.
+- **A Compose file** (`compose.yaml`, `docker-compose.yml`): `parse_compose`
+  with its `path` on the agent's machine (the file or its folder), or its
+  text as `yaml` when it is not there, with `folder` when the user says
+  where its relative paths start from. Nothing is run. A folder may hold
+  several Compose files: the one with a standard name is read and the rest
+  are named in `warnings`; tell the user they are there, and read another
+  by its own path when asked. Report the services
+  in the order given, which is the order they would start in, and tell the
+  user the three lists: `unsupported` (what the file asks for and WSLC cannot
+  give; `(not yet)` is what only the agent does not send yet), `notNeeded`
+  (what WSLC gives already) and `warnings`. Bringing a whole project up is
+  not available yet: say so, and offer the plan as the answer to "would
+  this run here, and what would be lost?". Do not bring the services up one
+  by one with `run_container` unless the user asks for that.
 - **Keep it running across reboots**: `set_restart_policy` with
   `unless-stopped` or `always`. This is agent-managed, not a runtime flag;
   `no` turns it off.

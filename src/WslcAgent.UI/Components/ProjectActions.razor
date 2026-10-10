@@ -1,0 +1,106 @@
+@* A project's actions, in its row and in its card: [start or stop] [restart]
+   [Compose file] [down], the container's own row of verbs for the whole
+   project. Start, stop and restart go through its containers in the order its
+   services start in, one at a time (ProjectVerbs), so the container being
+   started or stopped shows it as it does for its own verb, and the
+   project's row its progress. The Compose file is the project's own: the Compose window
+   on the file it was brought up from, to read it, and to apply it again once
+   it has changed. Down removes the project, after asking, and its volumes
+   only after asking about them apart. *@
+@inherits EntityActionsBase
+@inject ProjectVerbs Verbs
+
+<MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center">
+    @if (Running)
+    {
+        <MudIconButton Icon="@Icons.Material.Filled.Stop" Size="Size.Small" Color="Color.Primary" title="Stop the project's containers"
+                       Disabled="Locked" OnClick="@(() => VerbAsync("stop"))" />
+    }
+    else
+    {
+        <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" Color="Color.Success" title="Start the project's containers"
+                       Disabled="Locked" OnClick="@(() => VerbAsync("start"))" />
+    }
+    <MudIconButton Icon="@Icons.Material.Filled.RestartAlt" Size="Size.Small" Color="Color.Warning" title="Restart the project's containers"
+                   Disabled="Locked" OnClick="@(() => VerbAsync("restart"))" />
+    <MudIconButton Icon="@Icons.Material.Filled.EditNote" Size="Size.Small" title="Compose file: view it, and apply it again" Disabled="Locked" OnClick="FileAsync" />
+    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="Down: remove the project"
+                   Disabled="Locked" OnClick="DownAsync" />
+</MudStack>
+
+@code {
+    /// <summary>The project's name.</summary>
+    [Parameter, EditorRequired] public string Project { get; set; } = "";
+
+    /// <summary>The row's key in its list, the one the page's <c>KeyOf</c> returns.</summary>
+    [Parameter, EditorRequired] public string RowKey { get; set; } = "";
+
+    /// <summary>The project's containers, by name: what a down says it removes.</summary>
+    [Parameter] public IReadOnlyList<string> Containers { get; set; } = [];
+
+    /// <summary>One of its containers runs: the first verb is Stop.</summary>
+    [Parameter] public bool Running { get; set; }
+
+    /// <summary>The project is being saved: every verb shows, none can be pressed.</summary>
+    [Parameter] public bool Saving { get; set; }
+
+    protected override string Key => RowKey;
+
+    /// <summary>Greyed while a verb goes through the project's containers, as while it is being saved.</summary>
+    private bool Locked => Busy || Saving || Verbs.Of(Project) is not null;
+
+    /// <summary>Start, stop or restart, a container at a time (<see cref="ProjectVerbs"/>); the list is read again at its end.</summary>
+    private async Task VerbAsync(string verb)
+    {
+        await Verbs.RunAsync(Project, verb);
+        await Changed.InvokeAsync();
+    }
+
+    /// <summary>The Compose window on the file the project was brought up from; a save from it applies the file to the project.</summary>
+    private async Task FileAsync()
+    {
+        if (await DialogFlow.ShowAsync<Dialogs.ComposeDialog>(Dialogs, $"Compose — {Project}",
+                new DialogParameters<Dialogs.ComposeDialog> { { d => d.Project, Project } }, large: true))
+        {
+            await Changed.InvokeAsync();
+        }
+    }
+
+    /// <summary>
+    /// Down: the project's containers and networks, after asking; then its
+    /// volumes, asked about apart and by name, since what they hold is lost
+    /// with them. Cancel there keeps the volumes and goes on with the rest.
+    /// </summary>
+    private async Task DownAsync()
+    {
+        if (!await DialogFlow.ConfirmAsync(Dialogs, "Remove project",
+                $"Remove project {Project}? Its containers and its networks are removed:\n\n{Listed(Containers)}\n\n"
+                + "What the containers hold is lost unless it is in a volume. The Compose file itself is not touched.", "Remove", destructive: true))
+        {
+            return;
+        }
+
+        var volumes = await VolumesAsync();
+        var withVolumes = volumes.Count > 0 && await DialogFlow.ConfirmAsync(Dialogs, "Remove volumes",
+            $"Project {Project} has these volumes:\n\n{Listed(volumes)}\n\nRemove them too? What they hold is lost. Cancel keeps them and removes the rest.",
+            "Remove volumes", destructive: true);
+        await RunAsync($"project {Project}", "remove", ct => Api.DownProjectAsync(Project, withVolumes, ct));
+    }
+
+    /// <summary>The project's own volumes, from the Compose file kept with it; none when no file is kept or it no longer reads, and then none is removed.</summary>
+    private async Task<IReadOnlyList<string>> VolumesAsync()
+    {
+        try
+        {
+            var stored = await Api.GetStoredProjectAsync(Project);
+            var plan = await Api.PlanProjectAsync(new ComposePlanRequest(Yaml: stored.Yaml, Name: stored.Name, Variables: stored.Variables, Profiles: stored.Profiles, Folder: stored.Folder));
+            return plan.Volumes.Where(volume => !volume.External).Select(volume => volume.Name).ToList();
+        }
+        catch (Exception ex) when (ex is ApiClient.AgentApiException or HttpRequestException)
+        {
+            return [];
+        }
+    }
+
+    private static string Listed(IEnumerable<string> names) => string.Join("\n", names.Select(name => "• " + name));
+}

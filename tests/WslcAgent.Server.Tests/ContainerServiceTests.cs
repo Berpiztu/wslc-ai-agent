@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using WslcAgent.Server.Containers;
 using WslcAgent.Server.Networks;
+using WslcAgent.Server.Projects;
 using WslcAgent.Server.Wslc;
 
 namespace WslcAgent.Server.Tests;
@@ -22,7 +23,8 @@ public sealed class ContainerServiceTests
         var publications = new Publishing.PublicationStore(options, NullLogger<Publishing.PublicationStore>.Instance);
         var restarter = new ContainerRestarter(runner, policies, NullLogger<ContainerRestarter>.Instance);
         var publishing = new Publishing.PublishingService(publications, new Publishing.PublishingSettingsStore(options), networks, new FakePublishedPlugin(), NullLogger<Publishing.PublishingService>.Instance);
-        return new ContainerService(runner, networks, policies, publications, publishing, restarter, registry, new ContainerRecreations(), new ImageUpdatesUnderWay(), new WslcEvents(), NullLogger<ContainerService>.Instance);
+        return new ContainerService(runner, networks, policies, publications, publishing, restarter, registry, new ContainerRecreations(), new ImageUpdatesUnderWay(), new WslcEvents(),
+            new ProjectDependencies(new ProjectStore(options), new ProjectService(), runner), NullLogger<ContainerService>.Instance);
     }
 
     [Fact]

@@ -720,6 +720,45 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<ImageInspect> GetImageInspectAsync(string reference, CancellationToken cancellationToken = default) =>
         GetAsync<ImageInspect>($"api/v1/images/inspect?reference={Escape(reference)}", cancellationToken);
 
+    /// <summary>A Compose file read into what the agent would do with it: nothing is run.</summary>
+    public Task<ComposePlan> PlanProjectAsync(ComposePlanRequest request, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<ComposePlanRequest, ComposePlan>("api/v1/projects/plan", request, cancellationToken);
+
+    /// <summary>What saving a Compose file as a project would do, with nothing done.</summary>
+    public Task<ProjectPreview> PreviewProjectAsync(ProjectUpRequest request, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<ProjectUpRequest, ProjectPreview>("api/v1/projects/preview", request, cancellationToken);
+
+    /// <summary>Saves a Compose file as a project, as a job of the agent: the answer is the job, to follow with <see cref="GetProjectJobAsync"/>.</summary>
+    public Task<ProjectJob> StartProjectAsync(ProjectUpRequest request, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<ProjectUpRequest, ProjectJob>("api/v1/projects/up", request, cancellationToken);
+
+    public Task<ProjectJob> GetProjectJobAsync(string id, CancellationToken cancellationToken = default) =>
+        GetAsync<ProjectJob>($"api/v1/projects/jobs/{Escape(id)}", cancellationToken);
+
+    /// <summary>The Compose file kept with a project, as it was last brought up; 404 when none is kept.</summary>
+    public Task<StoredProject> GetStoredProjectAsync(string name, CancellationToken cancellationToken = default) =>
+        GetAsync<StoredProject>($"api/v1/projects/{Escape(name)}", cancellationToken);
+
+    /// <summary>A project's containers in the order its services start in, each with the services it depends on.</summary>
+    public Task<IReadOnlyList<ProjectMember>> GetProjectContainersAsync(string name, CancellationToken cancellationToken = default) =>
+        GetAsync<IReadOnlyList<ProjectMember>>($"api/v1/projects/{Escape(name)}/containers", cancellationToken);
+
+    /// <summary><c>start</c>, <c>stop</c> or <c>restart</c> on every container of a project, in the order its services start in.</summary>
+    public Task<ProjectResult> ProjectVerbAsync(string name, string verb, CancellationToken cancellationToken = default) =>
+        ReadAsync<ProjectResult>(HttpMethod.Post, $"api/v1/projects/{Escape(name)}/{Escape(verb)}", cancellationToken);
+
+    /// <summary>Removes a project's containers and networks, and its volumes only when <paramref name="volumes"/> says so.</summary>
+    public Task<ProjectResult> DownProjectAsync(string name, bool volumes, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<ProjectDownRequest, ProjectResult>($"api/v1/projects/{Escape(name)}/down", new ProjectDownRequest(volumes), cancellationToken);
+
+    /// <summary>
+    /// Windows' Open dialog, put on the agent's desktop: for a caller at the
+    /// agent's machine, and refused to any other. Answers once the user has
+    /// chosen a file or cancelled, with no path in that case.
+    /// </summary>
+    public Task<ComposeFileOpened> OpenComposeFileAsync(string folder = "", CancellationToken cancellationToken = default) =>
+        PostJsonAsync<OpenComposeFileRequest, ComposeFileOpened>("api/v1/projects/open", new OpenComposeFileRequest(folder), cancellationToken);
+
     /// <summary>What a local image sets for every container made from it; <c>Local</c> false when it has to be pulled first.</summary>
     public Task<ImageDefaults> GetImageDefaultsAsync(string reference, CancellationToken cancellationToken = default) =>
         GetAsync<ImageDefaults>($"api/v1/images/defaults?reference={Escape(reference)}", cancellationToken);

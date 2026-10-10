@@ -1,11 +1,13 @@
 @* The Containers page's verbs in the round button: Run and Create, the one
-   launch form in either mode. Drawn by the page, and by the dashboard while a
+   launch form in either mode, and Compose, the window a Compose file is
+   pasted or loaded into. Drawn by the page, and by the dashboard while a
    container's card is selected. *@
 @inherits PageVerbsBase
 @using WslcAgent.UI.Components.Launch
 
 <VerbFab StartIcon="@Icons.Material.Filled.PlayArrow" Label="Run" Color="Color.Success" OnClick="@(() => LaunchAsync(LaunchMode.Run))" Title="Run an image" />
 <VerbFab StartIcon="@Icons.Material.Filled.Add" Label="Create" Color="Color.Primary" OnClick="@(() => LaunchAsync(LaunchMode.Create))" Title="Create a container" />
+<VerbFab StartIcon="@Icons.Material.Filled.AccountTree" Label="Compose" OnClick="@(() => OpenAsync<ComposeDialog>("Compose", large: true))" Title="Paste or load a Compose file" />
 
 @code {
     private Task LaunchAsync(LaunchMode mode) =>

@@ -82,6 +82,52 @@ public sealed record ContainerLaunchRequest
     /// <summary>Emit <c>--no-healthcheck</c> and drop every health field.</summary>
     public bool NoHealthcheck { get; init; }
 
+    /// <summary>Labels, <c>key=value</c>, one per <c>--label</c>.</summary>
+    public IReadOnlyList<string> Labels { get; init; } = [];
+
+    /// <summary>
+    /// The container's host name; empty leaves the runtime's, its id. Inspect
+    /// does not show it, nor the domain name, the DNS, the tmpfs mounts, the
+    /// shm size and the stop signal below: the agent keeps them in a label of
+    /// the container, so details show them and a recreate keeps them.
+    /// </summary>
+    public string Hostname { get; init; } = "";
+
+    public string Domainname { get; init; } = "";
+
+    /// <summary>DNS servers, one per <c>--dns</c>.</summary>
+    public IReadOnlyList<string> Dns { get; init; } = [];
+
+    /// <summary>DNS search domains, one per <c>--dns-search</c>.</summary>
+    public IReadOnlyList<string> DnsSearch { get; init; } = [];
+
+    /// <summary>Resolver options, one per <c>--dns-option</c>.</summary>
+    public IReadOnlyList<string> DnsOptions { get; init; } = [];
+
+    /// <summary>tmpfs mounts, <c>/path[:options]</c>, one per <c>--tmpfs</c>.</summary>
+    public IReadOnlyList<string> Tmpfs { get; init; } = [];
+
+    /// <summary>Size of <c>/dev/shm</c> as the CLI takes it, e.g. <c>64m</c>.</summary>
+    public string ShmSize { get; init; } = "";
+
+    /// <summary>Limits, <c>name=soft[:hard]</c>, one per <c>--ulimit</c>.</summary>
+    public IReadOnlyList<string> Ulimits { get; init; } = [];
+
+    /// <summary>The signal a stop sends, e.g. <c>SIGINT</c>; empty leaves the image's.</summary>
+    public string StopSignal { get; init; } = "";
+
+    /// <summary>
+    /// The project and the service the container belongs to, <c>project/service</c>,
+    /// when a Compose file brought it up; empty for a container on its own.
+    /// The agent's own, not a CLI flag: it travels in labels of the container,
+    /// and the forms carry it through unseen, so editing a project's container
+    /// does not take it out of its project.
+    /// </summary>
+    public string Project { get; init; } = "";
+
+    /// <summary>The service as its file had it when the container was made, in a few characters; set by the project's save alone, so a container edited by hand no longer matches its file and the next save puts it back.</summary>
+    public string ProjectConfig { get; init; } = "";
+
     /// <summary>Start the container (run detached) rather than only create it.</summary>
     public bool Start { get; init; } = true;
 }
@@ -161,6 +207,8 @@ public sealed record CreateHostFolderRequest(string Parent, string Name);
 /// <param name="ContainerId">The container created, once done.</param>
 /// <param name="Notes">What the run had to adjust (a static ip dropped), once done.</param>
 /// <param name="Fields">Once failed: the form's fields the failure is about (<see cref="LaunchFields"/>), each with the CLI's reason.</param>
+/// <param name="Project">Not a container's run but a project being saved from its Compose file: the id of its job (<c>GET /api/v1/projects/jobs/{id}</c>), whose log is the row's. Empty for a run.</param>
+/// <param name="Group">The name of the project the row is of: the project's own save, and each run it starts. Empty for a container on its own.</param>
 public sealed record ContainerLaunch(
     string Id,
     string Image,
@@ -171,11 +219,19 @@ public sealed record ContainerLaunch(
     string Error,
     string ContainerId,
     IReadOnlyList<string> Notes,
-    IReadOnlyDictionary<string, string>? Fields = null)
+    IReadOnlyDictionary<string, string>? Fields = null,
+    string Project = "",
+    string Group = "")
 {
     private static readonly IReadOnlyDictionary<string, string> NoFields = new Dictionary<string, string>();
 
     public bool Active => Phase is "pull" or "run";
+
+    /// <summary>It ended well: listed a moment more, in the success colour, until the row of what it made takes its place.</summary>
+    public bool Done => Phase == "done";
+
+    /// <summary>The row is a project's save, not a run: it has a log to open and no settings to edit.</summary>
+    public bool IsProject => !string.IsNullOrEmpty(Project);
 
     /// <summary><see cref="Fields"/>, never null: an older agent sends none.</summary>
     public IReadOnlyDictionary<string, string> FieldErrors => Fields ?? NoFields;

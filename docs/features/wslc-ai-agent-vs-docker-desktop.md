@@ -16,7 +16,7 @@ either.
 
 | # | Feature | WSLC AI Agent | Docker Desktop |
 |---|---|---|---|
-| 1 | **An MCP server that manages the machine** | Built in at `/api/v1/mcp`, with **54 tools**. Claude, Hermes, OpenClaw or any MCP client drives it from wherever it runs, with an API token. A skill installs with one click, also over SSH. Destructive tools are **hidden** until switched on, then each one asks for approval | Gordon, Docker's own agent, inside the app on the machine. The MCP Toolkit runs *other* MCP servers |
+| 1 | **An MCP server that manages the machine** | Built in at `/api/v1/mcp`, with **55 tools**. Claude, Hermes, OpenClaw or any MCP client drives it from wherever it runs, with an API token. A skill installs with one click, also over SSH. Destructive tools are **hidden** until switched on, then each one asks for approval | Gordon, Docker's own agent, inside the app on the machine. The MCP Toolkit runs *other* MCP servers |
 | 2 | **A dashboard you design, with a full designer** | Drag and resize live objects on a grid: readings, dials, charts, logs, events, and cards for containers, images, volumes and networks. Group them into cards (Ctrl+G), undo (Ctrl+Z), and use marquee selection. A properties window sets size, type, colours, elevation, alignment, margins and the style of **every part** of an object. There are two pages, each with a landscape and a portrait layout, and five ways to fit any screen. Alarms turn an object red. It is kept on the server for every client, and drafts survive a power cut | A fixed screen |
 | 3 | **Notifications and alerts you configure: CPU and memory of the host and of every container** | Watched by the agent itself, with no screen open, and set in Settings › Notifications, the same for every client (or by your AI agent, over MCP). **Readings**, each on or off with its percentage and the minutes it must last (0: at once): host disk, host memory, host CPU, and the memory and CPU of **each container**. **Events**: a container that stopped on its own, one its restart policy could not start, a failed health check (wslc 3.0.2 on), the session gone down, a pull, build, transfer or backup failed or finished, the agent's update announced (with a **Cancel** button on the notification), installed or failed, and a reading back under its threshold or a container healthy again. **Delivered** as Windows notifications (tray and Windows app) and as **Android push** through Firebase, so the phone gets them without being connected to the agent; two Android channels, Alerts and Info, to silence apart; one phone for several agents, each push saying which; a tap opens the page; the last 200 kept, and a client that was away catches up. **Alarms on the dashboard** besides: a threshold on every measure, past it the object turns red and blinks, and chosen alarms show as rings in a status bar on every screen | —
 | 4 | **Publish a container on the internet through a reverse proxy, with a login** | One switch in the container's form publishes a port on a public HTTPS name, through the wslc-published proxy container (nginx plus a login). **Every name has a login**: an app with its own login is let through, and any other gets the proxy's, with users per name | — |
@@ -67,7 +67,7 @@ desktop.
 
 | | WSLC AI Agent | Docker Desktop |
 |---|---|---|
-| Built-in MCP server that manages the containers | **Yes**: `/api/v1/mcp`, **54 tools** (containers, images, volumes, networks, sessions, publishing, notifications, logs, system) | No built-in one. The MCP Toolkit runs *other* MCP servers (a catalog of 300+) for your agent. Docker-management MCP servers exist in that catalog and in the community |
+| Built-in MCP server that manages the containers | **Yes**: `/api/v1/mcp`, **55 tools** (containers, images, volumes, networks, sessions, publishing, notifications, logs, system) | No built-in one. The MCP Toolkit runs *other* MCP servers (a catalog of 300+) for your agent. Docker-management MCP servers exist in that catalog and in the community |
 | Bring your own AI agent | **Yes**: Claude, Hermes, OpenClaw or any MCP client | Gordon is Docker's own agent. MCP Toolkit servers connect to Claude, Cursor and others |
 | Agent reaches the machine remotely | **Yes**: over MCP with an API token, from another machine or across the internet | Gordon runs on the machine (Desktop tab or `docker ai`) |
 | A skill that teaches the agent the product | **Yes**: served by the agent and installed with one click into Claude Code, Hermes Agent or OpenClaw, also on another machine over SSH | — |
@@ -233,7 +233,7 @@ back after a reboot, as they would on Docker.
 
 ### And then there is the rest
 
-- **Your AI agent, in detail: an MCP server with 54 tools**, built in. Claude, Hermes, OpenClaw or any
+- **Your AI agent, in detail: an MCP server with 55 tools**, built in. Claude, Hermes, OpenClaw or any
   MCP client drives your containers from wherever it runs, with an API token.
   Ask it to "Run this as is: docker run -d --name web -p 8080:80
   nginx:latest", or to "Publish port 80 of the web container on
@@ -257,7 +257,7 @@ back after a reboot, as they would on Docker.
 - **$0** at any company size. Docker Business is **$24 per user per month**
   above 250 employees or $10M revenue. For 100 developers that is
   **$28,800 a year**.
-- **54** MCP tools. **1** port for everything. **0** admin rights.
+- **55** MCP tools. **1** port for everything. **0** admin rights.
 
 ### Being honest
 

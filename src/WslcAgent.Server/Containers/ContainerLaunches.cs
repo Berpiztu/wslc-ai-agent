@@ -3,6 +3,7 @@ using WslcAgent.ApiClient;
 using WslcAgent.ApiClient.Contracts;
 using WslcAgent.Mcp;
 using WslcAgent.Server.Images;
+using WslcAgent.Server.Projects;
 using WslcAgent.Server.Wslc;
 
 namespace WslcAgent.Server.Containers;
@@ -259,7 +260,7 @@ public sealed class ContainerLaunches(IContainerService containers, IImageServic
         {
             lock (_gate)
             {
-                return new ContainerLaunch(Id, Image, name, Phase, _status, _pct, _error, _containerId, _notes, _fields);
+                return new ContainerLaunch(Id, Image, name, Phase, _status, _pct, _error, _containerId, _notes, _fields, Group: ProjectLabels.Split(Request.Project).Project);
             }
         }
     }

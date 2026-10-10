@@ -120,6 +120,34 @@
     <MudTextField Margin="Margin.Dense" T="string" @bind-Value="Form.User" Label="User" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" HelperText="Example: 1000 or www-data"
                   Error="@Has(LaunchFields.User)" ErrorText="@Error(LaunchFields.User)" />
 
+    @* How it is named and resolved on the network, and what else wslc takes for it. *@
+    <MudTextField Margin="Margin.Dense" T="string" @bind-Value="Form.Hostname" Label="Hostname" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" HelperText="Example: web. Empty leaves the container's id."
+                  Error="@Has(LaunchFields.Hostname)" ErrorText="@Error(LaunchFields.Hostname)" />
+    <MudTextField Margin="Margin.Dense" T="string" @bind-Value="Form.Domainname" Label="Domain name" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" HelperText="Example: example.local"
+                  Error="@Has(LaunchFields.Domainname)" ErrorText="@Error(LaunchFields.Domainname)" />
+    <MultiValueField Values="Form.Dns" Label="DNS" Split="ValueList.Split" Placeholder="1.1.1.1"
+                     HelperText="Example: 1.1.1.1. Several separated by commas, or edited as rows with ⋮."
+                     Hint="One DNS server per row. Each row becomes a --dns flag." Error="@Error(LaunchFields.Dns)" />
+    <MultiValueField Values="Form.DnsSearch" Label="DNS search" Split="ValueList.Split" Placeholder="example.com"
+                     HelperText="Example: example.com. Several separated by commas, or edited as rows with ⋮."
+                     Hint="One search domain per row. Each row becomes a --dns-search flag." Error="@Error(LaunchFields.DnsSearch)" />
+    <MultiValueField Values="Form.DnsOptions" Label="DNS options" Split="ValueList.Split" Placeholder="ndots:2"
+                     HelperText="Example: ndots:2. Several separated by commas, or edited as rows with ⋮."
+                     Hint="One resolver option per row. Each row becomes a --dns-option flag." Error="@Error(LaunchFields.DnsOptions)" />
+    <MultiValueField Values="Form.Ulimits" Label="Ulimits" Split="ValueList.SplitPairs" Placeholder="nofile=1024:2048"
+                     HelperText="Example: nofile=1024:2048. Several separated by commas, or edited as rows with ⋮."
+                     Hint="One limit per row: name=soft[:hard], -1 for unlimited. Each row becomes a --ulimit flag." Error="@Error(LaunchFields.Ulimits)" />
+    <div class="wslc-span2">
+        <MultiValueField Values="Form.Labels" Label="Labels" Split="ValueList.SplitPairs" Placeholder="key=value"
+                         HelperText="Example: key=value. Several separated by commas, or edited as rows with ⋮."
+                         Hint="One label per row: key=value. Each row becomes a --label flag." Error="@Error(LaunchFields.Labels)" />
+    </div>
+    <div class="wslc-span2">
+        <MultiValueField Values="Form.Tmpfs" Label="Tmpfs" Split="ValueList.SplitPairs" Placeholder="/run:size=64m"
+                         HelperText="Example: /run:size=64m. One per row, edited as rows with ⋮."
+                         Hint="One in-memory mount per row: /path[:options]. Each row becomes a --tmpfs flag." Error="@Error(LaunchFields.Tmpfs)" />
+    </div>
+
     @* Its policies and limits: short values, two to a column. *@
     <div class="wslc-form-pair">
         <MudSelect Margin="Margin.Dense" T="string" @bind-Value="Form.RestartPolicy" Label="Restart policy" Dense="true" HelperTextOnFocus="true" Variant="Variant.Filled" HelperText="Dashboard-owned; production container"
@@ -136,6 +164,12 @@
                       Error="@Has(LaunchFields.Memory)" ErrorText="@Error(LaunchFields.Memory)" />
         <MudTextField T="string" @bind-Value="Form.Cpus" Label="CPUs" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" Margin="Margin.Dense" HelperText="Example: 1.5"
                       Error="@Has(LaunchFields.Cpus)" ErrorText="@Error(LaunchFields.Cpus)" />
+    </div>
+    <div class="wslc-form-pair">
+        <MudTextField T="string" @bind-Value="Form.ShmSize" Label="Shm size" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" Margin="Margin.Dense" HelperText="Example: 64m"
+                      Error="@Has(LaunchFields.ShmSize)" ErrorText="@Error(LaunchFields.ShmSize)" />
+        <MudTextField T="string" @bind-Value="Form.StopSignal" Label="Stop signal" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" Margin="Margin.Dense" HelperText="Example: SIGINT"
+                      Error="@Has(LaunchFields.StopSignal)" ErrorText="@Error(LaunchFields.StopSignal)" />
     </div>
     @* Beside the memory and the CPUs it is given: what of the machine the container may use. *@
     <div class="wslc-span2">
@@ -758,6 +792,16 @@
         LaunchFields.HealthStartPeriod => Form.HealthStartPeriod,
         LaunchFields.Memory => Form.Memory,
         LaunchFields.Cpus => Form.Cpus,
+        LaunchFields.Labels => string.Join(';', Form.Labels),
+        LaunchFields.Hostname => Form.Hostname,
+        LaunchFields.Domainname => Form.Domainname,
+        LaunchFields.Dns => string.Join(';', Form.Dns),
+        LaunchFields.DnsSearch => string.Join(';', Form.DnsSearch),
+        LaunchFields.DnsOptions => string.Join(';', Form.DnsOptions),
+        LaunchFields.Tmpfs => string.Join(';', Form.Tmpfs),
+        LaunchFields.ShmSize => Form.ShmSize,
+        LaunchFields.Ulimits => string.Join(';', Form.Ulimits),
+        LaunchFields.StopSignal => Form.StopSignal,
         _ => "",
     };
 

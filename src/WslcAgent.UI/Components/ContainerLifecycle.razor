@@ -9,6 +9,7 @@
    stop and a start, and removing a container stays on the list, whose ⋮ menu
    and bulk remove carry it. *@
 @inherits EntityActionsBase
+@inject ProjectVerbs Verbs
 
 <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
     @* StrokeWidth 10 closes the ring's hole to 14.4px round the dot, so ring and
@@ -26,14 +27,6 @@
 </MudStack>
 
 @code {
-    /// <summary>
-    /// Starting a container returns as soon as it has been launched, so the ring
-    /// turned for an instant and was gone before the press could be seen to do
-    /// anything. It turns for at least this long; stopping waits for the
-    /// container to go down and is usually longer on its own.
-    /// </summary>
-    private static readonly TimeSpan MinimumSpin = TimeSpan.FromSeconds(2);
-
     [Parameter, EditorRequired] public ContainerSummary Container { get; set; } = default!;
 
     protected override string Key => Container.Id;
@@ -44,10 +37,25 @@
     /// <summary>At rest the state's colour; amber while the container is between states.</summary>
     private Color DotColor => Busy ? Color.Warning : Container.IsRunning ? Color.Success : Color.Error;
 
-    private Task ToggleAsync() => Container.IsRunning
-        ? RunAsync(Container.Name, "stop", ct => AtLeastMinimumSpin(Api.StopContainerAsync(Container.Id, ct), ct))
-        : RunAsync(Container.Name, "start", ct => AtLeastMinimumSpin(Api.StartContainerAsync(Container.Id, ct), ct));
+    /// <summary>The ring turns for as long as a verb is shown (<see cref="VerbSpin"/>). A container of a project that others of it depend on is stopped after them, once the user has said so.</summary>
+    private async Task ToggleAsync()
+    {
+        if (!Container.IsRunning)
+        {
+            if (!await Verbs.CanStartAsync(Dialogs, Container, "start"))
+            {
+                return;
+            }
 
-    private static Task AtLeastMinimumSpin(Task work, CancellationToken cancellationToken) =>
-        Task.WhenAll(work, Task.Delay(MinimumSpin, cancellationToken));
+            await RunAsync(Container.Name, "start", ct => VerbSpin.AtLeast(Api.StartContainerAsync(Container.Id, ct), ct));
+        }
+        else if (await Verbs.StopWithDependentsAsync(Dialogs, Container) is null)
+        {
+            await RunAsync(Container.Name, "stop", ct => VerbSpin.AtLeast(Api.StopContainerAsync(Container.Id, ct), ct));
+        }
+        else
+        {
+            await Changed.InvokeAsync();
+        }
+    }
 }

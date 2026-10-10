@@ -32,6 +32,7 @@ public sealed class McpEndpointTests(WebApplicationFactory<Program> factory)
         Assert.Contains("system_info", names);
         Assert.Contains("home_overview", names);
         Assert.Contains("remove_container", names);
+        Assert.Contains("parse_compose", names);
         Assert.Equal(names.Count, names.Distinct().Count());
     }
 

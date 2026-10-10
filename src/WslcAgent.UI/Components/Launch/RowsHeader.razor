@@ -1,12 +1,16 @@
 @* The title line of a repeatable-rows section (Volumes, Networks): the label
-   at the left, the Add button at the right. *@
+   at the left, the Add button at the right. A list that is only read (a
+   Compose file converted) gives no OnAdd, and has the label alone. *@
 <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="2" Class="wslc-rows-head">
     <span class="wslc-form-label">@Label</span>
-    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OnAdd">Add</MudButton>
+    @if (OnAdd.HasDelegate)
+    {
+        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OnAdd">Add</MudButton>
+    }
 </MudStack>
 
 @code {
     [Parameter, EditorRequired] public string Label { get; set; } = "";
 
-    [Parameter, EditorRequired] public EventCallback OnAdd { get; set; }
+    [Parameter] public EventCallback OnAdd { get; set; }
 }

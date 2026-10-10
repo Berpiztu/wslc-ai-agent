@@ -69,6 +69,21 @@ public sealed partial class LaunchChecks(
             findings.Error(LaunchFields.Cpus, $"'{request.Cpus}' is not a CPU count. Example: 1.5.");
         }
 
+        if (request.ShmSize.Length > 0 && !MemorySize().IsMatch(request.ShmSize))
+        {
+            findings.Error(LaunchFields.ShmSize, $"'{request.ShmSize}' is not a size. Example: 64m, 1g.");
+        }
+
+        foreach (var label in request.Labels.Where(label => label.IndexOf('=') <= 0))
+        {
+            findings.Error(LaunchFields.Labels, $"'{label}' has no '=': a label is key=value.");
+        }
+
+        foreach (var limit in request.Ulimits.Where(limit => !Ulimit().IsMatch(limit)))
+        {
+            findings.Error(LaunchFields.Ulimits, $"'{limit}' is not a limit: name=soft[:hard], -1 for unlimited. Example: nofile=1024:2048.");
+        }
+
         if (request.StopTimeout.Length > 0 && (!int.TryParse(request.StopTimeout, out var stop) || stop < -1))
         {
             findings.Error(LaunchFields.StopTimeout, $"'{request.StopTimeout}' is not a stop timeout: seconds, 0 immediate, -1 never.");
@@ -377,6 +392,9 @@ public sealed partial class LaunchChecks(
 
     [GeneratedRegex(@"^\d+(ms|s|m|h)$")]
     private static partial Regex Duration();
+
+    [GeneratedRegex(@"^[a-z]+=-?\d+(:-?\d+)?$")]
+    private static partial Regex Ulimit();
 
     /// <summary><c>[ip:]hostPort[-to]:containerPort[-to][/proto]</c>, or a container port alone (a random host port).</summary>
     [GeneratedRegex(@"^(?:(?:\d{1,3}\.){3}\d{1,3}:)?(?:(?<host>\d{1,5})(?<range>-\d{1,5})?:)?(?<container>\d{1,5})(?:-\d{1,5})?(?:/(?:tcp|udp|sctp))?$", RegexOptions.IgnoreCase)]

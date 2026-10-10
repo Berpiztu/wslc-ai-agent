@@ -29,6 +29,16 @@ public static class LaunchFields
     public const string HealthStartPeriod = "healthStartPeriod";
     public const string Memory = "memory";
     public const string Cpus = "cpus";
+    public const string Labels = "labels";
+    public const string Hostname = "hostname";
+    public const string Domainname = "domainname";
+    public const string Dns = "dns";
+    public const string DnsSearch = "dnsSearch";
+    public const string DnsOptions = "dnsOptions";
+    public const string Tmpfs = "tmpfs";
+    public const string ShmSize = "shmSize";
+    public const string Ulimits = "ulimits";
+    public const string StopSignal = "stopSignal";
 }
 
 /// <summary>One thing the check found, on one field of the form (<see cref="LaunchFields"/>).</summary>

@@ -17,7 +17,7 @@ products are **WSLC AI Agent** (the agent, `wslc-ai-agent.exe`) and
 ## Features
 
 - **An MCP agent for WSLC, skill included for Claude, Hermes, OpenClaw,
-  etc.**: 54 tools, the destructive ones off by default and asking your
+  etc.**: 55 tools, the destructive ones off by default and asking your
   approval once switched on, and a skill installed with one click. One Windows program beside `wslc` that runs in
   the background of your Windows session, goes on with the browser and the
   apps closed, and serves the web interface, the clients

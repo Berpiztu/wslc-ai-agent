@@ -43,9 +43,6 @@ public static partial class RunCommandLine
     /// <summary>Switches the form has no field for: named in the status.</summary>
     private static readonly HashSet<string> UnsupportedSwitches = ["-i", "-t", "-it", "-ti", "--interactive", "--tty", "--rm", "-P", "--publish-all", "--privileged"];
 
-    /// <summary>Flags known to take a value the form has no field for.</summary>
-    private static readonly HashSet<string> UnsupportedValueFlags = ["--hostname", "-h", "--dns", "--label", "-l"];
-
     /// <summary>
     /// The names a WSLC container reaches its host by, with no flag (seen in
     /// wslc 3.0.2): docker's <c>--add-host=host.docker.internal:host-gateway</c>
@@ -61,6 +58,7 @@ public static partial class RunCommandLine
         "--name", "-w", "--workdir", "-m", "--memory", "--cpus", "--restart", "--stop-timeout", "--health-cmd", "--health-interval",
         "--health-timeout", "--health-retries", "--health-start-period", "--ip", "-p", "--publish", "-v", "--volume", "-e", "--env",
         "--network", "--net", "--network-alias", "--entrypoint", "-u", "--user", "--public-name", "--gpus",
+        "--label", "-l", "--hostname", "-h", "--domainname", "--dns", "--dns-search", "--dns-option", "--tmpfs", "--shm-size", "--ulimit", "--stop-signal",
     ];
 
     public static RunCommandParse Parse(string text)
@@ -75,7 +73,13 @@ public static partial class RunCommandLine
 
         string image = "", name = "", workdir = "", memory = "", cpus = "", restart = "no", stopTimeout = "", ip = "";
         string healthCmd = "", healthInterval = "", healthTimeout = "", healthRetries = "", healthStartPeriod = "";
-        string entrypoint = "", user = "";
+        string entrypoint = "", user = "", hostname = "", domainname = "", shmSize = "", stopSignal = "";
+        var labels = new List<string>();
+        var dns = new List<string>();
+        var dnsSearch = new List<string>();
+        var dnsOptions = new List<string>();
+        var tmpfs = new List<string>();
+        var ulimits = new List<string>();
         var publicNames = new List<string>();
         var publish = new List<string>();
         var volumes = new List<string>();
@@ -122,7 +126,7 @@ public static partial class RunCommandLine
             }
 
             // An unknown flag takes a value only when the next word is not a flag; both are named.
-            if (!ValueFlags.Contains(flag) && !UnsupportedValueFlags.Contains(flag))
+            if (!ValueFlags.Contains(flag))
             {
                 var written = inlineValue is null && i + 1 < words.Count && !words[i + 1].StartsWith('-')
                     ? $"{flag} {words[++i]}"
@@ -171,6 +175,16 @@ public static partial class RunCommandLine
                 case "--entrypoint": entrypoint = value; break;
                 case "-u" or "--user": user = value; break;
                 case "--public-name": publicNames.Add(value); break;
+                case "-l" or "--label": labels.Add(value); break;
+                case "-h" or "--hostname": hostname = value; break;
+                case "--domainname": domainname = value; break;
+                case "--dns": dns.Add(value); break;
+                case "--dns-search": dnsSearch.Add(value); break;
+                case "--dns-option": dnsOptions.Add(value); break;
+                case "--tmpfs": tmpfs.Add(value); break;
+                case "--shm-size": shmSize = value; break;
+                case "--ulimit": ulimits.Add(value); break;
+                case "--stop-signal": stopSignal = value; break;
                 default:
                     unsupported.Add($"{flag} {value}");
                     break;
@@ -211,6 +225,16 @@ public static partial class RunCommandLine
             HealthStartPeriod = healthStartPeriod,
             NoHealthcheck = noHealthcheck,
             Gpus = gpus,
+            Labels = labels,
+            Hostname = hostname,
+            Domainname = domainname,
+            Dns = dns,
+            DnsSearch = dnsSearch,
+            DnsOptions = dnsOptions,
+            Tmpfs = tmpfs,
+            ShmSize = shmSize,
+            Ulimits = ulimits,
+            StopSignal = stopSignal,
         };
         return new RunCommandParse(request, unsupported, "", fromDocker) { NotNeeded = notNeeded };
     }
@@ -265,7 +289,17 @@ public static partial class RunCommandLine
         Each("--network", request.ConnectNetworks);
         Flag("--ip", request.Ip);
         Each("--network-alias", request.NetworkAliases);
+        Flag("--hostname", request.Hostname);
+        Flag("--domainname", request.Domainname);
+        Each("--dns", request.Dns);
+        Each("--dns-search", request.DnsSearch);
+        Each("--dns-option", request.DnsOptions);
+        Each("--tmpfs", request.Tmpfs);
+        Flag("--shm-size", request.ShmSize);
+        Each("--ulimit", request.Ulimits);
+        Each("--label", request.Labels);
         Flag("-u", request.User);
+        Flag("--stop-signal", request.StopSignal);
 
         // The policy and the public names are the agent's own, not CLI flags:
         // written only for another agent, and only a policy that says something

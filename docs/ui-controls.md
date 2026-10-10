@@ -153,8 +153,10 @@ bar (Run) and by what the verbs do (View & edit removes and recreates).
   grid** (a row is "left | right"; a dot joins two short values sharing one
   column through `wslc-form-pair`): Image | Tag / Name | Publish / Volumes
   (rows, whole line) / Env (whole line) / Networks (rows, whole line) /
-  Entrypoint (whole line) / Command (whole line) / Workdir | User / Restart
-  policy · Stop timeout | Memory · CPUs / Disable healthcheck / Health cmd
+  Entrypoint (whole line) / Command (whole line) / Workdir | User / Hostname
+  | Domain name / DNS | DNS search / DNS options | Ulimits / Labels (whole
+  line) / Tmpfs (whole line) / Restart policy · Stop timeout | Memory · CPUs
+  / Shm size · Stop signal / Disable healthcheck / Health cmd
   (whole line) / Health interval · Health timeout | Health retries · Health
   start period. The two commands, Env and Health cmd take the whole line: a
   flag hidden past the edge of a half-width Command is how a wrong `--port`
@@ -498,6 +500,32 @@ Body lines are `Typo.body2` with the label in bold; secondary lines
   turn in this client, which a cross simply takes out of the queue), and the
   ring's own cross asks once and stops them all — a row that grows with each
   file makes the table dance.
+  A file is loaded through the system's own file dialog, never a window of
+  ours: `MudFileUpload` with its button as `CustomContent` and an empty
+  `SelectedTemplate`, the first button of the action rail (the launch
+  form's Load JSON, the Compose window's Load). Where the file's path
+  matters and the user sits at the agent's machine (`LoginStatus.Local`), the
+  same button asks the agent for Windows' Open dialog instead
+  (`OpenComposeFileAsync`): a browser hands over a name and a text, never a
+  path. A list shown in a window is the list editor's, the Ports popup's
+  (`PortRowsDialog`), piece for piece: `RowsHeader` with the list's name
+  (and Add only when rows can be added), a `MudPaper Outlined` with
+  `wslc-picker-list pa-2`, which is the box of one fixed height that
+  scrolls, its column heads inside it as `Typo.caption`
+  `mud-text-secondary`, a row of filled dense fields per item, and the note
+  at the foot as `Typo.caption` `mud-text-secondary mt-2`. Columns that
+  share the width are a `MudGrid` (`MudItem xs`), heads and rows alike, so
+  they line up; a field that only shows is `ReadOnly`, and what it says of
+  its row (a verdict) is its own start adornment in the theme's colour
+  (`AdornmentColor`). What is a tree is drawn as one, with `MudTreeView`
+  (`Dense`, `ReadOnly`, `ExpandOnClick`): what a branch says of itself is the
+  item's own `Icon` in the theme's colour and its `EndText`, never a second
+  column beside the tree. The Compose window's converted file is drawn so
+  (`ComposeDialog`): the file's own tree, a branch a line, each with its
+  verdict. A branch is one line and never more (`wslc-tree-lines`): what is
+  too long scrolls its box sideways. A window whose content is long takes
+  the screen's whole height, MudBlazor's own margin left round it
+  (`wslc-dialog-tall` on the content).
   A pull asked from a dialog is drawn in that dialog's title, beside Close
   (the launch form's, `ContainerFormDialog`): the same `ProgressRing`, its two
   verbs one over the other at its right as in a card, kept inside the ring's
@@ -514,7 +542,10 @@ Body lines are `Typo.body2` with the label in bold; secondary lines
   output holds the reason (a pull; a run that failed after its pull has none,
   `LogAfterFailure="false"`) and its cross becomes Dismiss: the agent remembers
   a failed pull five minutes and a failed run 45 seconds, and the cross forgets it now, for every client. No confirmation:
-  nothing is lost.
+  nothing is lost. A row that ended well and is still listed (`Done`: a run
+  or a project in the seconds before the row of what it made takes its place,
+  an image update whose pull is through) is drawn whole in the success colour,
+  its cross in that colour too: red is only for what failed or was cancelled.
 - The agent not answering (`AgentLink`, read by `AgentLinkHandler` from every
   call the client makes: a call that could not be sent at all takes the link
   down, any answer brings it back): the application is not made to work

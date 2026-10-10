@@ -4,30 +4,38 @@
    failed one keeps the bar in the error colour, says why in its tooltip, keeps
    the console when its output has the reason, and its cross becomes Dismiss:
    the agent remembers a failure for a while, and the row must not outlive the
-   user's interest in it. *@
+   user's interest in it. One that ended well, for as long as it is still
+   listed, has the bar whole and its cross in the success colour: it is over,
+   it went well, and the cross only closes it. What a list puts before a
+   row's name (a group's +/−, the mark of a row that stands under one) goes
+   before it here too (Lead). *@
 
-<div title="@Status" class="wslc-progress-cell">
+<div title="@Status" class="wslc-progress-cell @(Mixed ? "wslc-progress-mixed" : "")">
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Wrap="Wrap.NoWrap">
+        @Lead
         <span class="wslc-progress-name">@Name</span>
-        @if (!Failed)
+        @if (Running)
         {
             <MudText Typo="Typo.body2" Class="mud-text-secondary wslc-progress-pct">@(Pct)%</MudText>
         }
         @* No console, no button: an upload is bytes on their way, not output
            to read, and a magnifier that opens nothing is worse than none. *@
-        @if (OnLog.HasDelegate && (!Failed || LogAfterFailure))
+        @if (OnLog.HasDelegate && (Running || LogAfterFailure))
         {
             <MudIconButton Icon="@Icons.Material.Filled.Subject" Size="Size.Small" title="@LogTitle" aria-label="@LogTitle" OnClick="OnLog" />
         }
-        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error" title="@(Failed ? DismissTitle : CancelTitle)" aria-label="@(Failed ? DismissTitle : CancelTitle)"
-                       OnClick="@(Failed ? OnDismiss : OnCancel)" />
+        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="@(Done ? Color.Success : Color.Error)" title="@(Running ? CancelTitle : DismissTitle)" aria-label="@(Running ? CancelTitle : DismissTitle)"
+                       OnClick="@(Running ? OnCancel : OnDismiss)" />
     </MudStack>
     @* Info, the ring's blue in the cards: the same work in the same colour in both views. *@
-    <MudProgressLinear Value="@(Failed ? 100 : Math.Max(Pct, 2))" Color="@(Failed ? Color.Error : Color.Info)" Size="Size.Small" />
+    <MudProgressLinear Value="@(Running ? Math.Max(Pct, 2) : 100)" Color="@(Done ? Color.Success : Failed ? Color.Error : Color.Info)" Size="Size.Small" />
 </div>
 
 @code {
     [Parameter, EditorRequired] public string Name { get; set; } = "";
+
+    /// <summary>What stands before the name in this row, when its list puts something there.</summary>
+    [Parameter] public RenderFragment? Lead { get; set; }
 
     [Parameter] public int Pct { get; set; }
 
@@ -36,7 +44,13 @@
 
     [Parameter] public bool Failed { get; set; }
 
-    /// <summary>Whether the console still has the reason once the row failed: a pull's output does, a run that failed after its pull has none.</summary>
+    /// <summary>It ended well and is still listed: drawn whole in the success colour, its cross closing it.</summary>
+    [Parameter] public bool Done { get; set; }
+
+    /// <summary>The work is a project's, some of its containers up and some not yet: the bar in both colours, the running one and the stopped one, as its card's ring is.</summary>
+    [Parameter] public bool Mixed { get; set; }
+
+    /// <summary>Whether the console still has something to read once the row ended: a pull's output does, a run that failed after its pull has none.</summary>
     [Parameter] public bool LogAfterFailure { get; set; } = true;
 
     [Parameter] public string LogTitle { get; set; } = "View pull output";
@@ -49,6 +63,8 @@
 
     [Parameter] public EventCallback OnCancel { get; set; }
 
-    /// <summary>The cross of a failed row: forget it.</summary>
+    /// <summary>The cross of a row that ended, well or badly: forget it.</summary>
     [Parameter] public EventCallback OnDismiss { get; set; }
+
+    private bool Running => !Failed && !Done;
 }

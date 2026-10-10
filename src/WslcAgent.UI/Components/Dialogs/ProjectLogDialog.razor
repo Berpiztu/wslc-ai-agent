@@ -1,0 +1,51 @@
+@* The log of a project being saved from its Compose file, in the window a
+   container's logs open in (ContainerLogsDialog) and drawn by the same view:
+   every step the agent takes and what the builds print, the lines coloured by
+   level, with the view's rail (search, wrap, autorefresh, refresh, jump to
+   end, copy). Close leaves the save running; Cancel, there while it runs,
+   stops it, after asking. *@
+@inject WslcAgentApi Api
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+<MudDialog ContentClass="wslc-dialog-action">
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            @if (_running)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" OnClick="CancelAsync">Cancel</MudButton>
+            }
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <LogsView Read="ReadAsync" />
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private bool _running;
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    /// <summary>The id of the project's job on the agent.</summary>
+    [Parameter, EditorRequired] public string Job { get; set; } = "";
+
+    /// <summary>What the view shows: the job's log as it is now. Each read also says whether the save still runs, which is when Cancel is offered.</summary>
+    private async Task<string> ReadAsync()
+    {
+        var job = await Api.GetProjectJobAsync(Job);
+        var running = job.State == ProjectJob.Running;
+        if (running != _running)
+        {
+            _running = running;
+            // Cancel lives in the title line, the dialog's own tree.
+            await InvokeAsync(Dialog.StateHasChanged);
+        }
+
+        return string.Join('\n', job.Log);
+    }
+
+    /// <summary>The window stays open on a cancelled save: its last lines say where it stopped.</summary>
+    private Task CancelAsync() => ProjectFlow.CancelAsync(Dialogs, Api, Snackbar, Job);
+}

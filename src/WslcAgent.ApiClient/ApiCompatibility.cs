@@ -21,7 +21,7 @@ namespace WslcAgent.ApiClient;
 public static class ApiCompatibility
 {
     /// <summary>The level of the API this build speaks.</summary>
-    public const int Level = 6;
+    public const int Level = 7;
 
     /// <summary>The oldest client level this agent still serves (sent in <c>/health</c>).</summary>
     public const int MinimumClientLevel = 1;

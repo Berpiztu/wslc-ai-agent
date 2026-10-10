@@ -5,7 +5,10 @@
    the box goes to its end — unless the reader holds the box, pointer over it
    or finger on it, when the lines stay as they are and the ring stands still,
    and the box catches up on the first tick after they leave. Nothing moves
-   under a reader, and nothing scrolls when nothing new arrived. *@
+   under a reader, and nothing scrolls when nothing new arrived. The same view
+   draws a log that is not a container's (a project being saved): given what to
+   read (Read), it shows that text the same way, with the same rail but its
+   Clear, which is the agent's memory of a container's log. *@
 @using System.Globalization
 @using WslcAgent.ApiClient
 @inject WslcAgentApi Api
@@ -78,8 +81,11 @@
                        title="Jump to end" OnClick="JumpToEndAsync" />
         <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Info" Size="Size.Small" Variant="Variant.Filled"
                        title="Copy logs" OnClick="CopyAsync" />
-        <MudIconButton Icon="@Icons.Material.Filled.ClearAll" Color="Color.Error" Size="Size.Small" Variant="Variant.Filled"
-                       title="Clear logs, here and on every device — Refresh brings the history back" OnClick="ClearAsync" />
+        @if (Read is null)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.ClearAll" Color="Color.Error" Size="Size.Small" Variant="Variant.Filled"
+                           title="Clear logs, here and on every device — Refresh brings the history back" OnClick="ClearAsync" />
+        }
     </div>
 </div>
 
@@ -103,16 +109,23 @@
     private PeriodicTimer? _timer;
     private CancellationTokenSource? _stop;
 
-    [Parameter, EditorRequired] public string Container { get; set; } = "";
+    /// <summary>The container whose logs these are; not given when <see cref="Read"/> is.</summary>
+    [Parameter] public string Container { get; set; } = "";
 
     [Parameter] public int Tail { get; set; } = 200;
+
+    /// <summary>
+    /// A log that is not a container's: its whole text, asked for at every
+    /// read. Given, the view reads this and nothing of a container's.
+    /// </summary>
+    [Parameter] public Func<Task<string>>? Read { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
         // A clear kept by the agent holds on reopening, and on every device
         try
         {
-            _clearedAt = await Api.GetContainerLogsClearedAsync(Container);
+            _clearedAt = Read is null ? await Api.GetContainerLogsClearedAsync(Container) : null;
             _viewCleared = _clearedAt is not null;
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
@@ -171,9 +184,11 @@
         _loading = true;
         try
         {
-            var text = _clearedAt is { } cleared
-                ? LinesAfter(await Api.GetContainerLogsAsync(Container, Tail, true, since: Rfc3339(cleared)), cleared)
-                : await Api.GetContainerLogsAsync(Container, Tail, false);
+            var text = Read is { } read
+                ? await read()
+                : _clearedAt is { } cleared
+                    ? LinesAfter(await Api.GetContainerLogsAsync(Container, Tail, true, since: Rfc3339(cleared)), cleared)
+                    : await Api.GetContainerLogsAsync(Container, Tail, false);
             var shown = LogLines.Split(text);
             // The end is sought only when something new arrived: a box that jumps to
             // where it already is still jumps.
@@ -183,7 +198,7 @@
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
         {
-            _error = ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase)
+            _error = Read is null && ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase)
                 ? "Container no longer exists. Logs are unavailable after the container is removed."
                 : ex.Message;
         }

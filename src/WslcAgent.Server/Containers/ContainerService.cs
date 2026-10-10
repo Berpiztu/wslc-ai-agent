@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using WslcAgent.ApiClient.Contracts;
 using WslcAgent.Mcp;
+using WslcAgent.Server.Projects;
 using WslcAgent.Server.Wslc;
 
 namespace WslcAgent.Server.Containers;
@@ -25,6 +26,7 @@ public sealed partial class ContainerService(
     ContainerRecreations recreations,
     ImageUpdatesUnderWay updates,
     WslcEvents events,
+    ProjectDependencies dependencies,
     ILogger<ContainerService> logger) : IContainerService
 {
     private const string MetadataLabel = "com.microsoft.wsl.container.metadata=";
@@ -52,21 +54,28 @@ public sealed partial class ContainerService(
         return new ContainerListResponse(annotated, Aggregate(annotated));
     }
 
+    /// <summary><c>wslc container start</c>; a project's container is not started while a service its own depends on is not running (409).</summary>
     public async Task StartAsync(string container, CancellationToken cancellationToken = default)
     {
+        await dependencies.RequireRunningAsync(WslcArgs.Require(container, "container"), cancellationToken);
         await wslc.RunAsync(["container", "start", WslcArgs.Require(container, "container")], cancellationToken: cancellationToken);
         policies.SetDesired(container, RestartPolicyInfo.Running);
     }
 
+    /// <summary><c>wslc container stop</c>; a project's container is not stopped while another of the project that depends on it still runs (409).</summary>
     public async Task StopAsync(string container, CancellationToken cancellationToken = default)
     {
+        await dependencies.RequireNoDependentsAsync(WslcArgs.Require(container, "container"), cancellationToken);
         await wslc.RunAsync(["container", "stop", WslcArgs.Require(container, "container")], TimeSpan.FromSeconds(90), cancellationToken);
         policies.SetDesired(container, RestartPolicyInfo.Stopped);
     }
 
-    /// <summary>The restart verb lives in <see cref="ContainerRestarter"/>.</summary>
-    public Task RestartAsync(string container, CancellationToken cancellationToken = default) =>
-        restarter.RestartAsync(container, cancellationToken);
+    /// <summary>The restart verb lives in <see cref="ContainerRestarter"/>; a project's container is not restarted while a service its own depends on is not running (409), as it is not started.</summary>
+    public async Task RestartAsync(string container, CancellationToken cancellationToken = default)
+    {
+        await dependencies.RequireRunningAsync(WslcArgs.Require(container, "container"), cancellationToken);
+        await restarter.RestartAsync(container, cancellationToken);
+    }
 
     public async Task KillAsync(string container, CancellationToken cancellationToken = default)
     {
@@ -476,6 +485,7 @@ public sealed partial class ContainerService(
         var state = row.GetString("State").Trim().ToLowerInvariant();
         var labels = row.GetString("Labels");
         var ports = ParsePorts(row.GetString("Ports"), labels);
+        var (project, service, _) = ProjectLabels.Of(labels);
         var platform = row.TryGetProperty("Platform", out var p) && p.ValueKind == JsonValueKind.Object
             ? $"{p.GetString("os")}/{p.GetString("architecture")}".Trim('/')
             : "";
@@ -493,7 +503,9 @@ public sealed partial class ContainerService(
             Networks: row.GetString("Networks"),
             Size: row.GetString("Size"),
             HealthStatus: row.GetString("HealthStatus"),
-            Platform: platform);
+            Platform: platform,
+            Project: project,
+            Service: service);
     }
 
     /// <summary>

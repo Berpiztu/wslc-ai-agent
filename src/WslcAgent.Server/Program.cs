@@ -14,6 +14,7 @@ using WslcAgent.Server.Mcp;
 using WslcAgent.Server.Networks;
 using WslcAgent.Server.Notifications;
 using WslcAgent.Server.Overview;
+using WslcAgent.Server.Projects;
 using WslcAgent.Server.Publishing;
 using WslcAgent.Server.Registries;
 using WslcAgent.Server.SavedLogins;
@@ -117,6 +118,11 @@ builder.Services.AddSingleton<ContainerImageUpdates>();
 builder.Services.AddSingleton<ImageArchives>();
 builder.Services.AddSingleton<IVolumeService, VolumeService>();
 builder.Services.AddSingleton<INetworkService, NetworkService>();
+builder.Services.AddSingleton<IProjectService, ProjectService>();
+builder.Services.AddSingleton<ProjectStore>();
+builder.Services.AddSingleton<ProjectDependencies>();
+builder.Services.AddSingleton<ProjectRunner>();
+builder.Services.AddSingleton<ProjectLifecycle>();
 builder.Services.AddSingleton<ContainerRestarter>();
 builder.Services.AddSingleton<PublishingSettingsStore>();
 builder.Services.AddSingleton<PublicationStore>();
@@ -213,6 +219,7 @@ app.MapGroup("/api/v1")
     .MapImageEndpoints()
     .MapVolumeEndpoints()
     .MapNetworkEndpoints()
+    .MapProjectEndpoints()
     .MapPublishingEndpoints()
     .MapHostEndpoints()
     .MapClientEndpoints();

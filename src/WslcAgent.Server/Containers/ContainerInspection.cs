@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using WslcAgent.ApiClient;
 using WslcAgent.ApiClient.Contracts;
+using WslcAgent.Server.Projects;
 using WslcAgent.Server.Wslc;
 
 namespace WslcAgent.Server.Containers;
@@ -47,9 +48,20 @@ public sealed record ContainerInspection(
         var ports = PortBindings(hostConfig, networkSettings, root);
         var mounts = MountsOf(root, hostConfig);
         var network = hostConfig.GetString("NetworkMode") is "default" or "" ? "" : hostConfig.GetString("NetworkMode");
+        var memo = LaunchMemo.Read(Child(config, "Labels").GetString(LaunchMemo.Label));
         var form = ConfigFields(image, config) with
         {
             Name = name,
+            Project = ProjectOf(config),
+            Ulimits = Ulimits(hostConfig),
+            Hostname = memo?.Hostname ?? "",
+            Domainname = memo?.Domainname ?? "",
+            Dns = memo?.Dns ?? [],
+            DnsSearch = memo?.DnsSearch ?? [],
+            DnsOptions = memo?.DnsOptions ?? [],
+            Tmpfs = memo?.Tmpfs ?? [],
+            ShmSize = memo?.ShmSize ?? "",
+            StopSignal = memo?.StopSignal ?? "",
             Memory = BytesLimit(Prop(hostConfig, "Memory", out var mem) && mem.ValueKind == JsonValueKind.Number ? mem.GetInt64() : 0),
             Cpus = Cpus(hostConfig),
             Publish = ports.Select(PublishSpec).ToList(),
@@ -99,7 +111,42 @@ public sealed record ContainerInspection(
         HealthStartPeriod = Duration(config, "StartPeriod"),
         HealthRetries = HealthRetries(config),
         NoHealthcheck = noHealthcheck,
+        Labels = UserLabels(config),
     };
+
+    /// <summary><c>project/service</c> from the container's labels; empty for a container on its own.</summary>
+    private static string ProjectOf(JsonElement config)
+    {
+        var labels = Child(config, "Labels");
+        var project = labels.GetString(ProjectLabels.Project);
+        return project.Length > 0 ? $"{project}/{labels.GetString(ProjectLabels.Service)}" : "";
+    }
+
+    /// <summary>The labels a user set, <c>key=value</c>: the agent's own and the runtime's are theirs to keep, and are not shown.</summary>
+    private static List<string> UserLabels(JsonElement config)
+    {
+        var labels = Child(config, "Labels");
+        return labels.ValueKind != JsonValueKind.Object
+            ? []
+            : labels.EnumerateObject().Where(label => !LaunchMemo.IsOwn(label.Name)).Select(label => $"{label.Name}={labels.GetString(label.Name)}").ToList();
+    }
+
+    /// <summary><c>HostConfig.Ulimits</c> as <c>--ulimit</c> takes them: <c>name=soft[:hard]</c>.</summary>
+    private static List<string> Ulimits(JsonElement hostConfig)
+    {
+        var limits = new List<string>();
+        if (Prop(hostConfig, "Ulimits", out var list) && list.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var limit in list.EnumerateArray())
+            {
+                var soft = limit.GetString("Soft");
+                var hard = limit.GetString("Hard");
+                limits.Add(hard.Length == 0 || hard == soft ? $"{limit.GetString("Name")}={soft}" : $"{limit.GetString("Name")}={soft}:{hard}");
+            }
+        }
+
+        return limits;
+    }
 
     /// <summary>A property of an object, or false: inspect leaves whole sections null (<c>Healthcheck</c>, <c>PortBindings</c>) and undefined elements throw on lookup.</summary>
     private static bool Prop(JsonElement element, string name, out JsonElement value)

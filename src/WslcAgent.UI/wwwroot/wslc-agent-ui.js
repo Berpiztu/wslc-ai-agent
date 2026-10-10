@@ -26,6 +26,7 @@ function wslcAgentPark(chosen) {
 }
 
 // The UI's own interop, by name: wslcAgent.scrollToEnd (logs' jump to end),
+// wslcAgent.stepScroll (a wheel notch a row, the Compose file's tree),
 // wslcAgent.pickFiles and wslcAgent.sendFile (the web UI's upload: only the
 // browser can send a file of gigabytes without holding it in memory),
 // wslcAgent.isHandheld (whether toasts come down at the top centre, as on a phone),
@@ -130,6 +131,21 @@ window.wslcAgent = {
             return localStorage.getItem('wslcAgent.logs');
         } catch {
             // Private windows: the page still works, it is just not remembered.
+            return null;
+        }
+    },
+
+    // The projects whose group stands open in the Containers list, as one string
+    // ("shop;blog"), kept on this device like the table-or-cards choice. Without
+    // a value it only answers the one stored.
+    groups(stored) {
+        try {
+            if (stored !== undefined && stored !== null) {
+                localStorage.setItem('wslcAgent.groups', stored);
+            }
+            return localStorage.getItem('wslcAgent.groups');
+        } catch {
+            // Private windows: the groups still open and close, it is just not remembered.
             return null;
         }
     },
@@ -327,6 +343,60 @@ window.wslcAgent = {
             toEnd();
             requestAnimationFrame(() => { toEnd(); requestAnimationFrame(toEnd); });
         }
+    },
+
+    // A box whose rows are read one by one (the Compose file's tree): a notch
+    // of the mouse wheel moves it one row, the next one brought to the top of
+    // the box, instead of the three lines or so a browser moves, which there
+    // are several rows at once. Rows are of different heights (a branch may
+    // be one line or two), so it goes to the row itself and not a number of
+    // pixels. The rows of a branch that stands closed are still in the
+    // document, folded away by MudBlazor's collapse: they are not counted.
+    // A touchpad sends many small movements and no notches: those are left
+    // to the browser, which scrolls them as it always does. A notch is a
+    // movement in lines or pages, or one of 30px or more (Chromium sends 100px
+    // a notch with Windows at three lines a notch, a third of that at one).
+    // Positions are the layout's own (offsetTop), the same measure scrollTop
+    // is in, so the app's zoom changes nothing.
+    stepScroll(id, rowSelector) {
+        const box = document.getElementById(id);
+        if (!box || box.dataset.stepScroll) {
+            return;
+        }
+
+        box.dataset.stepScroll = "true";
+        const shown = row => {
+            for (let fold = row.parentElement.closest(".mud-collapse-container"); fold && box.contains(fold); fold = fold.parentElement.closest(".mud-collapse-container")) {
+                if (!fold.classList.contains("mud-collapse-entered")) {
+                    return false;
+                }
+            }
+
+            return true;
+        };
+        const topOf = row => {
+            let top = 0;
+            for (let element = row; element && element !== box; element = element.offsetParent) {
+                top += element.offsetTop;
+            }
+
+            return top;
+        };
+        box.addEventListener("wheel", event => {
+            const notch = event.deltaMode !== 0 || Math.abs(event.deltaY) >= 30;
+            if (!notch || event.deltaY === 0 || event.shiftKey || event.ctrlKey) {
+                return;
+            }
+
+            // The row at the top stands under the box's own padding, as the first one does.
+            const padding = parseFloat(getComputedStyle(box).paddingTop) || 0;
+            const tops = [...box.querySelectorAll(rowSelector)].filter(shown).map(row => topOf(row) - padding);
+            const next = event.deltaY > 0
+                ? tops.find(top => top > box.scrollTop + 1)
+                : tops.findLast(top => top < box.scrollTop - 1);
+            event.preventDefault();
+            box.scrollTop = next ?? (event.deltaY > 0 ? box.scrollHeight : 0);
+        }, { passive: false });
     },
 
     // Files into a container, chosen and sent by the browser itself, in two

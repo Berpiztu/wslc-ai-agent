@@ -67,6 +67,9 @@ public static class UiServiceCollectionExtensions
         services.AddScoped<BusyRows>();
         services.AddScoped<ActivityLine>();
         services.AddScoped<PullActivity>();
+        services.AddScoped<ProjectActivity>();
+        services.AddScoped<ProjectGroups>();
+        services.AddScoped<ProjectVerbs>();
         services.AddScoped<OpenPopups>();
         services.AddScoped<SessionState>();
         services.AddScoped<SessionPower>();

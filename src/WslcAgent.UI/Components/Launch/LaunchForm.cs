@@ -112,6 +112,35 @@ public sealed class LaunchForm
 
     public List<NetworkRow> Networks { get; } = [];
 
+    /// <summary>One <c>--label</c> per value, <c>key=value</c>; edited like <see cref="Env"/>.</summary>
+    public List<string> Labels { get; } = [];
+
+    public string Hostname { get; set; } = "";
+
+    public string Domainname { get; set; } = "";
+
+    /// <summary>One <c>--dns</c> per value.</summary>
+    public List<string> Dns { get; } = [];
+
+    /// <summary>One <c>--dns-search</c> per value.</summary>
+    public List<string> DnsSearch { get; } = [];
+
+    /// <summary>One <c>--dns-option</c> per value.</summary>
+    public List<string> DnsOptions { get; } = [];
+
+    /// <summary>One <c>--tmpfs</c> per value, <c>/path[:options]</c>.</summary>
+    public List<string> Tmpfs { get; } = [];
+
+    public string ShmSize { get; set; } = "";
+
+    /// <summary>One <c>--ulimit</c> per value, <c>name=soft[:hard]</c>.</summary>
+    public List<string> Ulimits { get; } = [];
+
+    public string StopSignal { get; set; } = "";
+
+    /// <summary>The project and service the container belongs to, carried through unseen: no field shows it, and a save keeps it.</summary>
+    public string Project { get; set; } = "";
+
     /// <summary>Start after create / recreate: the rail's Run verb sets it, its Save verb clears it.</summary>
     public bool Start { get; set; } = true;
 
@@ -148,6 +177,17 @@ public sealed class LaunchForm
         HealthStartPeriod = other.HealthStartPeriod;
         NoHealthcheck = other.NoHealthcheck;
         Gpus = other.Gpus;
+        Hostname = other.Hostname;
+        Domainname = other.Domainname;
+        ShmSize = other.ShmSize;
+        StopSignal = other.StopSignal;
+        Project = other.Project;
+        Replace(Labels, other.Labels);
+        Replace(Dns, other.Dns);
+        Replace(DnsSearch, other.DnsSearch);
+        Replace(DnsOptions, other.DnsOptions);
+        Replace(Tmpfs, other.Tmpfs);
+        Replace(Ulimits, other.Ulimits);
         Publish.Clear();
         Publish.AddRange(other.Publish);
         Env.Clear();
@@ -172,6 +212,8 @@ public sealed class LaunchForm
     {
         var named = Env.Select(EnvKey).ToHashSet(StringComparer.Ordinal);
         Env.AddRange(image.Env.Where(pair => !named.Contains(EnvKey(pair))));
+        var labelled = Labels.Select(EnvKey).ToHashSet(StringComparer.Ordinal);
+        Labels.AddRange(image.Labels.Where(pair => !labelled.Contains(EnvKey(pair))));
 
         if (Entrypoint.Trim().Length == 0)
         {
@@ -207,6 +249,7 @@ public sealed class LaunchForm
     public void DropImageDefaults(ContainerLaunchRequest image)
     {
         Env.RemoveAll(pair => image.Env.Contains(pair.Trim()));
+        Labels.RemoveAll(pair => image.Labels.Contains(pair.Trim()));
         Command = Unless(Command, image.Command);
         Entrypoint = Unless(Entrypoint, image.Entrypoint);
         Workdir = Unless(Workdir, image.Workdir);
@@ -232,6 +275,13 @@ public sealed class LaunchForm
     /// <summary>The value, or empty when it is still the image's.</summary>
     private static string Unless(string value, string images) => value.Trim() == images ? "" : value;
 
+    /// <summary>A list of the form made the same as another's.</summary>
+    private static void Replace(List<string> list, IEnumerable<string> values)
+    {
+        list.Clear();
+        list.AddRange(values);
+    }
+
     public static LaunchForm From(ContainerLaunchRequest request)
     {
         var form = new LaunchForm
@@ -253,7 +303,18 @@ public sealed class LaunchForm
             NoHealthcheck = request.NoHealthcheck,
             Gpus = request.Gpus,
             Start = request.Start,
+            Hostname = request.Hostname,
+            Domainname = request.Domainname,
+            ShmSize = request.ShmSize,
+            StopSignal = request.StopSignal,
+            Project = request.Project,
         };
+        form.Labels.AddRange(request.Labels);
+        form.Dns.AddRange(request.Dns);
+        form.DnsSearch.AddRange(request.DnsSearch);
+        form.DnsOptions.AddRange(request.DnsOptions);
+        form.Tmpfs.AddRange(request.Tmpfs);
+        form.Ulimits.AddRange(request.Ulimits);
         (form.ImageName, form.ImageTag) = SplitImage(request.Image);
         form.Publish.AddRange(request.Publish);
         form.Env.AddRange(request.Env);
@@ -305,6 +366,17 @@ public sealed class LaunchForm
             NoHealthcheck = NoHealthcheck,
             Gpus = Gpus,
             Start = Start,
+            Labels = Kept(Labels),
+            Hostname = Hostname.Trim(),
+            Domainname = Domainname.Trim(),
+            Dns = Kept(Dns),
+            DnsSearch = Kept(DnsSearch),
+            DnsOptions = Kept(DnsOptions),
+            Tmpfs = Kept(Tmpfs),
+            ShmSize = ShmSize.Trim(),
+            Ulimits = Kept(Ulimits),
+            StopSignal = StopSignal.Trim(),
+            Project = Project,
         };
     }
 

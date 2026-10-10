@@ -8,7 +8,7 @@ agents alike.
 ## At a glance
 
 - **An MCP agent for WSLC, skill included for Claude, Hermes, OpenClaw, etc.**
-  - 54 MCP tools: your AI assistant runs your containers; destructive actions are off by default, and once switched on each one asks your approval
+  - 55 MCP tools: your AI assistant runs your containers; destructive actions are off by default, and once switched on each one asks your approval
   - Its skill, which teaches the assistant WSLC, installed with one click into Claude Code, Hermes Agent or OpenClaw
   - A small Windows program that sits next to `wslc`, Microsoft's container CLI, and runs it for you
   - Runs in the background of your Windows session: close the browser and the apps, and its jobs, restart policies, alarms and notifications go on
@@ -52,7 +52,7 @@ from the start, with its skill included for Claude, Hermes, OpenClaw, etc.
 
 ### MCP and AI assistants
 
-- **An MCP server** in the agent (`/api/v1/mcp`) with 54 tools: containers,
+- **An MCP server** in the agent (`/api/v1/mcp`) with 55 tools: containers,
   images, volumes, networks, sessions, publishing, notifications, logs and
   the machine's state, and the paste of a `docker run` line.
 - **Destructive tools off by default**: removing, pruning, killing, running a
@@ -131,7 +131,10 @@ publishing and cleaning up need them on.
   several to start, stop or remove.
 - **Run and create** from one form: image, name, ports, volumes and bind
   mounts, environment, networks with static addresses, entrypoint, command,
-  working folder, user, restart policy, memory and CPU limits, health check.
+  working folder, user, restart policy, memory and CPU limits, health check,
+  host and domain names, DNS, labels, tmpfs mounts, shm size, ulimits and
+  stop signal. What `wslc` takes and its inspect does not say back, the
+  agent keeps on the container itself, so editing one never loses it.
   - **Paste a command**: a `docker run` or `wslc run` line, even across
     several lines, fills the form; flags it cannot use are named, and so is
     one WSLC does not need: `--add-host=host.docker.internal:host-gateway`,
@@ -145,6 +148,67 @@ publishing and cleaning up need them on.
     not on the machine has to be pulled for that: the form asks first, and
     shows the pull as the lists do, in the window's title beside Close: a
     ring with its percentage, and beside it its output and its cancel.
+  - **A Compose file**: the **Compose** verb opens a window built as the
+    Run form is. Its one field, **Docker Compose file, or paste**, takes
+    the file in any of three ways: its button opens the system's own Open
+    dialog and leaves the file's path there; a path is pasted; or the
+    Compose file itself is pasted, which the one line holds unseen. Once
+    there is a file, **Context** is asked for under it: the folder its
+    relative paths, its `build` and its `env_file` start from, which the
+    file does not say. It is the file's own folder when the file was opened
+    or its path pasted, and can be typed or picked. Beside
+    it, **Check Compose file** reads the file: nothing is read before it
+    is pressed. Under
+    it the file is shown as the tree it is, its services, networks and
+    volumes as branches to open and close, and on each branch's line
+    what the agent makes of it: taken as written, converted (and into
+    what: a relative path made whole, a volume under the project's name, a
+    folder with a Windows link inside that the file mounts over taken as
+    its entries, a mount each, and the link from its real folder, since WSLC
+    does not follow a junction),
+    or not supported (and why), so nothing the file asks for is dropped
+    unseen. Under the list, **Variables** holds the file's parameters, every
+    `${NAME}` it asks for with the value it was read as, to set before it
+    is saved. The rail holds the Run form's two verbs: **Save** creates the project
+    (its networks and volumes, the images it builds, a container a service)
+    and leaves it stopped, **Run** also starts it, in the order the services
+    depend on each other. Both say first what they are about to do, and then
+    the window closes: the agent does the work, each container shows in the
+    Containers list on its way, with its progress, and the title bar says
+    how the project goes. The project is a row of that list too while it is
+    saved, under its own name: how far it has got, its cancel, and its log,
+    every step and what the builds print, in the window and with the
+    colours and the rail of a container's logs. One that fails keeps its row and
+    its log until it is dismissed. A project stays in the list as a
+    group: one row with its name, how many of its containers run and their
+    CPU and memory share added up, whose **+** opens its containers' rows
+    under it; in cards, its own card followed by its containers' cards, in
+    the same cells as any other card, with a line round them as one, green
+    with every container running, blue with none, and striped in both with
+    some; while something is being done to the project the line is striped
+    and its card's header goes from the stopped tone to the running one
+    and back, as do the cards of the containers a verb has not got to yet,
+    the one whose turn it is turning its ring instead. A restart of the
+    project is of the containers that run: one left stopped stays so. Its own
+    verbs start, stop and restart its containers in the order its services
+    start in, one at a time: the group opens, the container it is on
+    shows it is working and the project how far it has got. A container of
+    a project is not started, by its own verb either, while a service its
+    own depends on is not running, nor restarted, which a window of its
+    own says, naming what has to be started first; stopping one that
+    others of the project depend on says which they are and asks, then
+    stops them first; and removing one warns that they will not be able
+    to work without it. A container's own verb shows its project working
+    with it, and each container shows as it is the moment its turn is
+    over. Its other verbs open its Compose file in this same window, and remove the
+    project (its volumes only when asked about them apart). Containers on
+    their own stand beside the groups as before; sorted by a column, the
+    list is every container in that order, without groups. On a
+    project that exists they apply the file to it: a service that did not
+    change is left alone, one that did is recreated (rehearsed first, the
+    old one kept if the new one does not start), a new one is created, and a
+    container whose service left the file is removed only after asking
+    ([the plan](compose/emulate.md)).
   - **Checked before it runs**: names in use, ports taken, missing networks,
     a command that listens on another port than the one published. Errors
     show on their fields.

@@ -3,7 +3,9 @@
    use), an empty cell otherwise. While a verb runs on the row (BusyRows, by
    Key) the dot pulses in place: it appears pulsing when a container starts
    and settles green once it runs; it pulses when one stops and goes away
-   once it has stopped. Nothing else in the row moves. *@
+   once it has stopped. Nothing else in the row moves. A row that stands for
+   several (a project's, for its containers) pulses while any of them is
+   worked on, which its page says (Working). *@
 @implements IDisposable
 @inject BusyRows Rows
 
@@ -23,7 +25,10 @@
     /// <summary>The row's key, the one its actions component reports busy with; null where no verb can run.</summary>
     [Parameter] public string? Key { get; set; }
 
-    private bool Busy => Rows.IsBusy(Key);
+    /// <summary>Something is being done to what the row stands for, whoever started it: it pulses as for its own verb.</summary>
+    [Parameter] public bool Working { get; set; }
+
+    private bool Busy => Working || Rows.IsBusy(Key);
 
     protected override void OnInitialized() => Rows.Changed += OnChanged;
 
