@@ -62,12 +62,24 @@ public sealed class ProjectRunner(
         var plan = await projects.PlanAsync(request.File, cancellationToken);
         var state = await StateAsync(plan, cancellationToken);
         var services = plan.Services.Where(service => service.Enabled).ToList();
+
+        // As things stand now: an image the save itself builds is not built yet, so a container it
+        // will recreate for that is still listed as left alone here, and said when the save gets to it.
+        var stale = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var service in services)
+        {
+            if (state.Containers.TryGetValue(service.Name, out var made) && await ImageChangedAsync(made, service.Launch.Image, cancellationToken))
+            {
+                stale.Add(service.Name);
+            }
+        }
+
         return new ProjectPreview(
             plan.Name,
             state.Containers.Count > 0,
             services.Where(service => !state.Containers.ContainsKey(service.Name)).Select(service => service.Launch.Name).ToList(),
-            services.Where(service => state.Containers.TryGetValue(service.Name, out var existing) && existing.Config != Hash(service)).Select(service => service.Launch.Name).ToList(),
-            services.Where(service => state.Containers.TryGetValue(service.Name, out var existing) && existing.Config == Hash(service)).Select(service => service.Launch.Name).ToList(),
+            services.Where(service => state.Containers.TryGetValue(service.Name, out var existing) && (existing.Config != Hash(service) || stale.Contains(service.Name))).Select(service => service.Launch.Name).ToList(),
+            services.Where(service => state.Containers.TryGetValue(service.Name, out var existing) && existing.Config == Hash(service) && !stale.Contains(service.Name)).Select(service => service.Launch.Name).ToList(),
             Orphans(state, plan).Select(orphan => orphan.Name).ToList(),
             plan.Networks.Where(network => !network.External && !state.Networks.Contains(network.Name)).Select(network => network.Name).ToList(),
             plan.Volumes.Where(volume => !volume.External && !state.Volumes.Contains(volume.Name)).Select(volume => volume.Name).ToList(),
@@ -352,6 +364,39 @@ public sealed class ProjectRunner(
         }
     }
 
+    /// <summary>
+    /// The container was made from another image than the one its service's
+    /// image is now: the name was built again, or pulled anew, after it was
+    /// created. Asked of <c>wslc</c>, which says of a container the image it
+    /// was made from and of a name the image it points to. False when either
+    /// cannot be told (an image not on the machine yet, which the launch
+    /// pulls): nothing is recreated on a guess.
+    /// </summary>
+    private async Task<bool> ImageChangedAsync(Existing existing, string image, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var made = Inspected((await wslc.RunAsync(["container", "inspect", existing.Id], cancellationToken: cancellationToken)).Stdout, "Image");
+            var now = Inspected((await wslc.RunAsync(["image", "inspect", image], cancellationToken: cancellationToken)).Stdout, "Id");
+            return made.Length > 0 && now.Length > 0 && made != now;
+        }
+        catch (Exception ex) when (ex is WslcException or JsonException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>A text of what an inspect says of its one object: the answer is a list of one.</summary>
+    private static string Inspected(string json, string name)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        var one = root.ValueKind == JsonValueKind.Array && root.GetArrayLength() > 0 ? root[0] : root;
+        return one.ValueKind == JsonValueKind.Object && one.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString() ?? ""
+            : "";
+    }
+
     /// <summary>What the service waits for before it starts: a dependency healthy, or run to its end.</summary>
     private async Task DependenciesAsync(Job job, ComposePlan plan, ComposeService service, CancellationToken stop)
     {
@@ -401,12 +446,15 @@ public sealed class ProjectRunner(
                 await containers.StartAsync(launch.Name, stop);
             }
         }
-        else if (existing.Config != launch.ProjectConfig)
+        else if (existing.Config != launch.ProjectConfig || await ImageChangedAsync(existing, launch.Image, stop))
         {
             // Not stopped half way: a recreate cut short could leave neither the old container nor the new one.
             // The file is what the container is made from again, whatever was changed in it by hand;
             // the names it is published on stay, since a Compose file has no way to say them.
-            job.Say($"Recreating {existing.Name}");
+            // Recreated too when the file says the same and its image does not: built again, or pulled
+            // anew, since the container was made. A container goes on running the image it was made
+            // from, so without this an up after a build left the old code running, saying "unchanged".
+            job.Say(existing.Config == launch.ProjectConfig ? $"Recreating {existing.Name}: its image changed" : $"Recreating {existing.Name}");
             await containers.RecreateAsync(existing.Id, publishing.Keeping(existing.Name, launch), CancellationToken.None);
             stop.ThrowIfCancellationRequested();
         }

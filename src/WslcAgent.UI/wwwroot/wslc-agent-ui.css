@@ -4153,6 +4153,14 @@
     background-color: color-mix(in srgb, var(--mud-palette-tertiary) 12%, var(--mud-palette-surface));
 }
 
+/* And in red, at the rows' own share, when one of its containers failed
+   (could not start, or ended with an error): folded, the project's row is the
+   only place left to say it. After the tertiary rule, which it takes the
+   place of. */
+.wslc-fill > .mud-table .mud-table-body .mud-table-row.wslc-bracket-project.wslc-bracket-failed > .mud-table-cell {
+    background-color: color-mix(in srgb, var(--mud-palette-error) 25%, var(--mud-palette-surface));
+}
+
 .wslc-fill > .mud-table .mud-table-body .mud-table-row.wslc-bracket.wslc-bracket-running > .mud-table-cell {
     --wslc-bracket: var(--mud-palette-success);
 }

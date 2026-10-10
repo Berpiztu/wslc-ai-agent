@@ -62,6 +62,37 @@ public sealed record ContainerSummary(
 
     public bool IsRunning => State == "running";
 
+    /// <summary>The code what it runs ended with, read from the status as the CLI prints it (<c>Exited (1) 2 minutes ago</c>); null while it runs, and for one that never ran.</summary>
+    public int? ExitCode
+    {
+        get
+        {
+            const string before = "Exited (";
+            if (State != "exited" || !Status.StartsWith(before, StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            var end = Status.IndexOf(')', before.Length);
+            return end > 0 && int.TryParse(Status.AsSpan(before.Length, end - before.Length), out var code) ? code : null;
+        }
+    }
+
+    /// <summary>
+    /// It is down and not because someone asked: it could not start
+    /// (<see cref="StartError"/>), or what it runs ended with an error. A
+    /// code of 0 is an end, and 137 and 143 are what a stop leaves (the kill
+    /// and the term signals, 128 and the signal's number): neither is a
+    /// failure.
+    /// </summary>
+    public bool HasFailed => !IsRunning && (StartError.Length > 0 || ExitCode is not (null or 0 or 137 or 143));
+
+    /// <summary>Why it is down, in words, when it <see cref="HasFailed"/>; empty otherwise.</summary>
+    public string Failure =>
+        !HasFailed ? ""
+        : StartError.Length > 0 ? $"Could not start: {StartError}"
+        : $"Exited with code {ExitCode}: its logs say why";
+
     /// <summary>A change to it is being applied: for these seconds it may not exist at all, and no verb has a container to act on.</summary>
     public bool IsRecreating => State == Recreating;
 

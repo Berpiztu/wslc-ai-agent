@@ -227,15 +227,25 @@ publishing and cleaning up need them on.
     list is every container in that order, without groups. On a
     project that exists they apply the file to it: a service that did not
     change is left alone, one that did is recreated (rehearsed first, the
-    old one kept if the new one does not start), a new one is created, and a
+    old one kept if the new one does not start), and so is one whose image
+    was built again or pulled anew since its container was made, so new
+    code runs after a build; a new one is created, and a
     container whose service left the file is removed only after asking. A
     container of a project changed by hand is put back as the file says by
     the next save, which names it apart before it does, as editing it warns
     too; the names it is published on are kept. A container that could
     not start (its port is taken) is left made and stopped, its card's body
-    in red with why, and its logs end with that same line; and a verb on
-    the project that did not get to its end leaves its ring where it
-    stopped, in red (one of two started: 50 %), until it is dismissed
+    in red with why, and its logs end with that same line (the card of a
+    container that did start and whose process then ended with an error is
+    red too, `Exited (1)`; one that was stopped is not, whatever code the
+    stop left). The project says it on itself, since folded its containers
+    are out of sight: its card's body and its row turn red while any of its
+    containers has failed, with their names in red in its list and why on
+    each. And its project
+    shows it too, whoever asked for the start (this screen, the command
+    line, another device): its ring stays in red at how many of its
+    containers run (one of two: 50 %) until its cross lets the failure go,
+    for every client
     ([the plan](compose/emulate.md)). The same from a terminal:
     **`wslc-compose`**, installed with the agent and on the `PATH`, takes
     Compose's own commands (`build`, `up`, `down`, `start`, `stop`,

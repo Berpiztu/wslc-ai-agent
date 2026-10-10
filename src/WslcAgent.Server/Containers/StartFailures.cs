@@ -20,7 +20,20 @@ public sealed class StartFailures
     public void Failed(string container, string why) =>
         _failures[container] = new StartFailure(DateTimeOffset.Now, why.ReplaceLineEndings(" ").Trim());
 
-    public void Started(string container) => _failures.TryRemove(container, out _);
+    /// <summary>The container started, or what was kept for it was seen and let go: forgotten under its id and under its name, whichever it is asked by.</summary>
+    public void Started(string container)
+    {
+        if (!_failures.TryRemove(container, out var failure))
+        {
+            return;
+        }
+
+        // The same failure is kept under the container's other name (Annotate): it goes with it.
+        foreach (var other in _failures.Where(kept => ReferenceEquals(kept.Value, failure)).Select(kept => kept.Key).ToList())
+        {
+            _failures.TryRemove(other, out _);
+        }
+    }
 
     /// <summary>The failure kept for a container, by its name or its id.</summary>
     public StartFailure? Of(string container) => _failures.GetValueOrDefault(container);

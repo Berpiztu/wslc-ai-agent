@@ -121,6 +121,15 @@ public static class ContainerEndpoints
             })
             .WithName("RestoreContainerLogs");
 
+        // Why the container did not start, let go: whoever saw it says so, and it stops being said
+        // on the container and on its project, for every client.
+        group.MapDelete("/{container}/start-error", (string container, StartFailures failures) =>
+            {
+                failures.Started(container);
+                return Results.NoContent();
+            })
+            .WithName("ForgetContainerStartError");
+
         group.MapGet("/{container}/stats", (string container, IContainerService containers, CancellationToken ct) => containers.StatsAsync(container, ct))
             .WithName("ContainerStats");
 

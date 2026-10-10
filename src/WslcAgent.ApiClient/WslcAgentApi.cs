@@ -708,6 +708,10 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task RestartContainerAsync(string container, CancellationToken cancellationToken = default) =>
         PostAsync($"api/v1/containers/{Escape(container)}/restart", cancellationToken);
 
+    /// <summary>Lets go of why the container did not start: it stops being said on it, and on its project, for every client.</summary>
+    public Task ForgetContainerStartErrorAsync(string container, CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Delete, $"api/v1/containers/{Escape(container)}/start-error", cancellationToken);
+
     public Task RemoveContainerAsync(string container, bool force = false, CancellationToken cancellationToken = default) =>
         SendAsync(HttpMethod.Delete, $"api/v1/containers/{Escape(container)}?force={Flag(force)}", cancellationToken);
 

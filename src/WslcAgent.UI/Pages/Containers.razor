@@ -442,7 +442,7 @@
             ? ""
             : $"wslc-bracket {lines.Tones.GetValueOrDefault(card.Project, "wslc-bracket-stopped")}"
               + $"{(lines.First.GetValueOrDefault(card.Project) == card.Id ? " wslc-bracket-start" : "")}{(lines.Last.GetValueOrDefault(card.Project) == card.Id ? " wslc-bracket-end" : "")}"
-              + $"{((IsGroup(card) && IsWorking(card.Project)) || Verbs.IsWaiting(card.Id) ? " wslc-bracket-waiting" : "")}{(IsGroup(card) ? " wslc-bracket-project" : "")}";
+              + $"{((IsGroup(card) && IsWorking(card.Project)) || Verbs.IsWaiting(card.Id) ? " wslc-bracket-waiting" : "")}{(IsGroup(card) ? " wslc-bracket-project" : "")}{(IsGroup(card) && FailedOf(card.Name).Count > 0 ? " wslc-bracket-failed" : "")}";
 
     /// <summary>What stands before a row's name: a project's +/− when it has containers to fold, the step in of a container under its project; nothing for a container on its own, or in a sorted list, which has no groups.</summary>
     private RenderFragment? Mark(ContainerSummary row)
@@ -503,16 +503,76 @@
                               OnLog="@(() => ShowLaunchLogAsync(saving))" OnCancel="@(() => CancelLaunchAsync(saving))" OnDismiss="@(() => DismissLaunchAsync(saving))" />;
     }
 
+    /// <summary>
+    /// What a project's row and ring have to show of work on it: a verb going
+    /// through its containers from this screen; or, with none, that some of
+    /// its containers did not start, read from the containers themselves
+    /// (<see cref="ContainerSummary.StartError"/>). The agent knows that
+    /// whoever asked for the start, this screen, a command line or another
+    /// device, so the project is half up in red for all of them: how many of
+    /// its containers run out of the ones it has, one of two at 50 %.
+    /// </summary>
+    private ProjectWork? WorkOf(string project)
+    {
+        if (Verbs.Of(project) is { } going)
+        {
+            return going;
+        }
+
+        var members = MembersOf(project).Where(member => LaunchOf(member) is null).ToList();
+        var failed = members.Where(member => !member.IsRunning && member.StartError.Length > 0).ToList();
+        return failed.Count == 0
+            ? null
+            : new ProjectWork(string.Join(" ", failed.Select(member => $"{member.Name} could not start: {member.StartError}")),
+                members.Count(member => member.IsRunning), members.Count, "start", Failed: true);
+    }
+
+    /// <summary>
+    /// The project's containers that are down and not because someone asked
+    /// (<see cref="ContainerSummary.HasFailed"/>): one that could not start,
+    /// one whose process ended with an error. The project says it on itself,
+    /// its card's body and its row in red: folded, its containers are out of
+    /// sight, and theirs is the only red there would be.
+    /// </summary>
+    private List<ContainerSummary> FailedOf(string project) => MembersOf(project).Where(member => member.HasFailed).ToList();
+
+    /// <summary>Each of those with why, a line each: what the project's red says to whoever rests the pointer on it.</summary>
+    private string FailuresOf(string project) => string.Join("\n", FailedOf(project).Select(member => $"{member.Name}: {member.Failure}"));
+
+    /// <summary>
+    /// The cross of a project's failure: it was seen. What this screen kept
+    /// of its own verb goes, and so does what the agent keeps of each
+    /// container that did not start, which takes the red off their cards too,
+    /// for every client.
+    /// </summary>
+    private async Task DismissFailureAsync(string project)
+    {
+        Verbs.Dismiss(project);
+        foreach (var member in MembersOf(project).Where(member => member.StartError.Length > 0))
+        {
+            try
+            {
+                await Api.ForgetContainerStartErrorAsync(member.Id);
+            }
+            catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+            {
+                // The agent is the one that keeps it: one it could not be told about stays said, which is true.
+            }
+        }
+
+        await RefreshAsync();
+    }
+
     /// <summary>A project's name while a verb goes through its containers: how far it has got, and the cross that stops it there.</summary>
     private RenderFragment GoingName(ContainerSummary head)
     {
-        if (Verbs.Of(head.Name) is not { } going)
+        if (WorkOf(head.Name) is not { } going)
         {
             return Named(head);
         }
 
         return @<ProgressCell Lead="@Mark(head)" Name="@Titled(head)" Pct="going.Bar" Status="@going.Step" Mixed="@(!going.Failed)" Failed="going.Failed"
-                              CancelTitle="Stop after this container" OnCancel="@(() => Verbs.Cancel(head.Name))" OnDismiss="@(() => Verbs.Dismiss(head.Name))" />;
+                              CancelTitle="Stop after this container" OnCancel="@(() => Verbs.Cancel(head.Name))" OnDismiss="@(() => DismissFailureAsync(head.Name))" />;
     }
 
     /// <summary>A project's verbs: the row's in the table, and in its card (<paramref name="shortcuts"/>) with the Compose file as a button of its own at the left, as a container's card has its own.</summary>
@@ -529,7 +589,8 @@
     /// that only turns for a verb on one container.
     /// </summary>
     private RenderFragment GroupCard(ContainerSummary head) =>
-        @<EntityCard Title="@Titled(head)" Subtitle="@head.Image" AvatarColor="@StateColors.For(head.State)" Tone="@CardTone.Of(head)" BodyTone="Color.Tertiary">
+        @<EntityCard Title="@Titled(head)" Subtitle="@head.Image" AvatarColor="@StateColors.For(head.State)" Tone="@CardTone.Of(head)"
+                     BodyTone="@(FailedOf(head.Name).Count > 0 ? Color.Error : Color.Tertiary)" BodyTitle="@FailuresOf(head.Name)">
                 <HeaderActions>
                     <StateChip State="@head.State" />
                 </HeaderActions>
@@ -540,12 +601,12 @@
                                       LogTitle="View project progress" CancelTitle="Cancel project" DismissTitle="Dismiss project"
                                       OnLog="@(() => ShowLaunchLogAsync(saving))" OnCancel="@(() => CancelLaunchAsync(saving))" OnDismiss="@(() => DismissLaunchAsync(saving))" />
                     }
-                    else if (Verbs.Of(head.Name) is { } going)
+                    else if (WorkOf(head.Name) is { } going)
                     {
                         @* A verb that did not get to its end stays there, where it stopped: half of two containers
                            started is a ring at 50 %, in the error colour, until its cross lets it go. *@
                         <ProgressRing Pct="going.Bar" Status="@going.Step" Mixed="@(!going.Failed)" Failed="going.Failed" KeepPct="true"
-                                      CancelTitle="Stop after this container" OnCancel="@(() => Verbs.Cancel(head.Name))" OnDismiss="@(() => Verbs.Dismiss(head.Name))" />
+                                      CancelTitle="Stop after this container" OnCancel="@(() => Verbs.Cancel(head.Name))" OnDismiss="@(() => DismissFailureAsync(head.Name))" />
                     }
                     else if (IsWorking(head.Name))
                     {
@@ -577,7 +638,8 @@
                         <div class="wslc-card-members">
                             @foreach (var member in MembersOf(head.Name))
                             {
-                                <MudText Typo="Typo.body2" Class="@(member.IsRunning ? "" : "mud-text-secondary")" title="@($"{member.Name}: {member.State}")">@member.Name</MudText>
+                                <MudText Typo="Typo.body2" Class="@(member.HasFailed ? "mud-error-text" : member.IsRunning ? "" : "mud-text-secondary")"
+                                         title="@($"{member.Name}: {(member.HasFailed ? member.Failure : member.State)}")">@member.Name</MudText>
                             }
                         </div>
                     </MudStack>
@@ -590,7 +652,7 @@
     /// <summary>A container's card, the same on its own and after its project's card.</summary>
     private RenderFragment ContainerCard(ContainerSummary c) =>
         @<EntityCard Title="@c.Name" Subtitle="@c.Image" AvatarColor="@StateColors.For(c.State)" Key="@c.Id" Tone="@CardTone.Of(c)"
-                     BodyTone="@(c.StartError.Length > 0 ? Color.Error : null)" BodyTitle="@(c.StartError.Length > 0 ? $"Could not start: {c.StartError}" : "")">
+                     BodyTone="@(c.HasFailed ? Color.Error : null)" BodyTitle="@c.Failure">
                         <HeaderActions>
                             <StateChip State="@c.State" />
                         </HeaderActions>

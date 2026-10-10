@@ -203,6 +203,13 @@ A new container is created and then started, two steps, not run in one:
 container whose port is taken fails at its start and is left made and
 stopped, as Compose leaves it, where a `run` that fails leaves nothing.
 
+A container is recreated too when the file says the same of its service and
+its image is no longer the one it was made from: the save built it again, or
+it was pulled anew. `wslc container inspect` says the image a container was
+made from and `wslc image inspect` the one a name points to now; when they
+differ the container is running old code, and an `up` after a build that
+answered "unchanged" left it running.
+
 The file is what a project's container is made from. One changed by hand
 (View & edit) stays in its project and loses the `config` label, which is
 how the next save knows: it is recreated as the file says, and the question
