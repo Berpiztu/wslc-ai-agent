@@ -28,6 +28,13 @@ public sealed class DashboardObjectPartAttribute(string key, string label) : Att
     public bool Line { get; init; }
 
     /// <summary>
+    /// A part drawn in a box of its own — a table's column titles, its rows —
+    /// which takes a background and an alignment too, across and down, beside
+    /// the object's own.
+    /// </summary>
+    public bool Box { get; init; }
+
+    /// <summary>
     /// The user can hide the part, and the object draws itself without it (a
     /// chart is its summary, its legend and its lines, each shown or not, none
     /// an object of its own).

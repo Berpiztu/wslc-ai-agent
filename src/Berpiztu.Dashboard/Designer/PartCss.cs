@@ -8,10 +8,12 @@ namespace Berpiztu.Dashboard.Designer;
 /// each part the user changed, its size as a multiple of the object's
 /// (<c>--bz-part-{key}-scale</c>), a line's thickness as a multiple of its
 /// design's (<c>--bz-part-{key}-thickness</c>), its colour (<c>--bz-part-{key}-color</c>)
-/// and its weight (<c>--bz-part-{key}-weight</c>), with a class saying which
-/// of the last two are set (<c>bz-part-{key}-color</c>,
-/// <c>bz-part-{key}-weight</c>), so the application's stylesheet overrides
-/// its design only there. A part as designed hands nothing.
+/// and its weight (<c>--bz-part-{key}-weight</c>), a box's background
+/// (<c>--bz-part-{key}-background</c>) and alignment (<c>--bz-part-{key}-align</c>:
+/// left, center, right; <c>--bz-part-{key}-valign</c>: top, middle, bottom), with a
+/// class saying which of all but the sizes are set (<c>bz-part-{key}-color</c>,
+/// <c>-weight</c>, <c>-background</c>, <c>-align</c>, <c>-valign</c>), so the
+/// application's stylesheet overrides its design only there. A part as designed hands nothing.
 /// </summary>
 internal static class PartCss
 {
@@ -44,6 +46,21 @@ internal static class PartCss
         {
             yield return $"; --bz-part-{key}-weight: {(bold ? 700 : 400)}";
         }
+
+        if (style.Background is { } background && ThemeColors.Css(background) is { } ground)
+        {
+            yield return $"; --bz-part-{key}-background: {ground}";
+        }
+
+        if (style.Horizontal is { } across)
+        {
+            yield return $"; --bz-part-{key}-align: {across.ToString().ToLowerInvariant()}";
+        }
+
+        if (style.Vertical is { } down)
+        {
+            yield return $"; --bz-part-{key}-valign: {down.ToString().ToLowerInvariant()}";
+        }
     }
 
     private static IEnumerable<string> ClassesOf(string key, PartStyle style)
@@ -56,6 +73,21 @@ internal static class PartCss
         if (style.Bold is not null)
         {
             yield return $" bz-part-{key}-weight";
+        }
+
+        if (style.Background is { } background && ThemeColors.Css(background) is not null)
+        {
+            yield return $" bz-part-{key}-background";
+        }
+
+        if (style.Horizontal is not null)
+        {
+            yield return $" bz-part-{key}-align";
+        }
+
+        if (style.Vertical is not null)
+        {
+            yield return $" bz-part-{key}-valign";
         }
     }
 }

@@ -101,7 +101,38 @@
                                              Options="ColorOptions" Label="Colour" Class="bz-dash-prop-wide"
                                              Title="@($"{part.Label}: its colour; Inherited is the object's design")" />
                             }
+                            @if (part.Box)
+                            {
+                                <ChoiceField T="ThemeColor" Value="@(style.Background ?? ThemeColor.Inherited)"
+                                             ValueChanged="@(color => SetAsync(shown.WithPart(part.Key, style with { Background = Kept(color, ThemeColor.Inherited) })))"
+                                             Options="ColorOptions" Label="Background" Class="bz-dash-prop-wide"
+                                             Title="@($"{part.Label}: its ground; Inherited is the object's design")" />
+                            }
                         </div>
+                        @* A box's alignment, as the object's: none chosen is the object's design. *@
+                        @if (part.Box)
+                        {
+                            <div class="bz-dash-align-rows mt-2">
+                                <div class="bz-dash-align-row">
+                                    <MudToggleGroup T="HorizontalAlign?" Value="@style.Horizontal"
+                                                    ValueChanged="@(across => SetAsync(shown.WithPart(part.Key, style with { Horizontal = across })))"
+                                                    Size="Size.Small" Color="Color.Primary" Outlined="true" Delimiters="false">
+                                        <MudToggleItem Value="@((HorizontalAlign?)HorizontalAlign.Left)" title="@($"{part.Label}: align left")"><MudIcon Icon="@Icons.Material.Filled.FormatAlignLeft" Size="Size.Small" /></MudToggleItem>
+                                        <MudToggleItem Value="@((HorizontalAlign?)HorizontalAlign.Center)" title="@($"{part.Label}: center")"><MudIcon Icon="@Icons.Material.Filled.FormatAlignCenter" Size="Size.Small" /></MudToggleItem>
+                                        <MudToggleItem Value="@((HorizontalAlign?)HorizontalAlign.Right)" title="@($"{part.Label}: align right")"><MudIcon Icon="@Icons.Material.Filled.FormatAlignRight" Size="Size.Small" /></MudToggleItem>
+                                    </MudToggleGroup>
+                                </div>
+                                <div class="bz-dash-align-row">
+                                    <MudToggleGroup T="VerticalAlign?" Value="@style.Vertical"
+                                                    ValueChanged="@(down => SetAsync(shown.WithPart(part.Key, style with { Vertical = down })))"
+                                                    Size="Size.Small" Color="Color.Primary" Outlined="true" Delimiters="false">
+                                        <MudToggleItem Value="@((VerticalAlign?)VerticalAlign.Top)" title="@($"{part.Label}: align top")"><MudIcon Icon="@Icons.Material.Filled.VerticalAlignTop" Size="Size.Small" /></MudToggleItem>
+                                        <MudToggleItem Value="@((VerticalAlign?)VerticalAlign.Middle)" title="@($"{part.Label}: middle")"><MudIcon Icon="@Icons.Material.Filled.VerticalAlignCenter" Size="Size.Small" /></MudToggleItem>
+                                        <MudToggleItem Value="@((VerticalAlign?)VerticalAlign.Bottom)" title="@($"{part.Label}: align bottom")"><MudIcon Icon="@Icons.Material.Filled.VerticalAlignBottom" Size="Size.Small" /></MudToggleItem>
+                                    </MudToggleGroup>
+                                </div>
+                            </div>
+                        }
                     </PropertySection>
                 }
                 @* Each measure it can raise an alarm on: whether it is on,
