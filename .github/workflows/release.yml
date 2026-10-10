@@ -89,10 +89,13 @@ jobs:
           $tag = "${{ github.ref_name }}"
           $files = @("wslc-ai-agent.msi", "wslc-ai-client.msi", "wslc-ai-client.apk") | ForEach-Object { Join-Path "dist" $_ }
           $files += Write-WslcAgentDefaultsFiles -Destination (Join-Path $PWD "dist")
+          # What the version brings, written beside the code (docs/release-notes/1.5.0.md),
+          # goes first on the release's page, above the list GitHub writes itself.
+          $notes = @(Get-WslcAgentReleaseNotes $tag)
           gh release view $tag 2>$null | Out-Null
           if ($LASTEXITCODE -eq 0) {
             gh release upload $tag @files --clobber
           } else {
-            gh release create $tag @files --title "WSLC AI Agent $($tag.TrimStart('v'))" --generate-notes
+            gh release create $tag @files --title "WSLC AI Agent $($tag.TrimStart('v'))" --generate-notes @notes
           }
           if ($LASTEXITCODE -ne 0) { throw "Publishing $tag failed with exit code $LASTEXITCODE" }

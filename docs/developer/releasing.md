@@ -49,11 +49,32 @@ about 20 minutes:
    `C:\Berpiztu\wslc-ai-agent` as the package folder), `wslc-ai-client.msi`
    and `wslc-ai-client.apk`, at exactly the versions the tag's commit carries.
 2. Creates the GitHub release with the three installers and the two defaults
-   files, its notes listing the pull requests merged since the last one.
+   files. Its page opens with what the version brings, when the repository
+   says it ([below](#what-the-releases-page-says)), and ends with the list
+   GitHub writes itself: the pull requests merged since the last release
+   and the link that compares the two.
 
 A failed build leaves the tag without a release: fix what failed, then run
 the workflow again on the tag (Actions → Release → Run workflow, the tag as
 the branch).
+
+### What the release's page says
+
+A release whose changes are worth telling has them written before it is
+made, in `docs/release-notes/<version>.md` (`docs/release-notes/1.5.0.md` for the tag
+`v1.5.0`): Markdown, for the person who is about to install it, not a list
+of commits. The file has to be committed with the release: the script says,
+before it tags, whether the version has one, and takes a new file only when
+you answer `y` to its question about new files. Without the file the page
+holds GitHub's own list alone, which for work pushed straight to `main` is
+one link.
+
+The file is read when the release is created. To change the page of a
+release that exists, edit it on GitHub, or:
+
+```powershell
+gh release edit v1.5.0 --notes-file docs\release-notes\1.5.0.md
+```
 
 ### The repository's secrets
 

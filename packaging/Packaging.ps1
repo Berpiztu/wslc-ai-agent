@@ -211,6 +211,18 @@ function Copy-WslcAgentNotices {
     Get-ChildItem -LiteralPath (Join-Path $root "packaging\licenses") -File | Copy-Item -Destination $licenses -Force
 }
 
+function Get-WslcAgentReleaseNotes {
+    <#
+    What a release brings, written beside the code as docs\release-notes\<version>.md:
+    the arguments that put it on the release's page (gh release create), or
+    none when that version has no such file and the page keeps to the list
+    GitHub writes itself.
+    #>
+    param([Parameter(Mandatory = $true)][string]$Tag)
+    $notes = Join-Path (Get-WslcAgentRepoRoot) "docs\release-notes\$($Tag.TrimStart('v')).md"
+    if (Test-Path -LiteralPath $notes) { "--notes-file"; $notes }
+}
+
 function Write-WslcAgentDefaultsFiles {
     <#
     The objects' defaults and the default dashboard as they travel beside the

@@ -177,6 +177,17 @@ if (git tag --list $tag) {
 }
 
 Write-Host "Release: agent $agentNow -> $agentVersion, client $clientNow -> $clientVersion (versionCode $clientCode), tag $tag" -ForegroundColor Cyan
+# What the release's page says of it: docs\release-notes\<version>.md, when the version has one.
+$notes = @(Get-WslcAgentReleaseNotes $tag)
+if ($notes.Count -gt 0 -and -not (git ls-files -- $notes[1])) {
+    # GitHub builds the release from the tag's commit: a file that is only here would not be on its page.
+    throw "$($notes[1]) is not in the repository; commit it and run this again."
+}
+if ($notes.Count -gt 0) {
+    Write-Host "Its page on GitHub opens with $($notes[1])." -ForegroundColor Cyan
+} else {
+    Write-Host "docs\release-notes\$agentVersion.md is not there: its page on GitHub will only list the changes GitHub finds." -ForegroundColor Yellow
+}
 Set-WslcAgentTrackedValue $Props "Version" $agentVersion
 Set-WslcAgentTrackedValue $Csproj "ApplicationDisplayVersion" $clientVersion
 Set-WslcAgentTrackedValue $Csproj "ApplicationVersion" "$clientCode"
@@ -221,7 +232,7 @@ $installers += Write-WslcAgentDefaultsFiles -Destination (Join-Path $RepoRoot "d
 
 # 6. The GitHub release, when asked.
 if ($Publish) {
-    gh release create $tag @installers --title "WSLC AI Agent $agentVersion" --generate-notes
+    gh release create $tag @installers --title "WSLC AI Agent $agentVersion" --generate-notes @notes
     if ($LASTEXITCODE -ne 0) { throw "gh release create failed with exit code $LASTEXITCODE; the tag $tag is pushed, create the release by hand." }
     Write-Host "Release $tag published with its three installers and the two defaults files." -ForegroundColor Green
 } else {
