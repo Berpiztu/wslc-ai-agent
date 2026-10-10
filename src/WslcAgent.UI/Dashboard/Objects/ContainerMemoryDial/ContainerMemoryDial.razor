@@ -4,7 +4,7 @@
 @namespace WslcAgent.UI.Dashboard.Objects
 @using Berpiztu.Dashboard.Catalogue
 @inherits ContainerObject
-@attribute [DashboardObject("wslc.container-memory", "Container memory", Group = "Container", Subgroup = "User", Icon = Icons.Material.Filled.Memory, Source = ContainerSourceFamily.FamilyKey, Columns = 6, Rows = 6, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Right)]
+@attribute [DashboardObject("wslc.container-memory", "Container memory", Group = "Container", Subgroup = "User", Icon = Icons.Material.Filled.Memory, Source = ContainerSourceFamily.FamilyKey, Columns = 6, Rows = 6, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Right, CardOnly = true)]
 @attribute [DashboardObjectAlarm(DashboardMeasures.Memory, "Memory")]
 @attribute [DashboardObjectPart("ring", "Ring", Text = false, Line = true)]
 @attribute [DashboardObjectPart("figure", "Figure")]

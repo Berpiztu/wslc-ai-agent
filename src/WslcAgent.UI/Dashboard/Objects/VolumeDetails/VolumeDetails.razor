@@ -6,7 +6,7 @@
 @using Berpiztu.Dashboard.Catalogue
 @using Berpiztu.Dashboard.Model
 @inherits VolumeObject
-@attribute [DashboardObject("wslc.volume-details", "Volume details", Group = "Volume", Subgroup = "User", Icon = Icons.Material.Filled.Article, Source = VolumeSourceFamily.FamilyKey, Columns = 12, Rows = 6, Fills = true, Horizontal = HorizontalAlign.Left, Vertical = VerticalAlign.Top, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both)]
+@attribute [DashboardObject("wslc.volume-details", "Volume details", Group = "Volume", Subgroup = "User", Icon = Icons.Material.Filled.Article, Source = VolumeSourceFamily.FamilyKey, Columns = 12, Rows = 6, Fills = true, Horizontal = HorizontalAlign.Left, Vertical = VerticalAlign.Top, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both, CardOnly = true)]
 
 @if (Volume is { } v)
 {

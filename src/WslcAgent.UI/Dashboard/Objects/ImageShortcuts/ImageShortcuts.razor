@@ -6,7 +6,7 @@
 @using Berpiztu.Dashboard.Catalogue
 @using Berpiztu.Dashboard.Model
 @inherits ImageObject
-@attribute [DashboardObject("wslc.image-shortcuts", "Image shortcuts", Group = "Image", Subgroup = "User", Icon = Icons.Material.Filled.Apps, Source = ImageSourceFamily.FamilyKey, Columns = 6, Rows = 2, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Left, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Left)]
+@attribute [DashboardObject("wslc.image-shortcuts", "Image shortcuts", Group = "Image", Subgroup = "User", Icon = Icons.Material.Filled.Apps, Source = ImageSourceFamily.FamilyKey, Columns = 6, Rows = 2, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Left, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Left, CardOnly = true)]
 
 @if (Image is { } r)
 {

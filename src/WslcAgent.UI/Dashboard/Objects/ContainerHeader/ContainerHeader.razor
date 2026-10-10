@@ -11,7 +11,7 @@
 @using Berpiztu.Dashboard.Catalogue
 @using Berpiztu.Dashboard.Model
 @inherits ContainerObject
-@attribute [DashboardObject("wslc.container-header", "Container header", Group = "Container", Subgroup = "User", Icon = Icons.Material.Filled.AccountBox, Source = ContainerSourceFamily.FamilyKey, Columns = 16, Rows = 4, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Left, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both)]
+@attribute [DashboardObject("wslc.container-header", "Container header", Group = "Container", Subgroup = "User", Icon = Icons.Material.Filled.AccountBox, Source = ContainerSourceFamily.FamilyKey, Columns = 16, Rows = 4, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Left, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both, CardOnly = true)]
 @attribute [DashboardObjectPart("name", "Name")]
 @attribute [DashboardObjectPart("subtitle", "Subtitle")]
 @inject TransferRows Transfers

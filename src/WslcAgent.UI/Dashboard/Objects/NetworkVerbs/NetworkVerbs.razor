@@ -6,7 +6,7 @@
 @using Berpiztu.Dashboard.Catalogue
 @using Berpiztu.Dashboard.Model
 @inherits NetworkObject
-@attribute [DashboardObject("wslc.network-verbs", "Network verbs", Group = "Network", Subgroup = "User", Icon = Icons.Material.Filled.SmartButton, Source = NetworkSourceFamily.FamilyKey, Columns = 6, Rows = 2, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Right, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both)]
+@attribute [DashboardObject("wslc.network-verbs", "Network verbs", Group = "Network", Subgroup = "User", Icon = Icons.Material.Filled.SmartButton, Source = NetworkSourceFamily.FamilyKey, Columns = 6, Rows = 2, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Right, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both, CardOnly = true)]
 
 @if (Network is { } r)
 {

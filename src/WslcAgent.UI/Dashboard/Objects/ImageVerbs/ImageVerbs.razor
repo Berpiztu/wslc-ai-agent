@@ -7,7 +7,7 @@
 @using Berpiztu.Dashboard.Catalogue
 @using Berpiztu.Dashboard.Model
 @inherits ImageObject
-@attribute [DashboardObject("wslc.image-verbs", "Image verbs", Group = "Image", Subgroup = "User", Icon = Icons.Material.Filled.SmartButton, Source = ImageSourceFamily.FamilyKey, Columns = 8, Rows = 2, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Right, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both)]
+@attribute [DashboardObject("wslc.image-verbs", "Image verbs", Group = "Image", Subgroup = "User", Icon = Icons.Material.Filled.SmartButton, Source = ImageSourceFamily.FamilyKey, Columns = 8, Rows = 2, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Right, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both, CardOnly = true)]
 
 @if (Image is { } r)
 {

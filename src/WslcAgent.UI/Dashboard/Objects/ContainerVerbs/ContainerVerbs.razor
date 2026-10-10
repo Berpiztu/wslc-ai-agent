@@ -11,7 +11,7 @@
 @using Berpiztu.Dashboard.Catalogue
 @using Berpiztu.Dashboard.Model
 @inherits ContainerObject
-@attribute [DashboardObject("wslc.container-verbs", "Container verbs", Group = "Container", Subgroup = "User", Icon = Icons.Material.Filled.SmartButton, Source = ContainerSourceFamily.FamilyKey, Columns = 8, Rows = 2, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Right, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both)]
+@attribute [DashboardObject("wslc.container-verbs", "Container verbs", Group = "Container", Subgroup = "User", Icon = Icons.Material.Filled.SmartButton, Source = ContainerSourceFamily.FamilyKey, Columns = 8, Rows = 2, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Right, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both, CardOnly = true)]
 
 @if (Container is { } c)
 {
