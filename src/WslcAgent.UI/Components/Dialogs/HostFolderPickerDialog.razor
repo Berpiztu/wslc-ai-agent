@@ -2,7 +2,11 @@
    ＋ New, Use and Close; under it ↑ Up, ⌂ Home and the current path; a boxed
    list of one fixed height whose first row ".." goes up, a click selects a
    folder (green) and a double-click opens it; the help line at the foot.
-   Use returns the selected folder, or the current one when none is selected. *@
+   Use returns the selected folder, or the current one when none is selected.
+   Asked for kinds of files (Files), it is the picker of a file of the host:
+   the folder's files of those kinds are listed under its folders, a click
+   selects one and a double-click takes it; Use returns the selected file and
+   waits for one, and there is no New. *@
 @using WslcAgent.ApiClient
 @inject WslcAgentApi Api
 @inject IDialogService Dialogs
@@ -10,7 +14,10 @@
 <MudDialog>
     <TitleContent>
         <DialogTitle Title="@Dialog.Title">
-            <MudButton Size="Size.Small" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Disabled="@(_listing is null || _listing.Path.Length == 0)" OnClick="NewFolderAsync">New</MudButton>
+            @if (!PicksFile)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Disabled="@(_listing is null || _listing.Path.Length == 0)" OnClick="NewFolderAsync">New</MudButton>
+            }
             <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Success" Disabled="@(Chosen.Length == 0)" OnClick="@(() => Dialog.Close(DialogResult.Ok(Chosen)))">Use</MudButton>
             <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
         </DialogTitle>
@@ -34,6 +41,11 @@
                         <MudListItem T="string" Value="@folder" Icon="@(_listing.Path.Length == 0 ? WslcIcons.Drive : WslcIcons.Files)" Text="@folder"
                                      OnClick="@(() => Select(folder))" @ondblclick="@(() => OpenAsync(Combine(folder)))" />
                     }
+                    @foreach (var file in _listing.Files ?? [])
+                    {
+                        <MudListItem T="string" Value="@file" Icon="@WslcIcons.Document" Text="@file"
+                                     OnClick="@(() => Select(file))" @ondblclick="@(() => Dialog.Close(DialogResult.Ok(Combine(file))))" />
+                    }
                 }
             </MudList>
         </MudPaper>
@@ -41,7 +53,7 @@
         {
             <MudAlert Severity="Severity.Error" Class="mt-2">@_error</MudAlert>
         }
-        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">Folders on the WSLC host (not this device). Double-click a folder to open it. First row .. goes up.</MudText>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">@Help</MudText>
     </DialogContent>
 </MudDialog>
 
@@ -52,13 +64,34 @@
 
     [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
 
-    /// <summary>The field's current folder: the picker opens on its parent with it selected; empty or unknown starts at the drives.</summary>
+    /// <summary>The field's current folder: the picker opens on its parent with it selected; empty or unknown starts at the drives. Picking a file, the field's current file, the same way.</summary>
     [Parameter] public string Path { get; set; } = "";
 
-    /// <summary>The selected folder inside the current one, else the current folder; empty at the drives.</summary>
+    /// <summary>
+    /// The kinds of file to pick one of, by their extensions
+    /// (<c>.yaml,.yml</c>): the picker then lists them under the folders and
+    /// returns a file. Empty, it picks a folder.
+    /// </summary>
+    [Parameter] public string Files { get; set; } = "";
+
+    private bool PicksFile => Files.Length > 0;
+
+    /// <summary>What is selected is a file of the folder listed.</summary>
+    private bool FileSelected => _selected is { Length: > 0 } && (_listing?.Files?.Contains(_selected) ?? false);
+
+    /// <summary>
+    /// What Use returns. Picking a folder: the selected folder inside the
+    /// current one, else the current folder; empty at the drives. Picking a
+    /// file: the selected file, and nothing until one is.
+    /// </summary>
     private string Chosen => _listing is null ? ""
+        : PicksFile ? (FileSelected ? Combine(_selected!) : "")
         : _selected is { Length: > 0 } and not ".." ? Combine(_selected)
         : _listing.Path;
+
+    private string Help => PicksFile
+        ? $"Files on the WSLC host (not this device): {Files.Replace(",", ", ")}. Double-click a folder to open it, a file to take it. First row .. goes up."
+        : "Folders on the WSLC host (not this device). Double-click a folder to open it. First row .. goes up.";
 
     protected override async Task OnInitializedAsync()
     {
@@ -77,9 +110,9 @@
             return;
         }
 
-        if (_listing!.Folders.FirstOrDefault(f => string.Equals(f.TrimEnd('\\', '/'), leaf, StringComparison.OrdinalIgnoreCase)) is { } folder)
+        if (_listing!.Folders.Concat(_listing.Files ?? []).FirstOrDefault(f => string.Equals(f.TrimEnd('\\', '/'), leaf, StringComparison.OrdinalIgnoreCase)) is { } entry)
         {
-            Select(folder);
+            Select(entry);
         }
     }
 
@@ -88,9 +121,14 @@
     {
         try
         {
-            _listing = await Api.GetHostFoldersAsync(path);
+            _listing = await Api.GetHostFoldersAsync(path, files: Files);
             _selected = null;
-            _error = null;
+
+            // An agent from before it listed files answers with the folders alone: said, since
+            // an empty list would read as a folder with no such file in it.
+            _error = PicksFile && _listing.Files is null
+                ? "This agent is older than this client and lists folders only: close this and type the file's path."
+                : null;
             return true;
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
@@ -105,9 +143,9 @@
         }
     }
 
-    private void Select(string folder)
+    private void Select(string entry)
     {
-        _selected = folder;
+        _selected = entry;
         Dialog.StateHasChanged();
     }
 
@@ -137,15 +175,15 @@
     /// Joins with the host's own separator. Path.Combine would use the
     /// browser runtime's (a slash), which is not the Windows agent's.
     /// </summary>
-    private string Combine(string folder)
+    private string Combine(string entry)
     {
         var path = _listing!.Path;
         if (path.Length == 0)
         {
-            return folder;
+            return entry;
         }
 
         var separator = path.Contains('\\') ? '\\' : '/';
-        return path.TrimEnd('\\', '/') + separator + folder;
+        return path.TrimEnd('\\', '/') + separator + entry;
     }
 }

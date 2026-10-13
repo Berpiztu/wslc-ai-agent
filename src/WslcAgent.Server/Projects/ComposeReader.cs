@@ -15,6 +15,8 @@ namespace WslcAgent.Server.Projects;
 /// <param name="ReadFile">A file's text by its full path, null when it is not there: how an <c>env_file</c> is read.</param>
 /// <param name="ListFolder">The entries of a folder by its full path, null when it is not a folder there: how a link inside a mounted folder is found. Not given, no folder is looked into.</param>
 /// <param name="Services">The services asked for by name: they are taken, with the ones they depend on, and no other, whatever the profiles say. None, the profiles decide.</param>
+/// <param name="Networks">The networks there are on the machine, by name: how an external one that is missing is said on its line before anything runs. Not given, nothing is said of it.</param>
+/// <param name="Volumes">The volumes there are on the machine, the same way.</param>
 public sealed record ComposeSource(
     string Name,
     string Folder,
@@ -22,7 +24,9 @@ public sealed record ComposeSource(
     IReadOnlyCollection<string> Profiles,
     Func<string, string?> ReadFile,
     Func<string, IReadOnlyList<HostEntry>?>? ListFolder = null,
-    IReadOnlyCollection<string>? Services = null);
+    IReadOnlyCollection<string>? Services = null,
+    IReadOnlyCollection<string>? Networks = null,
+    IReadOnlyCollection<string>? Volumes = null);
 
 /// <summary>An entry of a folder of the agent's machine, as the reader needs it to place a mount.</summary>
 /// <param name="Name">Its name.</param>
@@ -994,7 +998,11 @@ public static partial class ComposeReader
             }
 
             var named = Named(key, map);
-            Mark(at, named.External || named.Name == key ? ComposeLine.Ok : ComposeLine.Converted, named.External ? $"external: {named.Name} is used as it is" : $"→ network {named.Name}");
+            if (!MissingExternal(at, "network", named, source.Networks))
+            {
+                Mark(at, named.External || named.Name == key ? ComposeLine.Ok : ComposeLine.Converted, named.External ? $"external: {named.Name} is used as it is" : $"→ network {named.Name}");
+            }
+
             var ipam = List(Map(map.GetValueOrDefault("ipam")).GetValueOrDefault("config")).OfType<Dictionary<string, object?>>().FirstOrDefault() ?? new Dictionary<string, object?>();
             var network = new ComposeNetwork(key, named.Name, Text(ipam.GetValueOrDefault("subnet")), Text(ipam.GetValueOrDefault("gateway")), IsTrue(map.GetValueOrDefault("internal")), named.External);
             _usedNetworks[key] = network;
@@ -1017,10 +1025,33 @@ public static partial class ComposeReader
 
             ReadKeys(at, map, $"volume {key}", "name", "external", "driver", "driver_opts");
             var named = Named(key, map);
-            Mark(at, named.External || named.Name == key ? ComposeLine.Ok : ComposeLine.Converted, named.External ? $"external: {named.Name} is used as it is" : $"→ volume {named.Name}");
+            if (!MissingExternal(at, "volume", named, source.Volumes))
+            {
+                Mark(at, named.External || named.Name == key ? ComposeLine.Ok : ComposeLine.Converted, named.External ? $"external: {named.Name} is used as it is" : $"→ volume {named.Name}");
+            }
+
             var volume = new ComposeVolume(key, named.Name, Text(map.GetValueOrDefault("driver")), Pairs(map.GetValueOrDefault("driver_opts")), named.External);
             _usedVolumes[key] = volume;
             return volume;
+        }
+
+        /// <summary>
+        /// An external network or volume that is not on the machine: the
+        /// project does not create it, so bringing it up stops there. Said on
+        /// its line when the reading knows what the machine has, so it is
+        /// read before anything runs and not in the log of a save that failed.
+        /// True when it was said: the line then says that, and nothing else.
+        /// </summary>
+        private bool MissingExternal(string at, string kind, (string Name, bool External) named, IReadOnlyCollection<string>? there)
+        {
+            if (!named.External || there is null || there.Contains(named.Name))
+            {
+                return false;
+            }
+
+            Warn(at, $"The {kind} {named.Name} is external to the project and is not on this machine: the project cannot come up until it is created.",
+                $"external and not on this machine: create {kind} {named.Name} first, give its real name (name:), or take external out");
+            return true;
         }
 
         /// <summary>The name on the machine: the file's own <c>name</c>, the key itself for an external one, <c>project_key</c> otherwise.</summary>

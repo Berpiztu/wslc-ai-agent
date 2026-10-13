@@ -150,11 +150,18 @@ publishing and cleaning up need them on.
     ring with its percentage, and beside it its output and its cancel.
   - **A Compose file**: the **Compose** verb opens a window built as the
     Run form is. The file is given one of two ways, a field each: **Open
-    Compose file**, whose button opens the system's own Open dialog and
-    leaves the file's path there, or a path is typed; and **Paste
+    Compose file**, a file of the server's disk, whose button leaves the
+    file's path there, or a path is typed (the button is a menu that asks
+    where the file is: **From the server**, a picker that shows the
+    server's disk and its Compose files, or **From this device**, the
+    device's own Open dialog, for whoever has the file on the machine in
+    front of them and wants its containers on a server somewhere else);
+    and **Paste
     Compose**, where the Compose file itself is pasted, the one line
     showing its first and its arrow opening it whole over the window, to
-    read and change. Once
+    read and change. From another device than the agent's, a file of that
+    device is loaded with the rail's **Load**, and comes as a paste does:
+    its text, without the folder it was in. Once
     there is a file, **Context** is asked for under it: the folder its
     relative paths, its `build` and its `env_file` start from, which the
     file does not say. It is the file's own folder when the file was opened
@@ -169,7 +176,13 @@ publishing and cleaning up need them on.
     its entries, a mount each, and the link from its real folder, since WSLC
     does not follow a junction),
     or not supported (and why), so nothing the file asks for is dropped
-    unseen. On the line of **Context** and **Check Compose file**,
+    unseen. A branch is drawn in the colour of the worst line in it,
+    however deep: one line not supported makes its branch red, and every
+    branch over it, so a closed branch never reads as all well. A network
+    or a volume the file names as `external` and the machine does not have
+    is said on its line, and Save and Run then stop before anything is
+    made, in a window that names it: the project does not create what is
+    external to it. On the line of **Context** and **Check Compose file**,
     **Variables** holds the file's parameters, every `${NAME}` it asks for
     with the value it was read as, to set before it is saved, and
     **Profiles** the profiles to take the services of: its ⋮ lists the

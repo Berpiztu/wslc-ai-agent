@@ -361,8 +361,10 @@ Export JSON (`/containers/{id}/inspect.json` download) · Backup
   `PullImageDialog` are the dialogs the pickers embed.
 - Pickers exist once, in `Components/Pickers.cs`: `ImageAsync`, `VolumeAsync`,
   `NetworkAsync` (one `NamedPickerDialog` fed a loader and the resource's
-  create dialog, which selects what it created) and `HostFolderAsync`
-  (`HostFolderPickerDialog`, the agent machine's folders).
+  create dialog, which selects what it created), `HostFolderAsync`
+  (`HostFolderPickerDialog`, the agent machine's folders) and
+  `HostFileAsync` (the same dialog asked for kinds of files, which it lists
+  under the folders: a file of the agent machine's disk).
 - The container launch form is one component, `Launch/ContainerForm`, in
   three uses: Run (Fill bar, always detached), Create (Start
   toggle) and View & edit (pre-filled from `GET /containers/{id}/details`,

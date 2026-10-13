@@ -33,6 +33,7 @@ public static class WslcIcons
     public static readonly string Copy = Pictogram("📋");
     public static readonly string Debug = Pictogram("🐞");
     public static readonly string Files = Pictogram("📁");
+    public static readonly string Document = Pictogram("📄");
     public static readonly string Drive = Pictogram("🖴");
     public static readonly string Restart = Pictogram("🔄");
 

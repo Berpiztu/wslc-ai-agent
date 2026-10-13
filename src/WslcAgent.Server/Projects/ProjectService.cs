@@ -2,6 +2,7 @@ using System.Collections;
 using System.Text.RegularExpressions;
 using WslcAgent.ApiClient.Contracts;
 using WslcAgent.Mcp;
+using WslcAgent.Server.Wslc;
 
 namespace WslcAgent.Server.Projects;
 
@@ -11,9 +12,12 @@ namespace WslcAgent.Server.Projects;
 /// text has no folder, and is read with the variables alone. A folder may
 /// hold several Compose files: the one with a standard name is taken, as
 /// Compose does, and the others are said, so the user can ask for one of them
-/// by its own path.
+/// by its own path. A file that names a network or a volume as external is
+/// read knowing which of them the machine has, so one that is missing is
+/// said on its line: asked of the two services that list them, when the
+/// agent gives them (a reading with none, as a test's, says nothing of it).
 /// </summary>
-public sealed partial class ProjectService : IProjectService
+public sealed partial class ProjectService(INetworkService? networks = null, IVolumeService? volumes = null) : IProjectService
 {
     /// <summary>The names a Compose file goes by in its folder, in the order Compose looks for them.</summary>
     private static readonly string[] FileNames = ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"];
@@ -21,17 +25,52 @@ public sealed partial class ProjectService : IProjectService
     /// <summary>A file larger than this is not a Compose file: not opened to find out.</summary>
     private const long LargestFile = 1024 * 1024;
 
-    public Task<ComposePlan> PlanAsync(ComposePlanRequest request, CancellationToken cancellationToken = default) =>
-        Task.FromResult(Plan(request));
+    /// <summary>
+    /// The file is read; and, when it names something external, read again
+    /// with what the machine has, since only then is there anything to look
+    /// for. Most files name nothing external and cost no question to
+    /// <c>wslc</c>.
+    /// </summary>
+    public async Task<ComposePlan> PlanAsync(ComposePlanRequest request, CancellationToken cancellationToken = default)
+    {
+        var plan = Plan(request, null);
+        return (plan.Networks.Any(network => network.External) || plan.Volumes.Any(volume => volume.External))
+            && await ThereAsync(cancellationToken) is { } there
+            ? Plan(request, there)
+            : plan;
+    }
 
-    private static ComposePlan Plan(ComposePlanRequest request)
+    /// <summary>The networks and the volumes on the machine, by name; null when they cannot be asked for (no services given, <c>wslc</c> not there, its session stopped): the file is still read, without that check.</summary>
+    private async Task<Machine?> ThereAsync(CancellationToken cancellationToken)
+    {
+        if (networks is null || volumes is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return new Machine(
+                (await networks.ListAsync(cancellationToken)).Networks.Select(network => network.Name).ToHashSet(StringComparer.Ordinal),
+                (await volumes.ListAsync(cancellationToken)).Volumes.Select(volume => volume.Name).ToHashSet(StringComparer.Ordinal));
+        }
+        catch (Exception ex) when (ex is WslcException or WslcNotFoundException or TimeoutException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>What the machine has that a file may name as external.</summary>
+    private sealed record Machine(HashSet<string> Networks, HashSet<string> Volumes);
+
+    private static ComposePlan Plan(ComposePlanRequest request, Machine? there)
     {
         var path = request.Path.Trim();
         var context = Context(request.Folder);
         if (path.Length == 0)
         {
             return request.Yaml.Trim().Length > 0
-                ? ComposeReader.Read(request.Yaml, Source(request, context))
+                ? ComposeReader.Read(request.Yaml, Source(request, context, there))
                 : throw new ArgumentException("A Compose file is required: its path on this machine, or its text.");
         }
 
@@ -39,7 +78,7 @@ public sealed partial class ProjectService : IProjectService
         var beside = Path.GetDirectoryName(file) ?? "";
         var folder = context.Length > 0 ? context : beside;
         var name = Path.GetFileName(file);
-        var plan = ComposeReader.Read(File.ReadAllText(file), Source(request, folder), file);
+        var plan = ComposeReader.Read(File.ReadAllText(file), Source(request, folder, there), file);
         var notes = new List<string>();
 
         // Compose would merge the override over the file. Until the agent does, the plan says whose it is.
@@ -152,7 +191,7 @@ public sealed partial class ProjectService : IProjectService
     /// is the user's session), and the variables given with the request over
     /// both.
     /// </summary>
-    private static ComposeSource Source(ComposePlanRequest request, string folder)
+    private static ComposeSource Source(ComposePlanRequest request, string folder, Machine? there)
     {
         var variables = new Dictionary<string, string>(StringComparer.Ordinal);
         if (folder.Length > 0 && ReadFile(Path.Combine(folder, ".env")) is { } env)
@@ -181,7 +220,7 @@ public sealed partial class ProjectService : IProjectService
         }
 
         var services = (request.Services ?? []).Select(name => name.Trim()).Where(name => name.Length > 0).ToHashSet(StringComparer.Ordinal);
-        return new ComposeSource(request.Name, folder, variables, (request.Profiles ?? []).ToHashSet(StringComparer.Ordinal), ReadFile, ListFolder, services);
+        return new ComposeSource(request.Name, folder, variables, (request.Profiles ?? []).ToHashSet(StringComparer.Ordinal), ReadFile, ListFolder, services, there?.Networks, there?.Volumes);
     }
 
     private static string? ReadFile(string path) => File.Exists(path) ? File.ReadAllText(path) : null;

@@ -107,6 +107,7 @@ public sealed record ProjectBuildRequest(ComposePlanRequest File, bool NoCache =
 /// <param name="Networks">Networks to create.</param>
 /// <param name="Volumes">Volumes to create.</param>
 /// <param name="Builds">Images to build.</param>
+/// <param name="Missing">What the file names as external and the machine does not have, each as <c>network NAME</c> or <c>volume NAME</c>: the project does not create them, so the save would stop there. Null from an agent too old to say.</param>
 public sealed record ProjectPreview(
     string Name,
     bool Exists,
@@ -119,7 +120,8 @@ public sealed record ProjectPreview(
     IReadOnlyList<string> Builds,
     IReadOnlyList<string> Unsupported,
     IReadOnlyList<string> Warnings,
-    IReadOnlyList<string>? Edited = null);
+    IReadOnlyList<string>? Edited = null,
+    IReadOnlyList<string>? Missing = null);
 
 /// <summary>A project's save, or a build of its images, under way or over: <c>POST /api/v1/projects/up</c> and <c>/projects/build</c> answer it at once, <c>GET /api/v1/projects/jobs/{id}</c> as it goes.</summary>
 /// <param name="Step">What it is doing now, in words for the window that waits.</param>

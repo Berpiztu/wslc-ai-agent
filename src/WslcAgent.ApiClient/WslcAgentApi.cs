@@ -693,8 +693,9 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
 
     // Host
 
-    public Task<HostFolderListing> GetHostFoldersAsync(string path = "", CancellationToken cancellationToken = default) =>
-        GetAsync<HostFolderListing>($"api/v1/host/folders?path={Escape(path)}", cancellationToken);
+    /// <summary>One level of the agent machine's folders; with <paramref name="files"/> (<c>.yaml,.yml</c>), the folder's files of those kinds too.</summary>
+    public Task<HostFolderListing> GetHostFoldersAsync(string path = "", CancellationToken cancellationToken = default, string files = "") =>
+        GetAsync<HostFolderListing>($"api/v1/host/folders?path={Escape(path)}{(files.Length > 0 ? $"&files={Escape(files)}" : "")}", cancellationToken);
 
     public Task<HostFolderListing> CreateHostFolderAsync(string parent, string name, CancellationToken cancellationToken = default) =>
         PostJsonAsync<CreateHostFolderRequest, HostFolderListing>("api/v1/host/folders", new CreateHostFolderRequest(parent, name), cancellationToken);

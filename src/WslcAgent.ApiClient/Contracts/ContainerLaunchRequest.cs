@@ -189,7 +189,8 @@ public sealed record ContainerLogsCleared(DateTimeOffset? ClearedAt);
 public sealed record LaunchFormSource(string Json);
 
 /// <summary>Body of <c>GET /api/v1/host/folders</c>: one level of the agent machine's folders.</summary>
-public sealed record HostFolderListing(string Path, string Parent, IReadOnlyList<string> Folders);
+/// <param name="Files">The folder's files of the kinds asked for (<c>files=.yaml,.yml</c>), by name; null when none was asked for, or from an agent too old to list them.</param>
+public sealed record HostFolderListing(string Path, string Parent, IReadOnlyList<string> Folders, IReadOnlyList<string>? Files = null);
 
 /// <summary>Body of <c>POST /api/v1/host/folders</c>.</summary>
 public sealed record CreateHostFolderRequest(string Parent, string Name);

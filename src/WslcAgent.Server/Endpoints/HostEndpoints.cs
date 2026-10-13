@@ -3,14 +3,14 @@ using WslcAgent.Server.Host;
 
 namespace WslcAgent.Server.Endpoints;
 
-/// <summary><c>/api/v1/host</c>: the agent machine's folders, for bind-mount pickers. See docs/api-v1.md.</summary>
+/// <summary><c>/api/v1/host</c>: the agent machine's folders, for bind-mount pickers, and its files of a kind, for the picker of a Compose file. See docs/api-v1.md.</summary>
 public static class HostEndpoints
 {
     public static RouteGroupBuilder MapHostEndpoints(this RouteGroupBuilder api)
     {
         var group = api.MapGroup("/host");
 
-        group.MapGet("/folders", (string path = "") => HostFolders.List(path))
+        group.MapGet("/folders", (string path = "", string files = "") => HostFolders.List(path, files))
             .WithName("ListHostFolders");
 
         // The answer is the parent listed again, with the new folder in it: the

@@ -341,8 +341,15 @@ three are written; the last two say what is left.
    WSLC, and what would
    be lost?". At the agent's machine the Load button has the agent open
    Windows' Open dialog (`POST /api/v1/projects/open`), so the file comes
-   with its path and is read with its folder. From another device the
-   browser opens the dialog and the file arrives as its text, without the
+   with its path and is read with its folder. From another device the file
+   comes from one of two disks, and the field's three dots are a menu that
+   asks which, on every client and at the agent's machine too. **From the
+   server** opens the host file picker
+   (`Pickers.HostFileAsync`, `GET /api/v1/host/folders?files=.yaml,.yml`),
+   which shows the agent machine's folders and its Compose files, and the
+   file comes with its path as it does at the agent's machine. **From this
+   device**, as the rail's Load, has the browser open its dialog, and the
+   file arrives as its text, without the
    folder it was in: relative paths, `build` and `env_file` cannot be
    resolved from it, and are named as such. Given a folder alone (the API,
    `parse_compose`), the standard name is read and the folder's other

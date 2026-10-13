@@ -45,6 +45,14 @@ public static class Pickers
     public static Task<string?> HostFolderAsync(IDialogService dialogs, string current = "") =>
         DialogFlow.PickAsync<HostFolderPickerDialog>(dialogs, "Select host folder", new DialogParameters<HostFolderPickerDialog> { { d => d.Path, current } });
 
+    /// <summary>
+    /// A file of the host, of the kinds named by their extensions
+    /// (<c>.yaml,.yml</c>): the host folder picker, listing those files under
+    /// the folders. Opens on the current file's folder with it selected.
+    /// </summary>
+    public static Task<string?> HostFileAsync(IDialogService dialogs, string files, string current = "") =>
+        DialogFlow.PickAsync<HostFolderPickerDialog>(dialogs, "Select host file", new DialogParameters<HostFolderPickerDialog> { { d => d.Path, current }, { d => d.Files, files } });
+
     private static DialogParameters Parameters(Func<Task<IReadOnlyList<string>>> load, string hint, Type? createDialog, string createTitle, string current) =>
         new DialogParameters<NamedPickerDialog>
         {

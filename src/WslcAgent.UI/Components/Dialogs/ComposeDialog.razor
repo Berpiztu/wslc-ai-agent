@@ -25,14 +25,23 @@
    that branch alone, what is under it staying as it stood; beside the arrow
    its + opens it with everything under it, and is then a − that closes all
    of it. A file just read
-   opens as far as its list of services, each of them closed. A branch whose
-   own line was taken as written, with lines under it that were not, shows
-   both: its own verdict, and after it the worst of those under it. A branch is one
+   opens as far as its list of services, each of them closed. A branch is
+   drawn in the colour of the worst there is in it, its own line or any under
+   it, however deep: one taken as written with a line under it that is not
+   given is red, and so is every branch over it, so a closed branch never
+   reads as all well; after what it says of itself it says how many lines
+   under it are not as written. A branch is one
    line and never more: a line too long for the box scrolls the box sideways,
-   which two lines a branch leave few of. At the agent's machine it is the agent that opens the dialog, on
-   its desktop, so the file comes with its path; from any other device the
-   browser opens it and hands over the file's text, which goes into the field
-   as a paste does. Close is on the title line. Opened from a project's row
+   which two lines a branch leave few of. A file comes from one of two places, the server's
+   disk or this device's, and the three dots of Open Compose file are a menu
+   that asks which, always: whoever sits at a client of a server somewhere
+   else has the file on the one and wants the containers on the other. From
+   the server opens the host file picker, which shows the server's disk and
+   leaves the file's path in the field. From this device opens the dialog of
+   the device, as the rail's Load does: the browser's, which hands over the
+   file's text, and that goes into the field as a paste does; at the agent's
+   machine, where the two are the same disk, the system's own dialog, which
+   the agent puts on its desktop, so the file comes with its path. Close is on the title line. Opened from a project's row
    (Project), it opens on the file kept with that project, already read: the
    place the project's Compose file is seen, and applied again. *@
 @inject WslcAgentApi Api
@@ -64,8 +73,13 @@
                         <div class="wslc-field-pick has-note">
                             <MudTextField Margin="Margin.Dense" T="string" @bind-Value="_path" @bind-Value:after="PathTyped" Label="Open Compose file" Immediate="true"
                                           HelperTextOnFocus="true" Variant="Variant.Filled"
-                                          HelperText="Example: C:\apps\shop\compose.yaml, opened with the three dots or typed. Then press Check Compose file." />
-                            <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Open a Compose file" Disabled="_opening" OnClick="OpenAsync" />
+                                          HelperText="Example: C:\apps\shop\compose.yaml, a file of the server's disk, opened with the three dots or typed. Then press Check Compose file." />
+                            @* Where the file is, asked every time: this device or the server. *@
+                            <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" title="Open a Compose file: from this device or from the server"
+                                     Color="Color.Success" Variant="Variant.Filled" Disabled="_opening">
+                                <MudMenuItem Icon="@Icons.Material.Filled.Computer" OnClick="OpenLocalAsync">From this device</MudMenuItem>
+                                <MudMenuItem Icon="@Icons.Material.Filled.Dns" OnClick="PickOnServerAsync">From the server</MudMenuItem>
+                            </MudMenu>
                         </div>
                         <div class="wslc-field-pick has-note wslc-field-one-line">
                             <MudTextField @ref="_field" Margin="Margin.Dense" T="string" @bind-Value="_pasteLine" @bind-Value:after="PastedAsync" Label="Paste Compose" Immediate="true"
@@ -156,20 +170,21 @@
             </div>
 
             @* The action rail, as the launch form draws it. From another device Load is the
-               browser's file input (the file chosen is not shown here: MudBlazor's own chip
-               would push the rail out of line), which the field's button opens as well. *@
+               browser's file input, for a file of this device (the file chosen is not shown
+               here: MudBlazor's own chip would push the rail out of line), which the field's
+               menu opens as well; a file of the server's disk is opened from that menu. *@
             <div class="wslc-action-rail wslc-files-rail" role="toolbar">
                 @if (_atAgent)
                 {
                     <MudIconButton Color="Color.Success" Icon="@Icons.Material.Filled.UploadFile" Size="Size.Small" Variant="Variant.Filled"
-                                   title="Load a Compose file" Disabled="_opening" OnClick="OpenAsync" />
+                                   title="Load a Compose file" Disabled="_opening" OnClick="OpenOnDesktopAsync" />
                 }
                 else
                 {
-                    <MudFileUpload @ref="_upload" T="IBrowserFile" FilesChanged="LoadFileAsync" Accept=".yaml,.yml">
+                    <MudFileUpload @ref="_upload" T="IBrowserFile" FilesChanged="LoadFileAsync" Accept="@ComposeKinds">
                         <CustomContent>
                             <MudIconButton Color="Color.Success" Icon="@Icons.Material.Filled.UploadFile" Size="Size.Small" Variant="Variant.Filled"
-                                           title="Load a Compose file" OnClick="@context.OpenFilePickerAsync" />
+                                           title="Load a Compose file of this device" OnClick="@context.OpenFilePickerAsync" />
                         </CustomContent>
                         <SelectedTemplate></SelectedTemplate>
                     </MudFileUpload>
@@ -204,6 +219,9 @@
 @code {
     /// <summary>A Compose file is text of a few kilobytes: one larger than this is not one, and is not read into the page.</summary>
     private const long LargestFile = 1024 * 1024;
+
+    /// <summary>The kinds of file a Compose file is, by extension: what both dialogs list, this device's and the server's.</summary>
+    private const string ComposeKinds = ".yaml,.yml";
 
     private static readonly char[] PathSeparators = ['\\', '/'];
 
@@ -279,7 +297,7 @@
     /// </summary>
     private string _context = "";
 
-    /// <summary>The browser's file input, from another device: the field's button opens it as the rail's does.</summary>
+    /// <summary>The browser's file input, from another device: the field's menu opens it as the rail's Load does.</summary>
     private MudFileUpload<IBrowserFile>? _upload;
 
     [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
@@ -339,19 +357,22 @@
         }
     }
 
-    /// <summary>The system's Open dialog: the agent's own at its machine, whose file comes with its path; the browser's from anywhere else.</summary>
-    private async Task OpenAsync()
+    /// <summary>A file of this device: at the agent's machine the system's own Open dialog, from anywhere else the browser's.</summary>
+    private async Task OpenLocalAsync()
     {
-        if (!_atAgent)
+        if (_atAgent)
         {
-            if (_upload is not null)
-            {
-                await _upload.OpenFilePickerAsync();
-            }
-
-            return;
+            await OpenOnDesktopAsync();
         }
+        else if (_upload is not null)
+        {
+            await _upload.OpenFilePickerAsync();
+        }
+    }
 
+    /// <summary>The system's own Open dialog, put on the agent's desktop by the agent: for whoever sits at it.</summary>
+    private async Task OpenOnDesktopAsync()
+    {
         _opening = true;
         try
         {
@@ -372,6 +393,22 @@
         finally
         {
             _opening = false;
+        }
+    }
+
+    /// <summary>
+    /// The host file picker on the Compose files of the server's disk,
+    /// opened where the field's file is, or the last one opened, or the
+    /// context. The file picked is the field's path, as one typed there: its
+    /// folder is the context, and it is read when it is checked.
+    /// </summary>
+    private async Task PickOnServerAsync()
+    {
+        var from = new[] { _path.Trim().Trim('"'), _folder, _context.Trim() }.FirstOrDefault(place => place.Length > 0) ?? "";
+        if (await Pickers.HostFileAsync(Dialogs, ComposeKinds, from) is { } file)
+        {
+            (_path, _folder) = (file, FolderOf(file));
+            PathTyped();
         }
     }
 
@@ -615,6 +652,16 @@
         {
             var preview = await Api.PreviewProjectAsync(new ProjectUpRequest(request, start));
             Idle();
+
+            // Known before anything is made, and said in a window of its own: begun, the save
+            // would stop at the first of them and say so in a log nobody has open.
+            if (preview.Missing is { Count: > 0 } missing)
+            {
+                await DialogFlow.ExplainAsync(Dialogs, start ? "Run project" : "Save project",
+                    $"Project {preview.Name} cannot be {(start ? "run" : "saved")}: its file names as external what is not on this machine ({string.Join(", ", missing)}).",
+                    "A project uses what its file calls external and does not create it. Create it first (Networks, Volumes), give its real name in the file (name:), or take external out of the file so the project makes its own.");
+                return;
+            }
             if (!await DialogFlow.ConfirmAsync(Dialogs, start ? "Run project" : "Save project", Question(preview, start), start ? "Run" : "Save"))
             {
                 return;
@@ -930,15 +977,22 @@
     /// <summary>The worst verdict of the lines under a branch; empty when it has none, or they say nothing.</summary>
     private static string WorstUnder(Node node) => Under(node).Select(line => line.Verdict).MaxBy(Rank) ?? "";
 
-    /// <summary>The verdict a branch's icon shows: its own, or the worst of those under it when it says nothing itself.</summary>
-    private static string Worst(Node node) => node.Line.Verdict.Length > 0 ? node.Line.Verdict : WorstUnder(node);
+    /// <summary>
+    /// The verdict a branch is drawn in, its icon and what it says: the
+    /// worst there is in it. Its own line's, unless something under it is
+    /// worse (<see cref="Inside"/>); of a branch that says nothing itself,
+    /// the worst under it.
+    /// </summary>
+    private static string Worst(Node node) =>
+        Inside(node) is { Length: > 0 } inside ? inside : node.Line.Verdict.Length > 0 ? node.Line.Verdict : WorstUnder(node);
 
     /// <summary>
     /// What is under a branch when it is worse than what the branch says of
     /// itself: a service taken as written with lines under it that were
-    /// changed, or not given. The branch then shows both, its own verdict and
-    /// this one after it, so one that stands closed does not read as all
-    /// well. Empty when the branch's own icon already says it.
+    /// changed, or not given. The branch is then drawn in this one, and says
+    /// after its own words how many lines under it are not as written, so one
+    /// that stands closed does not read as all well. Empty when what the
+    /// branch says of itself is already the worst.
     /// </summary>
     private static string Inside(Node node) =>
         node.Line.Verdict.Length > 0 && WorstUnder(node) is var under && Rank(under) > Math.Max(Rank(node.Line.Verdict), Rank(ComposeLine.NotNeeded)) ? under : "";
@@ -971,6 +1025,23 @@
         _ => line.Note,
     };
 
+    /// <summary>
+    /// What a branch says, in the colour it is drawn in: what its own line
+    /// becomes and, when something under it is worse (or it says nothing
+    /// itself), how many lines under it are not as written. A line taken as
+    /// written does not say "OK" over what is wrong under it: it says what
+    /// it becomes, and then the count.
+    /// </summary>
+    private static string Said(Node node)
+    {
+        var worse = Inside(node).Length > 0;
+        var own = node.Line.Verdict.Length == 0 ? ""
+            : worse && node.Line.Verdict == ComposeLine.Ok ? node.Line.Note
+            : Outcome(node.Line);
+        var under = worse || node.Line.Verdict.Length == 0 ? Changed(node) : "";
+        return string.Join(" – ", new[] { own, under }.Where(text => text.Length > 0));
+    }
+
     /// <summary>The theme's colour for a verdict: green taken as written, amber changed into something else (converted, or to look at), red not given.</summary>
     private static Color Tone(string verdict) => verdict switch
     {
@@ -999,12 +1070,11 @@
     /// as what is quoted, and its name plain; what the branch becomes in
     /// bold, since it is what the window is read for.
     /// A branch, after the arrow the tree gives it: its + (or −), which opens
-    /// or closes it whole; its verdict's icon; then the file's line, and
-    /// under it (or beside it, in one line) what the agent makes of it, in
-    /// its verdict's colour. When what is under the branch is worse than what
-    /// it says of itself, a second icon follows the line's text, and what is
-    /// said goes on with how many lines under it are not as written, in that
-    /// colour. A branch that says nothing has the one line. A line with
+    /// or closes it whole; the icon of the worst verdict in it, its own or
+    /// any under it; then the file's line, and under it (or beside it, in
+    /// one line) what the agent makes of it, in that same colour, which goes
+    /// on with how many lines under it are not as written when what is under
+    /// it is the worse. A branch that says nothing has the one line. A line with
     /// nothing under it keeps the + its place, so the icons of a list stand
     /// one under another. A press on the + is not the row's, which the tree
     /// would take as a press on its arrow.
@@ -1022,31 +1092,10 @@
                 <MudIcon Icon="@Icon(verdict)" Color="@Tone(verdict)" Size="Size.Small" />
             }
             <MudStack Row="@(!_twoLines)" AlignItems="@(_twoLines ? AlignItems.Start : AlignItems.Center)" Spacing="@(_twoLines ? 0 : 1)">
-                @* The second icon stands after the line's text, not before it: before it, it pushed
-                   the text of a branch further right than the lines under that branch, which the
-                   tree indents by 17px, and the tree read backwards. *@
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                    <MudText Typo="Typo.body1">@Parts(node).Name<i>@Parts(node).Value</i></MudText>
-                    @if (Inside(node) is { Length: > 0 } inside)
-                    {
-                        <MudText Typo="Typo.body1" Class="mud-text-secondary">–</MudText>
-                        <MudIcon Icon="@Icon(inside)" Color="@Tone(inside)" Size="Size.Small" title="@Changed(node)" />
-                    }
-                </MudStack>
-                @if (node.Line.Verdict.Length > 0)
+                <MudText Typo="Typo.body1">@Parts(node).Name<i>@Parts(node).Value</i></MudText>
+                @if (Said(node) is { Length: > 0 } said)
                 {
-                    <MudText Typo="Typo.body1">
-                        <b class="@TextTone(node.Line.Verdict)">@Outcome(node.Line)</b>
-                        @if (Inside(node) is { Length: > 0 } worse)
-                        {
-                            <span class="mud-text-secondary"> – </span>
-                            <b class="@TextTone(worse)">@Changed(node)</b>
-                        }
-                    </MudText>
-                }
-                else if (Changed(node) is { Length: > 0 } changed)
-                {
-                    <MudText Typo="Typo.body1" Class="@TextTone(WorstUnder(node))"><b>@changed</b></MudText>
+                    <MudText Typo="Typo.body1" Class="@TextTone(Worst(node))"><b>@said</b></MudText>
                 }
             </MudStack>
         </MudStack>;

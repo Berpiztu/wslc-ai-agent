@@ -88,7 +88,12 @@ public sealed class ProjectRunner(
             plan.Warnings,
             // The mark of what it was made from is written by a save and by nothing else: a container
             // of the project without it was recreated since, by hand.
-            services.Where(service => state.Containers.TryGetValue(service.Name, out var existing) && existing.Config.Length == 0).Select(service => service.Launch.Name).ToList());
+            services.Where(service => state.Containers.TryGetValue(service.Name, out var existing) && existing.Config.Length == 0).Select(service => service.Launch.Name).ToList(),
+            // External to the project and not on the machine: the save would stop at the first of them.
+            [
+                .. plan.Networks.Where(network => network.External && !state.Networks.Contains(network.Name)).Select(network => $"network {network.Name}"),
+                .. plan.Volumes.Where(volume => volume.External && !state.Volumes.Contains(volume.Name)).Select(volume => $"volume {volume.Name}"),
+            ]);
     }
 
     /// <summary>Starts the save. The file is read first, so one that cannot be read is refused here and no job is begun.</summary>
