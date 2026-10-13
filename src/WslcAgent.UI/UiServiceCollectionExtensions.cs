@@ -57,7 +57,8 @@ public static class UiServiceCollectionExtensions
         // The last catch: what Blazor's renderer would have put in its yellow bar goes to a toast instead.
         services.AddSingleton<UnhandledErrors>();
         services.AddSingleton<ILoggerProvider, UnhandledErrorLoggerProvider>();
-        services.AddScoped<ISnackbar>(sp => new ErrorsStaySnackbar(sp.GetRequiredService<SnackbarService>(), sp.GetRequiredService<IJSRuntime>(), sp.GetRequiredService<AgentLink>()));
+        services.AddScoped<ClientReports>();
+        services.AddScoped<ISnackbar>(sp => new ErrorsStaySnackbar(sp.GetRequiredService<SnackbarService>(), sp.GetRequiredService<IJSRuntime>(), sp.GetRequiredService<AgentLink>(), sp.GetRequiredService<ClientReports>()));
         services.TryAddSingleton<IAgentTokenStore, CookieTokenStore>();
         services.TryAddSingleton<IClientServers, NoClientServers>();
         services.AddSingleton(sp => new AgentAccessToken { Value = sp.GetRequiredService<IAgentTokenStore>().Load() });

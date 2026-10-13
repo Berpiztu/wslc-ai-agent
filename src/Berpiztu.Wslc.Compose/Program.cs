@@ -71,6 +71,19 @@ internal static class Program
         using var agent = AgentConnection.Open(arguments);
         try
         {
+            return await RunAsync(arguments, agent, interrupt);
+        }
+        finally
+        {
+            // Whatever it printed as a warning or an error, in the agent's log too.
+            await agent.ReportAsync(Terminal.TakeSaid(), $"wslc-compose {arguments.Command}");
+        }
+    }
+
+    private static async Task<int> RunAsync(Arguments arguments, AgentConnection agent, Interrupt interrupt)
+    {
+        try
+        {
             await agent.CheckAsync(interrupt.Token);
             return await new Commands(agent, arguments, interrupt).RunAsync();
         }

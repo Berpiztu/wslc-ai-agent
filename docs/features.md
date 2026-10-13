@@ -172,13 +172,20 @@ publishing and cleaning up need them on.
     dialog where it has one, which reads of the folder only what the
     context's `.dockerignore` does not leave out). The images are then
     built on the server from that folder, sent when the project is saved
-    or run (only the files the server lacks: a change travels as what
-    changed, and the window says how far it has got), while what the file
+    or run (only the files the server lacks: a change travels as what changed). The
+    folder is read before the question a save asks, which takes seconds,
+    and sent after the yes with the window already closed, as the save
+    itself goes on: the title bar's line and the transfers list say how
+    far it has got, and nobody sits watching ten thousand files go, while what the file
     mounts, its `.env` and its `env_file` stay the server's, at the same
     path: the context is one folder, the same on both machines. A browser
-    hands over a folder and not where it is, so the path is filled in by
-    itself for a project the server already has, and is typed once for a
-    new one. Beside
+    hands over a folder and not where it is, so loading a file of
+    the device asks for things in one order, always the same: a small
+    window for the full path of the folder the file is in, which is the
+    context; and then the browser's own file chooser, for the file.
+    Nothing is guessed or remembered. The folder itself is asked of the
+    browser later, and only when a save has images to build from it, with
+    a window that says why first. Beside
     it, **Check Compose file** reads the file: nothing is read before it
     is pressed. Under
     it the file is shown as the tree it is, its services, networks and

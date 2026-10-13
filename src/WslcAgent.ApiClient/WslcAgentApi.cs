@@ -372,6 +372,10 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
         PostJsonAsync<DeleteLogEntriesRequest, DeleteLogEntriesResult>("api/v1/logs/delete", new DeleteLogEntriesRequest(entryIds), cancellationToken);
 
     /// <summary>The whole log, every file emptied: the entries past the tail included.</summary>
+    /// <summary>Has the agent write in its log something this client showed its user as a warning or an error.</summary>
+    public Task ReportClientAsync(ClientReport report, CancellationToken cancellationToken = default) =>
+        PostJsonAsync("api/v1/logs/client", report, cancellationToken);
+
     public Task<DeleteLogEntriesResult> ClearAgentLogsAsync(CancellationToken cancellationToken = default) =>
         DeleteAsync<DeleteLogEntriesResult>("api/v1/logs", cancellationToken);
 

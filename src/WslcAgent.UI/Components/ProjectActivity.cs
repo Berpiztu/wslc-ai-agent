@@ -1,3 +1,4 @@
+using Microsoft.JSInterop;
 using WslcAgent.ApiClient;
 using WslcAgent.ApiClient.Contracts;
 
@@ -32,6 +33,38 @@ public sealed class ProjectActivity(WslcAgentApi api, ActivityLine line)
         }
 
         _ = FollowAsync(job, work, request.Start);
+    }
+
+    /// <summary>
+    /// Starts a save that has something to do first, on this device: sending
+    /// what the project's images are built from. All of it is done with the
+    /// window closed, as the save itself is: a folder of ten thousand files
+    /// over a slow line is not something to sit and watch. The line says how
+    /// far <paramref name="before"/> has got, then the save's own steps; a
+    /// failure of either stays on it until it is closed.
+    /// </summary>
+    public void StartAfter(Func<Action<string>, Task> before, ProjectUpRequest request, string name)
+    {
+        var work = line.Begin($"Project {name}: sending what its images are built from");
+        _ = RunAsync();
+
+        async Task RunAsync()
+        {
+            ProjectJob job;
+            try
+            {
+                await before(step => work.Set($"Project {name}: {step}"));
+                work.Set($"{(request.Start ? "Starting" : "Saving")} project {name}");
+                job = await api.StartProjectAsync(request);
+            }
+            catch (Exception ex) when (ex is AgentApiException or HttpRequestException or JSException or InvalidOperationException)
+            {
+                work.Fail($"Project {name} was not {(request.Start ? "started" : "saved")}: {ex.Message}");
+                return;
+            }
+
+            await FollowAsync(job, work, request.Start);
+        }
     }
 
     /// <summary>Asks how the job goes every second until it is over; a job the agent no longer knows (it was restarted) is over too.</summary>

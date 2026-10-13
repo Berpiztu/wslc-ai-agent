@@ -13,8 +13,10 @@ namespace WslcAgent.UI.Components;
 /// its subtitle).
 /// A failure while the agent does not answer is not said: the layout already
 /// says that once, over the screen, as <see cref="ErrorsStaySnackbar"/> does.
+/// Every failure and warning the line keeps is written in the agent's log
+/// too (<see cref="ClientReports"/>).
 /// </summary>
-public sealed class ActivityLine(AgentLink link) : IDisposable
+public sealed class ActivityLine(AgentLink link, ClientReports reports) : IDisposable
 {
     /// <summary>How long the result of a verb that worked stays before the line goes back to the page's own.</summary>
     private static readonly TimeSpan ResultFor = TimeSpan.FromSeconds(3);
@@ -118,6 +120,16 @@ public sealed class ActivityLine(AgentLink link) : IDisposable
             // A failure while the agent does not answer is the link's, said by the layout.
             if (result.Tone == Color.Warning || link.Online)
             {
+                // Kept on the line until it is closed, and in the agent's log for good.
+                if (result.Tone == Color.Warning)
+                {
+                    reports.Warning(result.Text);
+                }
+                else
+                {
+                    reports.Error(result.Text);
+                }
+
                 _kept.Insert(0, result);
                 if (_kept.Count > KeptAtMost)
                 {

@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using WslcAgent.ApiClient.Contracts;
 
 namespace Berpiztu.Wslc.Compose;
 
@@ -38,6 +39,9 @@ internal static class Terminal
 
     /// <summary>What has been printed since <see cref="Hold"/> and is not on the screen yet; null when lines go straight to it.</summary>
     private static StringBuilder? _held;
+
+    /// <summary>The warnings and the errors printed, kept until the agent is told of them (<see cref="TakeSaid"/>).</summary>
+    private static readonly List<(string Level, string Text)> _said = [];
 
     /// <summary>A line in motion (<see cref="Moving"/>) is on the screen with the cursor still on it: the next line of any kind has to begin under it.</summary>
     private static bool _moving;
@@ -211,12 +215,36 @@ internal static class Terminal
     /// <summary>What is worth having and not worth the eye: the command a step ran.</summary>
     public static void Faint(string text) => Line(_out ? $"{Gray}{text}{Reset}" : text);
 
-    public static void Warning(string text) => ErrorLine(_err ? $"{Yellow}⚠ {text}{Reset}" : $"warning: {text}");
+    public static void Warning(string text)
+    {
+        _said.Add((ClientReport.Warning, text));
+        ErrorLine(_err ? $"{Yellow}⚠ {text}{Reset}" : $"warning: {text}");
+    }
 
     /// <summary>What the file asks for and will not get.</summary>
-    public static void Lost(string text) => ErrorLine(_err ? $"{Red}✖ not supported:{Reset} {text}" : $"not supported: {text}");
+    public static void Lost(string text)
+    {
+        _said.Add((ClientReport.Warning, $"not supported: {text}"));
+        ErrorLine(_err ? $"{Red}✖ not supported:{Reset} {text}" : $"not supported: {text}");
+    }
 
-    public static void Error(string text) => ErrorLine(_err ? $"{Red}✖ {text}{Reset}" : text);
+    public static void Error(string text)
+    {
+        _said.Add((ClientReport.Error, text));
+        ErrorLine(_err ? $"{Red}✖ {text}{Reset}" : text);
+    }
+
+    /// <summary>
+    /// The warnings and the errors printed since the last asking, to be
+    /// written in the agent's log: what a terminal showed is gone with the
+    /// window, and the log is where it is looked for afterwards.
+    /// </summary>
+    public static IReadOnlyList<(string Level, string Text)> TakeSaid()
+    {
+        var said = _said.ToList();
+        _said.Clear();
+        return said;
+    }
 
     /// <summary>What follows a failure or a summary, in a lower voice.</summary>
     public static void Aside(string text) => ErrorLine(_err ? $"{Gray}{text}{Reset}" : text);

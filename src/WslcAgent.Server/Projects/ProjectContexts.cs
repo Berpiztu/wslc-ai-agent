@@ -1,6 +1,5 @@
 using System.Formats.Tar;
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
@@ -34,7 +33,7 @@ namespace WslcAgent.Server.Projects;
 /// asks for one that is gone says so, and the client sends it again.
 /// </para>
 /// </summary>
-public sealed partial class ProjectContexts(IOptions<WslcOptions> options)
+public sealed partial class ProjectContexts(IOptions<WslcOptions> options, ILogger<ProjectContexts>? logger = null)
 {
     private const string ListExtension = ".json";
     private static readonly TimeSpan KeptFor = TimeSpan.FromDays(7);
@@ -152,35 +151,45 @@ public sealed partial class ProjectContexts(IOptions<WslcOptions> options)
             }
         }
 
+        // What the client could not read is not in the context, and a build that needed it
+        // fails later for a file that is not there: written down where that is looked into.
+        if (request.Skipped is { Count: > 0 } skipped)
+        {
+            logger?.LogWarning("Compose: the build context {Context} of {Project} came without {Count} entries its client could not read: {Entries}",
+                request.Context is { Length: > 0 } context ? context : ".", request.Project is { Length: > 0 } project ? project : "a project", skipped.Count, string.Join(", ", skipped));
+        }
+
         // The list is written before anything is let go of: a file it names that no other list
         // does, and that has been here a while, is then one that is named.
         Directory.CreateDirectory(Folder);
-        var id = IdOf(entries);
+        var id = ProjectContextRequest.IdOf(entries);
+        // Its entries alone: what is kept is what a build reads.
         File.WriteAllText(PathOf(id), JsonSerializer.Serialize(new ProjectContextRequest(entries), Json));
         Forget();
         return new ProjectContext(id, entries.Sum(entry => entry.Size), entries.Count(entry => entry.Blob.Length > 0));
     }
 
     /// <summary>
-    /// The list of a context, by its full path; null when it is not here,
-    /// or the id is no id of ours (it is a part of a path, so only what an
-    /// id can be is looked for). Asked for, it is in use: its week begins
+    /// Where the list of a context is, or will be, by its id: its full path,
+    /// whether it has arrived or not, so a file that names a context is read
+    /// the same before the context is sent and after; empty for what is no
+    /// id of ours (it is a part of a path, so only what an id can be is
+    /// taken). One that is here and is asked for is in use: its week begins
     /// again.
     /// </summary>
-    public string? Find(string id)
+    public string PathFor(string id)
     {
         if (!Id().IsMatch(id))
         {
-            return null;
+            return "";
         }
 
         var path = PathOf(id);
-        if (!File.Exists(path))
+        if (File.Exists(path))
         {
-            return null;
+            File.SetLastWriteTimeUtc(path, DateTime.UtcNow);
         }
 
-        File.SetLastWriteTimeUtc(path, DateTime.UtcNow);
         return path;
     }
 
@@ -298,14 +307,6 @@ public sealed partial class ProjectContexts(IOptions<WslcOptions> options)
     }
 
     private const string Gone = "The build context is no longer on the agent: it was let go of since it was sent. Run the build again from the machine that has the folder.";
-
-    /// <summary>
-    /// What a context is known by: its entries' names and its files' bytes,
-    /// in the order they come. Not when each was last written: a folder
-    /// checked out again holds the same files, and is the same context.
-    /// </summary>
-    private static string IdOf(IReadOnlyList<ProjectContextEntry> entries) =>
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', entries.Select(entry => $"{entry.Name}\0{entry.Blob}")))))[..32];
 
     /// <summary>A name an entry may have: a path of the context, down from it, with forward slashes.</summary>
     private static bool IsName(string name) =>

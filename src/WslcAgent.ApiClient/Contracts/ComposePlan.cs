@@ -16,9 +16,12 @@ namespace WslcAgent.ApiClient.Contracts;
 /// by a client on another machine, where the file's folders are: each
 /// context as the file writes it (<c>./app</c>, <c>.</c>) with the id the
 /// agent gave what was sent for it. A <c>build</c> named here is built from
-/// that, read by <c>wslc build</c> from its standard input. An empty id says
-/// the client will send it when it builds: the reading then takes the
-/// <c>build</c> as one that can be made, with nothing sent yet.
+/// that, read by <c>wslc build</c> from its standard input. The id may be of a context not
+/// sent yet (<see cref="ProjectContextRequest.IdOf"/>): the file is then
+/// read as it will be once it is, which is how a client asks what a save
+/// would do before it sends anything, and the build itself says so if it
+/// comes before the context. An empty id says only that the client will send
+/// one: the <c>build</c> is taken as one that can be made.
 /// </param>
 /// <param name="ClientFolder">
 /// The folder the file is in on the machine of whoever sends it, when that
@@ -45,7 +48,36 @@ public sealed record ComposePlanRequest(
 /// /api/v1/projects/contexts/files</c>) unless the agent had it already.
 /// </summary>
 /// <param name="Entries">The folders and the files of the context, a folder before what is in it.</param>
-public sealed record ProjectContextRequest(IReadOnlyList<ProjectContextEntry> Entries);
+/// <param name="Skipped">The entries of the folder the client could not read and left out, by their paths: written in the agent's log, where whoever asks later why a build lacks a file finds it.</param>
+/// <param name="Project">The project the context is for, and <paramref name="Context"/> the context as its Compose file writes it: what that line of the log says it is about.</param>
+public sealed record ProjectContextRequest(IReadOnlyList<ProjectContextEntry> Entries, IReadOnlyList<string>? Skipped = null, string Project = "", string Context = "")
+{
+    /// <summary>
+    /// What a context is known by: its entries' names and its files' bytes,
+    /// in the order they come. Not when each was last written: a folder
+    /// checked out again holds the same files, and is the same context.
+    /// Worked out the same way by the agent, which names what it keeps by
+    /// it, and by a client, which can then say which context a file is
+    /// built from before it has sent any of it.
+    /// </summary>
+    public static string IdOf(IReadOnlyList<ProjectContextEntry> entries) =>
+        Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(string.Join('\n', entries.Select(entry => $"{entry.Name}\0{entry.Blob}")))))[..32];
+}
+
+/// <summary>
+/// Body of <c>POST /api/v1/logs/client</c>: something a client showed its
+/// user as a warning or an error, for the agent to write in its log.
+/// </summary>
+/// <param name="Level"><see cref="Warning"/> or <see cref="Error"/>.</param>
+/// <param name="Text">What was shown.</param>
+/// <param name="Where">Which client and where in it: <c>web, /containers</c>, <c>wslc-compose up</c>.</param>
+public sealed record ClientReport(string Level, string Text, string Where = "")
+{
+    public const string Warning = "warning";
+
+    public const string Error = "error";
+}
 
 /// <summary>A folder or a file of a build context.</summary>
 /// <param name="Name">Its path in the context, with forward slashes: <c>src/app.py</c>.</param>

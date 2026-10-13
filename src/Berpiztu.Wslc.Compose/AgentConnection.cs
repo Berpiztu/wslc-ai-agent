@@ -1,4 +1,5 @@
 using WslcAgent.ApiClient;
+using WslcAgent.ApiClient.Contracts;
 
 namespace Berpiztu.Wslc.Compose;
 
@@ -56,6 +57,34 @@ internal sealed class AgentConnection : IDisposable
                 throw new CommandFailed($"The agent at {Address} ({health.Version}) no longer serves this wslc-compose ({Program.Version}). Use the one installed with that agent.");
             case ApiMatch.AgentTooOld:
                 throw new CommandFailed($"The agent at {Address} ({health.Version}) is older than this wslc-compose ({Program.Version}) works with. Update the agent.");
+        }
+    }
+
+    /// <summary>
+    /// Has the agent write in its log the warnings and the errors this
+    /// command printed, as the pages do with what they show. In a few seconds
+    /// at most, and with no complaint when it cannot be done: an agent that
+    /// does not answer is what the command has just said, and it is not said
+    /// twice.
+    /// </summary>
+    public async Task ReportAsync(IReadOnlyList<(string Level, string Text)> said, string where)
+    {
+        if (said.Count == 0)
+        {
+            return;
+        }
+
+        using var soon = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        try
+        {
+            foreach (var (level, text) in said)
+            {
+                await Api.ReportClientAsync(new ClientReport(level, text, where), soon.Token);
+            }
+        }
+        catch (Exception)
+        {
+            // Not told: see above.
         }
     }
 

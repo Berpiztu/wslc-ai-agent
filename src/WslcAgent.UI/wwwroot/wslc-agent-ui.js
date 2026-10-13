@@ -783,25 +783,36 @@ window.wslcAgent = {
         return { files, skipped };
     },
 
-    // The full path of a folder of this device, as it was typed for it the
-    // last time, by the folder's name: a browser hands over a folder and not
-    // where it is, so the path is typed once and remembered on this device.
-    folderPath(name) {
-        try {
-            return (JSON.parse(localStorage.getItem('wslcAgent.folderPaths') || '{}') || {})[name] || '';
-        } catch {
-            return '';
+    // A Compose file of this device, chosen in the browser's own file chooser:
+    // its name and its text, which is all a Compose file is to the page. With
+    // nothing chosen, no name. showOpenFilePicker where there is one, which
+    // opens where it was left the last time; elsewhere an input made for the
+    // pick.
+    async pickTextFile() {
+        const read = async file => (file ? { name: file.name, text: await file.text() } : { name: '', text: '' });
+        if (window.showOpenFilePicker) {
+            try {
+                const [chosen] = await window.showOpenFilePicker({
+                    id: 'wslcAgentCompose',
+                    types: [{ description: 'Compose files', accept: { 'application/yaml': ['.yaml', '.yml'] } }],
+                });
+                return await read(await chosen.getFile());
+            } catch (failure) {
+                if (failure && failure.name === 'AbortError') {
+                    return await read(null);
+                }
+                // A browser that has the chooser and will not use it here: the input's is still a chooser.
+            }
         }
-    },
 
-    rememberFolderPath(name, path) {
-        try {
-            const kept = JSON.parse(localStorage.getItem('wslcAgent.folderPaths') || '{}') || {};
-            kept[name] = path;
-            localStorage.setItem('wslcAgent.folderPaths', JSON.stringify(kept));
-        } catch {
-            // A device that keeps nothing: the path is typed again next time.
-        }
+        return new Promise(resolve => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.yaml,.yml';
+            input.onchange = async () => resolve(await read((input.files || [])[0]));
+            input.oncancel = async () => resolve(await read(null));
+            input.click();
+        });
     },
 
     // The hashes of some of a ticket's files, in the order asked for. It takes

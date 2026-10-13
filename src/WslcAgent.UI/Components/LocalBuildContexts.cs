@@ -19,6 +19,20 @@ public sealed record PickedFolder(string Ticket, string Name, int Count)
 /// <param name="Modified">When it was last written, in seconds since 1970.</param>
 public sealed record PickedFolderFile(int Index, string Path, long Size, long Modified);
 
+/// <summary>
+/// A build context of this device as it was read, with nothing of it sent
+/// yet: what there is to send, and the id the agent will know it by.
+/// </summary>
+/// <param name="Written">The context as the Compose file writes it.</param>
+/// <param name="Id">Its id (<see cref="ProjectContextRequest.IdOf"/>): what the file's request names it by.</param>
+/// <param name="Entries">Its list: every folder and file, each file with its hash.</param>
+/// <param name="First">A file of each hash, by its place in the folder's ticket: the one sent for that hash.</param>
+/// <param name="Skipped">The entries the browser would not hand over, which are not in it.</param>
+public sealed record ReadContext(string Written, string Id, List<ProjectContextEntry> Entries, IReadOnlyDictionary<string, int> First, List<string> Skipped, int Files, long Bytes);
+
+/// <summary>What the browser answers of a text file chosen on this device (<c>wslcAgent.pickTextFile</c>): its name, and what it holds.</summary>
+public sealed record PickedText(string Name, string Text);
+
 /// <summary>What the browser answers of a context of a picked folder (<c>wslcAgent.listPicked</c>).</summary>
 /// <param name="Files">Its files.</param>
 /// <param name="Skipped">The entries the browser lists and will not hand over (a link whose target is gone, a file the system keeps to itself), by their paths: they are not sent.</param>
@@ -40,6 +54,10 @@ public sealed class LocalBuildContexts(WslcAgentApi api, IJSRuntime js, AgentAcc
     public async Task<PickedFolder> PickAsync() =>
         await js.InvokeAsync<PickedFolder>("wslcAgent.pickFolder") ?? PickedFolder.None;
 
+    /// <summary>Opens the browser's file chooser for a Compose file of this device; no name when nothing was chosen.</summary>
+    public async Task<PickedText> PickTextFileAsync() =>
+        await js.InvokeAsync<PickedText>("wslcAgent.pickTextFile") ?? new PickedText("", "");
+
     /// <summary>Lets the browser go of a folder that is no longer needed.</summary>
     public async Task ReleaseAsync(PickedFolder folder)
     {
@@ -59,19 +77,18 @@ public sealed class LocalBuildContexts(WslcAgentApi api, IJSRuntime js, AgentAcc
     }
 
     /// <summary>
-    /// Sends one build context of the folder and answers the id the agent
-    /// knows it by. <paramref name="written"/> is the context as the Compose
-    /// file writes it (<c>.</c>, <c>./app</c>), from the folder picked, which
-    /// is the one the file is in. Each step says how far it has got through
-    /// <paramref name="say"/>; the sending itself is a transfer of the
-    /// agent's, listed under <paramref name="project"/>.
+    /// Reads one build context of the folder: which files it has and what
+    /// each is, by the hash of its bytes. It is done on this device and takes
+    /// seconds, and from it the context's id is known before any of it is
+    /// sent: a save can be asked about, and agreed to, with the sending still
+    /// to come. <paramref name="written"/> is the context as the Compose file
+    /// writes it (<c>.</c>, <c>./app</c>), from the folder picked, which is
+    /// the one the file is in.
     /// </summary>
-    public async Task<string> SendAsync(PickedFolder folder, string written, string project, Action<string> say)
+    public async Task<ReadContext> ReadAsync(PickedFolder folder, string written, Action<string> say)
     {
         say($"Reading build context {written}: listing its files");
-        var files = await InContextAsync(folder, written);
-        var whole = $"{files.Count} files, {Size(files.Sum(file => file.Size))}";
-
+        var (files, skipped) = await InContextAsync(folder, written);
         using var read = DotNetObjectReference.Create(new Told((done, bytes) => say($"Reading build context {written}: {done} of {files.Count} files, {Size(bytes)}")));
         var hashes = await js.InvokeAsync<string[]>("wslcAgent.hashPicked", folder.Ticket, files.Select(file => new { index = file.Index, path = file.Path }).ToArray(), read);
 
@@ -82,23 +99,37 @@ public sealed class LocalBuildContexts(WslcAgentApi api, IJSRuntime js, AgentAcc
             first.TryAdd(hashes[at], files[at].Index);
         }
 
-        say($"Build context {written} ({whole}): asking the agent what it lacks");
-        var missing = await api.GetMissingContextFilesAsync([.. first.Keys]);
+        var entries = Entries(files, hashes);
+        return new ReadContext(written, ProjectContextRequest.IdOf(entries), entries, first, skipped, files.Count, files.Sum(file => file.Size));
+    }
+
+    /// <summary>
+    /// Sends a context that was read: the files of it the agent lacks, and
+    /// then its list. It may take as long as the line to the agent makes it,
+    /// and is done with no window waiting on it: each step says how far it
+    /// has got through <paramref name="say"/>, and the sending itself is a
+    /// transfer of the agent's, listed under <paramref name="project"/>.
+    /// </summary>
+    public async Task SendAsync(PickedFolder folder, ReadContext context, string project, Action<string> say)
+    {
+        var whole = $"{context.Files} files, {Size(context.Bytes)}";
+        say($"build context {context.Written} ({whole}): asking the agent what it lacks");
+        var missing = await api.GetMissingContextFilesAsync([.. context.First.Keys]);
         if (missing.Count > 0)
         {
             using var going = DotNetObjectReference.Create(new Told((sent, all) => say(sent < all
-                ? $"Sending build context {written}: {missing.Count} of {files.Count} files, {sent * 100 / Math.Max(all, 1)} % of {Size(all)}"
-                : $"Sending build context {written}: all of it sent ({Size(all)}), waiting for the agent to keep it")));
+                ? $"sending build context {context.Written}: {missing.Count} of {context.Files} files, {sent * 100 / Math.Max(all, 1)} % of {Size(all)}"
+                : $"build context {context.Written} sent ({Size(all)}), waiting for the agent to keep it")));
             var sent = await js.InvokeAsync<SentFile>("wslcAgent.sendPickedFiles", folder.Ticket,
-                missing.Select(hash => new { index = first[hash], hash }).ToArray(), api.ContextFilesUploadUrl(project, written, missing.Count).ToString(), access.Value ?? "", going);
+                missing.Select(hash => new { index = context.First[hash], hash }).ToArray(), api.ContextFilesUploadUrl(project, context.Written, missing.Count).ToString(), access.Value ?? "", going);
             if (!sent.Ok)
             {
                 throw new AgentApiException(sent.Status, sent.Error);
             }
         }
 
-        say($"Build context {written}: giving the agent its list");
-        return (await api.SendProjectContextAsync(new ProjectContextRequest(Entries(files, hashes)))).Id;
+        say($"build context {context.Written}: giving the agent its list");
+        await api.SendProjectContextAsync(new ProjectContextRequest(context.Entries, context.Skipped, project, context.Written));
     }
 
     /// <summary>
@@ -109,7 +140,7 @@ public sealed class LocalBuildContexts(WslcAgentApi api, IJSRuntime js, AgentAcc
     /// walks the folder as it is asked: a virtual environment of forty
     /// thousand files is then never read.
     /// </summary>
-    private async Task<List<PickedFolderFile>> InContextAsync(PickedFolder folder, string written)
+    private async Task<(List<PickedFolderFile> Files, List<string> Skipped)> InContextAsync(PickedFolder folder, string written)
     {
         var under = written.Replace('\\', '/').Trim('/');
         while (under.StartsWith("./", StringComparison.Ordinal))
@@ -131,13 +162,16 @@ public sealed class LocalBuildContexts(WslcAgentApi api, IJSRuntime js, AgentAcc
             throw new InvalidOperationException($"The folder picked on this device ({folder.Name}) has no {written}, or nothing in it: pick the folder the Compose file is in.");
         }
 
-        // Said and not hidden: a build that needed one of them fails later for a file that is not there.
-        if (listed.Skipped.Where(name => !ignore.Leaves(name.TrimEnd('/'))).ToList() is { Count: > 0 } skipped)
+        // Said and not hidden: a build that needed one of them fails later for a file that is not
+        // there. Said here, in a warning that stays until it is closed, and to the agent, which
+        // writes it in its log.
+        var skipped = listed.Skipped.Where(name => !ignore.Leaves(name.TrimEnd('/'))).ToList();
+        if (skipped.Count > 0)
         {
-            snackbar.Add($"Build context {written}: {skipped.Count} entries of the folder could not be read and are not sent: {string.Join(", ", skipped.Take(5))}{(skipped.Count > 5 ? "…" : "")}", Severity.Warning);
+            snackbar.Add($"Build context {written}: {skipped.Count} entries of the folder could not be read and are not sent: {string.Join(", ", skipped.Take(8))}{(skipped.Count > 8 ? ", …" : "")}. The agent's log has them all.", Severity.Warning);
         }
 
-        return [.. listed.Files.Where(file => !ignore.Leaves(file.Path)).OrderBy(file => file.Path, InFolderOrder.Instance)];
+        return (listed.Files.Where(file => !ignore.Leaves(file.Path)).OrderBy(file => file.Path, InFolderOrder.Instance).ToList(), skipped);
     }
 
     /// <summary>

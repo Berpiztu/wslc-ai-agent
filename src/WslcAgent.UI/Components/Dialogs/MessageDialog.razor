@@ -1,5 +1,6 @@
 @* One thing to read and one button: an error with its explanation, shown
    before a verb runs when the form already knows it would be refused. *@
+@inject ClientReports Reports
 
 <MudDialog>
     <TitleContent>
@@ -24,4 +25,7 @@
 
     /// <summary>Why, and what to do about it.</summary>
     [Parameter] public string Explanation { get; set; } = "";
+
+    /// <summary>An error put before the user in a window of its own is written in the agent's log as any other shown is.</summary>
+    protected override void OnInitialized() => Reports.Error(Explanation.Length > 0 ? $"{Message} {Explanation}" : Message);
 }

@@ -92,14 +92,15 @@ public sealed partial class ProjectService(INetworkService? networks = null, IVo
 
     /// <summary>
     /// The build contexts the request names, each as the file writes it with
-    /// the archive kept for it; an empty path for one that is not here (not
-    /// sent yet, or let go of since): its <c>build</c> is still read as one,
-    /// and the build itself says the context has to be sent.
+    /// where its list is kept, or will be: a context named by its id is read
+    /// the same before it is sent and after, and the build itself says so if
+    /// it finds none. An empty path for one named with no id, which the
+    /// client only says it will send.
     /// </summary>
     private Dictionary<string, string>? Sent(ComposePlanRequest request) =>
         request.Contexts is not { Count: > 0 } named || contexts is null
             ? null
-            : named.ToDictionary(context => context.Key, context => contexts.Find(context.Value) ?? "", StringComparer.Ordinal);
+            : named.ToDictionary(context => context.Key, context => contexts.PathFor(context.Value ?? ""), StringComparer.Ordinal);
 
     /// <summary>The networks and the volumes on the machine, by name; null when they cannot be asked for (no services given, <c>wslc</c> not there, its session stopped): the file is still read, without that check.</summary>
     private async Task<Machine?> ThereAsync(CancellationToken cancellationToken)

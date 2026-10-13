@@ -10,13 +10,15 @@ namespace WslcAgent.UI.Components;
 /// screen until the user closes it, and carries a Copy button for its text: a
 /// failure the user did not read is a failure they will meet again, so only the
 /// good news fades on its own; and a failure worth reporting is worth copying
-/// whole instead of retyping from a toast. And while the agent does not answer
+/// whole instead of retyping from a toast. A warning stays the same way: it
+/// is there to be read, and one that went while the eye was elsewhere said
+/// nothing (the owner's request of 13 October 2026). And while the agent does not answer
 /// (<see cref="AgentLink"/>) no error is shown at all: every one of them is that
 /// same "Failed to fetch", and the layout already says it, once, over the
 /// screen. Both rules live here instead of at the thirty-odd places that
 /// report an error.
 /// </summary>
-public sealed class ErrorsStaySnackbar(SnackbarService snackbars, IJSRuntime js, AgentLink link) : ISnackbar
+public sealed class ErrorsStaySnackbar(SnackbarService snackbars, IJSRuntime js, AgentLink link, ClientReports reports) : ISnackbar
 {
     public IEnumerable<Snackbar> ShownSnackbars => snackbars.ShownSnackbars;
 
@@ -29,10 +31,10 @@ public sealed class ErrorsStaySnackbar(SnackbarService snackbars, IJSRuntime js,
     }
 
     public Snackbar? Add(string message, Severity severity = Severity.Normal, Action<SnackbarOptions>? configure = null, string? key = null) =>
-        Silenced(severity) ? null : snackbars.Add(message, severity, Stay(severity, configure, message), key);
+        Silenced(severity) ? null : snackbars.Add(message, severity, Stay(severity, configure, Logged(severity, message)), key);
 
     public Snackbar? Add(MarkupString message, Severity severity = Severity.Normal, Action<SnackbarOptions>? configure = null, string? key = null) =>
-        Silenced(severity) ? null : snackbars.Add(message, severity, Stay(severity, configure, message.Value), key);
+        Silenced(severity) ? null : snackbars.Add(message, severity, Stay(severity, configure, Logged(severity, message.Value)), key);
 
     /// <summary>A rendered message has no text of its own to copy; it still stays.</summary>
     public Snackbar? Add(RenderFragment message, Severity severity = Severity.Normal, Action<SnackbarOptions>? configure = null, string? key = null) =>
@@ -50,12 +52,31 @@ public sealed class ErrorsStaySnackbar(SnackbarService snackbars, IJSRuntime js,
 
     public void Dispose() => snackbars.Dispose();
 
+    /// <summary>
+    /// A warning or an error that is shown is written in the agent's log too,
+    /// here, where every one of them passes, and not at each of the places
+    /// that show one. It answers the text, for the toast's own Copy.
+    /// </summary>
+    private string Logged(Severity severity, string text)
+    {
+        if (severity == Severity.Error)
+        {
+            reports.Error(text);
+        }
+        else if (severity == Severity.Warning)
+        {
+            reports.Warning(text);
+        }
+
+        return text;
+    }
+
     /// <summary>An error while the agent does not answer is the link, already said by the layout.</summary>
     private bool Silenced(Severity severity) => severity == Severity.Error && !link.Online;
 
     /// <summary>
-    /// The caller's own options first, then the rule: an error waits for a click
-    /// and shows the cross to close it with, and — unless the caller gave the
+    /// The caller's own options first, then the rule: an error or a warning waits
+    /// for a click and shows the cross to close it with, and — unless the caller gave the
     /// toast an action of its own — a Copy that puts the text on the clipboard.
     /// MudBlazor closes a toast on any action, so Copy also closes it.
     /// </summary>
@@ -63,7 +84,7 @@ public sealed class ErrorsStaySnackbar(SnackbarService snackbars, IJSRuntime js,
         options =>
         {
             configure?.Invoke(options);
-            if (severity != Severity.Error)
+            if (severity is not (Severity.Error or Severity.Warning))
             {
                 return;
             }
