@@ -184,7 +184,9 @@
         else
         {
             @* A project's cards stand among the others, each in its own cell: its own card
-               first, then its containers', and a line runs round them as one (Bracket). *@
+               first, then its containers', and a line runs round them as one (Bracket). A
+               project begins a row, and so does the card after its last: the stylesheet
+               places them by the line's first and last cells (.wslc-bracket-start, -end). *@
             var cards = Visible;
             var lines = BracketsOf(cards);
             <CardsGrid TItem="ContainerSummary" Items="cards" Loading="Loading" EmptyText="@EmptyText">

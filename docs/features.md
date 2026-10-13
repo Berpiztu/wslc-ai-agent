@@ -208,7 +208,8 @@ publishing and cleaning up need them on.
     CPU and memory share added up, whose **+** opens its containers' rows
     under it (a project of one container shows it always, and has no **+**);
     in cards, its own card followed by its containers' cards, in
-    the same cells as any other card. The project's own row and card are
+    the same cells as any other card; a project always begins a row, and
+    so does the card after its last one, so two projects never share a row. The project's own row and card are
     named `NAME-compose` and carry a soft tertiary tone (the whole row, the
     card's body), which tell them from a container's at a glance. A line runs round them as one, round
     its rows in the table as round its cards, green

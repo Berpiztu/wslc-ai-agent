@@ -4062,6 +4062,18 @@
     border-inline-end-color: var(--wslc-bracket);
 }
 
+/* A project begins a row, and so does whatever comes after it: its own card
+   stands in the first column, and the card that follows its last one does
+   too, the cells left of a row staying empty. One project after another in
+   the same row read as one run of cards, and which container was whose took
+   following the line round them. A card with a column of its own and no row
+   is placed by the grid in the next row where that column is free, and the
+   cards after it go on from there. */
+.wslc-cards-grid > .wslc-bracket.wslc-bracket-start,
+.wslc-cards-grid > .wslc-bracket.wslc-bracket-end + * {
+    grid-column-start: 1;
+}
+
 /* A project's work in the two colours of its line, while a verb goes through
    its containers: the ring's stroke painted from the page's gradient (the
    success colour into the primary), the row's bar from the same two. The
