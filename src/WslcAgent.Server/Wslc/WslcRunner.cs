@@ -26,8 +26,11 @@ public interface IWslcRunner
     /// The same run with no time limit, handing every line of output (standard output
     /// and error alike) to <paramref name="onLine"/> as it arrives: a build whose
     /// progress the user follows. Cancel through <paramref name="cancellationToken"/>.
+    /// <paramref name="standardInput"/> is copied to the command and closed: a
+    /// build whose context is an archive read from there
+    /// (<c>wslc build -</c>, wslc 3.0.3 on).
     /// </summary>
-    Task<WslcResult> StreamAsync(IReadOnlyList<string> args, Action<string> onLine, CancellationToken cancellationToken = default);
+    Task<WslcResult> StreamAsync(IReadOnlyList<string> args, Action<string> onLine, CancellationToken cancellationToken = default, Stream? standardInput = null);
 
     /// <summary>
     /// A command the agent keeps open for as long as it lasts — the event
@@ -106,8 +109,8 @@ public sealed class WslcRunner(IOptionsMonitor<WslcOptions> options, ISelectedSe
     public Task<WslcResult> RunAsync(IReadOnlyList<string> args, TimeSpan? timeout = null, CancellationToken cancellationToken = default, string? standardInput = null, string? session = null) =>
         ExecuteAsync(args, timeout, standardInput, onLine: null, cancellationToken, session);
 
-    public Task<WslcResult> StreamAsync(IReadOnlyList<string> args, Action<string> onLine, CancellationToken cancellationToken = default) =>
-        ExecuteAsync(args, Timeout.InfiniteTimeSpan, standardInput: null, onLine, cancellationToken);
+    public Task<WslcResult> StreamAsync(IReadOnlyList<string> args, Action<string> onLine, CancellationToken cancellationToken = default, Stream? standardInput = null) =>
+        ExecuteAsync(args, Timeout.InfiniteTimeSpan, standardInput: null, onLine, cancellationToken, fed: standardInput);
 
     public async Task<int> WatchAsync(IReadOnlyList<string> args, Action<string> onLine, CancellationToken cancellationToken = default)
     {
@@ -123,7 +126,7 @@ public sealed class WslcRunner(IOptionsMonitor<WslcOptions> options, ISelectedSe
         }
     }
 
-    private async Task<WslcResult> ExecuteAsync(IReadOnlyList<string> args, TimeSpan? timeout, string? standardInput, Action<string>? onLine, CancellationToken cancellationToken, string? target = null, bool collect = true)
+    private async Task<WslcResult> ExecuteAsync(IReadOnlyList<string> args, TimeSpan? timeout, string? standardInput, Action<string>? onLine, CancellationToken cancellationToken, string? target = null, bool collect = true, Stream? fed = null)
     {
         var current = options.CurrentValue;
         var executable = ResolveExecutable(current.ExecutablePath);
@@ -135,7 +138,7 @@ public sealed class WslcRunner(IOptionsMonitor<WslcOptions> options, ISelectedSe
         {
             UseShellExecute = false,
             CreateNoWindow = true,
-            RedirectStandardInput = standardInput is not null,
+            RedirectStandardInput = standardInput is not null || fed is not null,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             StandardOutputEncoding = Utf8,
@@ -177,6 +180,10 @@ public sealed class WslcRunner(IOptionsMonitor<WslcOptions> options, ISelectedSe
             process.StandardInput.Close();
         }
 
+        // Fed beside the reading of what the command prints, not before it: a build reads its
+        // context and says what it does with it at once, and either pipe left unread stops both.
+        var feeding = fed is null ? Task.CompletedTask : FeedAsync(process, fed, cancellationToken);
+
         using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutSource.CancelAfter(limit);
         try
@@ -200,6 +207,7 @@ public sealed class WslcRunner(IOptionsMonitor<WslcOptions> options, ISelectedSe
 
         var stdout = await stdoutTask;
         var stderr = await stderrTask;
+        await feeding;
         stopwatch.Stop();
 
         var result = new WslcResult(effectiveArgs, process.ExitCode, stdout, stderr, stopwatch.Elapsed);
@@ -216,6 +224,37 @@ public sealed class WslcRunner(IOptionsMonitor<WslcOptions> options, ISelectedSe
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Copies a stream into the command's standard input and closes it, which
+    /// is how the command knows it has it all. A command that ends before it
+    /// has read everything (it refused its arguments, it was cancelled) breaks
+    /// the pipe: that is the command's failure to tell, by its exit code and
+    /// what it printed, so the broken pipe itself is let go.
+    /// </summary>
+    private static async Task FeedAsync(Process process, Stream fed, CancellationToken cancellationToken)
+    {
+        // Taken now: the process may be let go of (cancelled, timed out) while this still copies.
+        var input = process.StandardInput;
+        try
+        {
+            await fed.CopyToAsync(input.BaseStream, cancellationToken);
+            await input.BaseStream.FlushAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ex is IOException or OperationCanceledException or InvalidOperationException)
+        {
+            // Said by the command itself, or by the cancellation that is being handled.
+        }
+
+        try
+        {
+            input.Close();
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException)
+        {
+            // Already closed with the process.
+        }
     }
 
     /// <summary>

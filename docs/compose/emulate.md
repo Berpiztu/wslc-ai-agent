@@ -211,6 +211,25 @@ another name first, and the old container put back if the new one does not
 start. Containers of the project that the file no longer names are listed
 and removed only when asked.
 
+A build whose folder is on another machine is built from what that machine
+sends. A client that reads a Compose file where the agent is not (the
+command line with `--agent`) packs each `build` context as a tar archive
+and sends it (`POST /api/v1/projects/contexts`); the agent keeps it as it
+came, named by its bytes (`ProjectContexts`), and the build is `wslc build
+-` with the archive on its standard input, which `wslc` reads since 3.0.3.
+The archive is never unpacked on the agent's disk: it comes from another
+machine, and what is in it is the builder's to read, with the names and the
+rights a Linux build expects. The same folder sent again is the same
+archive, so it is not sent twice and its service does not read as changed.
+Only the sources travel. What the file mounts by a relative path, its
+`.env` and its `env_file` are the agent's machine's: read from the folder
+the request names there, or, for a file given as text with none, from the
+folder its project was last saved with (`ProjectStore` keeps it;
+`ComposePlan.folder` says which it was). That folder need not exist yet:
+`wslc` makes a bind mount's folder that is missing when the container
+starts (seen in wslc 3.0.3), so a project is brought to a machine for the
+first time by naming where it will live.
+
 A new container is created and then started, two steps, not run in one:
 `wslc` takes a published port at the start and not at the create, so a
 container whose port is taken fails at its start and is left made and
@@ -272,9 +291,12 @@ The containers inside it are the ones the page already shows, with every
 verb they have today.
 
 **Cards.** A project is a card of its own followed by its containers'
-cards, each in a cell of the cards area as any other card is, so no row is
-left half empty; a line runs round them as one, from the project's card to
-its last container's. The project's card carries its name, how many of its
+cards, each in a cell of the cards area as any other card is; a line runs
+round them as one, from the project's card to its last container's. A
+project begins a row: its own card stands in the first column, and so does
+the card that follows its last one, the cells left of a row staying empty.
+Projects one after another in a row read as one run of cards, and whose
+container each was took following the line. The project's card carries its name, how many of its
 services run, and the project's verbs (start, stop, restart, the file,
 down). A container's card is the same card in or out of a project. While an `up` is on its way, the header's avatar is the ring the
 lists already use, with its output and its cancel.
@@ -383,6 +405,7 @@ three are written; the last two say what is left.
    (`Containers.razor`: a head row a project, its containers under it while
    it is open, kept together by the place each is given; in cards the
    project's own card and then its containers', in the cells any card takes,
+   the project beginning a row and whatever follows it beginning the next,
    with a line round them as one; `ProjectActions`),
    open or closed remembered per project and per device (`ProjectGroups`);
    the verbs on the whole project (`ProjectLifecycle`: `POST

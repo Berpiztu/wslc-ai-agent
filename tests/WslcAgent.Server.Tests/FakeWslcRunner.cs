@@ -55,7 +55,7 @@ public sealed class FakeWslcRunner : IWslcRunner
     }
 
     /// <summary>The scripted answer, its output handed over line by line.</summary>
-    public async Task<WslcResult> StreamAsync(IReadOnlyList<string> args, Action<string> onLine, CancellationToken cancellationToken = default)
+    public async Task<WslcResult> StreamAsync(IReadOnlyList<string> args, Action<string> onLine, CancellationToken cancellationToken = default, Stream? standardInput = null)
     {
         var result = await RunAsync(args, cancellationToken: cancellationToken);
         foreach (var line in result.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))

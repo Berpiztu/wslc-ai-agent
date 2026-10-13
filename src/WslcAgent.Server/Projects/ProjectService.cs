@@ -17,7 +17,7 @@ namespace WslcAgent.Server.Projects;
 /// said on its line: asked of the two services that list them, when the
 /// agent gives them (a reading with none, as a test's, says nothing of it).
 /// </summary>
-public sealed partial class ProjectService(INetworkService? networks = null, IVolumeService? volumes = null) : IProjectService
+public sealed partial class ProjectService(INetworkService? networks = null, IVolumeService? volumes = null, ProjectContexts? contexts = null, ProjectStore? store = null) : IProjectService
 {
     /// <summary>The names a Compose file goes by in its folder, in the order Compose looks for them.</summary>
     private static readonly string[] FileNames = ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"];
@@ -26,19 +26,71 @@ public sealed partial class ProjectService(INetworkService? networks = null, IVo
     private const long LargestFile = 1024 * 1024;
 
     /// <summary>
-    /// The file is read; and, when it names something external, read again
-    /// with what the machine has, since only then is there anything to look
-    /// for. Most files name nothing external and cost no question to
-    /// <c>wslc</c>.
+    /// The file is read. One given as text with no folder is read again from
+    /// the folder its project was last saved with, when the agent has that
+    /// project: only the reading says which project the file is. And one
+    /// that names something external is read again with what the machine
+    /// has, since only then is there anything to look for. Most files are
+    /// read once and cost no question to <c>wslc</c>.
     /// </summary>
     public async Task<ComposePlan> PlanAsync(ComposePlanRequest request, CancellationToken cancellationToken = default)
     {
-        var plan = Plan(request, null);
+        var sent = Sent(request);
+        var plan = Plan(request, null, sent);
+        if (KeptFolder(request, plan) is { } kept)
+        {
+            request = request with { Folder = kept };
+            plan = Plan(request, null, sent);
+        }
+
         return (plan.Networks.Any(network => network.External) || plan.Volumes.Any(volume => volume.External))
             && await ThereAsync(cancellationToken) is { } there
-            ? Plan(request, there)
+            ? Plan(request, there, sent)
             : plan;
     }
+
+    /// <summary>
+    /// The folder of this machine a file given as text is read from when it
+    /// names none: the one its project was last saved with. It is how a
+    /// client on another machine brings up again a project that lives here
+    /// (its mounts, its <c>.env</c>, its <c>env_file</c> are this machine's),
+    /// sending only what changed on its side, the file and what it is built
+    /// from. Null when the request has its own folder, the agent keeps no
+    /// such project, or the folder it was saved with is gone.
+    /// </summary>
+    private string? KeptFolder(ComposePlanRequest request, ComposePlan plan)
+    {
+        if (store is null || request.Path.Trim().Length > 0 || request.Folder.Trim().Length > 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            var kept = store.Read(plan.Name);
+            var folder = kept is null ? ""
+                : kept.Folder.Length > 0 ? kept.Folder
+                : kept.File.Length > 0 ? Path.GetDirectoryName(kept.File) ?? ""
+                : "";
+            return folder.Length > 0 && Directory.Exists(folder) ? folder : null;
+        }
+        catch (ArgumentException)
+        {
+            // A name no project is kept under.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The build contexts the request names, each as the file writes it with
+    /// the archive kept for it; an empty path for one that is not here (not
+    /// sent yet, or let go of since): its <c>build</c> is still read as one,
+    /// and the build itself says the context has to be sent.
+    /// </summary>
+    private Dictionary<string, string>? Sent(ComposePlanRequest request) =>
+        request.Contexts is not { Count: > 0 } named || contexts is null
+            ? null
+            : named.ToDictionary(context => context.Key, context => contexts.Find(context.Value) ?? "", StringComparer.Ordinal);
 
     /// <summary>The networks and the volumes on the machine, by name; null when they cannot be asked for (no services given, <c>wslc</c> not there, its session stopped): the file is still read, without that check.</summary>
     private async Task<Machine?> ThereAsync(CancellationToken cancellationToken)
@@ -63,14 +115,23 @@ public sealed partial class ProjectService(INetworkService? networks = null, IVo
     /// <summary>What the machine has that a file may name as external.</summary>
     private sealed record Machine(HashSet<string> Networks, HashSet<string> Volumes);
 
-    private static ComposePlan Plan(ComposePlanRequest request, Machine? there)
+    private static ComposePlan Plan(ComposePlanRequest request, Machine? there, Dictionary<string, string>? sent)
     {
         var path = request.Path.Trim();
         var context = Context(request.Folder);
+        var notes = new List<string>();
+
+        // Not an error: a project brought to a machine for the first time names the folder it
+        // will live in before anything is there. What it mounts is made when its containers start.
+        if (context.Length > 0 && !Directory.Exists(context))
+        {
+            notes.Add($"The context {context} is not on this machine yet: the folders the file mounts under it are made when its containers start; its .env, its env_file and a build from a folder of it have nothing to read there.");
+        }
+
         if (path.Length == 0)
         {
             return request.Yaml.Trim().Length > 0
-                ? ComposeReader.Read(request.Yaml, Source(request, context, there))
+                ? Noted(ComposeReader.Read(request.Yaml, Source(request, context, there, sent)), notes)
                 : throw new ArgumentException("A Compose file is required: its path on this machine, or its text.");
         }
 
@@ -78,8 +139,7 @@ public sealed partial class ProjectService(INetworkService? networks = null, IVo
         var beside = Path.GetDirectoryName(file) ?? "";
         var folder = context.Length > 0 ? context : beside;
         var name = Path.GetFileName(file);
-        var plan = ComposeReader.Read(File.ReadAllText(file), Source(request, folder, there), file);
-        var notes = new List<string>();
+        var plan = ComposeReader.Read(File.ReadAllText(file), Source(request, folder, there, sent), file);
 
         // Compose would merge the override over the file. Until the agent does, the plan says whose it is.
         var overriding = Path.Combine(beside, Path.GetFileNameWithoutExtension(name) + ".override" + Path.GetExtension(name));
@@ -97,20 +157,18 @@ public sealed partial class ProjectService(INetworkService? networks = null, IVo
             notes.Add($"This folder holds other Compose files too: {string.Join(", ", others)}. {name} was read; give a file's own path to read another.");
         }
 
-        return notes.Count == 0 ? plan : plan with { Warnings = [.. plan.Warnings, .. notes], Notes = [.. plan.Notes, .. notes] };
+        return Noted(plan, notes);
     }
 
-    /// <summary>The context asked for, as a full path; it has to be a folder of this machine, since everything relative is read from it.</summary>
+    /// <summary>The plan with what is to be said of the file as a whole, among its warnings and above its lines.</summary>
+    private static ComposePlan Noted(ComposePlan plan, List<string> notes) =>
+        notes.Count == 0 ? plan : plan with { Warnings = [.. plan.Warnings, .. notes], Notes = [.. plan.Notes, .. notes] };
+
+    /// <summary>The context asked for, as a full path of this machine: everything relative is read from it. It may not be there yet (<see cref="Plan"/> says so).</summary>
     private static string Context(string folder)
     {
         var text = folder.Trim();
-        if (text.Length == 0)
-        {
-            return "";
-        }
-
-        var full = Path.GetFullPath(text);
-        return Directory.Exists(full) ? full : throw new ArgumentException($"The context is not a folder on this machine: {folder}");
+        return text.Length == 0 ? "" : Path.GetFullPath(text);
     }
 
     /// <summary>
@@ -191,7 +249,7 @@ public sealed partial class ProjectService(INetworkService? networks = null, IVo
     /// is the user's session), and the variables given with the request over
     /// both.
     /// </summary>
-    private static ComposeSource Source(ComposePlanRequest request, string folder, Machine? there)
+    private static ComposeSource Source(ComposePlanRequest request, string folder, Machine? there, Dictionary<string, string>? sent)
     {
         var variables = new Dictionary<string, string>(StringComparer.Ordinal);
         if (folder.Length > 0 && ReadFile(Path.Combine(folder, ".env")) is { } env)
@@ -220,7 +278,7 @@ public sealed partial class ProjectService(INetworkService? networks = null, IVo
         }
 
         var services = (request.Services ?? []).Select(name => name.Trim()).Where(name => name.Length > 0).ToHashSet(StringComparer.Ordinal);
-        return new ComposeSource(request.Name, folder, variables, (request.Profiles ?? []).ToHashSet(StringComparer.Ordinal), ReadFile, ListFolder, services, there?.Networks, there?.Volumes);
+        return new ComposeSource(request.Name, folder, variables, (request.Profiles ?? []).ToHashSet(StringComparer.Ordinal), ReadFile, ListFolder, services, there?.Networks, there?.Volumes, sent);
     }
 
     private static string? ReadFile(string path) => File.Exists(path) ? File.ReadAllText(path) : null;

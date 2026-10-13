@@ -40,10 +40,68 @@ machine for no login, so there is nothing to configure and no token to keep.
 Another agent is named with `--agent URL` (or `WSLC_COMPOSE_AGENT`) and
 given its API token, the one Settings shows, with `--token` (or
 `WSLC_COMPOSE_TOKEN`). That agent is on another machine, where a path of
-this one means nothing: it is sent the file's text, and what needs the
-file's folder (relative mounts, `build`, `env_file`, `.env`) is named by the
-agent as not available, unless `--project-directory` names a folder of the
-agent's machine.
+this one means nothing: it is sent the file's text, and what its services
+are built from ([below](#building-on-another-machine)). Everything else the
+file names by a relative path (its mounts, its `env_file`, its `.env`) is
+the agent's machine's, and is read from a folder there:
+
+- the one `--project-directory` names, a folder of the agent's machine. It
+  need not be there yet: the folders the file mounts under it are made when
+  its containers start;
+- without it, the folder the project was last saved with on that agent. A
+  project that already lives on a server is brought up again from another
+  machine with no folder named: its mounts and its `.env` are the server's
+  own, and only the file and the sources travel;
+- with neither (a project new to that agent, and no folder named), what
+  needs a folder is named as not available.
+
+`build` and `up` say which folder of the agent it is before they do
+anything.
+
+### Building on another machine
+
+A `build` and an `up` against an agent on another machine send it the
+folders the file's services are built from, and the agent builds there: the
+images are made where the containers will run, from the sources on your
+desk. It is how a deployment on a server is updated from the machine that
+has the new code: the build contexts go, the server's own data folders
+stay where they are and are mounted as they were.
+
+```
+cd C:\src\shop
+wslc-compose --agent https://server.example.com --token … --project-directory D:\apps\shop up -d --build
+```
+
+`--project-directory` is needed the first time, to say where on the server
+the project lives; after that the agent remembers it.
+
+```
+wslc-compose --agent https://server.example.com --token … up -d --build
+▸ Sending build context ./app (12.4 MB, 318 files)
+```
+
+Each context (`build: ./app`, or `build.context`) is packed as a tar
+archive, as `docker build` packs it: without what its `.dockerignore`
+leaves out, the Dockerfile and the `.dockerignore` themselves always in.
+The agent keeps the archive and hands it to `wslc build -`, which reads a
+context from its standard input since **wslc 3.0.3**; nothing is unpacked
+on the agent's disk. Only the contexts of the services the command takes
+are sent, and one the agent already has is not sent again: it is known by
+its bytes, so a folder that did not change costs one question. The agent
+lets go of a context nobody has used in a week.
+
+What it asks for:
+
+- **wslc 3.0.3 or later on the agent's machine.** An older one cannot read
+  a context from its standard input, and the build says so, with what to
+  update.
+- The Dockerfile inside its context, as it nearly always is: one named
+  outside it (`dockerfile: ../Dockerfile`) is not in what is sent.
+- An agent of API level 18 or later. An older one names the `build` as not
+  available, as before.
+
+`config` and `--dry-run` send nothing: they say the `build` is one whose
+context the client sends when it builds.
 
 A development agent is reached the same way:
 `wslc-compose --agent http://127.0.0.1:8070 ps`.

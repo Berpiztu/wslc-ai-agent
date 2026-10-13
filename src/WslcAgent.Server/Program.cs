@@ -119,6 +119,7 @@ builder.Services.AddSingleton<ContainerImageUpdates>();
 builder.Services.AddSingleton<ImageArchives>();
 builder.Services.AddSingleton<IVolumeService, VolumeService>();
 builder.Services.AddSingleton<INetworkService, NetworkService>();
+builder.Services.AddSingleton<ProjectContexts>();
 builder.Services.AddSingleton<IProjectService, ProjectService>();
 builder.Services.AddSingleton<ProjectStore>();
 builder.Services.AddSingleton<ProjectDependencies>();

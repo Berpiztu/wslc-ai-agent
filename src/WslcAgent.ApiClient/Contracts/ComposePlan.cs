@@ -10,7 +10,16 @@ namespace WslcAgent.ApiClient.Contracts;
 /// <param name="Variables">Variables for <c>${NAME}</c>, <c>KEY=value</c> each; they win over the folder's <c>.env</c>.</param>
 /// <param name="Profiles">The profiles asked for: a service with profiles is left out unless one of them is here.</param>
 /// <param name="Services">The services asked for by name: they are taken, with the ones they depend on, and every other is left out, whatever the profiles say. A name the file does not have is refused. None, the whole file is read and the profiles decide.</param>
-/// <param name="Folder">The context: the folder of the agent's machine the file's relative paths, its <c>build</c>, its <c>.env</c> and its <c>env_file</c> start from. Empty takes the folder the file is in; a file given as text has none unless it is said here.</param>
+/// <param name="Folder">The context: the folder of the agent's machine the file's relative paths, its <c>build</c>, its <c>.env</c> and its <c>env_file</c> start from. Empty takes the folder the file is in; a file given as text takes the one its project was last saved with on the agent, and has none when the project is new and none is said here. It need not be there yet: the folders the file mounts under it are made when its containers start.</param>
+/// <param name="Contexts">
+/// The build contexts sent to the agent (<c>POST /api/v1/projects/contexts</c>)
+/// by a client on another machine, where the file's folders are: each
+/// context as the file writes it (<c>./app</c>, <c>.</c>) with the id the
+/// agent gave what was sent for it. A <c>build</c> named here is built from
+/// that, read by <c>wslc build</c> from its standard input. An empty id says
+/// the client will send it when it builds: the reading then takes the
+/// <c>build</c> as one that can be made, with nothing sent yet.
+/// </param>
 public sealed record ComposePlanRequest(
     string Path = "",
     string Yaml = "",
@@ -18,7 +27,19 @@ public sealed record ComposePlanRequest(
     IReadOnlyList<string>? Variables = null,
     IReadOnlyList<string>? Profiles = null,
     string Folder = "",
-    IReadOnlyList<string>? Services = null);
+    IReadOnlyList<string>? Services = null,
+    IReadOnlyDictionary<string, string>? Contexts = null);
+
+/// <summary>
+/// A build context kept by the agent: answer of <c>POST
+/// /api/v1/projects/contexts</c>, which takes one as a tar archive, and of
+/// <c>GET /api/v1/projects/contexts/{id}</c>, which says whether it is still
+/// there.
+/// </summary>
+/// <param name="Id">What the agent knows it by: made from its bytes, so the same folder sent again is the same context, and one already there need not be sent.</param>
+/// <param name="Size">Its size in bytes; 0 when it is not there.</param>
+/// <param name="Present">The agent has it.</param>
+public sealed record ProjectContext(string Id, long Size, bool Present = true);
 
 /// <summary>Body of <c>POST /api/v1/projects/open</c>: where Windows' Open dialog starts.</summary>
 /// <param name="Folder">A folder of the agent's machine, usually that of the file opened last; empty leaves it to Windows.</param>
@@ -48,6 +69,8 @@ public sealed record ComposeFileOpened(string Path, string Yaml);
 /// <param name="Lines">The file itself, line by line, each with what the agent makes of it: the plan as the user reads it, beside what they wrote.</param>
 /// <param name="Notes">The warnings that are about the file as a whole and not about one of its lines: what a screen says above the lines, which carry the rest.</param>
 /// <param name="Variables">The variables the file asks for (<c>${NAME}</c>), in the order it first names them, each with the value it was read with: the file's parameters, for whoever runs it to set.</param>
+/// <param name="Contexts">The build contexts the file names by a relative path: what a client on another machine, where those folders are, sends to the agent (<see cref="ComposePlanRequest.Contexts"/>). Null from an agent too old to take one.</param>
+/// <param name="Folder">The folder of the agent's machine the file's relative paths were read from: the one asked for, the file's own, or the one its project was last saved with; empty when there was none.</param>
 public sealed record ComposePlan(
     string Name,
     string File,
@@ -59,7 +82,14 @@ public sealed record ComposePlan(
     IReadOnlyList<string> Warnings,
     IReadOnlyList<ComposeLine> Lines,
     IReadOnlyList<string> Notes,
-    IReadOnlyList<ComposeVariable> Variables);
+    IReadOnlyList<ComposeVariable> Variables,
+    IReadOnlyList<ComposeContext>? Contexts = null,
+    string Folder = "");
+
+/// <summary>A build context a Compose file names by a relative path.</summary>
+/// <param name="Path">The context as the file writes it (<c>./app</c>, <c>.</c>): what the request names it by.</param>
+/// <param name="Needed">A service that would be taken is built from it; false, only services left out are, and it need not be sent.</param>
+public sealed record ComposeContext(string Path, bool Needed);
 
 /// <summary>A variable a Compose file asks for.</summary>
 /// <param name="Name">Its name, as in <c>${NAME}</c>.</param>

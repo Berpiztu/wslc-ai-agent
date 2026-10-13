@@ -333,14 +333,24 @@ public sealed class ProjectRunner(
     /// its output into the job's log: one build for the services built from
     /// the same thing (<see cref="Together"/>), with a <c>--tag</c> for each
     /// of their images. The Dockerfile is the context's, as Compose reads it.
+    /// A context a client on another machine sent is an archive here
+    /// (<see cref="ProjectContexts"/>): the context is then <c>-</c>, the
+    /// archive goes to the command's standard input, and the Dockerfile is
+    /// named by its path inside it.
     /// </summary>
     private async Task BuildAsync(Job job, IReadOnlyList<ComposeService> same, CancellationToken stop, bool noCache = false, bool pull = false)
     {
         var build = same[0].Build!;
         var images = same.Select(service => service.Launch.Image).Distinct(StringComparer.Ordinal).ToList();
         job.Say($"Building {string.Join(", ", images)}");
-        var dockerfile = build.Dockerfile.Length == 0 || Path.IsPathFullyQualified(build.Dockerfile)
-            ? build.Dockerfile
+        var sent = build.Context.Length == 0 || ProjectContexts.IsArchive(build.Context);
+        if (sent)
+        {
+            await SentContextAsync(build.Context, images, stop);
+        }
+
+        var dockerfile = build.Dockerfile.Length == 0 || Path.IsPathFullyQualified(build.Dockerfile) ? build.Dockerfile
+            : sent ? InArchive(build.Dockerfile)
             : Path.GetFullPath(Path.Combine(build.Context, build.Dockerfile));
         var args = new List<string> { "build", "--progress", "plain" };
         foreach (var image in images)
@@ -358,15 +368,60 @@ public sealed class ProjectRunner(
             args.Option("--build-arg", value);
         }
 
-        args.Add(build.Context);
+        args.Add(sent ? "-" : build.Context);
         job.Note("DEBUG", "wslc " + string.Join(' ', args));
-        await wslc.StreamAsync(args, job.Add, stop);
+        if (sent)
+        {
+            await using var archive = new FileStream(build.Context, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16, useAsync: true);
+            await wslc.StreamAsync(args, job.Add, stop, archive);
+        }
+        else
+        {
+            await wslc.StreamAsync(args, job.Add, stop);
+        }
 
         // The job counts a build a service: the one build is all of theirs.
         foreach (var _ in same)
         {
             job.Advance();
         }
+    }
+
+    /// <summary>The first <c>wslc</c> that reads a build's context from its standard input.</summary>
+    private static readonly Version ReadsContextFromInput = new(3, 0, 3);
+
+    /// <summary>
+    /// A context a client sent can be built from: it is here, and this
+    /// machine's <c>wslc</c> reads one from its standard input. Said before
+    /// the build begins, in words that say what to do, where the command
+    /// itself would say that <c>-</c> is no folder.
+    /// </summary>
+    private async Task SentContextAsync(string archive, IReadOnlyList<string> images, CancellationToken stop)
+    {
+        if (archive.Length == 0 || !File.Exists(archive))
+        {
+            throw new InvalidOperationException($"The build context of {string.Join(", ", images)} is not on the agent: it was not sent, or was let go of since. Run the build again from the machine that has the folder.");
+        }
+
+        var result = await wslc.RunAsync(["version", "--format", "json"], cancellationToken: stop);
+        var row = WslcJson.ParseRows(result.Stdout).FirstOrDefault();
+        var said = row.ValueKind == JsonValueKind.Object && row.TryGetProperty("Client", out var client) ? client.GetString("Version") : "";
+        if (Version.TryParse(said.Split('-', '+', ' ')[0], out var version) && version < ReadsContextFromInput)
+        {
+            throw new InvalidOperationException($"This machine's wslc is {said}, and building from a folder of another machine needs {ReadsContextFromInput} or later, which reads the context sent. Update WSL (wsl --update), or build from a folder of this machine.");
+        }
+    }
+
+    /// <summary>A Dockerfile as the file writes it, as a path inside the archive: forward slashes, and no <c>./</c> before it.</summary>
+    private static string InArchive(string dockerfile)
+    {
+        var path = dockerfile.Replace('\\', '/');
+        while (path.StartsWith("./", StringComparison.Ordinal))
+        {
+            path = path[2..];
+        }
+
+        return path;
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 using WslcAgent.ApiClient.Contracts;
 using WslcAgent.Mcp;
 using WslcAgent.Server.Host;
@@ -34,6 +35,22 @@ public static class ProjectEndpoints
 
         group.MapGet("/jobs/{id}", (string id, ProjectRunner runner) => runner.Get(id))
             .WithName("ProjectJob");
+
+        // A build context from a client on another machine, as a tar archive: kept, and named
+        // by the client in the file's request. A folder of sources runs to gigabytes: no size limit.
+        group.MapPost("/contexts", async (IFormFile file, ProjectContexts contexts, CancellationToken ct) =>
+            {
+                await using var content = file.OpenReadStream();
+                return await contexts.SaveAsync(content, ct);
+            })
+            .WithName("SendProjectContext")
+            .DisableAntiforgery()
+            .WithMetadata(new DisableRequestSizeLimitAttribute())
+            .WithFormOptions(multipartBodyLengthLimit: long.MaxValue);
+
+        // Whether one sent before is still here: what is, is not sent again.
+        group.MapGet("/contexts/{id}", (string id, ProjectContexts contexts) => contexts.Get(id))
+            .WithName("ProjectContext");
 
         // The Compose file kept for a project: what its row opens.
         group.MapGet("/{name}", (string name, ProjectLifecycle lifecycle) => lifecycle.Stored(name))

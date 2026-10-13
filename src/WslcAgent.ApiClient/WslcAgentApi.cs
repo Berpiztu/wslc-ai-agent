@@ -741,6 +741,18 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<ProjectJob> BuildProjectAsync(ProjectBuildRequest request, CancellationToken cancellationToken = default) =>
         PostJsonAsync<ProjectBuildRequest, ProjectJob>("api/v1/projects/build", request, cancellationToken);
 
+    /// <summary>Sends a build context, a tar archive of the folder, for the agent to build from: how a file read on another machine has its images built on the agent's.</summary>
+    public async Task<ProjectContext> SendProjectContextAsync(Stream archive, CancellationToken cancellationToken = default)
+    {
+        using var response = await PostFileAsync("api/v1/projects/contexts", archive, "context.tar", cancellationToken);
+        return await response.Content.ReadFromJsonAsync<ProjectContext>(cancellationToken)
+            ?? throw new AgentApiException((int)response.StatusCode, "Empty answer");
+    }
+
+    /// <summary>Whether the agent still has a build context sent before: one it has need not be sent again.</summary>
+    public Task<ProjectContext> GetProjectContextAsync(string id, CancellationToken cancellationToken = default) =>
+        GetAsync<ProjectContext>($"api/v1/projects/contexts/{Escape(id)}", cancellationToken);
+
     public Task<ProjectJob> GetProjectJobAsync(string id, CancellationToken cancellationToken = default) =>
         GetAsync<ProjectJob>($"api/v1/projects/jobs/{Escape(id)}", cancellationToken);
 

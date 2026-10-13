@@ -39,6 +39,9 @@ internal static class Terminal
     /// <summary>What has been printed since <see cref="Hold"/> and is not on the screen yet; null when lines go straight to it.</summary>
     private static StringBuilder? _held;
 
+    /// <summary>A line in motion (<see cref="Moving"/>) is on the screen with the cursor still on it: the next line of any kind has to begin under it.</summary>
+    private static bool _moving;
+
     /// <summary><paramref name="ansi"/> is <c>auto</c> (or nothing), <c>always</c> or <c>never</c>, as Compose's own option.</summary>
     public static void Setup(string ansi)
     {
@@ -142,8 +145,53 @@ internal static class Terminal
         }
     }
 
+    /// <summary>
+    /// A step that takes long, said again in its place as it goes: how much
+    /// of a folder has been packed, how much of it has been sent. The line is
+    /// written over itself, so there is one line however often it is said, in
+    /// the blue of work under way and not the white of a step begun. On
+    /// a terminal only: in a file or a pipe a line cannot be written over,
+    /// and the step is said once, when it is over (<see cref="Settled"/>).
+    /// </summary>
+    public static void Moving(string text)
+    {
+        if (!_out || _held is not null)
+        {
+            return;
+        }
+
+        var room = Width - 2;
+        Console.Out.Write($"\r{Cyan}▸{Reset} {Blue}{(text.Length > room ? text[..room] : text)}{Reset}{EraseRight}");
+        _moving = true;
+    }
+
+    /// <summary>What a step in motion came to: written over its moving line on a terminal, a line of its own elsewhere.</summary>
+    public static void Settled(string text)
+    {
+        if (_moving)
+        {
+            _moving = false;
+            Console.Out.WriteLine($"\r{Green}✔{Reset} {text}{EraseRight}");
+        }
+        else
+        {
+            Done(text);
+        }
+    }
+
+    /// <summary>Leaves a line in motion where it stands, so what is printed next begins under it: what a step cut short (it failed, it was cancelled) leaves behind.</summary>
+    private static void Rest()
+    {
+        if (_moving)
+        {
+            _moving = false;
+            Console.Out.WriteLine();
+        }
+    }
+
     public static void Line(string text)
     {
+        Rest();
         if (_held is { } held)
         {
             held.Append(text).Append(EraseRight).Append("\r\n");
@@ -181,6 +229,7 @@ internal static class Terminal
     /// </summary>
     private static void ErrorLine(string text)
     {
+        Rest();
         if (_held is { Length: > 0 } held)
         {
             Console.Out.Write(held.ToString());

@@ -17,6 +17,7 @@ namespace WslcAgent.Server.Projects;
 /// <param name="Services">The services asked for by name: they are taken, with the ones they depend on, and no other, whatever the profiles say. None, the profiles decide.</param>
 /// <param name="Networks">The networks there are on the machine, by name: how an external one that is missing is said on its line before anything runs. Not given, nothing is said of it.</param>
 /// <param name="Volumes">The volumes there are on the machine, the same way.</param>
+/// <param name="Contexts">The build contexts a client on another machine sent, each as the file writes it with the archive kept for it on this machine; an empty path for one the client says it will send. A <c>build</c> named here needs no folder.</param>
 public sealed record ComposeSource(
     string Name,
     string Folder,
@@ -26,7 +27,8 @@ public sealed record ComposeSource(
     Func<string, IReadOnlyList<HostEntry>?>? ListFolder = null,
     IReadOnlyCollection<string>? Services = null,
     IReadOnlyCollection<string>? Networks = null,
-    IReadOnlyCollection<string>? Volumes = null);
+    IReadOnlyCollection<string>? Volumes = null,
+    IReadOnlyDictionary<string, string>? Contexts = null);
 
 /// <summary>An entry of a folder of the agent's machine, as the reader needs it to place a mount.</summary>
 /// <param name="Name">Its name.</param>
@@ -143,6 +145,9 @@ public static partial class ComposeReader
         private readonly List<string> _notNeeded = [];
         private readonly List<string> _warnings = [];
 
+        /// <summary>The build contexts written as relative paths, each with the service built from it: what a client on another machine, where those folders are, sends.</summary>
+        private readonly List<(string Service, string Path)> _contexts = [];
+
         /// <summary>The warnings about the file as a whole: no line of it carries them.</summary>
         private readonly List<string> _notes = [];
         private readonly Dictionary<string, ComposeNetwork> _usedNetworks = new(StringComparer.Ordinal);
@@ -252,7 +257,16 @@ public static partial class ComposeReader
             }
 
             var ordered = InStartOrder(services);
-            return new ComposePlan(_project, file, ordered, _usedNetworks.Values.ToList(), _usedVolumes.Values.ToList(), _unsupported, _notNeeded, _warnings, Lines(yaml), _notes, _variables.Values.ToList());
+            return new ComposePlan(_project, file, ordered, _usedNetworks.Values.ToList(), _usedVolumes.Values.ToList(), _unsupported, _notNeeded, _warnings, Lines(yaml), _notes, _variables.Values.ToList(), Contexts(ordered), source.Folder);
+        }
+
+        /// <summary>The contexts written as relative paths, each once, and whether a service that is taken is built from it.</summary>
+        private List<ComposeContext> Contexts(IReadOnlyList<ComposeService> services)
+        {
+            var taken = services.Where(service => service.Enabled).Select(service => service.Name).ToHashSet(StringComparer.Ordinal);
+            return [.. _contexts
+                .GroupBy(context => context.Path, StringComparer.Ordinal)
+                .Select(context => new ComposeContext(context.Key, context.Any(built => taken.Contains(built.Service))))];
         }
 
         /// <summary>
@@ -551,14 +565,32 @@ public static partial class ComposeReader
             var context = value is string text ? text : Text(map.GetValueOrDefault("context"));
             ReadKeys(at, map, $"{service}: build", "context", "dockerfile", "target", "args");
             var contextAt = value is string ? at : $"{at}/context";
-            var folder = HostPath(service, contextAt, "build", context.Length > 0 ? context : ".");
+            var written = context.Length > 0 ? context : ".";
+            var dockerfile = Text(map.GetValueOrDefault("dockerfile"));
+
+            if (!Path.IsPathFullyQualified(written) && !written.StartsWith('~'))
+            {
+                _contexts.Add((service, written));
+            }
+
+            // Sent by a client on another machine, where the folder is: built from what it sent,
+            // which is an archive here and no folder, whatever folder the rest of the file is read
+            // from (the sources are on the client's desk; what the containers mount is on this
+            // machine). The Dockerfile is then the one inside the archive.
+            if (source.Contexts is { } sent && sent.TryGetValue(written, out var archive))
+            {
+                Converted(contextAt, archive.Length > 0 ? "the context the client sent" : "the context the client sends when it builds");
+                return new ComposeBuild(archive, dockerfile, Text(map.GetValueOrDefault("target")), Pairs(map.GetValueOrDefault("args")));
+            }
+
+            var folder = HostPath(service, contextAt, "build", written);
             if (folder is null)
             {
                 return null;
             }
 
             Converted(contextAt, folder);
-            return new ComposeBuild(folder, Text(map.GetValueOrDefault("dockerfile")), Text(map.GetValueOrDefault("target")), Pairs(map.GetValueOrDefault("args")));
+            return new ComposeBuild(folder, dockerfile, Text(map.GetValueOrDefault("target")), Pairs(map.GetValueOrDefault("args")));
         }
 
         /// <summary><c>env_file</c> first, then <c>environment</c> over it, as Compose does; a name with no value takes the variable of that name, when there is one.</summary>

@@ -169,7 +169,7 @@ internal sealed partial class Commands(AgentConnection agent, Arguments argument
     /// </summary>
     private async Task<int> BuildAsync()
     {
-        var (request, plan) = await _file.ReadAsync(Stop);
+        var (request, plan) = await _file.ReadAsync(Stop, send: !arguments.Has(Arguments.DryRun));
         foreach (var doubt in plan.Warnings)
         {
             Terminal.Warning(doubt);
@@ -198,7 +198,7 @@ internal sealed partial class Commands(AgentConnection agent, Arguments argument
     /// </summary>
     private async Task<int> UpAsync()
     {
-        var (request, plan) = await _file.ReadAsync(Stop);
+        var (request, plan) = await _file.ReadAsync(Stop, send: !arguments.Has(Arguments.DryRun));
         foreach (var lost in plan.Unsupported)
         {
             Terminal.Lost(lost);

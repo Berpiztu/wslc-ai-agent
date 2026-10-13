@@ -61,8 +61,8 @@ public sealed class CachingWslcRunner(IWslcRunner inner, ISelectedSession select
         return Changing(args, () => inner.RunAsync(args, timeout, cancellationToken, standardInput, session));
     }
 
-    public Task<WslcResult> StreamAsync(IReadOnlyList<string> args, Action<string> onLine, CancellationToken cancellationToken = default) =>
-        Changing(args, () => inner.StreamAsync(args, onLine, cancellationToken));
+    public Task<WslcResult> StreamAsync(IReadOnlyList<string> args, Action<string> onLine, CancellationToken cancellationToken = default, Stream? standardInput = null) =>
+        Changing(args, () => inner.StreamAsync(args, onLine, cancellationToken, standardInput));
 
     public Task<int> WatchAsync(IReadOnlyList<string> args, Action<string> onLine, CancellationToken cancellationToken = default) =>
         Changing(args, () => inner.WatchAsync(args, onLine, cancellationToken));

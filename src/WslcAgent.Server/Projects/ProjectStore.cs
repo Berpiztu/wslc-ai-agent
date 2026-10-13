@@ -25,7 +25,8 @@ public sealed partial class ProjectStore(IOptions<WslcOptions> options)
         Directory.CreateDirectory(folder);
         File.WriteAllText(Path.Combine(folder, FileName), string.Join('\n', plan.Lines.Select(line => line.Text)));
         File.WriteAllText(Path.Combine(folder, AboutName), JsonSerializer.Serialize(
-            new About(plan.Name, plan.File, file.Folder, file.Variables ?? [], file.Profiles ?? [], DateTimeOffset.UtcNow, file.Services ?? []), Json));
+            // The folder it was read from, asked for or found: what a file given as text is read from the next time.
+            new About(plan.Name, plan.File, file.Folder.Trim().Length > 0 ? file.Folder : plan.Folder, file.Variables ?? [], file.Profiles ?? [], DateTimeOffset.UtcNow, file.Services ?? []), Json));
     }
 
     /// <summary>The file kept for a project; null when none is (a project whose containers were made on another agent, or before the file was kept).</summary>
