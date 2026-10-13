@@ -59,7 +59,7 @@ public sealed record SentFile(bool Ok, int Status, string Error);
 /// </para>
 /// </summary>
 public sealed class FileTransfers(WslcAgentApi api, ISnackbar snackbar, IDialogService dialogs, IJSRuntime js,
-    AgentAccessToken access, IClientFiles clientFiles, ILogger<FileTransfers> log)
+    AgentAccessToken access, IClientFiles clientFiles, ActivityLine line, ILogger<FileTransfers> log)
 {
     /// <summary>Bytes with nothing to say about what they are: what a container's file is to the machine saving it.</summary>
     private const string Bytes = "application/octet-stream";
@@ -237,7 +237,7 @@ public sealed class FileTransfers(WslcAgentApi api, ISnackbar snackbar, IDialogS
                 done: null);
             if (saved is not null)
             {
-                snackbar.Add($"Saved to {saved}", Severity.Success);
+                line.Done($"Saved to {saved}");
             }
 
             return;
@@ -252,7 +252,7 @@ public sealed class FileTransfers(WslcAgentApi api, ISnackbar snackbar, IDialogS
             [.. files.Select(file => new Carrying(file.Name, file.Size, id =>
                 folder.WriteAsync(file.Name, Bytes, (stream, token) => api.DownloadContainerFileAsync(container, file.Path, stream, id, token))))],
             done: null);
-        snackbar.Add($"{files.Count} files saved to {folder.Display}", Severity.Success);
+        line.Done($"{files.Count} files saved to {folder.Display}");
     }
 
     /// <summary>
@@ -403,7 +403,9 @@ public sealed class FileTransfers(WslcAgentApi api, ISnackbar snackbar, IDialogS
             await file.Send(id);
             if (done is not null)
             {
-                snackbar.Add($"{file.Name}: {done}", Severity.Success);
+                // On the title bar's line, for a moment, as a cancelled one is: a transfer that went
+                // through is no more a matter for a toast over the screen than one that was stopped.
+                line.Done($"{file.Name}: {done}");
             }
         }
         catch (Exception cancelled) when (cancelled is OperationCanceledException or AgentApiException { StatusCode: 404 or 409 })
@@ -413,24 +415,63 @@ public sealed class FileTransfers(WslcAgentApi api, ISnackbar snackbar, IDialogS
             // longer in the queue — the file was taken out between this client
             // checking its turn and sending it — and 409 that it was stopped
             // while it travelled; a browser that was interrupted throws its
-            // own. None of them is a failure, and none of them is news: the
-            // person who pressed the cross knows, the row says so to everyone
-            // else, and a line of its own for each of eight cancelled files is
-            // eight lines saying what was already decided. It goes to the log
-            // all the same, where a trace costs nobody anything.
-            Note($"{file.Name}: cancelled ({cancelled.Message})");
+            // own. None of them is a failure.
+            Cancelled(file.Name, cancelled.Message);
         }
         catch (Exception exception) when (exception is AgentApiException or HttpRequestException or IOException or JSException or InvalidOperationException)
         {
-            // The agent's row says the same thing to everyone; this says it to
-            // the one who asked, wherever they are now.
-            snackbar.Add($"{file.Name}: transfer failed. {exception.Message}", Severity.Error);
+            // A file stopped while it travelled breaks the request that carried
+            // it, and the carrier says that in its own words, as a failure of
+            // the network ("Failed to fetch"). It is the same cancel as above:
+            // what the agent says became of the file tells the two apart.
+            if (await WasCancelledAsync(id))
+            {
+                Cancelled(file.Name, exception.Message);
+            }
+            else
+            {
+                // The agent's row says the same thing to everyone; this says it to
+                // the one who asked, wherever they are now.
+                snackbar.Add($"{file.Name}: transfer failed. {exception.Message}", Severity.Error);
+            }
         }
         finally
         {
             _mine.Remove(id);
             QueueChanged?.Invoke();
             Finished?.Invoke(container, directory);
+        }
+    }
+
+    /// <summary>
+    /// A file of this client that somebody's cross stopped. It is no failure
+    /// and takes no toast: it is said for a moment on the title bar's line, in
+    /// the info tone, where the next one takes its place, so eight files
+    /// cancelled together are one line and not eight. How it was told goes to
+    /// the log, where a trace costs nobody anything.
+    /// </summary>
+    private void Cancelled(string name, string how)
+    {
+        line.Say($"{name}: transfer cancelled");
+        Note($"{name}: cancelled ({how})");
+    }
+
+    /// <summary>
+    /// The agent's word on a transfer that broke under this client: stopped
+    /// by a cross (its row says cancelled), or let go of altogether, which is
+    /// what a batch cancelled whole comes to. An agent that does not answer
+    /// says nothing, and the break is then told as the failure it looks like.
+    /// </summary>
+    private async Task<bool> WasCancelledAsync(string id)
+    {
+        try
+        {
+            return (await api.GetContainerTransfersAsync()).FirstOrDefault(transfer => transfer.Id == id) is not { } now
+                || now.Phase == ContainerTransfer.Cancelled;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            return false;
         }
     }
 
