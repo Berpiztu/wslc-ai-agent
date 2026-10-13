@@ -30,6 +30,12 @@ namespace WslcAgent.ApiClient.Contracts;
 /// and the agent keeps none for the project. One folder, the same on both
 /// machines, is what a Compose file's relative paths mean to whoever wrote it.
 /// </param>
+/// <param name="ClientFile">
+/// The file's own path on that machine, when it is sent as its text. The
+/// agent reads nothing from it: it is kept with the project
+/// (<see cref="StoredProject.ClientFile"/>), so the project says where its
+/// file is when it is opened again.
+/// </param>
 public sealed record ComposePlanRequest(
     string Path = "",
     string Yaml = "",
@@ -39,7 +45,8 @@ public sealed record ComposePlanRequest(
     string Folder = "",
     IReadOnlyList<string>? Services = null,
     IReadOnlyDictionary<string, string>? Contexts = null,
-    string ClientFolder = "");
+    string ClientFolder = "",
+    string ClientFile = "");
 
 /// <summary>
 /// Body of <c>POST /api/v1/projects/contexts</c>: a build context as the
@@ -233,7 +240,17 @@ public sealed record ProjectJob(string Id, string Name, string State, string Ste
 /// <param name="Variables">The variables it was read with, <c>KEY=value</c> each.</param>
 /// <param name="Profiles">The profiles it was read with.</param>
 /// <param name="Services">The services it was saved for by name, when it was not for the whole file: what the project's start goes by. Null or none, the whole file.</param>
-public sealed record StoredProject(string Name, string File, string Folder, string Yaml, IReadOnlyList<string> Variables, IReadOnlyList<string> Profiles, DateTimeOffset SavedAt, IReadOnlyList<string>? Services = null);
+/// <param name="Contexts">
+/// The build contexts it was built from when a client on another machine
+/// sent them, each as the file writes it with its id
+/// (<see cref="ComposePlanRequest.Contexts"/>). Null or none, its images are
+/// built from folders of the agent's machine. It is what says, when the
+/// project is opened again, that saving it sends that machine's folder
+/// again: the agent's own has nothing to build from.
+/// </param>
+/// <param name="ClientFile">The file's path on the machine it was sent from (<see cref="ComposePlanRequest.ClientFile"/>); empty when it was not said, or the file is the agent's.</param>
+public sealed record StoredProject(string Name, string File, string Folder, string Yaml, IReadOnlyList<string> Variables, IReadOnlyList<string> Profiles, DateTimeOffset SavedAt, IReadOnlyList<string>? Services = null,
+    IReadOnlyDictionary<string, string>? Contexts = null, string ClientFile = "");
 
 /// <summary>A container of a project; rows of <c>GET /api/v1/projects/{name}/containers</c>, in the order the project's services start in.</summary>
 /// <param name="Id">The container's id, as the containers list gives it.</param>

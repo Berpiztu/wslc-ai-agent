@@ -160,7 +160,7 @@ internal sealed class ComposeFile(AgentConnection agent, Arguments arguments)
             ? new ComposePlanRequest(Path: file, Name: arguments.Project, Profiles: arguments.Profiles,
                 Folder: arguments.Directory.Length > 0 ? Path.GetFullPath(arguments.Directory) : "", Services: arguments.Services)
             : new ComposePlanRequest(Yaml: await File.ReadAllTextAsync(file, cancellationToken), Name: arguments.Project, Profiles: arguments.Profiles,
-                Folder: arguments.Directory, Services: arguments.Services, ClientFolder: Path.GetDirectoryName(file) ?? "");
+                Folder: arguments.Directory, Services: arguments.Services, ClientFolder: Path.GetDirectoryName(file) ?? "", ClientFile: file);
     }
 
     /// <summary>There is a file to read: a project named with no file at hand is taken by its name alone.</summary>

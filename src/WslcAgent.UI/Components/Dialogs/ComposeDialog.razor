@@ -283,6 +283,16 @@
     /// </summary>
     private PickedFolder? _local;
 
+    /// <summary>
+    /// What the server already holds of this device's folder for the project
+    /// opened: the build contexts its last save sent, each as the file writes
+    /// it with its id. A save can build from them again with nothing read
+    /// from this device, which is the only way from a device that does not
+    /// have the folder, or cannot hand one over (the Android app). None for a
+    /// project that is new, or built from the server's own folders.
+    /// </summary>
+    private IReadOnlyDictionary<string, string> _kept = new Dictionary<string, string>();
+
     /// <summary>What the Context field says of itself when it has the cursor: whose folder the images are built from.</summary>
     private string ContextHelp => _device
         ? "A folder of this device: the file's images are built from it, sent to the server when the project is saved or run. The path is the same on the server: what the file mounts is there."
@@ -375,7 +385,12 @@
     /// <summary>
     /// The project's own file into the window. One that came from a path is
     /// read from there again, so what was changed in it since is what is
-    /// shown; one that was pasted is the text kept with the project.
+    /// shown; one that was pasted is the text kept with the project. One
+    /// built from a folder of another machine opens as it was made there:
+    /// its file by the path it has on that machine, its context that
+    /// machine's folder, so a save from here asks for the folder and sends
+    /// it, as the first one did. Opened with the context as the server's, it
+    /// was built from a folder of the server that never held its sources.
     /// </summary>
     private async Task OpenStoredAsync()
     {
@@ -388,7 +403,10 @@
             }
             else
             {
-                (_pasted, _pasteLine) = (stored.Yaml, LineOf(stored.Yaml));
+                _device = stored.Contexts is { Count: > 0 };
+                _kept = stored.Contexts ?? _kept;
+                (_path, _pathOfDevice) = _device && stored.ClientFile.Length > 0 ? (stored.ClientFile, true) : ("", false);
+                (_pasted, _pasteLine) = (stored.Yaml, _pathOfDevice ? Shown(stored.Yaml, FileName(stored.ClientFile)) : LineOf(stored.Yaml));
             }
 
             SetContext(stored.Folder);
@@ -591,8 +609,16 @@
         }
 
         await ForgetLocalContextAsync();
+        var folder = written.Trim().Trim('"').TrimEnd(PathSeparators);
+
+        // Another folder is other sources: what the server holds is of the one the project had.
+        if (!string.Equals(folder, _context.Trim().TrimEnd(PathSeparators), StringComparison.OrdinalIgnoreCase))
+        {
+            _kept = new Dictionary<string, string>();
+        }
+
         _device = true;
-        SetContext(written.Trim().Trim('"').TrimEnd(PathSeparators));
+        SetContext(folder);
         return true;
     }
 
@@ -601,30 +627,50 @@
     /// be sent: asked for when a save has images to build from it, with a
     /// window that says why first, since the browser's own asks for a folder
     /// and says nothing of what for. It has to be the folder whose path is
-    /// the context: one selected under another name is refused. Null when
+    /// the context: one selected under another name is refused.
+    /// <para>
+    /// When the server holds what the project's last save sent
+    /// (<paramref name="serverHasThem"/>), the same window offers the other
+    /// way: to build from that, with nothing read from this device. It is how
+    /// a variable is changed without the folder being read again, and the
+    /// only way from a device that does not have the folder or cannot hand
+    /// one over. The window is the same on every device: nothing is chosen
+    /// for the user.
+    /// </para>
+    /// The folder with <see cref="Sources.Device"/>; none with
+    /// <see cref="Sources.Server"/>, or with <see cref="Sources.None"/> when
     /// the user left either window.
     /// </summary>
-    private async Task<PickedFolder?> LocalFolderAsync()
+    private async Task<(Sources From, PickedFolder? Folder)> SourcesAsync(bool serverHasThem)
     {
         var path = _context.Trim().TrimEnd(PathSeparators);
         if (_local is { } held && string.Equals(held.Name, FileName(path), StringComparison.OrdinalIgnoreCase))
         {
-            return held;
+            return (Sources.Device, held);
         }
 
         Idle();
-        if (!await DialogFlow.ConfirmAsync(Dialogs, "Send what the images are built from",
-            $"The images of this project are built on the server from this device's folder:\n\n{path}\n\n"
-            + "A browser reads a folder only when it is selected in its own window. Select that folder next: the files of it the server lacks are sent, and nothing else.",
-            "Select the folder"))
+        var message = $"The images of this project are built on the server from this device's folder:\n\n{path}\n\n"
+            + "A browser reads a folder only when it is selected in its own window. Select that folder next: the files of it the server lacks are sent, and nothing else.";
+        var answer = serverHasThem
+            ? await DialogFlow.AskEitherAsync(Dialogs, "Send what the images are built from",
+                message + "\n\nOr build from what the server has: the folder as it was sent the last time, with nothing read from this device. What changed in the folder since is not in the images then.",
+                "Select the folder", "Use what the server has")
+            : new Confirmed(await DialogFlow.ConfirmAsync(Dialogs, "Send what the images are built from", message, "Select the folder"), false);
+        if (answer.Other)
         {
-            return null;
+            return (Sources.Server, null);
+        }
+
+        if (!answer.Yes)
+        {
+            return (Sources.None, null);
         }
 
         var picked = await LocalContexts.PickAsync();
         if (picked.Ticket.Length == 0)
         {
-            return null;
+            return (Sources.None, null);
         }
 
         if (picked.Name.Length > 0 && !string.Equals(FileName(path), picked.Name, StringComparison.OrdinalIgnoreCase))
@@ -633,7 +679,7 @@
             await DialogFlow.ExplainAsync(Dialogs, "Local folder",
                 $"The folder selected ({picked.Name}) is not the context ({path}).",
                 "Select the folder whose path is in the Context field, or change the context to the folder meant.");
-            return null;
+            return (Sources.None, null);
         }
 
         if (_local is { } other)
@@ -641,7 +687,15 @@
             await LocalContexts.ReleaseAsync(other);
         }
 
-        return _local = picked;
+        return (Sources.Device, _local = picked);
+    }
+
+    /// <summary>What a save builds the project's images from, as the user answered: this device's folder, read now; what the server holds of it from the last save; or nothing, the save left.</summary>
+    private enum Sources
+    {
+        None,
+        Device,
+        Server,
     }
 
     /// <summary>A folder of the server as the context: this device's is let go of, and the file's images are built from the server's folder again.</summary>
@@ -694,12 +748,27 @@
 
         var ids = named.ToDictionary(context => context.Path, _ => "", StringComparer.Ordinal);
         var read = new List<ReadContext>();
-        PickedFolder? folder = null;
-        if (named.Any(context => context.Needed))
+        var needed = named.Where(context => context.Needed).ToList();
+        if (needed.Count == 0)
         {
-            folder = await LocalFolderAsync()
-                ?? throw new InvalidOperationException("Nothing was done: this device's folder was not selected, and the project's images are built from it.");
-            foreach (var context in named.Where(context => context.Needed))
+            return (request with { Contexts = ids }, read, null);
+        }
+
+        // The other way is there only when the server holds every context this save builds from.
+        var (from, folder) = await SourcesAsync(needed.All(context => _kept.ContainsKey(context.Path)));
+        if (from == Sources.None)
+        {
+            throw new InvalidOperationException("Nothing was done: this device's folder was not selected, and the project's images are built from it.");
+        }
+
+        foreach (var context in needed)
+        {
+            if (folder is null)
+            {
+                // Named by the id it was sent under: the agent builds from what it kept of it.
+                ids[context.Path] = _kept[context.Path];
+            }
+            else
             {
                 read.Add(await LocalContexts.ReadAsync(folder, context.Path, Busy));
                 ids[context.Path] = read[^1].Id;
@@ -799,7 +868,8 @@
         var services = _services.Select(service => service.Trim()).Where(service => service.Length > 0).ToList();
         return _path.Trim().Length > 0 && !_pathOfDevice
             ? new ComposePlanRequest(_path.Trim().Trim('"'), Name: Project, Variables: variables, Profiles: profiles, Folder: context, Services: services)
-            : new ComposePlanRequest(Yaml: _pasted, Name: Project, Variables: variables, Profiles: profiles, Folder: context, Services: services);
+            : new ComposePlanRequest(Yaml: _pasted, Name: Project, Variables: variables, Profiles: profiles, Folder: context, Services: services,
+                ClientFile: _pathOfDevice ? _path.Trim() : "");
     }
 
     /// <summary>

@@ -163,7 +163,16 @@ public static class DialogFlow
     public static Task<Confirmed> AskEachAsync(IDialogService dialogs, string title, string message, string yes, string forAll, bool destructive = false) =>
         AskAsync(dialogs, title, message, yes, destructive, forAll);
 
-    private static async Task<Confirmed> AskAsync(IDialogService dialogs, string title, string message, string yes, bool destructive, string forAll = "")
+    /// <summary>
+    /// The same confirmation, with a second way through beside its verb: what
+    /// is asked for can be done in two ways, and the user says which.
+    /// <see cref="Confirmed.Yes"/> is the verb, <see cref="Confirmed.Other"/>
+    /// the other way, and neither is Cancel, or the window dismissed.
+    /// </summary>
+    public static Task<Confirmed> AskEitherAsync(IDialogService dialogs, string title, string message, string yes, string other) =>
+        AskAsync(dialogs, title, message, yes, destructive: false, other: other);
+
+    private static async Task<Confirmed> AskAsync(IDialogService dialogs, string title, string message, string yes, bool destructive, string forAll = "", string other = "")
     {
         var parameters = new DialogParameters<Dialogs.ConfirmDialog>
         {
@@ -171,6 +180,7 @@ public static class DialogFlow
             { d => d.YesText, yes },
             { d => d.Destructive, destructive },
             { d => d.ForAll, forAll },
+            { d => d.OtherText, other },
         };
         var reference = await dialogs.ShowAsync<Dialogs.ConfirmDialog>(title, parameters, Confirmation);
         var result = await reference.Result;

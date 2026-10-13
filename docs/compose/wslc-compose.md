@@ -100,7 +100,10 @@ its list and hands it to `wslc build -`, which reads a context from its
 standard input since **wslc 3.0.3**; nothing sent is ever laid out as the
 folder it was on the agent's disk. Only the contexts of the services the
 command takes are sent. The agent lets go of a context nobody has used in
-a week, and then of the files no context names.
+a week, and then of the files no context names; not of the ones a project
+it keeps was built from, which stay for as long as the project does, so
+the project can be built again from them (the Compose window's **Use what
+the server has**) when the machine that has the folder is not at hand.
 
 What it asks for:
 

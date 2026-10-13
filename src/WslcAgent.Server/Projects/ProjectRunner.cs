@@ -353,6 +353,11 @@ public sealed class ProjectRunner(
         var dockerfile = build.Dockerfile.Length == 0 || Path.IsPathFullyQualified(build.Dockerfile) ? build.Dockerfile
             : sent ? InArchive(build.Dockerfile)
             : Path.GetFullPath(Path.Combine(build.Context, build.Dockerfile));
+        if (!sent)
+        {
+            OnThisMachine(build.Context, dockerfile, images);
+        }
+
         var args = new List<string> { "build", "--progress", "plain" };
         foreach (var image in images)
         {
@@ -410,6 +415,27 @@ public sealed class ProjectRunner(
         if (Version.TryParse(said.Split('-', '+', ' ')[0], out var version) && version < ReadsContextFromInput)
         {
             throw new InvalidOperationException($"This machine's wslc is {said}, and building from a folder of another machine needs {ReadsContextFromInput} or later, which reads the context sent. Update WSL (wsl --update), or build from a folder of this machine.");
+        }
+    }
+
+    /// <summary>
+    /// A build from a folder of this machine has that folder and its
+    /// Dockerfile here. Said before the build begins, in words that say what
+    /// to do, where the command itself says only that the system cannot find
+    /// the file specified: it is what a project whose sources are on another
+    /// machine comes to when it is saved with none of them sent, its context
+    /// read as a folder of this one.
+    /// </summary>
+    private static void OnThisMachine(string context, string dockerfile, IReadOnlyList<string> images)
+    {
+        var file = dockerfile.Length > 0 ? dockerfile : Path.Combine(context, "Dockerfile");
+        var missing = !Directory.Exists(context) ? $"the folder {context}"
+            : !File.Exists(file) ? $"the Dockerfile {file}"
+            : null;
+        if (missing is not null)
+        {
+            throw new InvalidOperationException(
+                $"{string.Join(", ", images)} cannot be built: {missing} is not on this machine. When the project's sources are on another machine, save it from that machine with its context taken From this device, so what the images are built from is sent.");
         }
     }
 

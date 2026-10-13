@@ -29,11 +29,12 @@ namespace WslcAgent.Server.Projects;
 /// bytes, not the moment each file was last written), so the same folder
 /// sent again is the same context to a later save, which compares what a
 /// container was made from. One not used for a week is let go of when the
-/// next arrives, and then the files no context names any more; a build that
-/// asks for one that is gone says so, and the client sends it again.
+/// next arrives, unless a project the agent keeps was built from it, and
+/// then the files no context names any more; a build that asks for one that
+/// is gone says so, and the client sends it again.
 /// </para>
 /// </summary>
-public sealed partial class ProjectContexts(IOptions<WslcOptions> options, ILogger<ProjectContexts>? logger = null)
+public sealed partial class ProjectContexts(IOptions<WslcOptions> options, ILogger<ProjectContexts>? logger = null, ProjectStore? projects = null)
 {
     private const string ListExtension = ".json";
     private static readonly TimeSpan KeptFor = TimeSpan.FromDays(7);
@@ -322,16 +323,20 @@ public sealed partial class ProjectContexts(IOptions<WslcOptions> options, ILogg
     /// <summary>
     /// Lets go of the contexts nobody has asked for in a week, of what an
     /// upload or a build cut short left behind, and then of the files no
-    /// context names any more.
+    /// context names any more. Not of the ones a kept project was built from
+    /// (<see cref="ProjectStore.Contexts"/>): they stay for as long as the
+    /// project does, so it can be built again from them, however long ago
+    /// they were sent, when the machine that has the folder is not at hand.
     /// </summary>
     private void Forget()
     {
         var before = DateTime.UtcNow - KeptFor;
+        var ofProjects = projects?.Contexts() ?? [];
         foreach (var file in Directory.EnumerateFiles(Folder))
         {
             Try(() =>
             {
-                if (File.GetLastWriteTimeUtc(file) < before)
+                if (File.GetLastWriteTimeUtc(file) < before && !ofProjects.Contains(Path.GetFileNameWithoutExtension(file)))
                 {
                     File.Delete(file);
                 }
