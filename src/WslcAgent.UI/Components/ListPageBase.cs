@@ -313,10 +313,22 @@ public abstract class ListPageBase<TItem> : ComponentBase, IDisposable
     /// what changes, a minute while something is. It is never switched off —
     /// what died with a session the stream was listening to is never announced.
     /// A kind <c>wslc</c> reports nothing about keeps its five seconds, because
-    /// for that list the stream being up changes nothing at all.
+    /// for that list the stream being up changes nothing at all. So does a
+    /// list whose rows carry readings (<see cref="Measured"/>).
     /// </summary>
     private TimeSpan Interval =>
-        Changes.Live && ChangeNotice.IsReported(Kind) ? SafetyNet : RefreshEvery;
+        Changes.Live && ChangeNotice.IsReported(Kind) && !Measured ? SafetyNet : RefreshEvery;
+
+    /// <summary>
+    /// The rows carry readings that change with no event behind them, a
+    /// container's CPU and memory: an event says a container started, never
+    /// that it has calmed down since. Read on the events alone, the reading
+    /// taken at a start, when a container is at its busiest, stood on its
+    /// dial for a minute. The agent keeps one answer for all who ask within
+    /// the same seconds (Home asks at this pace too), so the clock is not a
+    /// launch of <c>wslc</c> a client.
+    /// </summary>
+    protected virtual bool Measured => false;
 
     private void OnLiveChanged()
     {

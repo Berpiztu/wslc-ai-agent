@@ -958,6 +958,9 @@
 
     protected override string KeyOf(ContainerSummary c) => c.Id;
 
+    /// <summary>Each container's CPU and memory are in its row and on its card's dials.</summary>
+    protected override bool Measured => true;
+
     /// <summary>A change to a container recreates it under a new id; its number in the agent's registry is what stays, and so does its place.</summary>
     protected override string PlaceOf(ContainerSummary c) => c.Uid > 0 ? $"uid:{c.Uid}" : c.Id;
 

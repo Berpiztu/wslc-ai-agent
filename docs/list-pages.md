@@ -347,6 +347,11 @@ Export JSON (`/containers/{id}/inspect.json` download) · Backup
   is skipped while a row menu is open (`OpenPopups`, fed by the menus'
   `OpenChanged` through `EntityActionsBase.MenuOpenChanged`): the refresh
   rebuilds the rows and would close the menu by itself.
+- While the agent's events stream is open, a list of a kind `wslc` reports
+  (containers, images, networks) is read when the agent says it changed, and
+  the clock slows to a minute. Not a list whose rows carry readings, which no
+  event announces: it overrides `Measured` and keeps its 5 seconds, as
+  Containers does for each container's CPU and memory.
 - `Visible` = items filtered by the search text (case-insensitive over the
   identity and a few key fields) and the page's checkboxes.
 - Bulk actions live in `TopbarNav` inside `BulkBar`, which shows "N
