@@ -172,6 +172,7 @@ public sealed class WslcRunner(IOptionsMonitor<WslcOptions> options, ISelectedSe
             throw new WslcNotFoundException($"Could not start {executable}: {ex.Message}");
         }
 
+        EndWithAgent(process);
         var stdoutTask = ReadAsync(process.StandardOutput, onLine, collect, cancellationToken);
         var stderrTask = ReadAsync(process.StandardError, onLine, collect, cancellationToken);
         if (standardInput is not null)
@@ -351,9 +352,34 @@ public sealed class WslcRunner(IOptionsMonitor<WslcOptions> options, ISelectedSe
             throw new WslcNotFoundException($"Could not start {command.Executable}: {ex.Message}");
         }
 
+        EndWithAgent(process);
+
         // The session, not the start, is what CLI Activity records: the caller
         // knows when it ended and with which code (ExecTerminals).
         return new PipeSession(process, command.Args);
+    }
+
+    /// <summary>Windows would not hold a command: said once in the log, not at every command.</summary>
+    private static int _unheldSaid;
+
+    /// <summary>
+    /// A command the agent has started ends when the agent does, however it
+    /// goes (<see cref="AgentJob"/>): the event stream of an agent an
+    /// installer closed went on listening to nobody, one more at every
+    /// update. A terminal's command needs none of it: its pseudo console goes
+    /// with the agent, and the command with its console. One that could not be
+    /// held runs all the same, as every one did before.
+    /// </summary>
+    private void EndWithAgent(Process process)
+    {
+        var error = AgentJob.Hold(process);
+
+        // A command that is over by now is refused for that, and leaves nothing behind.
+        if (error != 0 && !process.HasExited && Interlocked.Exchange(ref _unheldSaid, 1) == 0)
+        {
+            logger.LogWarning(
+                "Windows would not tie wslc's processes to the agent (error {Error}): one still running when the agent is closed, as its event stream is, stays behind", error);
+        }
     }
 
     /// <summary>
