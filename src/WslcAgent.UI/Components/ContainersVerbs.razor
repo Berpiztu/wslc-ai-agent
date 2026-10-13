@@ -7,7 +7,7 @@
 
 <VerbFab StartIcon="@Icons.Material.Filled.PlayArrow" Label="Run" Color="Color.Success" OnClick="@(() => LaunchAsync(LaunchMode.Run))" Title="Run an image" />
 <VerbFab StartIcon="@Icons.Material.Filled.Add" Label="Create" Color="Color.Primary" OnClick="@(() => LaunchAsync(LaunchMode.Create))" Title="Create a container" />
-<VerbFab StartIcon="@Icons.Material.Filled.AccountTree" Label="Compose" OnClick="@(() => OpenAsync<ComposeDialog>("Compose", large: true))" Title="Paste or load a Compose file" />
+<VerbFab StartIcon="@Icons.Material.Filled.AccountTree" Label="Add Compose" OnClick="@(() => OpenAsync<ComposeDialog>("Compose", large: true))" Title="Paste or load a Compose file" />
 
 @code {
     private Task LaunchAsync(LaunchMode mode) =>
