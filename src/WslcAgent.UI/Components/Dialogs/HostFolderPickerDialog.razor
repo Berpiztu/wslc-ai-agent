@@ -6,7 +6,10 @@
    Asked for kinds of files (Files), it is the picker of a file of the host:
    the folder's files of those kinds are listed under its folders, a click
    selects one and a double-click takes it; Use returns the selected file and
-   waits for one, and there is no New. *@
+   waits for one, and there is no New. While the agent is being asked for a
+   folder (its drives, the first time, take a moment on some machines) a line
+   moves across the top of the list, which has its room whether it moves or
+   not, so the window does not change size. *@
 @using WslcAgent.ApiClient
 @inject WslcAgentApi Api
 @inject IDialogService Dialogs
@@ -28,7 +31,8 @@
             <MudIconButton Icon="@Icons.Material.Filled.Home" Size="Size.Small" title="Drives" OnClick="@(() => OpenAsync(""))" />
             <MudText Typo="Typo.body2" Class="wslc-mono wslc-title mud-text-secondary">@(_listing?.Path.Length > 0 ? _listing.Path : "Drives")</MudText>
         </MudStack>
-        <MudPaper Outlined="true" Class="mt-2">
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="@(_loading ? "mt-2" : "mt-2 invisible")" />
+        <MudPaper Outlined="true">
             <MudList T="string" @bind-SelectedValue="_selected" Dense="true" Class="wslc-picker-list">
                 @if (_listing is { Path.Length: > 0 })
                 {
@@ -59,6 +63,10 @@
 
 @code {
     private HostFolderListing? _listing;
+
+    /// <summary>The agent is being asked for a folder: the line over the list moves.</summary>
+    private bool _loading;
+
     private string? _selected;
     private string? _error;
 
@@ -119,6 +127,8 @@
     /// <summary>Lists <paramref name="path"/>; false when the agent could not (the error stays shown).</summary>
     private async Task<bool> OpenAsync(string path)
     {
+        _loading = true;
+        StateHasChanged();
         try
         {
             _listing = await Api.GetHostFoldersAsync(path, files: Files);
@@ -138,6 +148,8 @@
         }
         finally
         {
+            _loading = false;
+
             // The title-row buttons live in the dialog's own tree: it must be told to repaint.
             Dialog.StateHasChanged();
         }
