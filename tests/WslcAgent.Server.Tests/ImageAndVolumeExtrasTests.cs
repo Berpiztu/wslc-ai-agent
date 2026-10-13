@@ -80,8 +80,8 @@ public sealed class ImageAndVolumeExtrasTests(WebApplicationFactory<Program> fac
                 ? Task.FromResult(new Wslc.WslcResult(args, 0, stdout, "", TimeSpan.Zero))
                 : inner.RunAsync(args, timeout, cancellationToken, standardInput, session);
 
-        public Task<Wslc.WslcResult> StreamAsync(IReadOnlyList<string> args, Action<string> onLine, CancellationToken cancellationToken = default) =>
-            inner.StreamAsync(args, onLine, cancellationToken);
+        public Task<Wslc.WslcResult> StreamAsync(IReadOnlyList<string> args, Action<string> onLine, CancellationToken cancellationToken = default, Stream? standardInput = null) =>
+            inner.StreamAsync(args, onLine, cancellationToken, standardInput);
 
         public Task<int> WatchAsync(IReadOnlyList<string> args, Action<string> onLine, CancellationToken cancellationToken = default) =>
             inner.WatchAsync(args, onLine, cancellationToken);
