@@ -7,7 +7,9 @@ namespace WslcAgent.UI.Dashboard;
 
 /// <summary>
 /// What the dashboard's alarms watch: on an object that reads a container, the
-/// container's own CPU or memory while it runs; on any other the host's — the
+/// container's own CPU or memory while it runs; on one that reads a Compose
+/// project, its running containers' added up, which is what its dial shows;
+/// on any other the host's — the
 /// CPU used of all there is, the memory used of the session's, the drive the
 /// sessions' VHDX files are on. Worked out here alone, from the reads the
 /// objects already follow, for the dashboard and the status bar alike.
@@ -54,6 +56,14 @@ public sealed class DashboardMeasures : IMeasures, IDisposable
                 : null;
         }
 
+        if (ProjectSource.Name(o.Source) is { } project)
+        {
+            var running = (_containers.Rows ?? []).Where(container => container.Project == project && container.IsRunning).ToList();
+            return running.Count > 0 && measure is Cpu or Memory
+                ? running.Sum(container => Percents.Parse(measure == Cpu ? container.CpuPercent : container.MemPercent))
+                : null;
+        }
+
         return measure switch
         {
             Cpu => HostUsage.CpuPercent(_runtime.Value),
@@ -72,23 +82,26 @@ public sealed class DashboardMeasures : IMeasures, IDisposable
     {
         var needed = alarms.ToList();
         List<IDisposable> following = [];
-        if (needed.Any(a => RegistrySource.Uid(a.Object.Source) is null && a.Measure is Cpu or Memory))
+        if (needed.Any(a => OfHost(a.Object) && a.Measure is Cpu or Memory))
         {
             following.Add(_runtime.Follow());
         }
 
-        if (needed.Any(a => RegistrySource.Uid(a.Object.Source) is null && a.Measure == Disk))
+        if (needed.Any(a => OfHost(a.Object) && a.Measure == Disk))
         {
             following.Add(_disk.Follow());
         }
 
-        if (needed.Any(a => RegistrySource.Uid(a.Object.Source) is not null))
+        if (needed.Any(a => !OfHost(a.Object)))
         {
             following.Add(_containers.Follow());
         }
 
         return new Following(following);
     }
+
+    /// <summary>The object reads neither a container nor a project: what its alarm watches is the host's.</summary>
+    private static bool OfHost(ObjectInstance o) => RegistrySource.Uid(o.Source) is null && ProjectSource.Name(o.Source) is null;
 
     public void Dispose()
     {

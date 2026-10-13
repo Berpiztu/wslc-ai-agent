@@ -4136,6 +4136,32 @@
     border-image-width: 2px;
 }
 
+/* The same line round a project's card on the dashboard, which is one card
+   with its containers in it: the whole frame, in the colour of how the
+   project is (ProjectRow.Line), out of design. And the same tone going to
+   and fro on its header and its rows of verbs while something is being done
+   to it; they are pieces standing over the frame, not inside it, so each
+   carries the class itself. The dashboard's own stylesheet comes after this
+   one and colours a card's line out of design (.bz-dash-bordered): named
+   here too, the project's line stands over it. */
+.bz-dash-group.bz-dash-bordered.wslc-bracket {
+    --wslc-bracket: var(--mud-palette-primary);
+    border: 2px solid var(--wslc-bracket);
+}
+
+.bz-dash-group.bz-dash-bordered.wslc-bracket.wslc-bracket-running {
+    --wslc-bracket: var(--mud-palette-success);
+}
+
+.bz-dash-group.bz-dash-bordered.wslc-bracket.wslc-bracket-partial {
+    border-image: repeating-linear-gradient(135deg, var(--mud-palette-success) 0 6px, var(--mud-palette-primary) 6px 12px) 2;
+}
+
+.wslc-dash-section.wslc-bracket-waiting .mud-card-header,
+.wslc-dash-section.wslc-bracket-waiting .mud-card-actions {
+    animation: wslc-card-working 1.4s ease-in-out infinite;
+}
+
 /* The same line in the table, round a project's rows: over its first row,
    under its last, down the left of every one's first cell and down the right
    of its last. It is drawn over each cell, not in it: the grid's own lines are

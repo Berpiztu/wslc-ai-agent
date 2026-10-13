@@ -14,22 +14,25 @@
                  Title="Type size: Medium is how the object draws itself; Small a step down, Large a step up" />
     @* Its colours, the theme's by name, its kind's until another is chosen. *@
     <ChoiceField T="ThemeColor?" Value="@Alike(Kinds.Select(k => k.Object.Background ?? k.Kind.About.Background))"
-                 ValueChanged="@(color => SetAsync((o, kind) => color is { } chosen ? o with { Background = Kept(chosen, kind.About.Background) } : o))"
+                 ValueChanged="@(color => SetAsync((o, kind) => color is { } chosen ? o with { Background = Kept(chosen, kind.About.Background) } : o,
+                     card => color is { } chosen ? card with { Background = Kept(chosen, ThemeColors.GroupBackground) } : card))"
                  Options="SomeColorOptions" Label="Background"
                  Title="The colour its cells are filled with; Inherited takes its card's" />
     <ChoiceField T="ThemeColor?" Value="@Alike(Kinds.Select(k => k.Object.Foreground ?? k.Kind.About.Foreground))"
-                 ValueChanged="@(color => SetAsync((o, kind) => color is { } chosen ? o with { Foreground = Kept(chosen, kind.About.Foreground) } : o))"
+                 ValueChanged="@(color => SetAsync((o, kind) => color is { } chosen ? o with { Foreground = Kept(chosen, kind.About.Foreground) } : o,
+                     card => color is { } chosen ? card with { Foreground = Kept(chosen, ThemeColors.GroupForeground) } : card))"
                  Options="SomeColorOptions" Label="Foreground"
                  Title="The colour of its text; Inherited takes its card's" />
     @* How far it stands off what is under it: every object has one, as every
        card has. *@
     <ChoiceField T="int?" Value="@(Objects.Select(o => o.Elevation).Distinct().ToList() is [var elevation] ? elevation : null)"
-                 ValueChanged="@(elevation => SetAsync((o, _) => o with { Elevation = elevation }))"
+                 ValueChanged="@(elevation => SetAsync((o, _) => o with { Elevation = elevation }, card => card with { Elevation = elevation }))"
                  Options="ElevationOptions" Label="Elevation"
                  Title="How far it stands off what is under it; Settings is its design's: standing alone, the Settings page's card elevation, in a card none" />
     @* Standing alone it is drawn as a card: the colour of that card's line; None is no line. *@
     <ChoiceField T="ThemeColor?" Value="@Alike(Objects.Select(o => o.Border ?? ThemeColors.CardBorder))"
-                 ValueChanged="@(color => SetAsync((o, _) => color is { } chosen ? o with { Border = Kept(chosen, ThemeColors.CardBorder) } : o))"
+                 ValueChanged="@(color => SetAsync((o, _) => color is { } chosen ? o with { Border = Kept(chosen, ThemeColors.CardBorder) } : o,
+                     card => color is { } chosen ? card with { Border = Kept(chosen, ThemeColors.CardBorder) } : card))"
                  Options="SomeBorderOptions" Label="Border color"
                  Title="Standing alone, drawn as a card: the colour of its line, None for no line, the tertiary under the pointer; in a card its card's line is drawn" />
     @* Which of its card's edges it keeps to as a fluid view widens the card
@@ -78,6 +81,17 @@
     /// <summary>The objects these fields show and change: one, or several chosen together.</summary>
     [Parameter, EditorRequired] public IReadOnlyList<ObjectInstance> Objects { get; set; } = [];
 
+    /// <summary>
+    /// The cards these fields change too, where they are asked for a card
+    /// that holds cards ("Apply to every object" on a project's card): what a
+    /// card has as an object has it, its colours, its elevation and its line,
+    /// is set on them with the objects. An object in a card shows neither a
+    /// line nor an elevation of its own, so set on the objects alone those
+    /// two changed nothing to see, and the cards inside kept theirs. None for
+    /// an object, or several chosen.
+    /// </summary>
+    [Parameter] public IReadOnlyList<DashboardGroup> Cards { get; set; } = [];
+
     /// <summary>A class for the first row of fields, to stand it clear of what is above it.</summary>
     [Parameter] public string Class { get; set; } = "";
 
@@ -87,7 +101,17 @@
             .Where(pair => pair.Kind is not null)
             .Select(pair => (pair.Object, pair.Kind!));
 
-    /// <summary>A change made to every object at once, one step undo takes back whole.</summary>
-    private Task SetAsync(Func<ObjectInstance, ObjectDescriptor, ObjectInstance> change) =>
-        Document.SetEachAsync([.. Kinds.Select(pair => change(pair.Object, pair.Kind)).Where(changed => !Objects.Contains(changed))]);
+    /// <summary>
+    /// A change made to every object at once, one step undo takes back whole;
+    /// and, where the field is one a card has too, to the cards given
+    /// (<see cref="Cards"/>), as they stand now, in a step of their own.
+    /// </summary>
+    private async Task SetAsync(Func<ObjectInstance, ObjectDescriptor, ObjectInstance> change, Func<DashboardGroup, DashboardGroup>? ofCard = null)
+    {
+        await Document.SetEachAsync([.. Kinds.Select(pair => change(pair.Object, pair.Kind)).Where(changed => !Objects.Contains(changed))]);
+        if (ofCard is not null && Cards.Count > 0)
+        {
+            await Document.SetLooksAsync([.. Cards.Select(card => Document.Layout.FindGroup(card.Id)).OfType<DashboardGroup>().Select(ofCard)]);
+        }
+    }
 }

@@ -1,0 +1,20 @@
+@* A Compose project's containers: what its card in the Containers list says
+   in its body, their names a line each (ProjectMembers), as one object; its
+   CPU and memory dials are objects of their own. It fills its cells as the
+   card's body does, and its type size steps its lines. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits ProjectObject
+@attribute [DashboardObject("wslc.project-details", "Project containers", Group = "Project", Subgroup = "User", Icon = Icons.Material.Filled.Article, Source = ProjectSourceFamily.FamilyKey, Columns = 12, Rows = 6, Fills = true, Horizontal = HorizontalAlign.Left, Vertical = VerticalAlign.Top, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both, CardOnly = true)]
+
+@if (Head is not null)
+{
+    <div class="@SectionClass("wslc-card-part-details")">
+        <EntityCardPart>
+            <MudCardContent>
+                <ProjectMembers Members="Members" />
+            </MudCardContent>
+        </EntityCardPart>
+    </div>
+}

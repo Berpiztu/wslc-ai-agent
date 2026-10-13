@@ -1,0 +1,42 @@
+@* A Compose project's header: the header of its card in the Containers list
+   (its name with -compose after it, how many of its containers run, the
+   avatar in its state's colour, its state chip, and the pastel green of a
+   project with a container running), standing alone. While a verb goes
+   through its containers the ring of how far it has got takes the avatar's
+   place, as in the list, and one that only turns while the project is being
+   removed. It fills its cells, as the header's tinted tone does its row; its
+   type size steps its name, its line under it, its chip and its avatar. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits ProjectObject
+@attribute [DashboardObject("wslc.project-header", "Project header", Group = "Project", Subgroup = "User", Icon = Icons.Material.Filled.AccountTree, Source = ProjectSourceFamily.FamilyKey, Columns = 16, Rows = 4, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Left, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both, CardOnly = true)]
+@attribute [DashboardObjectPart("name", "Name")]
+@attribute [DashboardObjectPart("subtitle", "Subtitle")]
+
+@if (Head is { } head)
+{
+    <div class="@($"{SectionClass("wslc-card-part-summary")} {WaitingClass}")">
+        <EntityCardPart>
+            <EntityCardHeader Title="@ProjectRow.Titled(head.Name)" Subtitle="@head.Image" AvatarColor="@StateColors.For(head.State)" Key="@head.Id" Avatar="@Ring(head)" Tone="@CardTone.Of(head)">
+                <HeaderActions>
+                    <StateChip State="@head.State" />
+                </HeaderActions>
+            </EntityCardHeader>
+        </EntityCardPart>
+    </div>
+}
+
+@code {
+    /// <summary>
+    /// The ring of a verb going through the project's containers, in the
+    /// avatar's place: how far it has got, and where it stopped when it did
+    /// not get to its end, until its cross lets it go. Nothing when no verb
+    /// is on the project.
+    /// </summary>
+    private RenderFragment? Ring(ContainerSummary head) =>
+        Verbs.Of(head.Name) is { } going
+            ? @<ProgressRing Pct="going.Bar" Status="@going.Step" Mixed="@(!going.Failed)" Failed="going.Failed" KeepPct="true"
+                             CancelTitle="Stop after this container" OnCancel="@(() => Verbs.Cancel(head.Name))" OnDismiss="@(() => Verbs.Dismiss(head.Name))" />
+            : null;
+}

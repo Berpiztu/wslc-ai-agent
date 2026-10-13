@@ -13,19 +13,23 @@
    verbs at the far end (Shortcuts). The logs are the containers' as one,
    each line said by its container. The
    menu is the whole list minus what the view already has within reach, as a
-   container's is, and is where a project's further verbs go. *@
+   container's is, and is where a project's further verbs go. The
+   dashboard's objects draw each group alone (ShortcutsAlone, and the row's
+   group with its whole menu), as a container's do, so the user places each. *@
 @inherits EntityActionsBase
 @inject ProjectVerbs Verbs
 @inject IJSRuntime Js
 
 <div class="@(Shortcuts ? "wslc-row-verbs" : "")">
-@if (Shortcuts)
+@if (Shortcuts || ShortcutsAlone)
 {
     <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center" Class="wslc-row-shortcuts">
         <MudIconButton Icon="@Icons.Material.Filled.EditNote" Size="Size.Small" title="Compose file: view it, and apply it again" Disabled="Locked" OnClick="FileAsync" />
         <MudIconButton Icon="@Icons.Material.Filled.Subject" Size="Size.Small" title="Logs of the project's containers, as one" OnClick="LogsAsync" />
     </MudStack>
 }
+@if (!ShortcutsAlone)
+{
 <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center">
     @if (Running)
     {
@@ -50,6 +54,7 @@
     <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="Down: remove the project"
                    Disabled="Locked" OnClick="DownAsync" />
 </MudStack>
+}
 </div>
 
 @code {
@@ -70,6 +75,9 @@
 
     /// <summary>In a card: the Compose file as a button of its own at the left end, and out of the menu.</summary>
     [Parameter] public bool Shortcuts { get; set; }
+
+    /// <summary>The shortcuts with nothing else: the dashboard's object of them, the project's own verbs being another.</summary>
+    [Parameter] public bool ShortcutsAlone { get; set; }
 
     protected override string Key => RowKey;
 

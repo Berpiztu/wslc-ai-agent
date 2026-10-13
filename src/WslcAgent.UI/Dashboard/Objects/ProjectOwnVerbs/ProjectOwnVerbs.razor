@@ -1,0 +1,30 @@
+@* A Compose project's own verbs: start or stop, restart, the menu and down,
+   the group its card in the Containers list keeps at the right end of its
+   actions row, standing alone. Its shortcuts are an object of their own
+   (ProjectShortcuts), so the user places each; its menu is therefore the
+   whole list, as a table row's is, since the shortcuts may not be on the
+   dashboard at all. Start, stop and restart go through its containers one at
+   a time (ProjectVerbs), and its header says how far they have got. A verb
+   reads the list again at once, so every object of the project shows the
+   change. It fills its cells with the row's tone and stands at the right,
+   until another alignment is chosen. In design the canvas makes it inert.
+   Named apart from ProjectVerbs, which is the service that does the work. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@using Berpiztu.Dashboard.Model
+@inherits ProjectObject
+@attribute [DashboardObject("wslc.project-verbs", "Project verbs", Group = "Project", Subgroup = "User", Icon = Icons.Material.Filled.SmartButton, Source = ProjectSourceFamily.FamilyKey, Columns = 8, Rows = 2, Fills = true, Background = ThemeColor.PrimaryTint, Horizontal = HorizontalAlign.Right, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both, CardOnly = true)]
+
+@if (Head is { } head)
+{
+    <div class="@($"{SectionClass()} {WaitingClass}")">
+        <EntityCardPart>
+            <MudCardActions Class="py-1" Style="@CardTone.Style(CardTone.Of(head))">
+                <VerbTaps>
+                    <ProjectActions Project="@head.Name" RowKey="@head.Id" Containers="MemberNames" Running="head.IsRunning"
+                                    Changed="@(() => Containers.RefreshAsync())" />
+                </VerbTaps>
+            </MudCardActions>
+        </EntityCardPart>
+    </div>
+}

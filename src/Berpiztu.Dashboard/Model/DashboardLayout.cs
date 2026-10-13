@@ -106,23 +106,33 @@ public sealed record DashboardLayout(int Columns, IReadOnlyList<ObjectInstance> 
         }
 
         return candidate.Group is { } groupId
-            ? FindGroup(groupId) is { } group && group.Box.Contains(box)
+            ? FindGroup(groupId) is { } group && group.Box.Contains(box) && (candidate.Hidden == true || Cards(groupId).All(card => !card.Box.Overlaps(box)))
             : Groups.All(group => !group.Box.Overlaps(box));
     }
+
+    /// <summary>The cards that stand inside this one (<see cref="DashboardGroup.Parent"/>): a project's containers, each a card of its own in the project's.</summary>
+    public IReadOnlyList<DashboardGroup> Cards(string groupId) => [.. Groups.Where(card => card.Parent == groupId)];
 
     /// <summary>
     /// Whether <paramref name="candidate"/> — a group moved or resized — can
     /// stand where it says with <paramref name="members"/>, its objects as they
     /// would then stand: on the canvas, holding all of them, and on no cell of
-    /// another group or of an object that is not its own.
+    /// another group or of an object that is not its own. A card that holds
+    /// others holds them still, where they would then stand
+    /// (<paramref name="cards"/>; where they stand now when none are given),
+    /// and what is theirs is its own; a card inside another stays inside it,
+    /// and off what else that card holds.
     /// </summary>
-    public bool FitsGroup(DashboardGroup candidate, IReadOnlyList<ObjectInstance> members)
+    public bool FitsGroup(DashboardGroup candidate, IReadOnlyList<ObjectInstance> members, IReadOnlyList<DashboardGroup>? cards = null)
     {
         var box = candidate.Box;
         return OnCanvas(box)
             && members.All(member => box.Contains(member.Box))
-            && Groups.All(group => group.Id == candidate.Id || !group.Box.Overlaps(box))
-            && Objects.All(o => o.Group == candidate.Id || !o.Box.Overlaps(box));
+            && (cards ?? Cards(candidate.Id)).All(card => box.Contains(card.Box))
+            && (candidate.Parent is not { } parentId || (FindGroup(parentId) is { } parent && parent.Box.Contains(box)))
+            && Groups.All(group => group.Id == candidate.Id || group.Id == candidate.Parent || group.Parent == candidate.Id || !group.Box.Overlaps(box))
+            // A hidden piece takes no cells: what it left is free for a card as it is for an object.
+            && Objects.All(o => o.Group == candidate.Id || o.Hidden == true || FindGroup(o.Group)?.Parent == candidate.Id || !o.Box.Overlaps(box));
     }
 
     /// <summary>
@@ -156,7 +166,8 @@ public sealed record DashboardLayout(int Columns, IReadOnlyList<ObjectInstance> 
     /// group, where the user put it.
     /// </summary>
     public DashboardGroup? GroupHolding(CellBox box) =>
-        Groups.FirstOrDefault(group => group.Box.Contains(box));
+        // The card inside before the one that holds it: both hold the box, and the inner one is where it was put.
+        Groups.Where(group => group.Box.Contains(box)).OrderBy(group => group.Parent is null).FirstOrDefault();
 
     /// <summary>The dashboard with <paramref name="changed"/> in place of the object of its id, or added when it has none.</summary>
     public DashboardLayout With(ObjectInstance changed) =>
@@ -175,13 +186,73 @@ public sealed record DashboardLayout(int Columns, IReadOnlyList<ObjectInstance> 
     public DashboardLayout MovedTogether(IReadOnlyCollection<string> ids, int dx, int dy) =>
         this with
         {
-            Objects = [.. Objects.Select(o => ids.Contains(o.Id) || (o.Group is { } g && ids.Contains(g)) ? o.MovedBy(dx, dy) : o)],
-            Groups = [.. Groups.Select(g => ids.Contains(g.Id) ? g with { X = g.X + dx, Y = g.Y + dy } : g)],
+            // A card goes with what stands in it: its objects, and the cards inside it with theirs.
+            Objects = [.. Objects.Select(o => ids.Contains(o.Id) || (o.Group is { } g && (ids.Contains(g) || (FindGroup(g)?.Parent is { } holder && ids.Contains(holder)))) ? o.MovedBy(dx, dy) : o)],
+            Groups = [.. Groups.Select(g => ids.Contains(g.Id) || (g.Parent is { } holder && ids.Contains(holder)) ? g with { X = g.X + dx, Y = g.Y + dy } : g)],
         };
 
     /// <summary>Whether every object and group these ids name stands where it may, in this dashboard.</summary>
     public bool FitsAll(IReadOnlyCollection<string> ids) =>
         ids.All(id => Find(id) is { } one ? Fits(one) : FindGroup(id) is not { } group || FitsGroup(group, Members(group.Id)));
+
+    /// <summary>
+    /// The dashboard with a card put inside another (<see cref="DashboardGroup.Parent"/>):
+    /// a card of its own, with its frame, its line and its elevation, taken
+    /// and moved whole, in that card's frame. It goes to the first of the
+    /// frame's places that nothing in it stands on, the places being as wide
+    /// and as tall as the card, <paramref name="perRow"/> to a row, from the
+    /// frame's first cell; and the frame grows to hold it. Null when the
+    /// group is not there, or its frame cannot grow that far: it would pass
+    /// the dashboard's edge or take cells that are not its own.
+    /// </summary>
+    /// <param name="card">The card's frame, its size and its id; where it stands is found here.</param>
+    /// <param name="objects">The card's objects, each where it stands from the card's top-left cell.</param>
+    public DashboardLayout? WithInside(string groupId, DashboardGroup card, IReadOnlyList<ObjectInstance> objects, int perRow)
+    {
+        if (FindGroup(groupId) is not { } frame)
+        {
+            return null;
+        }
+
+        var members = Members(groupId);
+        var cards = Cards(groupId);
+        // An object or a card stands on a few places at most: past this many, one of them is free.
+        for (var place = 0; place <= ((members.Count + cards.Count) * 4) + perRow; place++)
+        {
+            var box = new CellBox(frame.X + (place % perRow * card.W), frame.Y + (place / perRow * card.H), card.W, card.H);
+            if (members.Any(member => member.Hidden != true && member.Box.Overlaps(box)) || cards.Any(other => other.Box.Overlaps(box)))
+            {
+                continue;
+            }
+
+            var around = CellBox.Around([frame.Box, box]);
+            var grown = frame with { W = around.W, H = around.H };
+            var placed = card with { X = box.X, Y = box.Y, Parent = groupId };
+            return FitsGroup(grown, members, [.. cards, placed])
+                ? With(grown, members).With(placed, [.. objects.Select(o => o with { X = box.X + o.X, Y = box.Y + o.Y, Group = placed.Id })])
+                : null;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The dashboard without these cards of a card, each with every object
+    /// in it, and that card's frame drawn back to what is left in it from
+    /// its first cell: what <see cref="WithInside"/> grew it for is given back.
+    /// </summary>
+    public DashboardLayout WithoutInside(string groupId, IReadOnlyCollection<string> cardIds)
+    {
+        var left = cardIds.Aggregate(this, (layout, id) => layout.FindGroup(id)?.Parent == groupId ? layout.WithoutGroup(id) : layout);
+        if (left.FindGroup(groupId) is not { } frame)
+        {
+            return left;
+        }
+
+        var members = left.Members(groupId);
+        var around = CellBox.Around([.. members.Select(member => member.Box), .. left.Cards(groupId).Select(card => card.Box), new CellBox(frame.X, frame.Y, 1, 1)]);
+        return left.With(frame with { W = around.W, H = around.H }, members);
+    }
 
     /// <summary>The dashboard with <paramref name="group"/> in place of the group of its id, or added, and its objects as <paramref name="members"/> say.</summary>
     public DashboardLayout With(DashboardGroup group, IReadOnlyList<ObjectInstance> members)
@@ -204,21 +275,24 @@ public sealed record DashboardLayout(int Columns, IReadOnlyList<ObjectInstance> 
         return left with { Groups = [.. left.Groups.Where(g => left.Objects.Any(o => o.Group == g.Id))] };
     }
 
-    /// <summary>The dashboard without this group, its objects left standing where they are, alone.</summary>
+    /// <summary>The dashboard without this group, its objects left standing where they are, alone, and the cards inside it cards on the page.</summary>
     public DashboardLayout Ungrouped(string groupId) =>
         this with
         {
-            Groups = [.. Groups.Where(g => g.Id != groupId)],
+            Groups = [.. Groups.Where(g => g.Id != groupId).Select(g => g.Parent == groupId ? g with { Parent = null } : g)],
             Objects = [.. Objects.Select(o => o.Group == groupId ? o with { Group = null } : o)],
         };
 
-    /// <summary>The dashboard without this group and every object in it.</summary>
-    public DashboardLayout WithoutGroup(string groupId) =>
-        this with
+    /// <summary>The dashboard without this group and every object in it, the cards inside it and theirs gone with it.</summary>
+    public DashboardLayout WithoutGroup(string groupId)
+    {
+        var gone = Groups.Where(g => g.Id == groupId || g.Parent == groupId).Select(g => g.Id).ToHashSet(StringComparer.Ordinal);
+        return this with
         {
-            Groups = [.. Groups.Where(g => g.Id != groupId)],
-            Objects = [.. Objects.Where(o => o.Group != groupId)],
+            Groups = [.. Groups.Where(g => !gone.Contains(g.Id))],
+            Objects = [.. Objects.Where(o => o.Group is null || !gone.Contains(o.Group))],
         };
+    }
 
     public string Write() => JsonSerializer.Serialize(new Stored(FormVersion, Columns, Objects, Groups, Status.Count > 0 ? Status : null, CanvasWidth, CanvasHeight, CanvasLeft, CanvasTop), Json);
 

@@ -303,8 +303,9 @@ project begins a row: its own card stands in the first column, and so does
 the card that follows its last one, the cells left of a row staying empty.
 Projects one after another in a row read as one run of cards, and whose
 container each was took following the line. The project's card carries its name, how many of its
-services run, and the project's verbs (start, stop, restart, the file,
-down). A container's card is the same card in or out of a project. While an `up` is on its way, the header's avatar is the ring the
+services run, the CPU and the memory of its containers added up as two
+dials (the pointer on one says each container's share), and the project's
+verbs (start, stop, restart, the file, down). A container's card is the same card in or out of a project. While an `up` is on its way, the header's avatar is the ring the
 lists already use, with its output and its cancel.
 
 **Rows.** A project is one row, the grouper: its name, its services

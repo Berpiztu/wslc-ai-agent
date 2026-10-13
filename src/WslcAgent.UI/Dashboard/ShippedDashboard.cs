@@ -18,7 +18,8 @@ internal static class ShippedDashboard
     /// <summary>The layout without what reads one of this machine's resources.</summary>
     private static DashboardLayout Portable(DashboardLayout layout)
     {
-        IReadOnlyList<ObjectInstance> objects = [.. layout.Objects.Where(o => RegistrySource.Uid(o.Source) is null)];
+        // A project is this machine's as a container is, though it is named and not numbered.
+        IReadOnlyList<ObjectInstance> objects = [.. layout.Objects.Where(o => RegistrySource.Uid(o.Source) is null && ProjectSource.Name(o.Source) is null)];
         return layout with
         {
             Objects = objects,

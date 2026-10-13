@@ -12,6 +12,7 @@
 @using static Berpiztu.Dashboard.Designer.PropertyChoices
 @inject ObjectCatalogue Catalogue
 @inject SourceFamilies Families
+@inject CardCompanions Companions
 @inject ISnackbar Snackbar
 
 @* Outlined as its fields are: the object's
@@ -217,12 +218,18 @@
                              Options="AnchorOptions" Label="Anchor"
                              Title="As a fluid view widens: Scale spreads the card in proportion; Left or Right keeps its size and its distance to that edge of the view; Both keeps both distances and widens it" />
             </div>
+            @* The cards the card holds beside its own pieces (a project's containers), each with its tick: in the card, or not. *@
+            @if (Companions.Find(frame.Template) is { } companions && GroupSource(frame) is { Length: > 0 } read)
+            {
+                <CardCompanionsList Document="Document" Frame="frame" Source="@read" Set="companions" Defaults="Defaults" View="@View" />
+            }
             @* What is set once for every object of the card: shown when asked for, each change made to them
                all in one step. *@
-            <CheckRow @bind-Value="_toEvery" Label="Apply to every object" Class="mt-1" Title="Set these properties on every object of the group at once" />
+            <CheckRow @bind-Value="_toEvery" Label="Apply to every object" Class="mt-1"
+                      Title="Set these properties on every object of the group at once; in a card that holds cards, on theirs too, and the card's own colours, elevation, line and anchor on those cards" />
             @if (_toEvery)
             {
-                <LookProperties Document="Document" Objects="@Document.Layout.Members(frame.Id)" Class="mt-2" />
+                <LookProperties Document="Document" Objects="@Every(frame)" Cards="@Document.Layout.Cards(frame.Id)" Class="mt-2" />
             }
         }
         else
@@ -286,11 +293,36 @@
     /// <summary>The group's Col or Row typed: its frame resized, refused when it would leave one of its objects out or take cells that are not its own.</summary>
     private async Task SetFrameAsync(DashboardGroup changed)
     {
-        if (changed is { W: >= 1, H: >= 1 } && !await Document.SetGroupAsync(changed))
+        if (changed is not { W: >= 1, H: >= 1 })
+        {
+            return;
+        }
+
+        var before = Document.Layout.FindGroup(changed.Id);
+        if (!await Document.SetGroupAsync(changed))
         {
             Snackbar.Add("There is no room for that: the group would leave one of its objects out, or take cells that are not its own.", Severity.Warning);
+            return;
+        }
+
+        // "Apply to every object" on a card that holds cards: what was changed of its look is
+        // theirs too (a project's elevation, its containers'), each kept as it is otherwise.
+        if (_toEvery && before is not null && Document.Layout.Cards(changed.Id) is { Count: > 0 } cards)
+        {
+            await Document.SetLooksAsync([.. cards.Select(card => card with
+            {
+                Background = changed.Background != before.Background ? changed.Background : card.Background,
+                Foreground = changed.Foreground != before.Foreground ? changed.Foreground : card.Foreground,
+                Elevation = changed.Elevation != before.Elevation ? changed.Elevation : card.Elevation,
+                Border = changed.Border != before.Border ? changed.Border : card.Border,
+                Anchor = changed.Anchor != before.Anchor ? changed.Anchor : card.Anchor,
+            })]);
         }
     }
+
+    /// <summary>Every object of a card: its own, and those of the cards inside it. What "Apply to every object" sets.</summary>
+    private IReadOnlyList<ObjectInstance> Every(DashboardGroup card) =>
+        [.. Document.Layout.Members(card.Id), .. Document.Layout.Cards(card.Id).SelectMany(inner => Document.Layout.Members(inner.Id))];
 
     /// <summary>
     /// The object selected as its kind makes it (after trying things, back to
@@ -336,7 +368,7 @@
             IReadOnlyList<ObjectInstance> objects =
                 Document.SelectedObject is { } one ? [one]
                 : Document.Chosen.Count > 1 ? ChosenAndTheirs
-                : Frame is { } card && _toEvery ? Document.Layout.Members(card.Id)
+                : Frame is { } card && _toEvery ? Every(card)
                 : [];
             return [.. objects
                 .Select(o => (Object: o, Kind: Catalogue.Find(o.Type)))
@@ -394,9 +426,32 @@
     private string? GroupSource(DashboardGroup group) =>
         Readers(group).Select(reader => reader.Kind.SourceOf(reader.Member)).Distinct().ToList() is [var source] ? source : null;
 
-    /// <summary>The source chosen for a group: every object of it that reads one reads it, in one change.</summary>
-    private Task SetGroupSourceAsync(DashboardGroup group, string source) =>
-        Document.SetEachAsync([.. Readers(group).Select(reader => reader.Member with { Source = reader.Kind.Kept(source) })]);
+    /// <summary>
+    /// The source chosen for a group: every one of its objects that reads
+    /// one reads it, in one change. A card that holds others
+    /// (<see cref="ICardCompanions"/>) takes them in now: the cards of what
+    /// it read before go, and every one of what it reads now comes into the
+    /// card, a card of its own in it, so a project is put on the dashboard
+    /// with its containers in it and not as a name alone. It is done here,
+    /// when the source is chosen, and never again by itself: what appears
+    /// later is the user's to tick.
+    /// </summary>
+    private async Task SetGroupSourceAsync(DashboardGroup group, string source)
+    {
+        await Document.SetEachAsync([.. Readers(group).Select(reader => reader.Member with { Source = reader.Kind.Kept(source) })]);
+        if (Companions.Find(group.Template) is not { } companions)
+        {
+            return;
+        }
+
+        await Document.RemoveInsideAsync(group.Id,
+            [.. Document.Layout.Cards(group.Id).Where(card => card.Template == companions.Card.Type).Select(card => card.Id)]);
+        if (source.Length > 0 && await companions.ListAsync(source) is { Count: > 0 } listed
+            && await CardCompanionsList.AddAsync(Document, Catalogue, companions, group, [.. listed.Select(one => one.Value)], Defaults, View) is > 0 and var none)
+        {
+            Snackbar.Add($"There is no room in the card for {none} {companions.Noun}(s): it would pass the dashboard's edge, or take cells of what stands beside it. Move it, and tick them in its properties.", Severity.Warning);
+        }
+    }
 
     /// <summary>What is selected removed: the objects chosen, or a group with every object in it.</summary>
     private Task RemoveAsync() =>

@@ -1,0 +1,94 @@
+@* The cards a card holds beside its own pieces, in the properties window
+   (ICardCompanions): a project's containers, in the project's card. Each
+   with its tick, ticked while its card is in the card; ticking one puts it
+   in, the card growing to hold it, and unticking takes it out. It is read
+   when the card is selected, or reads another source: one that appeared
+   since is listed unticked, and nothing is put in behind the user's back.
+   One whose thing is gone is not listed: its card stays in the card with
+   nothing to read, as any object whose source is gone. *@
+@inject ObjectCatalogue Catalogue
+@inject ISnackbar Snackbar
+
+@if (_listed is { Count: > 0 } listed)
+{
+    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-2">@($"{Set.Label} shown in the card")</MudText>
+    @foreach (var one in listed)
+    {
+        <CheckRow Value="@(Cards(Document.Layout, Catalogue, Set, Frame.Id, one.Value).Count > 0)" ValueChanged="@(on => SetAsync(one, on))" Label="@one.Text"
+                  Title="@($"This {Set.Noun}: shown in the card, or not")" />
+    }
+}
+
+@code {
+    [Parameter, EditorRequired] public DashboardDocument Document { get; set; } = default!;
+
+    /// <summary>The card selected, which holds them.</summary>
+    [Parameter, EditorRequired] public DashboardGroup Frame { get; set; } = default!;
+
+    /// <summary>What that card reads.</summary>
+    [Parameter, EditorRequired] public string Source { get; set; } = "";
+
+    [Parameter, EditorRequired] public ICardCompanions Set { get; set; } = default!;
+
+    /// <summary>How each kind is born, which the cards put in take.</summary>
+    [Parameter] public IObjectDefaults? Defaults { get; set; }
+
+    [Parameter] public string View { get; set; } = DashboardView.Landscape;
+
+    private IReadOnlyList<FieldOption<string>>? _listed;
+
+    /// <summary>The card and the source the list was read for: read again when either is another.</summary>
+    private (string Frame, string Source) _of;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var of = (Frame.Id, Source);
+        if (of == _of)
+        {
+            return;
+        }
+
+        (_of, _listed) = (of, null);
+        var listed = await Set.ListAsync(Source);
+        if (_of == of)
+        {
+            _listed = listed;
+        }
+    }
+
+    private async Task SetAsync(FieldOption<string> one, bool on)
+    {
+        if (!on)
+        {
+            await Document.RemoveInsideAsync(Frame.Id, [.. Cards(Document.Layout, Catalogue, Set, Frame.Id, one.Value).Select(card => card.Id)]);
+        }
+        else if (await AddAsync(Document, Catalogue, Set, Frame, [one.Value], Defaults, View) > 0)
+        {
+            Snackbar.Add($"There is no room in the card for {one.Text}: it would pass the dashboard's edge, or take cells of what stands beside it. Move the card where it has room.", Severity.Warning);
+        }
+    }
+
+    /// <summary>What a card reads: the source of its objects, the first that has one; null while none is chosen.</summary>
+    public static string? SourceOf(DashboardLayout layout, ObjectCatalogue catalogue, string groupId) =>
+        layout.Members(groupId)
+            .Select(o => catalogue.Find(o.Type) is { HasSource: true } kind ? kind.SourceOf(o) : null)
+            .FirstOrDefault(source => source is { Length: > 0 });
+
+    /// <summary>The cards inside the card that show this one of them: the companions' template, reading its value.</summary>
+    public static IReadOnlyList<DashboardGroup> Cards(DashboardLayout layout, ObjectCatalogue catalogue, ICardCompanions set, string groupId, string value) =>
+        [.. layout.Cards(groupId).Where(card => card.Template == set.Card.Type && SourceOf(layout, catalogue, card.Id) == value)];
+
+    /// <summary>
+    /// These of them put in the card, each as its own card is born and a
+    /// card of its own inside it, its objects that read a source reading its
+    /// value; how many found no room.
+    /// </summary>
+    public static Task<int> AddAsync(DashboardDocument document, ObjectCatalogue catalogue, ICardCompanions set, DashboardGroup frame,
+        IReadOnlyList<string> values, IObjectDefaults? defaults, string view)
+    {
+        var born = set.Card.Born(defaults, view);
+        return document.AddInsideAsync(frame.Id, [.. values.Select(_ => born)],
+            (index, o) => catalogue.Find(o.Type) is { HasSource: true } kind ? o with { Source = kind.Kept(values[index]) } : o,
+            set.PerRow);
+    }
+}

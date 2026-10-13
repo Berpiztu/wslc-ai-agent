@@ -34,13 +34,19 @@ namespace Berpiztu.Dashboard.Model;
 /// screen, as its objects keep to the card's
 /// (<see cref="HorizontalAnchor"/>); null is <see cref="HorizontalAnchor.Scale"/>.
 /// </param>
+/// <param name="Parent">
+/// The card it stands inside, when it is a card of another's (a container's,
+/// in its project's card): that card's frame holds this one's, it goes
+/// where that card goes, and is removed with it. Null for a card on the page.
+/// A card inside another holds none itself: one level, and no more.
+/// </param>
 /// <param name="Border">
 /// The colour of its card's line out of design (the tertiary under the
 /// pointer); <see cref="ThemeColor.Transparent"/> is none, null its default,
 /// <see cref="ThemeColors.CardBorder"/>.
 /// </param>
 public sealed record DashboardGroup(string Id, int X, int Y, int W, int H, ThemeColor? Background = null, ThemeColor? Foreground = null,
-    string? Template = null, int? Elevation = null, HorizontalAnchor? Anchor = null, ThemeColor? Border = null)
+    string? Template = null, int? Elevation = null, HorizontalAnchor? Anchor = null, ThemeColor? Border = null, string? Parent = null)
 {
     /// <summary>The highest elevation a card takes, MudBlazor's highest shadow but one, as the application's settings allow.</summary>
     public const int MaxElevation = 24;

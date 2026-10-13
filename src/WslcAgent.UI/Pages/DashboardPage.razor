@@ -83,7 +83,10 @@
         {
             @switch (Family)
             {
+                // A project is on the Containers page as a container is: its card
+                // offers that page's verbs too, Compose among them.
                 case ContainerSourceFamily.FamilyKey:
+                case ProjectSourceFamily.FamilyKey:
                     <ContainersVerbs Changed="@(() => Containers.RefreshAsync())" />
                     break;
                 case ImageSourceFamily.FamilyKey:

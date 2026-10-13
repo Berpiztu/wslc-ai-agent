@@ -7,6 +7,13 @@ public static class Readings
 {
     public static string Dash(string value) => string.IsNullOrEmpty(value) ? "—" : value;
 
+    /// <summary>
+    /// The used side of <c>899.5MiB / 30.98GiB</c>: the total is the machine's,
+    /// the same for every container, so what changes is shown and the whole
+    /// reading stays in a tooltip.
+    /// </summary>
+    public static string MemoryUsed(string usage) => usage.Split('/')[0].Trim();
+
     /// <summary>The containers' CPU as Home writes it: what they use of all there is, "12.00% / 800%".</summary>
     public static string Cpu(HomeRuntime runtime) =>
         $"{runtime.CpuUsedPercent.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}% / {runtime.CpuTotalPercent}%";

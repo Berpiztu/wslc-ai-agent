@@ -8,7 +8,7 @@ namespace WslcAgent.UI.Dashboard.Cards;
 /// The cards made already, out of the objects that a card's parts became, so
 /// each can be changed or moved after; on cells of about 17px.
 /// <para>
-/// A resource card — a container's, an image's, a volume's, a network's — is
+/// A resource card — a container's, a Compose project's, an image's, a volume's, a network's — is
 /// laid out as the list pages draw theirs, measured against the
 /// Containers, Images, Volumes and Networks screens: twenty-four cells across,
 /// a list card's 414px; its header three rows (the list's 50px), its body
@@ -55,6 +55,16 @@ public static class WslcCards
 
     public static readonly CardTemplate Container = new("wslc.container-card", "Container card", Icons.Material.Filled.ViewInAr, UserCards,
         Resource("container", 7, dials: [("cpu", SmallRing), ("memory", SmallRing)], shortcuts: 14));
+
+    /// <summary>
+    /// A Compose project's card, laid out as a container's, which it stands
+    /// beside in the Containers list: its containers' names where a
+    /// container's words are, the same seven rows, its two dials their CPU
+    /// and memory added up; its two shortcuts (the Compose file, the logs)
+    /// in the cells a volume's two take, and its verbs in the rest.
+    /// </summary>
+    public static readonly CardTemplate Project = new("wslc.project-card", "Project card", Icons.Material.Filled.AccountTree, UserCards,
+        Resource("project", 7, dials: [("cpu", SmallRing), ("memory", SmallRing)], shortcuts: 12));
 
     public static readonly CardTemplate Image = new("wslc.image-card", "Image card", Icons.Material.Filled.Layers, UserCards,
         Resource("image", 6, dials: [], shortcuts: 10));
@@ -158,5 +168,5 @@ public static class WslcCards
     ]);
 
     public static IEnumerable<IDashboardTemplate> All =>
-        [Container, Image, Volume, Network, SystemCard, CpuChart, MemoryChart, DiskChart, NetworkChart, ChartsCard, TransfersCard];
+        [Container, Project, Image, Volume, Network, SystemCard, CpuChart, MemoryChart, DiskChart, NetworkChart, ChartsCard, TransfersCard];
 }

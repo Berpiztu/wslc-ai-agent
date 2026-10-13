@@ -1,4 +1,5 @@
 using Berpiztu.Dashboard;
+using Berpiztu.Dashboard.Catalogue;
 using Berpiztu.Dashboard.Sources;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -99,6 +100,8 @@ public static class UiServiceCollectionExtensions
         services.AddScoped<ContainerSourceFamily>();
         services.AddScoped<ISourceFamily>(provider => provider.GetRequiredService<ContainerSourceFamily>());
         services.AddScoped<ISourceFamily, SubjectSourceFamily>();
+        services.AddScoped<ISourceFamily, ProjectSourceFamily>();
+        services.AddScoped<ICardCompanions, ProjectContainerCards>();
         services.AddScoped<ISourceFamily, ImageSourceFamily>();
         services.AddScoped<ISourceFamily, VolumeSourceFamily>();
         services.AddScoped<ISourceFamily, NetworkSourceFamily>();

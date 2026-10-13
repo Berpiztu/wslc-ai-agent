@@ -53,7 +53,9 @@ public static class DashboardViews
         IReadOnlyList<ObjectInstance> objects = [.. layout.Objects.Select(o => Born(o, layout.FindGroup(o.Group), to, defaults))];
         IReadOnlyList<DashboardGroup> groups = [.. layout.Groups.Select(card =>
         {
-            var reach = CellBox.Around(objects.Where(o => o.Group == card.Id).Select(o => o.Box).DefaultIfEmpty(card.Box));
+            // What it holds: its objects, and the cards inside it.
+            var reach = CellBox.Around(objects.Where(o => o.Group == card.Id).Select(o => o.Box)
+                .Concat(layout.Groups.Where(inner => inner.Parent == card.Id).Select(inner => inner.Box)).DefaultIfEmpty(card.Box));
             var designed = card.Template is { } template ? defaults?.For(to, template) : null;
             return card with
             {

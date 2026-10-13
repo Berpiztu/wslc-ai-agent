@@ -1,0 +1,18 @@
+@* A project's containers, a name a line, in a box as tall as a container
+   card's own lines: the project's card is as tall as theirs however many it
+   has, and the box scrolls, not the card. One that is not running is written
+   fainter, one that failed in the error colour, with why in its tooltip.
+   Drawn by the project's card in the Containers list and by its card on the
+   dashboard. *@
+
+<div class="wslc-card-members">
+    @foreach (var member in Members)
+    {
+        <MudText Typo="Typo.body2" Class="@(member.HasFailed ? "mud-error-text" : member.IsRunning ? "" : "mud-text-secondary")"
+                 title="@($"{member.Name}: {(member.HasFailed ? member.Failure : member.State)}")">@member.Name</MudText>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<ContainerSummary> Members { get; set; } = [];
+}

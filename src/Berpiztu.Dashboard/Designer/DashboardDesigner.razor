@@ -25,6 +25,7 @@
 @inject ObjectCatalogue Catalogue
 @inject IEnumerable<IDashboardTemplate> Templates
 @inject SourceFamilies Families
+@inject CardCompanions Companions
 @inject DashboardInterop Interop
 @inject ISnackbar Snackbar
 @inject IDialogService Dialogs
@@ -50,8 +51,8 @@
                     var frame = ShownFrame(group);
                     <div class="@GroupClass(frame)" style="@FrameStyle(frame)" @key="group.Id"
                          @onpointerdown="@(pointer => PressFrameAsync(group, pointer))" @onpointerdown:stopPropagation="true"
-                         @onclick="@(() => TapAsync(group.Id))" @onclick:stopPropagation="true"
-                         @onpointerenter="@(() => Hover(group.Id))" @onpointerleave="@(() => Hover(null))">
+                         @onclick="@(() => TapAsync(group.Parent ?? group.Id))" @onclick:stopPropagation="true"
+                         @onpointerenter="@(() => Hover(group.Parent ?? group.Id))" @onpointerleave="@(() => Hover(null))">
                     </div>
                 }
                 @* A hidden piece is not drawn, in design or out of it; its card's properties show it again.
@@ -66,8 +67,8 @@
                     var shown = Shown(instance);
                     <div class="@ObjectClass(shown, kind)" style="@ObjectStyle(shown, kind)" @key="instance.Id"
                          @onpointerdown="@(pointer => PressObjectAsync(instance, pointer))" @onpointerdown:stopPropagation="true"
-                         @onclick="@(() => TapAsync(instance.Group ?? instance.Id))" @onclick:stopPropagation="true"
-                         @onpointerenter="@(() => Hover(instance.Group ?? instance.Id))" @onpointerleave="@(() => Hover(null))">
+                         @onclick="@(() => TapAsync(UnitOf(instance)))" @onclick:stopPropagation="true"
+                         @onpointerenter="@(() => Hover(UnitOf(instance)))" @onpointerleave="@(() => Hover(null))">
                         <div class="@(kind.About.Fills ? "bz-dash-content bz-dash-fill" : "bz-dash-content")">
                             @if (Unset(kind, instance))
                             {
@@ -325,6 +326,11 @@
             Measures.Changed += OnChanged;
         }
 
+        foreach (var companions in Companions.All)
+        {
+            companions.Changed += OnChanged;
+        }
+
         if (Defaults is not null)
         {
             await Defaults.LoadAsync();
@@ -485,6 +491,11 @@
             Measures.Changed -= OnChanged;
         }
 
+        foreach (var companions in Companions.All)
+        {
+            companions.Changed -= OnChanged;
+        }
+
         if (_sizeWatch is not null)
         {
             await _sizeWatch.DisposeAsync();
@@ -543,8 +554,24 @@
     /// <summary>A group as it is drawn: where the drag under way would put it, or where it stands.</summary>
     private DashboardGroup ShownFrame(DashboardGroup group) =>
         _groupDrag is { } drag && drag.Origin.Id == group.Id ? drag.Preview
-        : _many is { } many && many.Ids.Contains(group.Id) ? group with { X = group.X + many.Dx, Y = group.Y + many.Dy }
+        // A card inside the one carried goes with it.
+        : _groupDrag is { Resizing: false } carrying && carrying.Origin.Id == group.Parent
+            ? group with { X = group.X + carrying.Preview.X - carrying.Origin.X, Y = group.Y + carrying.Preview.Y - carrying.Origin.Y }
+        : _many is { } many && (many.Ids.Contains(group.Id) || (group.Parent is { } holder && many.Ids.Contains(holder)))
+            ? group with { X = group.X + many.Dx, Y = group.Y + many.Dy }
         : group;
+
+    /// <summary>The card an object's own card stands inside (<see cref="DashboardGroup.Parent"/>); null for an object alone, or in a card on the page.</summary>
+    private string? HolderOf(ObjectInstance instance) => _document.Layout.FindGroup(instance.Group)?.Parent;
+
+    /// <summary>
+    /// What a tap or the pointer on an object counts for out of design: the
+    /// card on the page it is in, or itself standing alone. A card inside
+    /// another is not taken there: it is a part of the card that holds it,
+    /// which is the one selected and the one whose line answers the pointer.
+    /// In design it is taken on its own, as any card.
+    /// </summary>
+    private string UnitOf(ObjectInstance instance) => HolderOf(instance) ?? instance.Group ?? instance.Id;
 
     /// <summary>What is chosen, carried where the drag under way would put it, fits there; true when nothing is carried.</summary>
     private bool ManyFits => _many is not { } many
@@ -553,9 +580,9 @@
     /// <summary>An object as it is drawn: carried itself, with its group, or with the others chosen, or where it stands.</summary>
     private ObjectInstance Shown(ObjectInstance instance) =>
         _drag is { } drag && drag.Origin.Id == instance.Id ? drag.Preview
-        : _groupDrag is { Resizing: false } moving && moving.Origin.Id == instance.Group
+        : _groupDrag is { Resizing: false } moving && (moving.Origin.Id == instance.Group || moving.Origin.Id == HolderOf(instance))
             ? instance.MovedBy(moving.Preview.X - moving.Origin.X, moving.Preview.Y - moving.Origin.Y)
-        : _many is { } many && many.Carries(instance) ? instance.MovedBy(many.Dx, many.Dy)
+        : _many is { } many && (many.Carries(instance) || (HolderOf(instance) is { } holder && many.Ids.Contains(holder))) ? instance.MovedBy(many.Dx, many.Dy)
         : instance;
 
     /// <summary>
@@ -610,8 +637,22 @@
     /// within the view, widened to the screen; an object in a card within its
     /// card, wherever the card's own anchor put it.
     /// </summary>
-    private string Placed(CellBox box, DashboardGroup? card = null, HorizontalAnchor anchor = HorizontalAnchor.Scale)
+    /// <param name="card">The card it stands in: an object's own, or the one a card inside another stands in.</param>
+    /// <param name="holder">The card <paramref name="card"/> itself stands in, for an object of a card inside another.</param>
+    /// <param name="keep">
+    /// How many pixels it keeps clear of what holds it, side by side. Placed
+    /// and not on cells, they are taken off its box; on cells its class's
+    /// margin does that, and they are written as its margin only where they
+    /// are not the same on every side (<paramref name="uneven"/>), which no
+    /// class can say.
+    /// </param>
+    private string Placed(CellBox box, DashboardGroup? card = null, HorizontalAnchor anchor = HorizontalAnchor.Scale, DashboardGroup? holder = null,
+        Keep keep = default, bool uneven = false)
     {
+        string OnCells(CellBox area) => uneven
+            ? Area(area) + FormattableString.Invariant($"; margin: {keep.Top}px {keep.Right}px {keep.Bottom}px {keep.Left}px")
+            : Area(area);
+
         if (!Designing && Framed && Origin != (0, 0))
         {
             // Out of design only the view is shown: what stands wholly outside
@@ -626,32 +667,70 @@
 
             if (OneToOne)
             {
-                return Area(box);
+                return OnCells(box);
             }
 
             box = fromView;
             card = card is null ? null : card with { X = card.X - Origin.Column, Y = card.Y - Origin.Row };
+            holder = holder is null ? null : holder with { X = holder.X - Origin.Column, Y = holder.Y - Origin.Row };
             if (!Fluid)
             {
-                return Area(seen);
+                return OnCells(seen);
             }
         }
 
         if (!Fluid)
         {
-            return Area(box);
+            return OnCells(box);
         }
 
-        var within = card is null ? ViewAcross : Across(card.Box, card.Anchor ?? HorizontalAnchor.Scale, ViewAcross);
+        var across = holder is null ? ViewAcross : Across(holder.Box, holder.Anchor ?? HorizontalAnchor.Scale, ViewAcross);
+        var within = card is null ? ViewAcross : Across(card.Box, card.Anchor ?? HorizontalAnchor.Scale, across);
         var placed = Across(box, anchor, within);
 
         // An object in a card keeps clear of the card's line (.bz-dash-member's
         // margin): on cells the margin shrinks it inside its area; placed here
         // it would only move it, and its right and bottom edges would cover the
-        // card's line there, so its keep is taken off its box instead.
-        var keep = card is null ? 0 : MemberKeep;
+        // card's line there, so its keep is taken off its box instead. So is
+        // that of a card inside another, and of its objects.
         return FormattableString.Invariant(
-            $"position: absolute; margin: 0; left: calc({placed.Left} + {keep}px); top: calc({box.Y} * {Cell} + {keep}px); width: calc({placed.Width} - {2 * keep}px); height: calc({box.H} * {Cell} - {2 * keep}px)");
+            $"position: absolute; margin: 0; left: calc({placed.Left} + {keep.Left}px); top: calc({box.Y} * {Cell} + {keep.Top}px); width: calc({placed.Width} - {keep.Left + keep.Right}px); height: calc({box.H} * {Cell} - {keep.Top + keep.Bottom}px)");
+    }
+
+    /// <summary>How many pixels a card or an object keeps clear of what holds it, on each side.</summary>
+    private readonly record struct Keep(int Left, int Top, int Right, int Bottom)
+    {
+        /// <summary>The same on every side.</summary>
+        public static Keep All(int pixels) => new(pixels, pixels, pixels, pixels);
+    }
+
+    /// <summary>
+    /// What an object of a card keeps clear on each side. In a card on the
+    /// page, the card's line (<see cref="MemberKeep"/>). In a card inside
+    /// another, that card is drawn smaller to leave the line of the one that
+    /// holds it in sight (<see cref="InnerKeep"/>), so its objects keep that
+    /// much more, and only on the sides where they stand at its edge: between
+    /// two of them the room stays what it is in any card. Taken off every
+    /// side, a card inside another had its pieces three times as far apart as
+    /// the same card on the page.
+    /// </summary>
+    private static Keep KeepOf(ObjectInstance o, DashboardGroup? card, bool inner)
+    {
+        if (card is null)
+        {
+            return default;
+        }
+
+        if (!inner)
+        {
+            return Keep.All(MemberKeep);
+        }
+
+        return new Keep(
+            MemberKeep + (o.X == card.X ? InnerKeep : 0),
+            MemberKeep + (o.Y == card.Y ? InnerKeep : 0),
+            MemberKeep + (o.X + o.W == card.X + card.W ? InnerKeep : 0),
+            MemberKeep + (o.Y + o.H == card.Y + card.H ? InnerKeep : 0));
     }
 
     /// <summary>One to one out of design: the canvas at its own size from its first cell, as in design.</summary>
@@ -675,6 +754,15 @@
 
     /// <summary>How far an object in a card keeps from the card's line, as .bz-dash-member's margin keeps it on cells.</summary>
     private const int MemberKeep = 2;
+
+    /// <summary>
+    /// How far a card inside another keeps from that card's line, as
+    /// .bz-dash-inner's margin keeps it on cells: the line at its widest, two
+    /// pixels, and two of air, which is what the cards of a project keep from
+    /// the project's line in the Containers list. A card as large as the one
+    /// that holds it stood on that card's line and hid it.
+    /// </summary>
+    private const int InnerKeep = 4;
 
     /// <summary>The view across a fluid screen: from the canvas's edge, its columns each a widened cell.</summary>
     private (string Left, string Width, int X, int W) ViewAcross =>
@@ -710,7 +798,10 @@
         var group = _document.Layout.FindGroup(o.Group);
         var background = o.Background ?? kind.About.Background;
         var foreground = o.Foreground ?? kind.About.Foreground;
-        return Placed(o.Box, group, kind.AnchorOf(o))
+        var holder = _document.Layout.FindGroup(group?.Parent);
+        // Its card where it is drawn: carried, the object goes with it, and is at its edge still.
+        var keep = KeepOf(o, group is null ? null : ShownFrame(group), holder is not null);
+        return Placed(o.Box, group, kind.AnchorOf(o), holder, keep, uneven: holder is not null)
             + Colour("background-color", background == ThemeColor.Inherited && group is not null ? GroupBackground(group) : background)
             + Colour("color", foreground == ThemeColor.Inherited && group is not null ? GroupForeground(group) : foreground)
             + Margins(o)
@@ -720,7 +811,7 @@
 
     /// <summary>Where a group's frame stands, and the colour its card is filled with; inherited, the page shows through it.</summary>
     private string FrameStyle(DashboardGroup group) =>
-        Placed(group.Box, anchor: group.Anchor ?? HorizontalAnchor.Scale)
+        Placed(group.Box, _document.Layout.FindGroup(group.Parent), group.Anchor ?? HorizontalAnchor.Scale, keep: Keep.All(group.Parent is null ? 0 : InnerKeep))
         + Colour("background-color", GroupBackground(group) is var background && background == ThemeColor.Inherited ? ThemeColor.Transparent : background)
         + BorderStyle(group.Border);
 
@@ -803,7 +894,7 @@
 
     private string GroupClass(DashboardGroup shown)
     {
-        var classes = "bz-dash-group";
+        var classes = shown.Parent is null ? "bz-dash-group" : "bz-dash-group bz-dash-inner";
         if (Designing && (_document.Chosen.Contains(shown.Id) || (_marquee is { } marquee && Caught(marquee).Contains(shown.Id))))
         {
             classes += " bz-dash-selected";
@@ -820,7 +911,8 @@
         }
 
         if (_groupDrag is { } drag && drag.Origin.Id == shown.Id
-            && !_document.Layout.FitsGroup(shown, _document.Moved(shown.Id, shown.X - drag.Origin.X, shown.Y - drag.Origin.Y)))
+            && !_document.Layout.FitsGroup(shown, _document.Moved(shown.Id, shown.X - drag.Origin.X, shown.Y - drag.Origin.Y),
+                _document.MovedCards(shown.Id, shown.X - drag.Origin.X, shown.Y - drag.Origin.Y)))
         {
             classes += " bz-dash-blocked";
         }
@@ -828,6 +920,15 @@
         if (CardUp(shown.Id))
         {
             classes += " bz-dash-alarm";
+        }
+
+        // Out of design, a card that holds what its source is made of says how that is as a
+        // whole on its own line (a project's, as its cards' line in the list): the application's classes.
+        if (!Designing && Companions.Find(shown.Template) is { } companions
+            && CardCompanionsList.SourceOf(_document.Layout, Catalogue, shown.Id) is { } read
+            && companions.LineOf(read) is { Length: > 0 } line)
+        {
+            classes += " " + line;
         }
 
         // How far its card stands off the page: its own, or the application's

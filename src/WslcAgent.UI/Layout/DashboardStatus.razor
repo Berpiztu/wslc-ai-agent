@@ -144,9 +144,11 @@
             : null;
     }
 
-    /// <summary>What the ring is under: the container's name for a container's, Host for the host's.</summary>
+    /// <summary>What the ring is under: the container's name for a container's, the project's as its card writes it for a project's, Host for the host's.</summary>
     private string Name(Item item) =>
-        RegistrySource.Uid(item.Object.Source) is { } uid && Containers.Find(uid) is { } container ? container.Name : "Host";
+        ProjectSource.Name(item.Object.Source) is { } project ? ProjectRow.Titled(project)
+        : RegistrySource.Uid(item.Object.Source) is { } uid && Containers.Find(uid) is { } container ? container.Name
+        : "Host";
 
     private RenderFragment Ring(Item item)
     {

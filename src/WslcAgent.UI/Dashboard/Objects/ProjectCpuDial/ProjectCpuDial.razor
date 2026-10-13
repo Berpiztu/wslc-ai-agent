@@ -1,0 +1,22 @@
+@* A Compose project's CPU, as a dial: its containers' added up, which is
+   what its row says in the Containers list and its card draws there
+   (UsageDial). The pointer on it says each running container's own. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@inherits ProjectObject
+@attribute [DashboardObject("wslc.project-cpu", "Project CPU", Group = "Project", Subgroup = "User", Icon = Icons.Material.Filled.Speed, Source = ProjectSourceFamily.FamilyKey, Columns = 6, Rows = 6, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Right, CardOnly = true)]
+@attribute [DashboardObjectAlarm(DashboardMeasures.Cpu, "CPU")]
+@attribute [DashboardObjectPart("ring", "Ring", Text = false, Line = true)]
+@attribute [DashboardObjectPart("figure", "Figure")]
+@attribute [DashboardObjectPart("label", "Label")]
+
+<div class="@TypeClass">
+    <UsageDial Label="CPU" Reading="@(Head?.CpuPercent ?? "")" Live="@(Head?.IsRunning == true)" Title="@Tip" />
+</div>
+
+@code {
+    /// <summary>Which project it is and what each of its containers takes, since the dial alone says only "CPU".</summary>
+    private string Tip => Head is { } head
+        ? ProjectRow.Usage(head.Name, "CPU", head.CpuPercent, Members, ProjectRow.Cpu)
+        : "CPU: the project is being read";
+}

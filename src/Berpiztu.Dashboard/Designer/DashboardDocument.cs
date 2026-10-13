@@ -228,6 +228,44 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
         return true;
     }
 
+    /// <summary>
+    /// Cards made already put inside a group, one after another, each a card
+    /// of its own in it (<see cref="DashboardLayout.WithInside"/>), each of
+    /// its objects as <paramref name="each"/> makes it (what it reads is
+    /// known already), all in one change undo takes back whole. The group
+    /// stays selected: it is in its properties that they were asked for. How
+    /// many found no room: the ones before them are put in all the same.
+    /// </summary>
+    public async Task<int> AddInsideAsync(string groupId, IReadOnlyList<BornCard> cards, Func<int, ObjectInstance, ObjectInstance> each, int perRow)
+    {
+        var layout = Layout;
+        var none = 0;
+        for (var index = 0; index < cards.Count; index++)
+        {
+            var card = cards[index];
+            IReadOnlyList<ObjectInstance> objects = [.. card.Objects.Select(o => each(index, o with { Id = Guid.NewGuid().ToString("N") }))];
+            if (layout.WithInside(groupId, card.Framed(Guid.NewGuid().ToString("N"), 0, 0), objects, perRow) is { } next)
+            {
+                layout = next;
+            }
+            else
+            {
+                none++;
+            }
+        }
+
+        if (!ReferenceEquals(layout, Layout))
+        {
+            await ChangeAsync(layout);
+        }
+
+        return none;
+    }
+
+    /// <summary>These cards of a group removed, each with its objects, and its frame drawn back to what is left, in one change undo takes back whole.</summary>
+    public Task RemoveInsideAsync(string groupId, IReadOnlyCollection<string> cardIds) =>
+        cardIds.Count == 0 ? Task.CompletedTask : ChangeAndKeepSelectionAsync(Layout.WithoutInside(groupId, cardIds));
+
     /// <summary>The alarms the status bar shows, as ticked in the properties window, in one change undo takes back.</summary>
     public Task SetStatusAsync(IReadOnlyList<StatusAlarm> status) => ChangeAsync(Layout with { Status = status });
 
@@ -368,9 +406,30 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
             return Task.FromResult(true);
         }
 
-        var members = Moved(changed.Id, changed.X - current.X, changed.Y - current.Y);
-        return Layout.FitsGroup(changed, members) ? ChangeAsync(Layout.With(changed, members)) : Task.FromResult(false);
+        // The cards inside it go with it, each with its objects, by as much.
+        var (dx, dy) = (changed.X - current.X, changed.Y - current.Y);
+        var members = Moved(changed.Id, dx, dy);
+        var cards = MovedCards(changed.Id, dx, dy);
+        return Layout.FitsGroup(changed, members, cards)
+            ? ChangeAsync(cards.Aggregate(Layout.With(changed, members), (layout, card) => layout.With(card, Moved(card.Id, dx, dy))))
+            : Task.FromResult(false);
     }
+
+    /// <summary>
+    /// Cards as they should now look (their colours, elevation, line, anchor),
+    /// each standing where it stands: one change, so one undo takes it back.
+    /// One that is not on the dashboard, or is as it was, is left alone.
+    /// </summary>
+    public Task SetLooksAsync(IReadOnlyList<DashboardGroup> cards)
+    {
+        var next = cards.Where(card => Layout.FindGroup(card.Id) is { } current && current != card)
+            .Aggregate(Layout, (layout, card) => layout.With(card, layout.Members(card.Id)));
+        return ReferenceEquals(next, Layout) ? Task.CompletedTask : ChangeAsync(next);
+    }
+
+    /// <summary>The cards inside a group as they stand once it is moved by <paramref name="dx"/>, <paramref name="dy"/>.</summary>
+    public IReadOnlyList<DashboardGroup> MovedCards(string groupId, int dx, int dy) =>
+        [.. Layout.Cards(groupId).Select(card => card with { X = card.X + dx, Y = card.Y + dy })];
 
     /// <summary>The objects of a group as they stand once it is moved by <paramref name="dx"/>, <paramref name="dy"/>.</summary>
     public IReadOnlyList<ObjectInstance> Moved(string groupId, int dx, int dy) =>

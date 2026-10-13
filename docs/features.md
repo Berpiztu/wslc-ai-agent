@@ -228,7 +228,8 @@ publishing and cleaning up need them on.
     CPU and memory share added up, whose **+** opens its containers' rows
     under it (a project of one container shows it always, and has no **+**);
     in cards, its own card followed by its containers' cards, in
-    the same cells as any other card; a project always begins a row, and
+    the same cells as any other card, with the CPU and the memory of its
+    containers added up as two dials, where a container's card has its own; a project always begins a row, and
     so does the card after its last one, so two projects never share a row. The project's own row and card are
     named `NAME-compose` and carry a soft tertiary tone (the whole row, the
     card's body), which tell them from a container's at a glance. A line runs round them as one, round
@@ -456,7 +457,7 @@ The Home page is a dashboard designed by each user, not a fixed screen.
 - **Design mode**: a toolbox of every object and ready-made card, dragged onto
   a grid; objects never overlap. A card's own pieces — a chart's, file
   transfers', and the header, details, dials, shortcuts and buttons of a
-  container, image, volume or network card — come only with their card: the
+  container, Compose project, image, volume or network card — come only with their card: the
   toolbox does not offer them alone, they never leave it, and removing one
   hides it. Select several with a marquee, group them
   into a card (Ctrl+G), undo (Ctrl+Z), delete. A floating properties window
@@ -470,15 +471,23 @@ The Home page is a dashboard designed by each user, not a fixed screen.
   first.
 - **Objects**: host CPU, memory and disk readings and dials; counts of
   containers, images, volumes and networks; CPU, memory, disk and network
-  charts of the host or of any container, with legends; container, image,
-  volume and network headers, details, dials, shortcuts and action buttons;
+  charts of the host or of any container, with legends; container, Compose
+  project, image, volume and network headers, details, dials, shortcuts and
+  action buttons (a project's dials are the CPU and the memory of its
+  containers added up, and its details their names);
   the session selector; agent, client, `wslc`, Windows and kernel versions;
   Live updates (whether the agent hears `wslc`'s events, or the screens read
   on their own clock); Recent events (what `wslc` reported lately, newest
   first: containers started, stopped or ended with their exit code, networks
   connected or disconnected, health changes); the agent's log; file transfers;
   free text.
-- **Ready-made cards**: container, image, volume, network, system, charts.
+- **Ready-made cards**: container, Compose project, image, volume, network, system, charts.
+  A project's card is one card with its containers in it, each a
+  container's card of its own inside it, taken and moved whole: choosing the
+  project puts them in, and the card's properties list them with a tick
+  each (shown in the card, or not); one made later is listed unticked. Its
+  line is the project's, as round its cards in Containers: green, the
+  primary colour, or stripes of the two.
 - **Alarms**: each measure has a threshold; past it the object turns red and
   blinks. Chosen alarms also show as rings in a status bar on every screen.
 - **Zoom and fit**: zoom in and out, and fit the view to any screen: Fit, Fill,

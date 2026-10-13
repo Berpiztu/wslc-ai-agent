@@ -18,6 +18,7 @@ public static class DashboardServiceCollectionExtensions
     {
         services.AddSingleton(new ObjectCatalogue([typeof(DashboardObject).Assembly, .. objects]));
         services.AddScoped<SourceFamilies>();
+        services.AddScoped<CardCompanions>();
         services.AddScoped<DashboardInterop>();
         return services;
     }

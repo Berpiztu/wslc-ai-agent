@@ -1,5 +1,4 @@
 @page "/containers"
-@using System.Globalization
 @using WslcAgent.UI.Components.Launch
 @inherits ListPageBase<ContainerSummary>
 @inject OpenDetails Open
@@ -148,7 +147,7 @@
                     </PropertyColumn>
                     <PropertyColumn T="ListRow<ContainerSummary>" TProperty="string" Property="c => c.Value.MemUsage" Title="Memory" HeaderClass="@GridColumn.Number(8)" CellClass="@GridColumn.Number(8)">
                         <CellTemplate>
-                            <span title="@context.Item.Value.MemUsage">@Dash(MemoryUsed(context.Item.Value.MemUsage))</span>
+                            <span title="@context.Item.Value.MemUsage">@Dash(Readings.MemoryUsed(context.Item.Value.MemUsage))</span>
                         </CellTemplate>
                     </PropertyColumn>
                     <PropertyColumn T="ListRow<ContainerSummary>" TProperty="string" Property="c => c.Value.DiskIo" Title="Disk" HeaderClass="@GridColumn.Number(12)" CellClass="@GridColumn.Number(12)">
@@ -216,13 +215,6 @@
 
     /// <summary>used% / total% (N CPUs).</summary>
     private string CpuText => $"{_aggregate.CpuUsedPercent:0.##}% / {_aggregate.CpuCount * 100}% ({_aggregate.CpuCount} CPUs)";
-
-    /// <summary>
-    /// The used side of <c>899.5MiB / 30.98GiB</c>: the total is the machine's,
-    /// the same in every row, so the column shows what changes and the whole
-    /// reading stays in the cell's tooltip.
-    /// </summary>
-    private static string MemoryUsed(string usage) => usage.Split('/')[0].Trim();
 
     private const string LaunchPrefix = "launch:";
 
@@ -294,7 +286,7 @@
         {
             var name = projects[index];
             var members = containers.Where(container => container.Project == name).OrderBy(container => container.Uid).ToList();
-            List<ContainerSummary> ofProject = [GroupRow(name, members), .. members, .. runs.Where(run => run.Project == name)];
+            List<ContainerSummary> ofProject = [ProjectRow.Of(name, members, _runningOnly), .. members, .. runs.Where(run => run.Project == name)];
             var oldest = members.Where(member => member.Uid > 0).Select(member => member.Uid).DefaultIfEmpty(0).Min();
 
             // From a quarter before its oldest container to short of the next number: no other row has a place in there.
@@ -308,23 +300,6 @@
         // gave none) keeps a new row at the place it comes in, which has to be the last as well.
         return [.. rows.OrderBy(row => _ages.GetValueOrDefault(row.Id, row.Uid))];
     }
-
-    /// <summary>A project's head row: how many of its containers run, and their CPU and memory share added up.</summary>
-    private ContainerSummary GroupRow(string name, IReadOnlyList<ContainerSummary> members)
-    {
-        var running = members.Count(member => member.IsRunning);
-        var measured = members.Where(member => member.CpuPercent.Length > 0).ToList();
-        return new ContainerSummary(GroupPrefix + name, name,
-            _runningOnly ? $"{running} running" : $"{running} of {members.Count} running",
-            running > 0 ? "running" : "exited", "", "", "", "", [], "", "", "", "",
-            CpuPercent: measured.Count > 0 ? Sum(measured, member => member.CpuPercent) : "",
-            MemPercent: measured.Count > 0 ? Sum(measured, member => member.MemPercent) : "",
-            Project: name);
-    }
-
-    /// <summary>Percentages as <c>wslc stats</c> prints them, added up and written the same way.</summary>
-    private static string Sum(IEnumerable<ContainerSummary> rows, Func<ContainerSummary, string> reading) =>
-        rows.Sum(row => Percents.Parse(reading(row))).ToString("0.00", CultureInfo.InvariantCulture) + "%";
 
     private static bool IsGroup(ContainerSummary row) => row.Id.StartsWith(GroupPrefix, StringComparison.Ordinal);
 
@@ -400,10 +375,9 @@
     /// is done to the project, which shows it as its own work.
     /// </summary>
     private bool IsWorking(string project) =>
-        Verbs.IsGoing(project)
+        ProjectRow.Working(project, MembersOf(project), Verbs, Working)
         || SavingOf(project) is { Active: true }
-        || Working.IsBusy(GroupPrefix + project)
-        || MembersOf(project).Any(member => Working.IsBusy(member.Id) || member.IsRecreating || member.IsUpdating || LaunchOf(member) is { Active: true });
+        || MembersOf(project).Any(member => LaunchOf(member) is { Active: true });
 
     /// <summary>
     /// How a project is, as the class its cards' line is coloured by: every
@@ -412,17 +386,8 @@
     /// it (<see cref="IsWorking"/>) it is on its way from one to the other,
     /// and is drawn as some.
     /// </summary>
-    private string ToneOf(string project)
-    {
-        if (IsWorking(project))
-        {
-            return "wslc-bracket-partial";
-        }
-
-        var containers = MembersOf(project).Where(member => LaunchOf(member) is null).ToList();
-        var running = containers.Count(container => container.IsRunning);
-        return running == 0 ? "wslc-bracket-stopped" : running == containers.Count ? "wslc-bracket-running" : "wslc-bracket-partial";
-    }
+    private string ToneOf(string project) =>
+        ProjectRow.Line(MembersOf(project).Where(member => LaunchOf(member) is null).ToList(), IsWorking(project));
 
     /// <summary>
     /// The classes of what is a project's, the cell of its card or its row in
@@ -474,7 +439,7 @@
     /// what it is among rows that are containers. Its name stays the
     /// project's wherever it is used and not shown.
     /// </summary>
-    private static string Titled(ContainerSummary row) => IsGroup(row) ? $"{row.Name}-compose" : row.Name;
+    private static string Titled(ContainerSummary row) => IsGroup(row) ? ProjectRow.Titled(row.Name) : row.Name;
 
     /// <summary>A row's name, after its mark when it has one.</summary>
     private RenderFragment Named(ContainerSummary row)
@@ -627,24 +592,27 @@
                     }
                 </Avatar>
                 <ChildContent>
-                    @* Its containers, a name a line, in a box as tall as a container card's own
-                       lines: the project's card is as tall as theirs however many it has, and the
-                       box scrolls, not the card. One that is not running is written fainter.
+                    @* Its containers, a name a line (ProjectMembers).
                        The +/− that shows and hides their cards stands beside the list it is about,
-                       not at the far end of the header; a project of one container has none. *@
-                    <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="1" Wrap="Wrap.NoWrap">
-                        @if (!IsSingle(head.Name))
-                        {
-                            @Mark(head)
-                        }
-                        <div class="wslc-card-members">
-                            @foreach (var member in MembersOf(head.Name))
+                       not at the far end of the header; a project of one container has none.
+                       Beside them, where a container's card has its own, the two dials of the
+                       project: the CPU and the memory of its containers added up, which is what
+                       its row says in the table. Folded, it is the only place they are seen. *@
+                    <div class="wslc-card-detail">
+                        <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="1" Wrap="Wrap.NoWrap">
+                            @if (!IsSingle(head.Name))
                             {
-                                <MudText Typo="Typo.body2" Class="@(member.HasFailed ? "mud-error-text" : member.IsRunning ? "" : "mud-text-secondary")"
-                                         title="@($"{member.Name}: {(member.HasFailed ? member.Failure : member.State)}")">@member.Name</MudText>
+                                @Mark(head)
                             }
+                            <ProjectMembers Members="@MembersOf(head.Name)" />
+                        </MudStack>
+                        <div class="wslc-card-dials">
+                            <UsageDial Label="CPU" Reading="@head.CpuPercent" Live="head.IsRunning"
+                                       Title="@(ProjectRow.Usage(head.Name, "CPU", head.CpuPercent, MembersOf(head.Name), ProjectRow.Cpu))" />
+                            <UsageDial Label="Memory" Reading="@head.MemPercent" Live="head.IsRunning"
+                                       Title="@(ProjectRow.Usage(head.Name, "Memory", head.MemPercent, MembersOf(head.Name), ProjectRow.Memory))" />
                         </div>
-                    </MudStack>
+                    </div>
                 </ChildContent>
                 <Actions>
                     @GroupActions(head, shortcuts: true)

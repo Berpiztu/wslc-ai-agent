@@ -275,6 +275,18 @@
     margin: 2px;
 }
 
+/* A card inside another (a container's, in its project's card) keeps clear of
+   that card's line, as the cards of a project keep from the project's line in
+   the list: the line at its widest, two pixels, and two of air. As large as
+   the card that holds it, it stood on that line and hid it. Its own objects
+   keep that much more on the sides where they stand at its edge, and only
+   there, which the designer writes on each (DashboardDesigner.KeepOf):
+   between two of them the room is what it is in any card. In a fluid view,
+   placed rather than on cells, the designer takes the same off their boxes. */
+.bz-dash-group.bz-dash-inner {
+    margin: 4px;
+}
+
 /* Out of design, a card or an object standing alone is drawn as a card: its
    line its Border colour (--bz-dash-border, the primary until another is
    chosen; None is transparent, the line kept unseen so nothing moves); the

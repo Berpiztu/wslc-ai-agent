@@ -1,0 +1,22 @@
+@* A Compose project's memory, as a dial: its containers' added up, drawn
+   as its card in the Containers list draws it beside the CPU's (UsageDial).
+   The pointer on it says each running container's own. *@
+@namespace WslcAgent.UI.Dashboard.Objects
+@using Berpiztu.Dashboard.Catalogue
+@inherits ProjectObject
+@attribute [DashboardObject("wslc.project-memory", "Project memory", Group = "Project", Subgroup = "User", Icon = Icons.Material.Filled.Memory, Source = ProjectSourceFamily.FamilyKey, Columns = 6, Rows = 6, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Right, CardOnly = true)]
+@attribute [DashboardObjectAlarm(DashboardMeasures.Memory, "Memory")]
+@attribute [DashboardObjectPart("ring", "Ring", Text = false, Line = true)]
+@attribute [DashboardObjectPart("figure", "Figure")]
+@attribute [DashboardObjectPart("label", "Label")]
+
+<div class="@TypeClass">
+    <UsageDial Label="Memory" Reading="@(Head?.MemPercent ?? "")" Live="@(Head?.IsRunning == true)" Title="@Tip" />
+</div>
+
+@code {
+    /// <summary>Which project it is and what each of its containers takes, as the card's tooltip says it.</summary>
+    private string Tip => Head is { } head
+        ? ProjectRow.Usage(head.Name, "Memory", head.MemPercent, Members, ProjectRow.Memory)
+        : "Memory: the project is being read";
+}
