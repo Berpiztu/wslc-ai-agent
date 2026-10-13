@@ -20,6 +20,13 @@ namespace WslcAgent.ApiClient.Contracts;
 /// the client will send it when it builds: the reading then takes the
 /// <c>build</c> as one that can be made, with nothing sent yet.
 /// </param>
+/// <param name="ClientFolder">
+/// The folder the file is in on the machine of whoever sends it, when that
+/// is another machine: where a project new to the agent is to live, at the
+/// same path on the agent's own, when no <paramref name="Folder"/> is named
+/// and the agent keeps none for the project. One folder, the same on both
+/// machines, is what a Compose file's relative paths mean to whoever wrote it.
+/// </param>
 public sealed record ComposePlanRequest(
     string Path = "",
     string Yaml = "",
@@ -28,18 +35,37 @@ public sealed record ComposePlanRequest(
     IReadOnlyList<string>? Profiles = null,
     string Folder = "",
     IReadOnlyList<string>? Services = null,
-    IReadOnlyDictionary<string, string>? Contexts = null);
+    IReadOnlyDictionary<string, string>? Contexts = null,
+    string ClientFolder = "");
 
 /// <summary>
-/// A build context kept by the agent: answer of <c>POST
-/// /api/v1/projects/contexts</c>, which takes one as a tar archive, and of
-/// <c>GET /api/v1/projects/contexts/{id}</c>, which says whether it is still
-/// there.
+/// Body of <c>POST /api/v1/projects/contexts</c>: a build context as the
+/// list of what is in it. Its files are not in the request: each is named by
+/// the hash of its bytes, and has been sent before (<c>POST
+/// /api/v1/projects/contexts/files</c>) unless the agent had it already.
 /// </summary>
-/// <param name="Id">What the agent knows it by: made from its bytes, so the same folder sent again is the same context, and one already there need not be sent.</param>
-/// <param name="Size">Its size in bytes; 0 when it is not there.</param>
-/// <param name="Present">The agent has it.</param>
-public sealed record ProjectContext(string Id, long Size, bool Present = true);
+/// <param name="Entries">The folders and the files of the context, a folder before what is in it.</param>
+public sealed record ProjectContextRequest(IReadOnlyList<ProjectContextEntry> Entries);
+
+/// <summary>A folder or a file of a build context.</summary>
+/// <param name="Name">Its path in the context, with forward slashes: <c>src/app.py</c>.</param>
+/// <param name="Size">A file's size in bytes; 0 for a folder.</param>
+/// <param name="Modified">When it was last written, in seconds since 1970 (UTC): what the build sees as its date.</param>
+/// <param name="Blob">The SHA-256 of a file's bytes, in lower-case hex; empty for a folder.</param>
+public sealed record ProjectContextEntry(string Name, long Size, long Modified, string Blob);
+
+/// <summary>
+/// Body and answer of <c>POST /api/v1/projects/contexts/files/missing</c>:
+/// the files a client has, by the SHA-256 of their bytes, and of those the
+/// ones the agent lacks, which are the ones to send.
+/// </summary>
+public sealed record ContextFiles(IReadOnlyList<string> Hashes);
+
+/// <summary>A build context kept by the agent: answer of <c>POST /api/v1/projects/contexts</c>.</summary>
+/// <param name="Id">What the agent knows it by, and the request of a Compose file names it by: made from what it holds, so the same folder sent again is the same context.</param>
+/// <param name="Size">The size of its files, in bytes.</param>
+/// <param name="Files">How many files it has.</param>
+public sealed record ProjectContext(string Id, long Size, int Files = 0);
 
 /// <summary>Body of <c>POST /api/v1/projects/open</c>: where Windows' Open dialog starts.</summary>
 /// <param name="Folder">A folder of the agent's machine, usually that of the file opened last; empty leaves it to Windows.</param>
@@ -71,6 +97,7 @@ public sealed record ComposeFileOpened(string Path, string Yaml);
 /// <param name="Variables">The variables the file asks for (<c>${NAME}</c>), in the order it first names them, each with the value it was read with: the file's parameters, for whoever runs it to set.</param>
 /// <param name="Contexts">The build contexts the file names by a relative path: what a client on another machine, where those folders are, sends to the agent (<see cref="ComposePlanRequest.Contexts"/>). Null from an agent too old to take one.</param>
 /// <param name="Folder">The folder of the agent's machine the file's relative paths were read from: the one asked for, the file's own, or the one its project was last saved with; empty when there was none.</param>
+/// <param name="NeedsFolder">The file names something by a relative path (a mount, an <c>env_file</c>, a build nobody sends) and there was no folder of the agent's machine to read it from: those lines are not given until one is named.</param>
 public sealed record ComposePlan(
     string Name,
     string File,
@@ -84,7 +111,8 @@ public sealed record ComposePlan(
     IReadOnlyList<string> Notes,
     IReadOnlyList<ComposeVariable> Variables,
     IReadOnlyList<ComposeContext>? Contexts = null,
-    string Folder = "");
+    string Folder = "",
+    bool NeedsFolder = false);
 
 /// <summary>A build context a Compose file names by a relative path.</summary>
 /// <param name="Path">The context as the file writes it (<c>./app</c>, <c>.</c>): what the request names it by.</param>

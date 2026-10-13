@@ -213,14 +213,20 @@ and removed only when asked.
 
 A build whose folder is on another machine is built from what that machine
 sends. A client that reads a Compose file where the agent is not (the
-command line with `--agent`) packs each `build` context as a tar archive
-and sends it (`POST /api/v1/projects/contexts`); the agent keeps it as it
-came, named by its bytes (`ProjectContexts`), and the build is `wslc build
--` with the archive on its standard input, which `wslc` reads since 3.0.3.
-The archive is never unpacked on the agent's disk: it comes from another
-machine, and what is in it is the builder's to read, with the names and the
-rights a Linux build expects. The same folder sent again is the same
-archive, so it is not sent twice and its service does not read as changed.
+command line with `--agent`; the Compose window with a folder of the
+device as its context) sends each `build` context as what it is made of:
+it hashes the files, asks the agent which it lacks (`POST
+/api/v1/projects/contexts/files/missing`), sends those (`…/files`) and then
+the list of the context's entries, each file named by its hash (`POST
+/api/v1/projects/contexts`). The agent keeps every file once, under its
+hash (`ProjectContexts`), so a change travels as the files that changed.
+The build is `wslc build -` with a tar archive on its standard input, which
+`wslc` reads since 3.0.3, made from the list when the build begins. Nothing
+sent is laid out as the folder it was on the agent's disk: it comes from
+another machine, and what is in it is the builder's to read, with the names
+and the rights a Linux build expects. A context is known by its names and
+its bytes, so the same folder sent again is the same context and its
+service does not read as changed.
 Only the sources travel. What the file mounts by a relative path, its
 `.env` and its `env_file` are the agent's machine's: read from the folder
 the request names there, or, for a file given as text with none, from the

@@ -25,6 +25,148 @@ function wslcAgentPark(chosen) {
     return { ticket, files: chosen.map((file, index) => ({ index, name: file.name, size: file.size })) };
 }
 
+// A folder of this device, picked to be a build context of the Compose window,
+// is held one of two ways, by the picker that gave it. The folder chooser of
+// the File System Access API gives the folder itself, to be walked when its
+// files are wanted (wslcAgentFolders, by the pick's ticket); the files read
+// from it are then parked as they are read. An input that asks for a folder
+// gives every file under it at once, which are parked as any pick's are. The
+// folder's name is all a browser says of where it is.
+const wslcAgentFolders = new Map();
+
+// A file's path from the folder it was picked in, with forward slashes and
+// the folder's own name left out: what an input that asks for a folder says.
+function wslcAgentInFolder(file) {
+    const parts = (file.webkitRelativePath || file.name).split('/');
+    return (parts.length > 1 ? parts.slice(1) : parts).join('/');
+}
+
+// What a folder picked through an input answers: `count` is how many files it
+// holds, since the input has read them all.
+function wslcAgentParkFolder(chosen) {
+    if (chosen.length === 0) {
+        return { ticket: '', name: '', count: 0 };
+    }
+
+    const ticket = String(++wslcAgentPicks);
+    wslcAgentPicked.set(ticket, chosen);
+    return { ticket, name: (chosen[0].webkitRelativePath || '').split('/')[0], count: chosen.length };
+}
+
+// What the file of a build context is told of: its place in the ticket, its
+// path from the context, its size and the moment it was last written, in seconds.
+function wslcAgentListed(file, index, path) {
+    return { index, path, size: file.size, modified: Math.floor(file.lastModified / 1000) };
+}
+
+const wslcAgentSha256K = new Uint32Array([
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+]);
+
+// One 64-byte block of SHA-256 into the running state.
+function wslcAgentSha256Block(state, w, bytes, offset) {
+    for (let i = 0; i < 16; i++) {
+        const at = offset + 4 * i;
+        w[i] = (bytes[at] << 24) | (bytes[at + 1] << 16) | (bytes[at + 2] << 8) | bytes[at + 3];
+    }
+
+    for (let i = 16; i < 64; i++) {
+        const x = w[i - 15];
+        const y = w[i - 2];
+        const s0 = ((x >>> 7) | (x << 25)) ^ ((x >>> 18) | (x << 14)) ^ (x >>> 3);
+        const s1 = ((y >>> 17) | (y << 15)) ^ ((y >>> 19) | (y << 13)) ^ (y >>> 10);
+        w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+    }
+
+    let a = state[0], b = state[1], c = state[2], d = state[3], e = state[4], f = state[5], g = state[6], h = state[7];
+    for (let i = 0; i < 64; i++) {
+        const sigma1 = ((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7));
+        const t1 = (h + sigma1 + ((e & f) ^ (~e & g)) + wslcAgentSha256K[i] + w[i]) | 0;
+        const sigma0 = ((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10));
+        const t2 = (sigma0 + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+        h = g; g = f; f = e; e = (d + t1) | 0;
+        d = c; c = b; b = a; a = (t1 + t2) | 0;
+    }
+
+    state[0] += a; state[1] += b; state[2] += c; state[3] += d;
+    state[4] += e; state[5] += f; state[6] += g; state[7] += h;
+}
+
+// The SHA-256 of a file, in lower-case hex: what the agent knows a file of a
+// build context by. A file of a size to hold in memory is handed whole to the
+// browser's own digest, where there is one: a page served over plain http
+// from another machine has none (crypto.subtle wants a secure context), and a
+// file of gigabytes cannot be held. Both of those are read a piece at a time
+// and hashed here. `whole` is the size up to which a file is handed whole.
+async function wslcAgentSha256(file, whole) {
+    const hex = bytes => Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+    if (globalThis.crypto && crypto.subtle && file.size <= whole) {
+        return hex(new Uint8Array(await crypto.subtle.digest('SHA-256', await file.arrayBuffer())));
+    }
+
+    const state = new Uint32Array([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]);
+    const w = new Uint32Array(64);
+    const last = new Uint8Array(128);
+    let kept = 0;
+    const piece = 4 * 1024 * 1024;
+    for (let at = 0; at < file.size; at += piece) {
+        const bytes = new Uint8Array(await file.slice(at, at + piece).arrayBuffer());
+        // Every piece but the last is a whole number of blocks; what is left of the last waits for the padding.
+        const blocks = bytes.length - (bytes.length % 64);
+        for (let offset = 0; offset < blocks; offset += 64) {
+            wslcAgentSha256Block(state, w, bytes, offset);
+        }
+
+        kept = bytes.length - blocks;
+        last.set(bytes.subarray(blocks));
+    }
+
+    // The padding: a one bit, zeros, and the length in bits as 64 bits, to a whole block or two.
+    last[kept] = 0x80;
+    const end = kept < 56 ? 64 : 128;
+    last.fill(0, kept + 1, end);
+    const view = new DataView(last.buffer);
+    view.setUint32(end - 8, Math.floor(file.size / 0x20000000));
+    view.setUint32(end - 4, (file.size % 0x20000000) * 8);
+    for (let offset = 0; offset < end; offset += 64) {
+        wslcAgentSha256Block(state, w, last, offset);
+    }
+
+    const digest = new Uint8Array(32);
+    state.forEach((word, i) => new DataView(digest.buffer).setUint32(4 * i, word));
+    return hex(digest);
+}
+
+// The 512 bytes a tar archive says a file with: its name, its size, and the
+// sum of the header's own bytes, by which a reader knows it is one. The names
+// here are hashes, which fit the hundred characters the plain header has.
+function wslcAgentTarHeader(name, size) {
+    const header = new Uint8Array(512);
+    const put = (text, at) => { for (let i = 0; i < text.length; i++) { header[at + i] = text.charCodeAt(i); } };
+    const octal = (value, digits) => value.toString(8).padStart(digits, '0');
+    put(name, 0);
+    put('0000644', 100);
+    put('0000000', 108);
+    put('0000000', 116);
+    put(octal(size, 11), 124);
+    put(octal(Math.floor(Date.now() / 1000), 11), 136);
+    put('        ', 148);
+    put('0', 156);
+    put('ustar', 257);
+    put('00', 263);
+    put(octal(header.reduce((sum, byte) => sum + byte, 0), 6), 148);
+    header[154] = 0;
+    header[155] = 32;
+    return header;
+}
+
 // The UI's own interop, by name: wslcAgent.scrollToEnd (logs' jump to end),
 // wslcAgent.stepScroll (a wheel notch a row, the Compose file's tree),
 // wslcAgent.pickFiles and wslcAgent.sendFile (the web UI's upload: only the
@@ -496,6 +638,270 @@ window.wslcAgent = {
             // The agent went, the network went, or the request was aborted.
             return { ok: false, status: 0, error: String((failure && failure.message) || failure) };
         }
+    },
+
+    // A folder of this device as a build context, for the Compose window: a
+    // file read on this device has its build folders here, and what is in them
+    // is sent to the agent. In steps, each the browser's own to do, since the
+    // files never leave it but to go to the agent: pickFolder opens the folder
+    // chooser; pickedText reads one of the folder's files as text (a context's
+    // .dockerignore); listPicked says which files a context has; hashPicked
+    // says what each is, by the SHA-256 of its bytes, so the agent can say
+    // which it lacks; sendPickedFiles sends those. releasePicked lets go of
+    // the folder.
+    //
+    // Two ways of asking for a folder, as there are two of asking for a file.
+    // showDirectoryPicker (the File System Access API) says "Select folder",
+    // hands over the folder and reads nothing until it is walked, so a folder
+    // with a virtual environment in it costs nothing that its .dockerignore
+    // leaves out. It needs a secure context (https, or the agent's own
+    // machine) and Chromium. Elsewhere an input that asks for a folder, made
+    // for the pick: its chooser says "Upload", and reads every file under the
+    // folder before it answers. `count` is -1 when the folder has not been read.
+    async pickFolder() {
+        if (window.showDirectoryPicker) {
+            try {
+                const folder = await window.showDirectoryPicker({ id: 'wslcAgentContext', mode: 'read' });
+                const ticket = String(++wslcAgentPicks);
+                wslcAgentFolders.set(ticket, folder);
+                wslcAgentPicked.set(ticket, []);
+                return { ticket, name: folder.name, count: -1 };
+            } catch (failure) {
+                if (failure && failure.name === 'AbortError') {
+                    // Closed with nothing chosen, which is an answer.
+                    return wslcAgentParkFolder([]);
+                }
+                // A browser that has the API and will not use it here: the
+                // input's chooser is still better than no picker at all.
+            }
+        }
+
+        return new Promise(resolve => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.webkitdirectory = true;
+            input.multiple = true;
+            input.onchange = () => resolve(wslcAgentParkFolder(Array.from(input.files || [])));
+            // A chooser closed with nothing chosen: without this the caller
+            // would wait for an answer that never comes.
+            input.oncancel = () => resolve(wslcAgentParkFolder([]));
+            input.click();
+        });
+    },
+
+    // A file of the folder as text, by its path from the folder; empty when it
+    // has none of that name (a context with no .dockerignore).
+    async pickedText(ticket, path) {
+        const folder = wslcAgentFolders.get(ticket);
+        if (!folder) {
+            const file = (wslcAgentPicked.get(ticket) || []).find(held => held && wslcAgentInFolder(held) === path);
+            return file ? await file.text() : '';
+        }
+
+        try {
+            const parts = path.split('/');
+            const name = parts.pop();
+            let within = folder;
+            for (const part of parts) {
+                within = await within.getDirectoryHandle(part);
+            }
+
+            return await (await (await within.getFileHandle(name)).getFile()).text();
+        } catch {
+            return '';
+        }
+    },
+
+    // The files of one build context of the folder: those under `under` (a
+    // path from the folder, empty for the folder itself), each by its path
+    // from there. A folder that was handed over is walked now, and
+    // receiver.Enters(path) says of each folder under it whether to go in:
+    // what the context's .dockerignore leaves out whole is never read. One
+    // whose files were all read at the pick answers the ones under `under`.
+    //
+    // It answers `files`, and `skipped`: the entries the browser lists and
+    // will not hand over (a link whose target is gone, a file the system
+    // keeps to itself). They cannot be sent, and one of them stopped the whole
+    // context with an error that named nothing; they are left out and named.
+    async listPicked(ticket, under, receiver) {
+        const held = wslcAgentPicked.get(ticket) || [];
+        const folder = wslcAgentFolders.get(ticket);
+        if (!folder) {
+            const prefix = under ? under + '/' : '';
+            const files = [];
+            held.forEach((file, index) => {
+                const path = file ? wslcAgentInFolder(file) : '';
+                if (file && path.startsWith(prefix)) {
+                    files.push(wslcAgentListed(file, index, path.slice(prefix.length)));
+                }
+            });
+            return { files, skipped: [] };
+        }
+
+        let from = folder;
+        try {
+            for (const part of under.split('/').filter(Boolean)) {
+                from = await from.getDirectoryHandle(part);
+            }
+        } catch {
+            // Not a folder of the one picked: the caller says so, with which one it was.
+            return { files: [], skipped: [] };
+        }
+
+        const files = [];
+        const skipped = [];
+        const walk = async (within, path) => {
+            let entries;
+            try {
+                entries = [];
+                for await (const entry of within.values()) {
+                    entries.push(entry);
+                }
+            } catch {
+                skipped.push((path || '.') + '/');
+                return;
+            }
+
+            for (const entry of entries) {
+                const name = path ? path + '/' + entry.name : entry.name;
+                if (entry.kind === 'directory') {
+                    if (await receiver.invokeMethodAsync('Enters', name)) {
+                        await walk(entry, name);
+                    }
+                } else {
+                    try {
+                        const file = await entry.getFile();
+                        held.push(file);
+                        files.push(wslcAgentListed(file, held.length - 1, name));
+                    } catch {
+                        skipped.push(name);
+                    }
+                }
+            }
+        };
+        await walk(from, '');
+        return { files, skipped };
+    },
+
+    // The full path of a folder of this device, as it was typed for it the
+    // last time, by the folder's name: a browser hands over a folder and not
+    // where it is, so the path is typed once and remembered on this device.
+    folderPath(name) {
+        try {
+            return (JSON.parse(localStorage.getItem('wslcAgent.folderPaths') || '{}') || {})[name] || '';
+        } catch {
+            return '';
+        }
+    },
+
+    rememberFolderPath(name, path) {
+        try {
+            const kept = JSON.parse(localStorage.getItem('wslcAgent.folderPaths') || '{}') || {};
+            kept[name] = path;
+            localStorage.setItem('wslcAgent.folderPaths', JSON.stringify(kept));
+        } catch {
+            // A device that keeps nothing: the path is typed again next time.
+        }
+    },
+
+    // The hashes of some of a ticket's files, in the order asked for. It takes
+    // as long as reading them all does, so it says how far it has got four
+    // times a second at most: receiver.Progress(files done, bytes read).
+    //
+    // A file that cannot be read stops it, by its name (items: index and path
+    // each): the browser's own words for it name no file at all.
+    async hashPicked(ticket, items, receiver) {
+        const files = wslcAgentPicked.get(ticket) || [];
+        const hashes = [];
+        let bytes = 0;
+        let told = 0;
+        for (const item of items) {
+            const file = files[item.index];
+            if (!file) {
+                throw new Error('The browser no longer has that folder: pick it again');
+            }
+
+            try {
+                hashes.push(await wslcAgentSha256(file, 64 * 1024 * 1024));
+            } catch (failure) {
+                throw new Error('The file ' + item.path + ' could not be read (' + ((failure && failure.name) || 'error') + '). It changed or went while the folder was being read: try again, or leave it out in the .dockerignore');
+            }
+
+            bytes += file.size;
+            if (Date.now() - told >= 250) {
+                told = Date.now();
+                await receiver.invokeMethodAsync('Progress', hashes.length, bytes);
+            }
+        }
+
+        return hashes;
+    },
+
+    // Some of a ticket's files to the agent, as one tar archive whose entries
+    // are named by their hashes (items: index and hash each). The archive is
+    // made of the files themselves and the few bytes between them, which the
+    // browser reads from the disk as it sends, so its size costs no memory.
+    // By XMLHttpRequest, which says how much has gone, where fetch does not:
+    // receiver.Progress(bytes sent, bytes in all).
+    sendPickedFiles(ticket, items, url, token, receiver) {
+        const files = wslcAgentPicked.get(ticket) || [];
+        const parts = [];
+        for (const item of items) {
+            const file = files[item.index];
+            if (!file) {
+                return Promise.resolve({ ok: false, status: 0, error: 'The browser no longer has that folder: pick it again' });
+            }
+
+            parts.push(wslcAgentTarHeader(item.hash, file.size), file);
+            const padding = (512 - (file.size % 512)) % 512;
+            if (padding > 0) {
+                parts.push(new Uint8Array(padding));
+            }
+        }
+
+        // Two empty blocks end an archive.
+        parts.push(new Uint8Array(1024));
+        const body = new FormData();
+        body.append('file', new Blob(parts, { type: 'application/x-tar' }), 'files.tar');
+        return new Promise(resolve => {
+            const request = new XMLHttpRequest();
+            let told = 0;
+            request.open('POST', url);
+            request.withCredentials = true;
+            if (token) {
+                request.setRequestHeader('Authorization', 'Bearer ' + token);
+            }
+
+            request.upload.onprogress = event => {
+                if (event.lengthComputable && (Date.now() - told >= 250 || event.loaded === event.total)) {
+                    told = Date.now();
+                    receiver.invokeMethodAsync('Progress', event.loaded, event.total);
+                }
+            };
+            request.onload = () => {
+                if (request.status >= 200 && request.status < 300) {
+                    resolve({ ok: true, status: request.status, error: '' });
+                    return;
+                }
+
+                let problem = null;
+                try {
+                    problem = JSON.parse(request.responseText);
+                } catch {
+                    // Not the agent's own answer: a proxy's page, or nothing.
+                }
+
+                resolve({ ok: false, status: request.status, error: (problem && (problem.detail || problem.title)) || request.statusText });
+            };
+            // The agent went, the network went, or a file changed under the browser's feet.
+            request.onerror = () => resolve({ ok: false, status: 0, error: 'The files could not be sent: the agent did not answer, or a file of the folder changed while it was being read' });
+            request.send(body);
+        });
+    },
+
+    releasePicked(ticket) {
+        wslcAgentPicked.delete(ticket);
+        wslcAgentFolders.delete(ticket);
     },
 
     // A finger is the primary pointer: a phone or a tablet, where the thumb

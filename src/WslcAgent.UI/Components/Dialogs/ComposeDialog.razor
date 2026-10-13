@@ -49,6 +49,8 @@
 @inject ISnackbar Snackbar
 @inject ProjectActivity Projects
 @inject IJSRuntime Js
+@inject LocalBuildContexts LocalContexts
+@implements IAsyncDisposable
 
 <MudDialog ContentClass="wslc-dialog-action wslc-dialog-tall">
     <TitleContent>
@@ -120,10 +122,22 @@
                        opens the list with a row a variable. Checking the file fills them in. *@
                         <div class="wslc-span2 wslc-form-grid wslc-form-line wslc-compose-fields">
                         <div class="wslc-field-pick has-note">
+                            @* One folder, whichever machine it was picked on: the context is one path, the
+                               same on this device and on the server, as the Compose file means it. Picked on
+                               this device, the images are built from this device's (the mark before the
+                               path says so), and what the file mounts is at that path on the server. *@
                             <MudTextField Margin="Margin.Dense" T="string" @bind-Value="_context" @bind-Value:after="ContextTyped" Label="Context" Immediate="true" HelperTextOnFocus="true"
-                                          Error="@(_contextError.Length > 0)" ErrorText="@_contextError"
-                                          Variant="Variant.Filled" HelperText="Example: C:\apps\shop. The folder the file's relative paths, its build and its env_file start from: the file's own when it was opened or its path pasted, or the one given here." />
-                            <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick the context folder" OnClick="PickContextAsync" />
+                                          Error="@(_contextError.Length > 0)" ErrorText="@_contextError" Variant="Variant.Filled"
+                                          Adornment="@(_local is null ? Adornment.None : Adornment.Start)" AdornmentIcon="@Icons.Material.Filled.Computer" AdornmentColor="Color.Info"
+                                          HelperText="@ContextHelp" />
+                            @* Where the context is, asked as the file's place is: a folder of the server, from
+                               which the whole file is read; or one of this device, from which its images are
+                               built, what it mounts staying the server's. *@
+                            <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" title="Pick the context: a folder of this device or of the server"
+                                     Color="Color.Success" Variant="Variant.Filled">
+                                <MudMenuItem Icon="@Icons.Material.Filled.Computer" OnClick="PickLocalContextAsync">From this device</MudMenuItem>
+                                <MudMenuItem Icon="@Icons.Material.Filled.Dns" OnClick="PickServerContextAsync">From the server</MudMenuItem>
+                            </MudMenu>
                         </div>
                         <div class="wslc-compose-verb">
                             <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FactCheck" OnClick="ConvertAsync">Check Compose file</MudButton>
@@ -248,6 +262,24 @@
 
     /// <summary>What the Context field is missing, said on the field itself: a file is not read without it.</summary>
     private string _contextError = "";
+
+    /// <summary>
+    /// The folder of this device the file's images are built from, picked in
+    /// the browser: the one the Compose file is in. With it, what the file
+    /// builds is sent to the agent when it is saved or run; what it mounts,
+    /// its <c>.env</c> and its <c>env_file</c> stay the server's, read from
+    /// the Context field's folder, or with none from the folder the project
+    /// was last saved with. Null when the context is the server's alone.
+    /// </summary>
+    private PickedFolder? _local;
+
+    /// <summary>What the Context field says of itself when it has the cursor: whose folder the images are built from.</summary>
+    private string ContextHelp => _local is null
+        ? @"Example: C:\apps\shop. The folder the file's relative paths, its build and its env_file start from: the file's own when it was opened or its path pasted, or the one given here. ⋮ picks it on the server, or on this device to build from here."
+        : $"Built from this device's folder ({LocalName}), sent to the server when the project is saved or run. The path is the folder's, the same on the server: what the file mounts is there.";
+
+    /// <summary>The name of this device's folder, which is all a browser says of where it is.</summary>
+    private string LocalName => _local is { Name.Length: > 0 } folder ? folder.Name : "the folder picked";
 
     /// <summary>There is a file to read, either way.</summary>
     private bool HasFile => _path.Trim().Length > 0 || _pasted.Trim().Length > 0;
@@ -488,6 +520,13 @@
     /// </summary>
     private bool ContextGiven()
     {
+        // A folder of this device is a context: the server's is then the project's own, when it has one.
+        if (_local is not null)
+        {
+            _contextError = "";
+            return true;
+        }
+
         if (_context.Trim().Length == 0 && FolderOf(_path.Trim().Trim('"')) is { Length: > 0 } folder)
         {
             SetContext(folder);
@@ -514,6 +553,110 @@
         {
             SetContext(folder);
         }
+    }
+
+    /// <summary>
+    /// A folder of this device as the context: the browser's folder chooser,
+    /// which hands over what the folder holds. Nothing is sent now: the file
+    /// is read with its builds named as ones this device will send, and they
+    /// are sent when the project is saved or run.
+    /// </summary>
+    private async Task PickLocalContextAsync()
+    {
+        try
+        {
+            var picked = await LocalContexts.PickAsync();
+            if (picked.Ticket.Length == 0)
+            {
+                return;
+            }
+
+            await ForgetLocalContextAsync();
+            (_local, _contextError) = (picked, "");
+
+            // A browser hands over the folder and not where it is. The path typed for a folder
+            // of that name the last time is put back; with none, one left in the field from
+            // another folder is taken out, and the field asks for this one's.
+            if (await Js.InvokeAsync<string>("wslcAgent.folderPath", picked.Name) is { Length: > 0 } known)
+            {
+                SetContext(known);
+            }
+            else if (!_context.Trim().TrimEnd(PathSeparators).EndsWith(picked.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                (_context, _contextError) = ("", $"Type the full path of the folder picked ({LocalName}): the browser does not say it. It is remembered on this device.");
+            }
+        }
+        catch (JSException ex)
+        {
+            Snackbar.Add($"The folder could not be read: {ex.Message}", Severity.Error);
+        }
+    }
+
+    /// <summary>A folder of the server as the context: this device's is let go of, and the file's images are built from the server's folder again.</summary>
+    private async Task PickServerContextAsync()
+    {
+        await ForgetLocalContextAsync();
+        await PickContextAsync();
+    }
+
+    /// <summary>Lets go of this device's folder: the context is the server's again.</summary>
+    private async Task ForgetLocalContextAsync()
+    {
+        if (_local is { } held)
+        {
+            _local = null;
+            await LocalContexts.ReleaseAsync(held);
+        }
+    }
+
+    /// <summary>The window closes: the browser lets go of the folder it was holding for it.</summary>
+    public async ValueTask DisposeAsync() => await ForgetLocalContextAsync();
+
+    /// <summary>
+    /// The request with this device's build contexts named in it. To read the
+    /// file (<paramref name="send"/> false) each is named with nothing sent,
+    /// which has the agent read the build as one that can be made; to save or
+    /// run it, the ones a service that is taken needs are sent first, the
+    /// veil saying how far each has got.
+    /// </summary>
+    private async Task<ComposePlanRequest> WithLocalContextsAsync(ComposePlanRequest request, bool send)
+    {
+        if (_local is not { } folder || await Api.PlanProjectAsync(request) is not { Contexts: { Count: > 0 } named } plan)
+        {
+            return request;
+        }
+
+        var sent = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var context in named)
+        {
+            sent[context.Path] = send && context.Needed ? await LocalContexts.SendAsync(folder, context.Path, plan.Name, Busy) : "";
+        }
+
+        return request with { Contexts = sent };
+    }
+
+    /// <summary>
+    /// With a folder of this device as the context, the path it has, once a
+    /// reading has said: a browser hands over a folder and not where it is,
+    /// so the field is filled with the folder the server has the project in,
+    /// when it has it; and when the file needs the path and nothing says it,
+    /// the field asks for it to be typed.
+    /// </summary>
+    private void ServerFolder(ComposePlan plan)
+    {
+        if (_local is null)
+        {
+            return;
+        }
+
+        if (_context.Trim().Length == 0 && plan.Folder.Length > 0)
+        {
+            SetContext(plan.Folder);
+        }
+
+        _contextError = plan.NeedsFolder
+            ? $"Type the full path of the folder picked ({LocalName}): the browser does not say it, and what the file mounts goes at that same path on the server."
+            : "";
     }
 
     /// <summary>The context was typed: what the field said it was missing no longer holds.</summary>
@@ -566,11 +709,18 @@
         request = request with { Folder = _context.Trim() };
         try
         {
+            request = await WithLocalContextsAsync(request, send: false);
             var plan = await Api.PlanProjectAsync(request);
             if (asked == _asked)
             {
                 (_plan, _summary, _error) = (plan, Summary(plan, request.Path.Length > 0), "");
                 Parameters(plan);
+                ServerFolder(plan);
+                if (_local is { Name.Length: > 0 } folder && _context.Trim().Length > 0)
+                {
+                    // Read with it, so it is this folder's path: the next pick of the folder finds it.
+                    await Js.InvokeVoidAsync("wslcAgent.rememberFolderPath", folder.Name, _context.Trim());
+                }
 
                 // A file read by its path is shown as it was read, where a pasted one is.
                 if (request.Path.Length > 0)
@@ -650,6 +800,8 @@
         Busy("Checking the Compose file…");
         try
         {
+            request = await WithLocalContextsAsync(request, send: true);
+            Busy("Checking the Compose file…");
             var preview = await Api.PreviewProjectAsync(new ProjectUpRequest(request, start));
             Idle();
 
@@ -676,8 +828,9 @@
             await Projects.StartAsync(new ProjectUpRequest(request, start, remove), preview.Name);
             Dialog.Close(DialogResult.Ok(true));
         }
-        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException or JSException or InvalidOperationException)
         {
+            // The agent's refusal, or this device's folder not being what the file needs of it.
             _error = ex.Message;
         }
         finally
@@ -722,11 +875,13 @@
     private static string Listed(IEnumerable<string> names) => string.Join("\n", names.Select(name => "• " + name));
 
     // Both paint at once: a click paints by itself only at its first wait and at its end.
+    // Busy is also told from the browser as a folder is sent, which in a native client
+    // does not come in on the screen's own thread: it asks for its painting there.
     private void Busy(string title)
     {
         _busy = true;
         _busyTitle = title;
-        StateHasChanged();
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private void Idle()

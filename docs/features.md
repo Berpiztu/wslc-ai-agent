@@ -165,7 +165,20 @@ publishing and cleaning up need them on.
     there is a file, **Context** is asked for under it: the folder its
     relative paths, its `build` and its `env_file` start from, which the
     file does not say. It is the file's own folder when the file was opened
-    or its path pasted, and can be typed or picked. Beside
+    or its path pasted, and can be typed or picked. Its ⋮ asks where it is:
+    **From the server**, a folder of the server's disk; or **From this
+    device**, the folder the file is in on the machine in front of you,
+    when the agent is on another one (the browser's own Select folder
+    dialog where it has one, which reads of the folder only what the
+    context's `.dockerignore` does not leave out). The images are then
+    built on the server from that folder, sent when the project is saved
+    or run (only the files the server lacks: a change travels as what
+    changed, and the window says how far it has got), while what the file
+    mounts, its `.env` and its `env_file` stay the server's, at the same
+    path: the context is one folder, the same on both machines. A browser
+    hands over a folder and not where it is, so the path is filled in by
+    itself for a project the server already has, and is typed once for a
+    new one. Beside
     it, **Check Compose file** reads the file: nothing is read before it
     is pressed. Under
     it the file is shown as the tree it is, its services, networks and

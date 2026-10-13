@@ -431,7 +431,7 @@ public static class ContainerEndpoints
             ? transfers.Claim(id, clientGone)
             : transfers.Start(container, direction, directory, name, totalBytes, clientGone);
 
-    private static async Task<(string Name, Stream Body)> FileSectionAsync(HttpRequest request, CancellationToken cancellationToken)
+    internal static async Task<(string Name, Stream Body)> FileSectionAsync(HttpRequest request, CancellationToken cancellationToken)
     {
         var boundary = MediaTypeHeaderValue.TryParse(request.ContentType, out var contentType)
             ? HeaderUtilities.RemoveQuotes(contentType.Boundary).Value

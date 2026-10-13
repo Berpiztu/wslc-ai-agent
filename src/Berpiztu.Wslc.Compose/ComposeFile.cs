@@ -13,6 +13,9 @@ namespace Berpiztu.Wslc.Compose;
 /// </summary>
 internal sealed class ComposeFile(AgentConnection agent, Arguments arguments)
 {
+    /// <summary>The API level from which an agent takes a build context as its files, the ones it lacks alone.</summary>
+    private const int SendsFiles = 19;
+
     /// <summary>The names a Compose file is looked for by, in Compose's own order.</summary>
     private static readonly string[] StandardNames = ["compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"];
 
@@ -37,6 +40,10 @@ internal sealed class ComposeFile(AgentConnection agent, Arguments arguments)
         {
             Terminal.Faint($"On the agent, the file's relative paths start from {plan.Folder}");
         }
+        else if (!agent.IsLocal && plan.NeedsFolder)
+        {
+            Terminal.Warning("The file names things by relative paths and the agent has no folder to start them from: name one of its machine with --project-directory.");
+        }
 
         return (request, plan);
     }
@@ -60,13 +67,19 @@ internal sealed class ComposeFile(AgentConnection agent, Arguments arguments)
             return (request, plan);
         }
 
+        // Level 18 took a context as one archive; this sends it as its files, which that agent has no route for.
+        if (send && agent.ApiLevel < SendsFiles && missing.Any(context => context.Needed))
+        {
+            throw new CommandFailed($"The agent at {agent.Address} is older than this wslc-compose and takes a build context another way: update the agent, or build there from a folder of its own machine (--project-directory).");
+        }
+
         var folder = Path.GetDirectoryName(Find()) ?? Folder;
         var contexts = new BuildContexts(agent.Api);
         var sent = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var context in missing)
         {
             sent[context.Path] = send && context.Needed
-                ? await contexts.SendAsync(Path.GetFullPath(Path.Combine(folder, context.Path)), context.Path, cancellationToken)
+                ? await contexts.SendAsync(Path.GetFullPath(Path.Combine(folder, context.Path)), context.Path, plan.Name, cancellationToken)
                 : "";
         }
 
@@ -147,7 +160,7 @@ internal sealed class ComposeFile(AgentConnection agent, Arguments arguments)
             ? new ComposePlanRequest(Path: file, Name: arguments.Project, Profiles: arguments.Profiles,
                 Folder: arguments.Directory.Length > 0 ? Path.GetFullPath(arguments.Directory) : "", Services: arguments.Services)
             : new ComposePlanRequest(Yaml: await File.ReadAllTextAsync(file, cancellationToken), Name: arguments.Project, Profiles: arguments.Profiles,
-                Folder: arguments.Directory, Services: arguments.Services);
+                Folder: arguments.Directory, Services: arguments.Services, ClientFolder: Path.GetDirectoryName(file) ?? "");
     }
 
     /// <summary>There is a file to read: a project named with no file at hand is taken by its name alone.</summary>

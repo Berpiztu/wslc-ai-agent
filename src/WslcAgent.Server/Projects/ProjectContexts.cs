@@ -1,4 +1,7 @@
+using System.Formats.Tar;
 using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using WslcAgent.ApiClient.Contracts;
@@ -8,82 +11,158 @@ namespace WslcAgent.Server.Projects;
 
 /// <summary>
 /// The build contexts sent to the agent: a Compose file read on another
-/// machine has its <c>build</c> folders there, so the client sends each as a
-/// tar archive and the agent builds from it, handing the archive to
-/// <c>wslc build -</c> on its standard input (wslc 3.0.3 on). An archive is
-/// never unpacked here: what is in it is the builder's to read.
+/// machine has its <c>build</c> folders there, so the client sends what is
+/// in them and the agent builds from it, handing it to <c>wslc build -</c> as
+/// a tar archive on its standard input (wslc 3.0.3 on).
 /// <para>
-/// Each is kept in the agent's data folder under a name made from its bytes.
-/// The same folder sent again is then the same context: it need not be sent
-/// twice, and a service built from it is the same service to a later save,
-/// which compares what a container was made from. One not used for a week is
-/// let go of when the next arrives; a build that asks for one that is gone
-/// says so, and the client sends it again.
+/// A context is sent as what it is made of, not as one piece. Every file is
+/// kept once, under the hash of its bytes, whichever context and whichever
+/// folder it came in; a context is the list of its entries, each file named
+/// with its hash. So a client asks first which of its files the agent lacks
+/// and sends those alone: one Dockerfile changed in a folder of fifty
+/// megabytes travels as one Dockerfile. The archive a build reads is made
+/// here from the list, when the build begins.
+/// </para>
+/// <para>
+/// Nothing sent is ever laid out as the folder it was: a file is kept under
+/// its hash and read back into the archive, whose names are the builder's to
+/// make something of. A context is known by what it holds (the names and the
+/// bytes, not the moment each file was last written), so the same folder
+/// sent again is the same context to a later save, which compares what a
+/// container was made from. One not used for a week is let go of when the
+/// next arrives, and then the files no context names any more; a build that
+/// asks for one that is gone says so, and the client sends it again.
 /// </para>
 /// </summary>
 public sealed partial class ProjectContexts(IOptions<WslcOptions> options)
 {
-    private const string Extension = ".tar";
+    private const string ListExtension = ".json";
     private static readonly TimeSpan KeptFor = TimeSpan.FromDays(7);
+
+    /// <summary>How long a file no context names is left alone: it may be one of a context still on its way, whose list has not arrived.</summary>
+    private static readonly TimeSpan Unnamed = TimeSpan.FromDays(1);
+
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    /// <summary>
+    /// The rights of every entry of the archive: <c>rwxr-xr-x</c>, what a
+    /// build from Windows gives them, since Windows keeps none of its own.
+    /// </summary>
+    private const UnixFileMode Rights =
+        UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
+        | UnixFileMode.GroupRead | UnixFileMode.GroupExecute
+        | UnixFileMode.OtherRead | UnixFileMode.OtherExecute;
 
     private string Folder => Path.Combine(options.Value.DataDirectory, "project-contexts");
 
-    /// <summary>Keeps what is sent, under the id its bytes give it; one already there is left as it is.</summary>
-    public async Task<ProjectContext> SaveAsync(Stream archive, CancellationToken cancellationToken = default)
-    {
-        Directory.CreateDirectory(Folder);
-        Forget();
+    private string Files => Path.Combine(Folder, "files");
 
-        // Written under another name first: the id is known only once every byte has been read.
-        var arriving = Path.Combine(Folder, $"{Guid.NewGuid():N}.arriving");
-        try
-        {
-            string id;
-            long size;
-            using (var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
-            {
-                await using var file = new FileStream(arriving, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1 << 16, useAsync: true);
-                var buffer = new byte[1 << 16];
-                int read;
-                while ((read = await archive.ReadAsync(buffer, cancellationToken)) > 0)
-                {
-                    hash.AppendData(buffer, 0, read);
-                    await file.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
-                }
-
-                size = file.Length;
-                id = IdOf(hash.GetHashAndReset());
-            }
-
-            if (size == 0)
-            {
-                throw new ArgumentException("The build context sent is empty.");
-            }
-
-            var kept = PathOf(id);
-            if (File.Exists(kept))
-            {
-                File.SetLastWriteTimeUtc(kept, DateTime.UtcNow);
-            }
-            else
-            {
-                File.Move(arriving, kept);
-            }
-
-            return new ProjectContext(id, size);
-        }
-        finally
-        {
-            File.Delete(arriving);
-        }
-    }
-
-    /// <summary>Whether a context is here, and its size.</summary>
-    public ProjectContext Get(string id) =>
-        Find(id) is { } path ? new ProjectContext(id, new FileInfo(path).Length) : new ProjectContext(id, 0, Present: false);
+    /// <summary>Of the files a client has, by their hashes, the ones the agent lacks: what there is to send.</summary>
+    public IReadOnlyList<string> Missing(IReadOnlyList<string> hashes) =>
+        [.. hashes.Distinct(StringComparer.Ordinal).Where(hash => !File.Exists(FilePath(hash)))];
 
     /// <summary>
-    /// The archive of a context, by its full path; null when it is not here,
+    /// Keeps the files sent, which come as a tar archive whose entries are
+    /// named by the hash of what they hold. Each is hashed again as it is
+    /// written, and one whose bytes are not the ones its name says is
+    /// refused: a file that changed between being read and being sent would
+    /// otherwise be kept as what it no longer is. Answers how many it kept.
+    /// <paramref name="received"/> is told how many bytes of the archive have
+    /// arrived so far, as they do: what the transfer's row counts.
+    /// </summary>
+    public async Task<int> SaveFilesAsync(Stream archive, Action<long>? received = null, CancellationToken cancellationToken = default)
+    {
+        Directory.CreateDirectory(Files);
+        var kept = 0;
+        await using var counted = new Counted(archive, received);
+        await using var reader = new TarReader(counted, leaveOpen: true);
+        while (await reader.GetNextEntryAsync(copyData: false, cancellationToken) is { } entry)
+        {
+            if (entry.EntryType is not (TarEntryType.RegularFile or TarEntryType.V7RegularFile))
+            {
+                continue;
+            }
+
+            var named = FilePath(entry.Name);
+
+            // Written under another name first: it is this file only once every byte agrees.
+            var arriving = Path.Combine(Files, $"{Guid.NewGuid():N}.arriving");
+            try
+            {
+                string hash;
+                using (var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
+                {
+                    await using var file = new FileStream(arriving, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1 << 16, useAsync: true);
+                    var data = entry.DataStream ?? Stream.Null;
+                    var buffer = new byte[1 << 16];
+                    int read;
+                    while ((read = await data.ReadAsync(buffer, cancellationToken)) > 0)
+                    {
+                        sha.AppendData(buffer, 0, read);
+                        await file.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                    }
+
+                    hash = Convert.ToHexStringLower(sha.GetHashAndReset());
+                }
+
+                if (hash != entry.Name)
+                {
+                    throw new ArgumentException("A file of the build context changed while it was being sent: what arrived is not what was read. Send it again.");
+                }
+
+                if (!File.Exists(named))
+                {
+                    File.Move(arriving, named);
+                }
+
+                kept++;
+            }
+            finally
+            {
+                File.Delete(arriving);
+            }
+        }
+
+        return kept;
+    }
+
+    /// <summary>
+    /// Keeps a context: the list of its entries, every file of which has to
+    /// be here already. Answers the id the request of a Compose file names it
+    /// by, which is made from what it holds.
+    /// </summary>
+    public ProjectContext Save(ProjectContextRequest request)
+    {
+        var entries = request.Entries ?? [];
+        if (entries.Count == 0)
+        {
+            throw new ArgumentException("The build context sent is empty.");
+        }
+
+        foreach (var entry in entries)
+        {
+            if (!IsName(entry.Name))
+            {
+                throw new ArgumentException($"Not a name inside a build context: {entry.Name}");
+            }
+
+            if (entry.Blob.Length > 0 && !File.Exists(FilePath(entry.Blob)))
+            {
+                throw new ArgumentException($"The file {entry.Name} of the build context was not sent: its bytes are not on the agent. Send the context again.");
+            }
+        }
+
+        // The list is written before anything is let go of: a file it names that no other list
+        // does, and that has been here a while, is then one that is named.
+        Directory.CreateDirectory(Folder);
+        var id = IdOf(entries);
+        File.WriteAllText(PathOf(id), JsonSerializer.Serialize(new ProjectContextRequest(entries), Json));
+        Forget();
+        return new ProjectContext(id, entries.Sum(entry => entry.Size), entries.Count(entry => entry.Blob.Length > 0));
+    }
+
+    /// <summary>
+    /// The list of a context, by its full path; null when it is not here,
     /// or the id is no id of ours (it is a part of a path, so only what an
     /// id can be is looked for). Asked for, it is in use: its week begins
     /// again.
@@ -105,35 +184,198 @@ public sealed partial class ProjectContexts(IOptions<WslcOptions> options)
         return path;
     }
 
-    /// <summary>A path is an archive kept here: what a build reads from its standard input instead of taking as a folder.</summary>
-    public static bool IsArchive(string context) =>
-        context.EndsWith(Extension, StringComparison.OrdinalIgnoreCase) && Id().IsMatch(Path.GetFileNameWithoutExtension(context));
+    /// <summary>A build's context is one that was sent (the path of its list here), and no folder: it is read by the build from its standard input.</summary>
+    public static bool IsSent(string context) =>
+        context.EndsWith(ListExtension, StringComparison.OrdinalIgnoreCase) && Id().IsMatch(Path.GetFileNameWithoutExtension(context));
 
-    /// <summary>The id of an archive's bytes: the first half of their SHA-256, which a client works out the same way before it sends anything.</summary>
-    public static string IdOf(byte[] sha256) => Convert.ToHexStringLower(sha256)[..32];
+    /// <summary>
+    /// The context as the tar archive a build reads, made now from its list
+    /// and the files it names, and gone when it is closed. It begins with an
+    /// entry for the folder itself, which has a short name: what reads the
+    /// archive tells it is one by its first entry (seen with wslc 3.0.3,
+    /// which takes for a Dockerfile an archive that begins any other way),
+    /// and a file with a very long name is written in two parts.
+    /// </summary>
+    public async Task<Stream> OpenAsync(string list, CancellationToken cancellationToken = default)
+    {
+        var context = File.Exists(list) ? JsonSerializer.Deserialize<ProjectContextRequest>(await File.ReadAllTextAsync(list, cancellationToken), Json) : null;
+        if (context?.Entries is not { Count: > 0 } entries)
+        {
+            throw new InvalidOperationException(Gone);
+        }
 
-    private string PathOf(string id) => Path.Combine(Folder, id + Extension);
+        var archive = new FileStream(Path.Combine(Folder, $"{Guid.NewGuid():N}.packing"), FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 1 << 16,
+            FileOptions.DeleteOnClose | FileOptions.Asynchronous);
+        try
+        {
+            await using (var tar = new TarWriter(archive, TarEntryFormat.Gnu, leaveOpen: true))
+            {
+                await tar.WriteEntryAsync(new GnuTarEntry(TarEntryType.Directory, "./") { Mode = Rights, ModificationTime = DateTimeOffset.UnixEpoch }, cancellationToken);
+                foreach (var entry in entries)
+                {
+                    var changed = DateTimeOffset.FromUnixTimeSeconds(Math.Clamp(entry.Modified, 0, DateTimeOffset.MaxValue.ToUnixTimeSeconds()));
+                    if (entry.Blob.Length == 0)
+                    {
+                        await tar.WriteEntryAsync(new GnuTarEntry(TarEntryType.Directory, entry.Name + "/") { Mode = Rights, ModificationTime = changed }, cancellationToken);
+                        continue;
+                    }
 
-    /// <summary>Lets go of the contexts nobody has asked for in a week, and of what an upload cut short left behind.</summary>
+                    var file = FilePath(entry.Blob);
+                    if (!File.Exists(file))
+                    {
+                        throw new InvalidOperationException(Gone);
+                    }
+
+                    await using var data = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16, useAsync: true);
+                    await tar.WriteEntryAsync(new GnuTarEntry(TarEntryType.RegularFile, entry.Name) { Mode = Rights, ModificationTime = changed, DataStream = data }, cancellationToken);
+                }
+            }
+
+            archive.Position = 0;
+            return archive;
+        }
+        catch
+        {
+            await archive.DisposeAsync();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// The archive as it is read, telling how much of it has been, every half
+    /// megabyte and at its end: an archive is read a file at a time, and the
+    /// one who waits counts bytes.
+    /// </summary>
+    private sealed class Counted(Stream inner, Action<long>? tell) : Stream
+    {
+        private const long Every = 512 * 1024;
+        private long _read;
+        private long _told;
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => _read;
+            set => throw new NotSupportedException();
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => Tell(inner.Read(buffer, offset, count));
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+            Tell(await inner.ReadAsync(buffer, cancellationToken));
+
+        public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            Tell(await inner.ReadAsync(buffer.AsMemory(offset, count), cancellationToken));
+
+        public override void Flush()
+        {
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        private int Tell(int count)
+        {
+            _read += count;
+            if (tell is not null && (count == 0 || _read - _told >= Every))
+            {
+                _told = _read;
+                tell(_read);
+            }
+
+            return count;
+        }
+    }
+
+    private const string Gone = "The build context is no longer on the agent: it was let go of since it was sent. Run the build again from the machine that has the folder.";
+
+    /// <summary>
+    /// What a context is known by: its entries' names and its files' bytes,
+    /// in the order they come. Not when each was last written: a folder
+    /// checked out again holds the same files, and is the same context.
+    /// </summary>
+    private static string IdOf(IReadOnlyList<ProjectContextEntry> entries) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', entries.Select(entry => $"{entry.Name}\0{entry.Blob}")))))[..32];
+
+    /// <summary>A name an entry may have: a path of the context, down from it, with forward slashes.</summary>
+    private static bool IsName(string name) =>
+        name.Length > 0 && !name.Contains('\\') && !name.Contains('\0')
+        && name.Split('/').All(part => part.Length > 0 && part is not ("." or ".."));
+
+    private string PathOf(string id) => Path.Combine(Folder, id + ListExtension);
+
+    /// <summary>Where a file is kept, by its hash: a part of a path, so only what a hash can be is taken.</summary>
+    private string FilePath(string hash) =>
+        Hash().IsMatch(hash) ? Path.Combine(Files, hash) : throw new ArgumentException($"Not the hash of a file: {hash}");
+
+    /// <summary>
+    /// Lets go of the contexts nobody has asked for in a week, of what an
+    /// upload or a build cut short left behind, and then of the files no
+    /// context names any more.
+    /// </summary>
     private void Forget()
     {
         var before = DateTime.UtcNow - KeptFor;
         foreach (var file in Directory.EnumerateFiles(Folder))
         {
-            try
+            Try(() =>
             {
                 if (File.GetLastWriteTimeUtc(file) < before)
                 {
                     File.Delete(file);
                 }
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            });
+        }
+
+        if (!Directory.Exists(Files))
+        {
+            return;
+        }
+
+        var named = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var list in Directory.EnumerateFiles(Folder, "*" + ListExtension))
+        {
+            Try(() => named.UnionWith((JsonSerializer.Deserialize<ProjectContextRequest>(File.ReadAllText(list), Json)?.Entries ?? []).Select(entry => entry.Blob)));
+        }
+
+        var unnamedBefore = DateTime.UtcNow - Unnamed;
+        foreach (var file in Directory.EnumerateFiles(Files))
+        {
+            Try(() =>
             {
-                // In use by a build: it is looked at again when the next context arrives.
-            }
+                if (!named.Contains(Path.GetFileName(file)) && File.GetLastWriteTimeUtc(file) < unnamedBefore)
+                {
+                    File.Delete(file);
+                }
+            });
+        }
+    }
+
+    /// <summary>What cannot be done to one file now (it is in use by a build, it is half written) is looked at again when the next context arrives.</summary>
+    private static void Try(Action act)
+    {
+        try
+        {
+            act();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
         }
     }
 
     [GeneratedRegex("^[0-9a-f]{32}$")]
     private static partial Regex Id();
+
+    [GeneratedRegex("^[0-9a-f]{64}$")]
+    private static partial Regex Hash();
 }

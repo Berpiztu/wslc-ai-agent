@@ -41,6 +41,7 @@ public sealed class ProjectRunner(
     IWslcRunner wslc,
     ProjectStore store,
     Publishing.PublishingService publishing,
+    ProjectContexts contexts,
     ILogger<ProjectRunner> logger)
 {
     /// <summary>What a project's row says in the Image column: it is no container's image.</summary>
@@ -333,17 +334,17 @@ public sealed class ProjectRunner(
     /// its output into the job's log: one build for the services built from
     /// the same thing (<see cref="Together"/>), with a <c>--tag</c> for each
     /// of their images. The Dockerfile is the context's, as Compose reads it.
-    /// A context a client on another machine sent is an archive here
-    /// (<see cref="ProjectContexts"/>): the context is then <c>-</c>, the
-    /// archive goes to the command's standard input, and the Dockerfile is
-    /// named by its path inside it.
+    /// A context a client on another machine sent is no folder here
+    /// (<see cref="ProjectContexts"/>): the context is then <c>-</c>, it
+    /// goes to the command's standard input as the archive made of it for
+    /// this build, and the Dockerfile is named by its path inside it.
     /// </summary>
     private async Task BuildAsync(Job job, IReadOnlyList<ComposeService> same, CancellationToken stop, bool noCache = false, bool pull = false)
     {
         var build = same[0].Build!;
         var images = same.Select(service => service.Launch.Image).Distinct(StringComparer.Ordinal).ToList();
         job.Say($"Building {string.Join(", ", images)}");
-        var sent = build.Context.Length == 0 || ProjectContexts.IsArchive(build.Context);
+        var sent = build.Context.Length == 0 || ProjectContexts.IsSent(build.Context);
         if (sent)
         {
             await SentContextAsync(build.Context, images, stop);
@@ -372,7 +373,7 @@ public sealed class ProjectRunner(
         job.Note("DEBUG", "wslc " + string.Join(' ', args));
         if (sent)
         {
-            await using var archive = new FileStream(build.Context, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16, useAsync: true);
+            await using var archive = await contexts.OpenAsync(build.Context, stop);
             await wslc.StreamAsync(args, job.Add, stop, archive);
         }
         else
@@ -396,9 +397,9 @@ public sealed class ProjectRunner(
     /// the build begins, in words that say what to do, where the command
     /// itself would say that <c>-</c> is no folder.
     /// </summary>
-    private async Task SentContextAsync(string archive, IReadOnlyList<string> images, CancellationToken stop)
+    private async Task SentContextAsync(string context, IReadOnlyList<string> images, CancellationToken stop)
     {
-        if (archive.Length == 0 || !File.Exists(archive))
+        if (context.Length == 0 || !File.Exists(context))
         {
             throw new InvalidOperationException($"The build context of {string.Join(", ", images)} is not on the agent: it was not sent, or was let go of since. Run the build again from the machine that has the folder.");
         }

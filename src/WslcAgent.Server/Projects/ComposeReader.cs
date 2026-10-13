@@ -145,6 +145,9 @@ public static partial class ComposeReader
         private readonly List<string> _notNeeded = [];
         private readonly List<string> _warnings = [];
 
+        /// <summary>Something of the file is written as a relative path and there was no folder to read it from.</summary>
+        private bool _needsFolder;
+
         /// <summary>The build contexts written as relative paths, each with the service built from it: what a client on another machine, where those folders are, sends.</summary>
         private readonly List<(string Service, string Path)> _contexts = [];
 
@@ -257,7 +260,7 @@ public static partial class ComposeReader
             }
 
             var ordered = InStartOrder(services);
-            return new ComposePlan(_project, file, ordered, _usedNetworks.Values.ToList(), _usedVolumes.Values.ToList(), _unsupported, _notNeeded, _warnings, Lines(yaml), _notes, _variables.Values.ToList(), Contexts(ordered), source.Folder);
+            return new ComposePlan(_project, file, ordered, _usedNetworks.Values.ToList(), _usedVolumes.Values.ToList(), _unsupported, _notNeeded, _warnings, Lines(yaml), _notes, _variables.Values.ToList(), Contexts(ordered), source.Folder, _needsFolder);
         }
 
         /// <summary>The contexts written as relative paths, each once, and whether a service that is taken is built from it.</summary>
@@ -923,7 +926,9 @@ public static partial class ComposeReader
 
             if (source.Folder.Length == 0)
             {
-                Unsupported(at, $"{service}: {what} {path} (a relative path needs the folder the file is in, and a pasted file has none)", "a relative path needs the file's folder, and a pasted file has none");
+                // Said for what it is whoever gave the file: pasted, loaded from another device, sent by a command.
+                _needsFolder = true;
+                Unsupported(at, $"{service}: {what} {path} (a relative path needs a folder of the agent's machine to start from, and none was named)", "a relative path needs a folder of the server to start from, and none was named");
                 return null;
             }
 

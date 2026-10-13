@@ -741,17 +741,30 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<ProjectJob> BuildProjectAsync(ProjectBuildRequest request, CancellationToken cancellationToken = default) =>
         PostJsonAsync<ProjectBuildRequest, ProjectJob>("api/v1/projects/build", request, cancellationToken);
 
-    /// <summary>Sends a build context, a tar archive of the folder, for the agent to build from: how a file read on another machine has its images built on the agent's.</summary>
-    public async Task<ProjectContext> SendProjectContextAsync(Stream archive, CancellationToken cancellationToken = default)
+    /// <summary>Of the files of a build context, by the SHA-256 of their bytes, the ones the agent lacks: what there is to send it.</summary>
+    public async Task<IReadOnlyList<string>> GetMissingContextFilesAsync(IReadOnlyList<string> hashes, CancellationToken cancellationToken = default) =>
+        (await PostJsonAsync<ContextFiles, ContextFiles>("api/v1/projects/contexts/files/missing", new ContextFiles(hashes), cancellationToken)).Hashes;
+
+    /// <summary>
+    /// Sends files of a build context, as a tar archive whose entries are
+    /// named by the SHA-256 of what they hold. It is a transfer of the
+    /// agent's while it lasts, listed under <paramref name="project"/> as
+    /// <paramref name="files"/> files into the context <paramref name="context"/>.
+    /// </summary>
+    public async Task SendContextFilesAsync(Stream archive, string project, string context, int files, CancellationToken cancellationToken = default)
     {
-        using var response = await PostFileAsync("api/v1/projects/contexts", archive, "context.tar", cancellationToken);
-        return await response.Content.ReadFromJsonAsync<ProjectContext>(cancellationToken)
-            ?? throw new AgentApiException((int)response.StatusCode, "Empty answer");
+        using var response = await PostFileAsync(ContextFilesPath(project, context, files), archive, "files.tar", cancellationToken);
     }
 
-    /// <summary>Whether the agent still has a build context sent before: one it has need not be sent again.</summary>
-    public Task<ProjectContext> GetProjectContextAsync(string id, CancellationToken cancellationToken = default) =>
-        GetAsync<ProjectContext>($"api/v1/projects/contexts/{Escape(id)}", cancellationToken);
+    private static string ContextFilesPath(string project, string context, int files) =>
+        $"api/v1/projects/contexts/files?project={Escape(project)}&context={Escape(context)}&files={files}";
+
+    /// <summary>Where a context's files are sent, for a browser that sends them itself (<c>wslcAgent.sendPickedFiles</c>).</summary>
+    public Uri ContextFilesUploadUrl(string project, string context, int files) => new(http.BaseAddress!, ContextFilesPath(project, context, files));
+
+    /// <summary>Gives the agent a build context to build from, as the list of what is in it, its files sent before: how a file read on another machine has its images built on the agent's.</summary>
+    public Task<ProjectContext> SendProjectContextAsync(ProjectContextRequest context, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<ProjectContextRequest, ProjectContext>("api/v1/projects/contexts", context, cancellationToken);
 
     public Task<ProjectJob> GetProjectJobAsync(string id, CancellationToken cancellationToken = default) =>
         GetAsync<ProjectJob>($"api/v1/projects/jobs/{Escape(id)}", cancellationToken);

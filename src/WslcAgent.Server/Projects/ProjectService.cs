@@ -28,7 +28,9 @@ public sealed partial class ProjectService(INetworkService? networks = null, IVo
     /// <summary>
     /// The file is read. One given as text with no folder is read again from
     /// the folder its project was last saved with, when the agent has that
-    /// project: only the reading says which project the file is. And one
+    /// project (only the reading says which project the file is), or else
+    /// from the folder it is in on the machine it came from, the same path
+    /// here. And one
     /// that names something external is read again with what the machine
     /// has, since only then is there anything to look for. Most files are
     /// read once and cost no question to <c>wslc</c>.
@@ -40,6 +42,13 @@ public sealed partial class ProjectService(INetworkService? networks = null, IVo
         if (KeptFolder(request, plan) is { } kept)
         {
             request = request with { Folder = kept };
+            plan = Plan(request, null, sent);
+        }
+        else if (request.Path.Trim().Length == 0 && request.Folder.Trim().Length == 0 && (request.ClientFolder ?? "").Trim() is { Length: > 0 } same)
+        {
+            // A project new to this machine, from a file of another: it lives here where it
+            // lives there, at the same path, which is what its relative paths were written for.
+            request = request with { Folder = same };
             plan = Plan(request, null, sent);
         }
 

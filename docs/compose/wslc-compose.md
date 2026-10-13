@@ -52,8 +52,9 @@ the agent's machine's, and is read from a folder there:
   project that already lives on a server is brought up again from another
   machine with no folder named: its mounts and its `.env` are the server's
   own, and only the file and the sources travel;
-- with neither (a project new to that agent, and no folder named), what
-  needs a folder is named as not available.
+- for a project new to that agent, the folder the Compose file is in here,
+  at the same path on the agent's machine: one folder, the same on both,
+  which is what the file's relative paths were written for.
 
 `build` and `up` say which folder of the agent it is before they do
 anything.
@@ -72,23 +73,34 @@ cd C:\src\shop
 wslc-compose --agent https://server.example.com --token … --project-directory D:\apps\shop up -d --build
 ```
 
-`--project-directory` is needed the first time, to say where on the server
-the project lives; after that the agent remembers it.
+`--project-directory` is for a project that is to live somewhere else on
+the server than it does here; without it a new project takes the same
+path, and the agent remembers where each project lives.
 
 ```
 wslc-compose --agent https://server.example.com --token … up -d --build
-▸ Sending build context ./app (12.4 MB, 318 files)
+✔ Build context ./app: 2 of 318 files, 12.4 MB sent (9.1 KB); the agent had the rest
 ```
 
-Each context (`build: ./app`, or `build.context`) is packed as a tar
-archive, as `docker build` packs it: without what its `.dockerignore`
-leaves out, the Dockerfile and the `.dockerignore` themselves always in.
-The agent keeps the archive and hands it to `wslc build -`, which reads a
-context from its standard input since **wslc 3.0.3**; nothing is unpacked
-on the agent's disk. Only the contexts of the services the command takes
-are sent, and one the agent already has is not sent again: it is known by
-its bytes, so a folder that did not change costs one question. The agent
-lets go of a context nobody has used in a week.
+Each context (`build: ./app`, or `build.context`) is sent as `docker
+build` sends it: without what its `.dockerignore` leaves out, the
+Dockerfile and the `.dockerignore` themselves always in. And only as much
+of it as the agent lacks: every file is hashed here, the agent, which keeps
+each file once under its hash, says which it does not have, and those
+alone travel. The first time that is the whole folder; after it, a
+Dockerfile changed in a folder of fifty megabytes travels as a Dockerfile,
+and a folder that did not change sends nothing but the questions. The line
+that says so moves as it reads, packs and sends. The sending is one of the
+agent's transfers while it lasts: it is in the transfers list of every
+client under the project's name, with how far it has got and a cross that
+stops it, and the agent does not update itself while it travels.
+
+When the build begins the agent makes a tar archive of the context from
+its list and hands it to `wslc build -`, which reads a context from its
+standard input since **wslc 3.0.3**; nothing sent is ever laid out as the
+folder it was on the agent's disk. Only the contexts of the services the
+command takes are sent. The agent lets go of a context nobody has used in
+a week, and then of the files no context names.
 
 What it asks for:
 
@@ -97,8 +109,8 @@ What it asks for:
   update.
 - The Dockerfile inside its context, as it nearly always is: one named
   outside it (`dockerfile: ../Dockerfile`) is not in what is sent.
-- An agent of API level 18 or later. An older one names the `build` as not
-  available, as before.
+- An agent of API level 19 or later. An older one names the `build` as not
+  available, as before, or is said to need updating.
 
 `config` and `--dry-run` send nothing: they say the `build` is one whose
 context the client sends when it builds.

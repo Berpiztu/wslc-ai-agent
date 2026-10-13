@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using WslcAgent.ApiClient.Contracts;
 using WslcAgent.Mcp;
+using WslcAgent.Server.Containers;
 using WslcAgent.Server.Host;
 using WslcAgent.Server.Projects;
 
@@ -36,21 +37,53 @@ public static class ProjectEndpoints
         group.MapGet("/jobs/{id}", (string id, ProjectRunner runner) => runner.Get(id))
             .WithName("ProjectJob");
 
-        // A build context from a client on another machine, as a tar archive: kept, and named
-        // by the client in the file's request. A folder of sources runs to gigabytes: no size limit.
-        group.MapPost("/contexts", async (IFormFile file, ProjectContexts contexts, CancellationToken ct) =>
-            {
-                await using var content = file.OpenReadStream();
-                return await contexts.SaveAsync(content, ct);
-            })
-            .WithName("SendProjectContext")
-            .DisableAntiforgery()
-            .WithMetadata(new DisableRequestSizeLimitAttribute())
-            .WithFormOptions(multipartBodyLengthLimit: long.MaxValue);
+        // A build context from a client on another machine, in three steps, so that only what
+        // the agent lacks travels. Which of the client's files, by their hashes, are not here.
+        group.MapPost("/contexts/files/missing", (ContextFiles files, ProjectContexts contexts) => new ContextFiles(contexts.Missing(files.Hashes ?? [])))
+            .WithName("MissingContextFiles");
 
-        // Whether one sent before is still here: what is, is not sent again.
-        group.MapGet("/contexts/{id}", (string id, ProjectContexts contexts) => contexts.Get(id))
-            .WithName("ProjectContext");
+        // Those files, as a tar archive whose entries are named by their hashes. A folder of
+        // sources runs to gigabytes: no size limit. It is a transfer of the agent's, as a file
+        // into a container is: every client sees it in the list with how far it has got, its
+        // cross stops it, and the agent does not update itself under it. Its place is the
+        // project's, which has no container yet to stand under.
+        group.MapPost("/contexts/files", async Task<Results<NoContent, ProblemHttpResult>> (
+                HttpRequest request, ProjectContexts contexts, ContainerTransfers transfers,
+                string project = "", string context = ".", int files = 0, CancellationToken ct = default) =>
+            {
+                var (_, body) = await ContainerEndpoints.FileSectionAsync(request, ct);
+                using var upload = transfers.Start(
+                    project.Trim().Length > 0 ? project.Trim() : "Compose project", ContainerTransfer.In, $"build context {context}",
+                    // One archive, said as one: with the count alone the row read as that many transfers.
+                    files > 0 ? $"one tar archive ({files} files)" : "one tar archive", request.ContentLength ?? 0, ct);
+                try
+                {
+                    await contexts.SaveFilesAsync(body, upload.Progress, upload.Token);
+                    upload.Finish();
+                    return TypedResults.NoContent();
+                }
+                catch (OperationCanceledException)
+                {
+                    // The cross on its row stopped it, or the client that was sending it went:
+                    // an answer, not a failure.
+                    upload.Fail("Upload cancelled");
+                    return TypedResults.Problem("The upload was cancelled.", statusCode: StatusCodes.Status409Conflict, title: "Upload cancelled");
+                }
+                catch (Exception exception)
+                {
+                    // The row says why, whatever the client that started it does with the answer.
+                    upload.Fail(exception.Message);
+                    throw;
+                }
+            })
+            .WithName("SendContextFiles")
+            .DisableAntiforgery()
+            .WithMetadata(new DisableRequestSizeLimitAttribute());
+
+        // And the context itself, as the list of what is in it: kept, and named by the client
+        // in the file's request.
+        group.MapPost("/contexts", (ProjectContextRequest context, ProjectContexts contexts) => contexts.Save(context))
+            .WithName("SendProjectContext");
 
         // The Compose file kept for a project: what its row opens.
         group.MapGet("/{name}", (string name, ProjectLifecycle lifecycle) => lifecycle.Stored(name))

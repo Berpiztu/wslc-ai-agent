@@ -89,6 +89,7 @@ public static class UiServiceCollectionExtensions
         services.AddScoped<ApiCompatibilityWatch>();
         services.AddScoped<AgentChanges>();
         services.AddScoped<FileTransfers>();
+        services.AddScoped<LocalBuildContexts>();
         services.AddScoped<AgentBuild>();
         // The dashboard: Berpiztu's, with WSLC's
         // objects found in this assembly, their container family, and the
