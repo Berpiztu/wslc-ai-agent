@@ -28,7 +28,7 @@ if ($PassThru) { $script:WslcAgentCheckInstalling = $true }
 # runs it unattended.
 $Winget = "winget install -e --accept-source-agreements --accept-package-agreements --id"
 # The oldest WSLC the agent works with, and the first generally available one.
-$MinimumWslc = [version]"2.9.13"
+$MinimumWslc = [version]"3.0.0"
 $RecommendedWslc = [version]"3.0.1"
 # Where each prerequisite is explained and installed, section by section.
 $Guide = "docs\developer\prerequisites.md"
@@ -182,7 +182,7 @@ if (-not $wslVersion) {
     Write-WslcAgentCheck absent "WSL" "not installed: the agent has no containers to manage." -Run "wsl --install --no-distribution" -Admin -Then $Restart -Guide "$Guide#wsl"
 } elseif ($wslVersion -lt $MinimumWslc) {
     # As good as no WSLC: everything builds, the agent has no containers.
-    Write-WslcAgentCheck absent "WSL" "$wslVersion is older than $MinimumWslc, the first with WSLC: everything builds and the tests pass, and the agent has no containers to manage." -Run "wsl --update" -Guide "$Guide#wsl"
+    Write-WslcAgentCheck absent "WSL" "$wslVersion is older than $MinimumWslc, the oldest the agent works with: everything builds and the tests pass, and the agent has no containers to manage." -Run "wsl --update" -Guide "$Guide#wsl"
 } else {
     Write-WslcAgentCheck ok "WSL" "$wslVersion."
 }

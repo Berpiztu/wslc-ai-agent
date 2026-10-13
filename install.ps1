@@ -87,14 +87,14 @@ param([switch]$Client)
     $msi = Join-Path $downloads $name
 
     if (-not $Client) {
-        # WSLC comes with WSL 2.9.13 and later; without it the agent installs
+        # The agent works with the WSLC of WSL 3.0.0 and later; without it the agent installs
         # and runs, with no containers to manage.
         $previousUtf8 = $env:WSL_UTF8
         $env:WSL_UTF8 = "1"
         $wslLine = try { & wsl.exe --version 2>$null | Select-Object -First 1 } catch { $null }
         $env:WSL_UTF8 = $previousUtf8
         $wsl = if ("$wslLine" -match '(\d+\.\d+\.\d+)') { [version]$Matches[1] } else { $null }
-        $hasWslc = $wsl -and $wsl -ge [version]"2.9.13"
+        $hasWslc = $wsl -and $wsl -ge [version]"3.0.0"
         if (-not $hasWslc) {
             Write-Host "WSLC needs WSL 3.0.1 or later$(if ($wsl) { " (this machine has $wsl)" }). The agent installs anyway; for containers, run: wsl --update" -ForegroundColor Yellow
         }

@@ -26,6 +26,13 @@ products are **WSLC AI Agent** (the agent, `wslc-ai-agent.exe`) and
   (taken, converted or not supported), then started, stopped and watched as
   one group of containers, with one log
   ([docs/compose/wslc-compose.md](docs/compose/wslc-compose.md)).
+- **New: build on another machine, from the sources on yours (WSL 3.0.3).**
+  `wslc-compose --agent https://server.example.com --token … up -d --build` packs the
+  build context as a tar archive, sends it to the agent, and the agent
+  builds it there with `wslc build -`, which reads a context from its
+  standard input since WSL 3.0.3. Only the files the agent lacks travel: a
+  Dockerfile changed in a folder of fifty megabytes is sent as a Dockerfile.
+  The Compose window does the same from a folder of your device.
 - **An MCP agent for WSLC, skill included for Claude, Hermes, OpenClaw,
   etc.**: 55 tools, the destructive ones off by default and asking your
   approval once switched on, and a skill installed with one click. One Windows program beside `wslc` that runs in
@@ -131,7 +138,9 @@ One UI, one language, one API contract.
 ## Quick start
 
 Needs Windows 11 and **WSLC**, generally available since WSL 3.0.1: install
-the [latest WSL release](https://github.com/microsoft/WSL/releases/latest). The agent works with 2.9.13 or later.
+the [latest WSL release](https://github.com/microsoft/WSL/releases/latest). The agent works with 3.0.0 or later;
+building on an agent from the sources of another machine needs WSL 3.0.3 or
+later on the agent's machine.
 
 Two ways in:
 

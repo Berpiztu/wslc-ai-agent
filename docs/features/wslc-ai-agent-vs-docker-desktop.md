@@ -41,7 +41,7 @@ either.
 | | **WSLC AI Agent** | **Docker Desktop** |
 |---|---|---|
 | What it is | A Windows agent beside `wslc`, Microsoft's container CLI built into WSL: web UI, Windows and Android apps, tray icon, REST API and MCP server | Docker's desktop application: Docker Engine in a VM, a GUI, CLI tools and Docker's add-on services |
-| Container engine | WSLC (`wslc.exe`), part of WSL since 29 Sep 2026, WSL 2.9.3 or later | Docker Engine, on a WSL 2, Hyper-V or Docker VMM backend |
+| Container engine | WSLC (`wslc.exe`), part of WSL since 29 Sep 2026, WSL 3.0.0 or later | Docker Engine, on a WSL 2, Hyper-V or Docker VMM backend |
 | Platforms | Windows (agent); browser, Windows and Android (clients) | Windows, macOS, Linux |
 | Licence | MIT, free for everyone, companies included | Free (Personal) only below 250 employees **and** $10M revenue; otherwise $9–$24 per user per month |
 | Source | Open source | Proprietary application (the Engine underneath is open source) |
