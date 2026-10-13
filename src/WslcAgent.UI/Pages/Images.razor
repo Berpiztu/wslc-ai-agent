@@ -179,7 +179,8 @@
 
                 if (before.Any(p => p.State == "running" && _pulls.FirstOrDefault(n => n.Image == p.Image)?.State != "running"))
                 {
-                    await InvokeAsync(RefreshAsync);
+                    // Drawn too: the tick after the last pull has nothing left to follow and paints nothing.
+                    await RefreshAndDrawAsync();
                 }
                 else
                 {

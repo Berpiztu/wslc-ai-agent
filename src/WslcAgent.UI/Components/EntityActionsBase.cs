@@ -43,7 +43,11 @@ public abstract class EntityActionsBase : ComponentBase
 
     protected async Task RunAsync(string what, string verb, Func<CancellationToken, Task> action)
     {
-        SetBusy(true, verb);
+        // The row as it is when the verb begins. By its end the list has been read again, and
+        // this component may be drawing another row (the one that stood after a row removed):
+        // the mark comes off the row it was put on, or that row turned for good.
+        var key = Key;
+        SetBusy(key, true, verb);
         using var work = Activity.Begin($"{VerbWords.Gerund(verb)} {what}");
         try
         {
@@ -57,7 +61,7 @@ public abstract class EntityActionsBase : ComponentBase
         }
         finally
         {
-            SetBusy(false);
+            SetBusy(key, false);
         }
     }
 
@@ -80,16 +84,16 @@ public abstract class EntityActionsBase : ComponentBase
         }
     }
 
-    private void SetBusy(bool busy, string verb = "")
+    private void SetBusy(string key, bool busy, string verb = "")
     {
         Busy = busy;
         if (busy)
         {
-            Rows.Begin(Key, verb);
+            Rows.Begin(key, verb);
         }
         else
         {
-            Rows.End(Key);
+            Rows.End(key);
         }
     }
 }

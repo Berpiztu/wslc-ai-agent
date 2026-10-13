@@ -408,6 +408,22 @@ public abstract class ListPageBase<TItem> : ComponentBase, IDisposable
 
     protected Task RefreshAsync() => RefreshAsync(polling: false);
 
+    /// <summary>
+    /// The list read again and drawn, for whoever asks from outside an event
+    /// of the screen: a loop that follows a job, a service going through a
+    /// project's containers. A click draws the page when its handler ends; a
+    /// loop draws nothing by itself, and a read that was not drawn left on
+    /// screen what had been painted last, for as long as nothing else drew:
+    /// the ring of a job that was over, still turning, or whole at 100 %,
+    /// until the next reading of the list. Slow answers (an agent far away)
+    /// made that the usual end of a job and not the odd one.
+    /// </summary>
+    protected Task RefreshAndDrawAsync() => InvokeAsync(async () =>
+    {
+        await RefreshAsync();
+        StateHasChanged();
+    });
+
     /// <summary>A read was asked for while one was under way: it happens as soon as that one ends.</summary>
     private bool _readAgain;
 

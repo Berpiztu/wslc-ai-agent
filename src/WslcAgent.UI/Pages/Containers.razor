@@ -739,11 +739,7 @@
     /// green, or stopped and no longer so) before the verb goes on to the
     /// next, and the project is not through before its last one shows it.
     /// </summary>
-    private Task ReadForVerbsAsync() => InvokeAsync(async () =>
-    {
-        await RefreshAsync();
-        StateHasChanged();
-    });
+    private Task ReadForVerbsAsync() => RefreshAndDrawAsync();
 
     /// <summary>The pull this container's image update waits for, while it does; one not listed yet is about to start.</summary>
     private ImagePullState? UpdateOf(ContainerSummary row) =>
@@ -828,7 +824,8 @@
                     || Ended(launches, _launches, l => l.Id, l => l.Done)
                     || _launches.Any(now => launches.All(before => before.Id != now.Id)))
                 {
-                    await InvokeAsync(RefreshAsync);
+                    // Drawn too: the tick after the last job has nothing left to follow and paints nothing.
+                    await RefreshAndDrawAsync();
                 }
                 else
                 {

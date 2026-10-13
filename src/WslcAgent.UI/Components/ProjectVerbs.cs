@@ -364,12 +364,18 @@ public sealed class ProjectVerbs(WslcAgentApi api, ActivityLine line, BusyRows r
         }
         finally
         {
-            if (ReadList is { } read)
+            try
             {
-                await read();
+                if (ReadList is { } read)
+                {
+                    await read();
+                }
             }
-
-            rows.End(member.Id);
+            finally
+            {
+                // Whatever the reading comes to: a container left marked turns for good.
+                rows.End(member.Id);
+            }
         }
     }
 
