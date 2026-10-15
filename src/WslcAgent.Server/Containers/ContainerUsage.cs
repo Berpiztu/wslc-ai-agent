@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using WslcAgent.ApiClient;
 using WslcAgent.Server.Wslc;
 
 namespace WslcAgent.Server.Containers;

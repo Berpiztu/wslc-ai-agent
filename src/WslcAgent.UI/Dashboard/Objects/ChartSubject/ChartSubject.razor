@@ -1,6 +1,6 @@
 @* The name of what the charts beside it show (the first line of the
    Charts card), as the subject's picker names
-   it: Host, or the container's own name. Its subject is its property, chosen
+   it: Host, the project's name with -compose after it, or the container's own name. Its subject is its property, chosen
    once on the card with the charts' (ChartObject); it opens nothing. *@
 @namespace WslcAgent.UI.Dashboard.Objects
 @using Berpiztu.Dashboard.Catalogue
@@ -18,6 +18,8 @@
 
     public override bool Opens => false;
 
-    /// <summary>Host, the container's name, or a dash while its container is not known yet.</summary>
-    private string Name => Source == SubjectSourceFamily.Host ? "Host" : Container?.Name ?? "—";
+    /// <summary>Host, the project's name, the container's name, or a dash while its container is not known yet.</summary>
+    private string Name => Source == SubjectSourceFamily.Host ? "Host"
+        : Project is { } project ? ProjectRow.Titled(project)
+        : Container?.Name ?? "—";
 }

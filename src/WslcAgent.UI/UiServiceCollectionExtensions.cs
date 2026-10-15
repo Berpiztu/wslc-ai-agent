@@ -100,7 +100,8 @@ public static class UiServiceCollectionExtensions
         services.AddScoped<ContainerSourceFamily>();
         services.AddScoped<ISourceFamily>(provider => provider.GetRequiredService<ContainerSourceFamily>());
         services.AddScoped<ISourceFamily, SubjectSourceFamily>();
-        services.AddScoped<ISourceFamily, ProjectSourceFamily>();
+        services.AddScoped<ProjectSourceFamily>();
+        services.AddScoped<ISourceFamily>(provider => provider.GetRequiredService<ProjectSourceFamily>());
         services.AddScoped<ICardCompanions, ProjectContainerCards>();
         services.AddScoped<ISourceFamily, ImageSourceFamily>();
         services.AddScoped<ISourceFamily, VolumeSourceFamily>();
@@ -117,6 +118,7 @@ public static class UiServiceCollectionExtensions
         services.AddScoped<TransferRows>();
         services.AddScoped<TransferCardFilters>();
         services.AddScoped<ContainerStatsReads>();
+        services.AddScoped<ProjectStatsReads>();
         services.AddScoped<HostOverviewRead>();
         services.AddScoped<HostRuntimeRead>();
         services.AddScoped<HostDiskRead>();

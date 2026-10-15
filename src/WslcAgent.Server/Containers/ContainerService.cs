@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using WslcAgent.ApiClient;
 using WslcAgent.ApiClient.Contracts;
 using WslcAgent.Mcp;
 using WslcAgent.Server.Projects;

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using WslcAgent.ApiClient;
 using WslcAgent.Server.Containers;
 using WslcAgent.Server.Networks;
 using WslcAgent.Server.Projects;

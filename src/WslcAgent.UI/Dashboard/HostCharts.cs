@@ -18,7 +18,7 @@ public sealed record HostChartData(
 /// <summary>
 /// The four charts — CPU, memory, disk, network — each worked out once from
 /// the history its read keeps: the host's, or a container's, as its Stats
-/// tab does. A chart object draws it,
+/// tab does, or a project's, its containers added up. A chart object draws it,
 /// and the legend and the summary of the same chart and subject write their
 /// lines and values from the same.
 /// </summary>
@@ -52,8 +52,8 @@ public static class HostCharts
             NetworkActivity(io.Value)),
     };
 
-    /// <summary>A container's chart of this key, as its Stats tab draws it: its memory's axis grows to the container's limit.</summary>
-    public static HostChartData Of(string chart, ContainerStatsRead read)
+    /// <summary>A container's chart of this key, as its Stats tab draws it, or a project's (<see cref="ProjectStatsRead"/>): its memory's axis grows to the limit.</summary>
+    public static HostChartData Of(string chart, SampledRead<TimedStats> read)
     {
         var history = read.History.Select(sample => sample.Stats).ToList();
         long[] times = [.. read.History.Select(sample => sample.Timestamp)];

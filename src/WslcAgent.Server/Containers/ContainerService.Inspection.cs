@@ -1,4 +1,5 @@
 using System.Text.Json;
+using WslcAgent.ApiClient;
 using WslcAgent.ApiClient.Contracts;
 using WslcAgent.Server.Wslc;
 

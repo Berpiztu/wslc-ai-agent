@@ -1,9 +1,13 @@
 using System.Globalization;
-using WslcAgent.ApiClient;
 
-namespace WslcAgent.Server.Containers;
+namespace WslcAgent.ApiClient;
 
-/// <summary>Reads the human strings <c>wslc stats</c> prints back into numbers, for the page aggregate.</summary>
+/// <summary>
+/// Reads the human strings <c>wslc stats</c> prints back into numbers: the
+/// agent's for the page aggregate and a container's stats, a client's for
+/// what a row of the containers' list says (a project's charts on the
+/// dashboard add its containers' up).
+/// </summary>
 public static class StatsParsing
 {
     private static readonly (string Suffix, double Factor)[] Units =
