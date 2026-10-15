@@ -1,20 +1,66 @@
-@* A Compose project's containers: what its card in the Containers list says
-   in its body, their names a line each (ProjectMembers), as one object; its
-   CPU and memory dials are objects of their own. It fills its cells as the
-   card's body does, and its type size steps its lines. *@
+@* A Compose project's containers as a table, a row each in the order the
+   agent first knew them: the tables' dot (green while it runs, pulsing while
+   something is done to it), its service and its container, its status as
+   wslc says it (how long it has been up), its ports (a click opens them, as
+   in its row), and its CPU and memory, the figures at the right as in every
+   table's columns of numbers. One that is not running is written fainter,
+   one that failed in the error colour, with why in its tooltip. It is the
+   Recent events table's shape (wslc-dash-table): the columns' titles stay
+   and the rows scroll, across too when the object is narrower than they
+   are; its type size steps it. Its columns' titles and its rows are parts,
+   each with its own colour, weight, size, ground and alignment. The
+   project's dials are objects of their own. *@
 @namespace WslcAgent.UI.Dashboard.Objects
 @using Berpiztu.Dashboard.Catalogue
 @using Berpiztu.Dashboard.Model
 @inherits ProjectObject
-@attribute [DashboardObject("wslc.project-details", "Project containers", Group = "Project", Subgroup = "User", Icon = Icons.Material.Filled.Article, Source = ProjectSourceFamily.FamilyKey, Columns = 12, Rows = 6, Fills = true, Horizontal = HorizontalAlign.Left, Vertical = VerticalAlign.Top, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both, CardOnly = true)]
+@attribute [DashboardObject("wslc.project-details", "Project containers", Group = "Project", Subgroup = "User", Icon = Icons.Material.Filled.TableRows, Source = ProjectSourceFamily.FamilyKey, Columns = 12, Rows = 6, Fills = true, Horizontal = HorizontalAlign.Left, Vertical = VerticalAlign.Top, Anchor = Berpiztu.Dashboard.Model.HorizontalAnchor.Both, CardOnly = true)]
+@attribute [DashboardObjectPart("head", "Columns", Bold = true, Box = true)]
+@attribute [DashboardObjectPart("rows", "Rows", Box = true)]
 
 @if (Head is not null)
 {
-    <div class="@SectionClass("wslc-card-part-details")">
-        <EntityCardPart>
-            <MudCardContent>
-                <ProjectMembers Members="Members" />
-            </MudCardContent>
-        </EntityCardPart>
+    <div class="@($"{TypeClass} wslc-dash-table")">
+        <div class="wslc-dash-table-box">
+            <MudSimpleTable Dense="true" Hover="true" FixedHeader="true">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Service</th>
+                        <th>Container</th>
+                        <th>Status</th>
+                        <th>Ports</th>
+                        <th class="wslc-col-num">CPU</th>
+                        <th class="wslc-col-num">Memory</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var member in Members)
+                    {
+                        @* MudSimpleTable sets each row's colour to inherit, over a class on the row: the tone goes on its cells. *@
+                        var tone = Tone(member);
+                        <tr @key="member.Id" title="@(member.HasFailed ? member.Failure : null)">
+                            <td><StateDot Active="member.IsRunning" Title="running" Key="@member.Id" Working="@(member.IsRecreating || member.IsUpdating)" /></td>
+                            <td class="@($"text-nowrap {tone}")">@Readings.Dash(member.Service)</td>
+                            <td class="@($"text-nowrap {tone}")">@member.Name</td>
+                            <td class="@($"text-nowrap {tone}")">@member.Status</td>
+                            <td class="text-nowrap"><PortsLink Ports="member.Ports" Container="@member.Id" Publications="member.Published" /></td>
+                            <td class="@($"wslc-col-num text-nowrap {tone}")">@(member.IsRunning ? Readings.Dash(member.CpuPercent) : "—")</td>
+                            <td class="@($"wslc-col-num text-nowrap {tone}")">@Memory(member)</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </div>
     </div>
+}
+
+@code {
+    /// <summary>One that is not running fainter, one that failed in the error colour; a running one as the table's own.</summary>
+    private static string Tone(ContainerSummary member) =>
+        member.HasFailed ? "mud-error-text" : member.IsRunning ? "" : "mud-text-secondary";
+
+    /// <summary>Its share and what that is ("0.7% · 52MiB"); a dash while it is not running, when there is nothing to measure.</summary>
+    private static string Memory(ContainerSummary member) =>
+        member.IsRunning && member.MemPercent.Length > 0 ? $"{member.MemPercent} · {Readings.MemoryUsed(member.MemUsage)}" : "—";
 }

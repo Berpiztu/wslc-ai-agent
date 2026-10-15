@@ -4149,12 +4149,33 @@
     border: 2px solid var(--wslc-bracket);
 }
 
+/* On the dashboard the line is three times the list's, so a project going
+   from stopped to running is seen across the room: 6px, drawn as a ring over
+   the frame's own 2px and 4px out past it. Out past it and not in, because
+   the card's pieces keep clear of its line by its own 2px
+   (DashboardDesigner.MemberKeep); a line grown inward would run under them.
+   The ring is placed from the frame's padding box, inside its 2px, hence
+   6px out. It takes no press. */
+.bz-dash-group.bz-dash-bordered.wslc-bracket::before {
+    content: "";
+    position: absolute;
+    inset: -6px;
+    border: 6px solid var(--wslc-bracket);
+    border-radius: calc(var(--mud-default-borderradius) + 4px);
+    pointer-events: none;
+}
+
 .bz-dash-group.bz-dash-bordered.wslc-bracket.wslc-bracket-running {
     --wslc-bracket: var(--mud-palette-success);
 }
 
 .bz-dash-group.bz-dash-bordered.wslc-bracket.wslc-bracket-partial {
     border-image: repeating-linear-gradient(135deg, var(--mud-palette-success) 0 6px, var(--mud-palette-primary) 6px 12px) 2;
+}
+
+/* Some running: the ring in stripes of the two, three times the list's too. */
+.bz-dash-group.bz-dash-bordered.wslc-bracket.wslc-bracket-partial::before {
+    border-image: repeating-linear-gradient(135deg, var(--mud-palette-success) 0 12px, var(--mud-palette-primary) 12px 24px) 6;
 }
 
 .wslc-dash-section.wslc-bracket-waiting .mud-card-header,
@@ -5035,7 +5056,7 @@
    taking what the summary and the filter leave. */
 .wslc-dash-log,
 .wslc-dash-transfers,
-.wslc-dash-events {
+.wslc-dash-table {
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -5050,11 +5071,11 @@
     overflow: auto;
 }
 
-/* Recent events (SystemRecentEvents): its title, then the table filling what is left, the
-   table's own container the one thing that scrolls, so its column titles (MudSimpleTable's
-   FixedHeader, sticky in that container) stay where they are and only the events move.
-   With the box around it scrolling, the titles left with the rows. */
-.wslc-dash-events > .wslc-dash-events-box {
+/* A table as a dashboard object (Recent events, a project's containers): its title, then the
+   table filling what is left, the table's own container the one thing that scrolls, so its
+   column titles (MudSimpleTable's FixedHeader, sticky in that container) stay where they are
+   and only the rows move. With the box around it scrolling, the titles left with the rows. */
+.wslc-dash-table > .wslc-dash-table-box {
     flex: 1 1 auto;
     min-height: 0;
     display: flex;
@@ -5062,14 +5083,14 @@
     overflow: hidden;
 }
 
-.wslc-dash-events > .wslc-dash-events-box > .mud-simple-table {
+.wslc-dash-table > .wslc-dash-table-box > .mud-simple-table {
     flex: 1 1 auto;
     min-height: 0;
     display: flex;
     flex-direction: column;
 }
 
-.wslc-dash-events > .wslc-dash-events-box > .mud-simple-table > .mud-table-container {
+.wslc-dash-table > .wslc-dash-table-box > .mud-simple-table > .mud-table-container {
     flex: 1 1 auto;
     min-height: 0;
     overflow: auto;
@@ -5080,68 +5101,74 @@
    size and its part's (title, head, rows); bold title and columns by design. The cells'
    selectors are MudSimpleTable's own (table * tr > th), which set their own size and weight
    and outranked a plainer one. */
-.wslc-dash-events .wslc-dash-events-title {
+.wslc-dash-table .wslc-dash-table-title {
     font-size: calc(var(--mud-typography-subtitle2-size) * var(--wslc-dash-scale, 1) * var(--bz-part-title-scale, 1));
     font-weight: 700;
 }
 
-.wslc-dash-events .mud-simple-table table * tr > th {
+.wslc-dash-table .mud-simple-table table * tr > th {
     font-size: calc(var(--mud-typography-caption-size) * var(--wslc-dash-scale, 1) * var(--bz-part-head-scale, 1));
     font-weight: 700;
 }
 
-.wslc-dash-events .mud-simple-table table * tr > td,
-.wslc-dash-events .wslc-dash-events-empty {
+.wslc-dash-table .mud-simple-table table * tr > td,
+.wslc-dash-table .wslc-dash-table-empty {
     font-size: calc(var(--mud-typography-caption-size) * var(--wslc-dash-scale, 1) * var(--bz-part-rows-scale, 1));
+}
+
+/* A column of numbers (a project's CPU and memory) is read down its last digit, as in the
+   lists' tables: its title and its figures at the right. */
+.wslc-dash-table .mud-simple-table table * tr > .wslc-col-num {
+    text-align: right;
 }
 
 /* Each part's colour, weight, ground and alignment when the properties window sets them;
    the columns' titles and the rows are boxes (DashboardObjectPart Box). */
-.bz-part-title-color .wslc-dash-events .wslc-dash-events-title {
+.bz-part-title-color .wslc-dash-table .wslc-dash-table-title {
     color: var(--bz-part-title-color);
 }
 
-.bz-part-title-weight .wslc-dash-events .wslc-dash-events-title {
+.bz-part-title-weight .wslc-dash-table .wslc-dash-table-title {
     font-weight: var(--bz-part-title-weight);
 }
 
-.bz-part-head-color .wslc-dash-events .mud-simple-table table * tr > th {
+.bz-part-head-color .wslc-dash-table .mud-simple-table table * tr > th {
     color: var(--bz-part-head-color);
 }
 
-.bz-part-head-weight .wslc-dash-events .mud-simple-table table * tr > th {
+.bz-part-head-weight .wslc-dash-table .mud-simple-table table * tr > th {
     font-weight: var(--bz-part-head-weight);
 }
 
-.bz-part-head-background .wslc-dash-events .mud-simple-table table * tr > th {
+.bz-part-head-background .wslc-dash-table .mud-simple-table table * tr > th {
     background-color: var(--bz-part-head-background);
 }
 
-.bz-part-head-align .wslc-dash-events .mud-simple-table table * tr > th {
+.bz-part-head-align .wslc-dash-table .mud-simple-table table * tr > th {
     text-align: var(--bz-part-head-align);
 }
 
-.bz-part-head-valign .wslc-dash-events .mud-simple-table table * tr > th {
+.bz-part-head-valign .wslc-dash-table .mud-simple-table table * tr > th {
     vertical-align: var(--bz-part-head-valign);
 }
 
-.bz-part-rows-color :is(.wslc-dash-events .mud-simple-table table * tr > td, .wslc-dash-events .wslc-dash-events-empty) {
+.bz-part-rows-color :is(.wslc-dash-table .mud-simple-table table * tr > td, .wslc-dash-table .wslc-dash-table-empty) {
     color: var(--bz-part-rows-color);
 }
 
-.bz-part-rows-weight :is(.wslc-dash-events .mud-simple-table table * tr > td, .wslc-dash-events .wslc-dash-events-empty) {
+.bz-part-rows-weight :is(.wslc-dash-table .mud-simple-table table * tr > td, .wslc-dash-table .wslc-dash-table-empty) {
     font-weight: var(--bz-part-rows-weight);
 }
 
-.bz-part-rows-background .wslc-dash-events .mud-simple-table table * tr > td {
+.bz-part-rows-background .wslc-dash-table .mud-simple-table table * tr > td {
     background-color: var(--bz-part-rows-background);
 }
 
-.bz-part-rows-align :is(.wslc-dash-events .mud-simple-table table * tr > td, .wslc-dash-events .wslc-dash-events-empty) {
+.bz-part-rows-align :is(.wslc-dash-table .mud-simple-table table * tr > td, .wslc-dash-table .wslc-dash-table-empty) {
     text-align: var(--bz-part-rows-align);
 }
 
-.bz-part-rows-valign .wslc-dash-events .mud-simple-table table * tr > td {
+.bz-part-rows-valign .wslc-dash-table .mud-simple-table table * tr > td {
     vertical-align: var(--bz-part-rows-valign);
 }
 

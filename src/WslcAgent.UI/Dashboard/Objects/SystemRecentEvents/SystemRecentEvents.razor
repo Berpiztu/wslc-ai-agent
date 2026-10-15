@@ -19,18 +19,18 @@
 @inject EventStatusRead Status
 @inject AgentChanges Changes
 
-<div class="@($"{TypeClass} wslc-dash-events")">
+<div class="@($"{TypeClass} wslc-dash-table")">
     @if (Shows("title"))
     {
-        <div class="wslc-dash-events-title">Recent events</div>
+        <div class="wslc-dash-table-title">Recent events</div>
     }
     @if (Events.Value is not { Count: > 0 } shown)
     {
-        <div class="wslc-dash-events-empty mud-text-secondary">@EmptyText</div>
+        <div class="wslc-dash-table-empty mud-text-secondary">@EmptyText</div>
     }
     else
     {
-        <div class="wslc-dash-events-box">
+        <div class="wslc-dash-table-box">
             <MudSimpleTable Dense="true" Hover="true" FixedHeader="true">
                 <thead><tr><th>Time</th><th>Kind</th><th>Event</th><th>Name</th></tr></thead>
                 <tbody>
