@@ -4,13 +4,14 @@ Part 1 is the analysis: what each product does, feature by feature, with
 sources. Part 2 is the article for X, built only on what Part 1 verifies.
 
 Facts as of 9 October 2026; what is said of Compose, as of 10 October 2026,
-when the agent began to run Compose files.
+when the agent began to run Compose files; what is said of building on
+another machine, as of 13 October 2026.
 
 ---
-
+ 
 # Part 1 — Analysis
 
-## What only WSLC AI Agent has
+## What only WSLC AIAgent has
 
 None of this is in Docker Desktop, and the first seven are not in plain `wslc`
 either.
@@ -89,6 +90,7 @@ that agent runs, with the destructive part off until you allow it.
 | **Edit an existing container**: change its settings and recreate it, rehearsed under another name, old one restored if it fails | **Yes** | — (remove it and run it again, or use Compose) |
 | **Update an image in place**: pull a new version and recreate the container with everything it had, keeping the old one if the new one fails | **Yes** | — |
 | Build, tag, push, save, load, import | Yes | Yes (Build Cloud is extra) |
+| Build on another machine, from the sources on yours | **Yes, by the agent**: `wslc` reaches no engine but its own machine's, so the agent on the other machine does it. `wslc-compose --agent https://server … up -d --build` sends the build context to it, only the files it does not have yet, and it builds there with `wslc build -` (WSL 3.0.3 on that machine); the Compose window does the same from a folder of your device. Over the agent's own HTTPS API and token | Yes: the Docker client pointed at a remote engine (a Docker context) builds there from your local sources, and BuildKit transfers only the files that changed |
 | Publish a version (`registry/owner/app:1.4` plus `latest`, pushed) | Yes, one step | Through the CLI |
 | Logs, live stats, shell, files inside a container | Yes, plus files inside **images and volumes** | Yes |
 | File transfers that go on after the view closes | Yes, owned by the agent and seen by every client | — |
@@ -164,6 +166,8 @@ The 18 points at the top of this part: [What only WSLC AI Agent has](#what-only-
   [Gordon update](https://www.docker.com/blog/gordon-dockers-ai-agent-just-got-an-update/)
 - MCP Toolkit: [docs.docker.com](https://docs.docker.com/ai/mcp-catalog-and-toolkit/toolkit/)
 - Docker Desktop on Windows: [docs.docker.com/desktop/setup/install/windows-install](https://docs.docker.com/desktop/setup/install/windows-install/)
+- Building on a remote Docker engine: [Docker contexts](https://docs.docker.com/engine/manage-resources/contexts/),
+  [BuildKit](https://docs.docker.com/build/buildkit/) ("Incrementally transfer only the changed files in your build context between builds")
 - WSLC AI Agent: [features](../features.md), [README](../../README.md)
 
 ---
@@ -259,6 +263,11 @@ back after a reboot, as they would on Docker.
   `wslc-compose up -d` from a terminal, with Compose's own command line, or
   the same file from the web and the apps as a project: one group of
   containers, started, stopped and read as one.
+- **Build on your server from your desk**: `wslc-compose --agent
+  https://server … up -d --build` sends your sources to the agent there,
+  only the files it does not have yet, and builds where the containers will
+  run. Docker does this with a context; on WSLC, where `wslc` only reaches
+  its own machine, the agent does.
 - A **network map**, **VHD volumes**, **disk compaction**, files inside images
   and volumes, transfers that keep running, and the history of every command.
 

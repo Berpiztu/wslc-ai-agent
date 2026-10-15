@@ -117,10 +117,14 @@ answer it; `declined: true` means they said no — say so and stop.
    "delete it" that repeats the original request) is not an answer: ask again
    and wait.
 
-Rules the agent enforces: a token works **once**, expires after **five
+Rules the agent enforces: a token works **once**, expires after **ten
 minutes**, and only for the action and target it was issued for — a token
-from "remove container a" does nothing for "remove container b". If the user
-says no, or changes the target, do nothing and let the token die.
+from "remove container a" does nothing for "remove container b". A token sent
+back **less than ten seconds** after it was issued is refused, sooner than a
+person could have read the question and answered, and the refusal starts the
+ten seconds again: calling again at once never gets through, so do not retry,
+ask. If the user says no, or changes the target, do nothing and let the token
+die.
 
 - **Before offering any deletion, check your tool list.** The switch
   (the agent's Settings → MCP server) takes effect at once on the running agent, so

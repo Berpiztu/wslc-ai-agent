@@ -25,7 +25,8 @@ products are **WSLC AI Agent** (the agent, `wslc-ai-agent.exe`) and
   the clients as a project: checked line by line before anything runs
   (taken, converted or not supported), then started, stopped and watched as
   one group of containers, with one log
-  ([docs/compose/wslc-compose.md](docs/compose/wslc-compose.md)).
+  ([docs/compose/wslc-compose.md](docs/compose/wslc-compose.md)). A first
+  project in ten minutes: [the counter](docs/compose/examples/counter/README.md).
 - **New: build on another machine, from the sources on yours (WSL 3.0.3).**
   `wslc-compose --agent https://server.example.com --token … up -d --build` packs the
   build context as a tar archive, sends it to the agent, and the agent

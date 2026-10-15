@@ -6,7 +6,8 @@ asks the agent over [`/api/v1`](../api-v1.md) and prints what the agent
 answers. It decides nothing itself, so a project brought up from a terminal
 is the same project the Containers page shows, with its group, its line and
 its verbs. How a Compose file becomes containers on WSLC is in
-[emulate.md](emulate.md).
+[emulate.md](emulate.md). A first project, step by step, from the file to
+another machine: [the counter](examples/counter/README.md).
 
 Its command line is Compose's own, so a script written for it needs its
 first word changed and nothing else:
