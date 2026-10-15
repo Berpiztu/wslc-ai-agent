@@ -423,6 +423,8 @@
       "w": 16,
       "h": 8,
       "size": "small",
+      "x": 2,
+      "y": 12,
       "elevation": 1
     },
     "wslc.system-events": {
@@ -460,6 +462,11 @@
       "size": "medium",
       "x": 11,
       "y": 0
+    },
+    "wslc.project-card": {
+      "w": 53,
+      "h": 33,
+      "size": "medium"
     }
   },
   "portrait": {
