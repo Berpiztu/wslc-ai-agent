@@ -199,15 +199,17 @@
    painted once: a phone turned is repainted by the
    browser before the page hears it turn and shows the other view, and the
    view it leaves would be seen for that moment in the new shape. The rule
-   is the browser's, so it holds from the very paint the turn makes. */
+   is the browser's, so it holds from the very paint the turn makes. Not in
+   design's preview (bz-dash-previewing): there the view is the one chosen to
+   be designed, whatever the screen's way up, and it is the one to be seen. */
 @media (orientation: portrait) {
-    .bz-dash-fitted[data-bz-view="landscape"] .bz-dash-canvas {
+    .bz-dash-fitted:not(.bz-dash-previewing)[data-bz-view="landscape"] .bz-dash-canvas {
         visibility: hidden;
     }
 }
 
 @media (orientation: landscape) {
-    .bz-dash-fitted[data-bz-view="portrait"] .bz-dash-canvas {
+    .bz-dash-fitted:not(.bz-dash-previewing)[data-bz-view="portrait"] .bz-dash-canvas {
         visibility: hidden;
     }
 }
@@ -539,6 +541,18 @@
 
 .bz-dash-designing .bz-dash-group.bz-dash-selected {
     border: 2px solid var(--mud-palette-success);
+}
+
+/* Previewed (DashboardDesigner.Previewing), the view drawn as it will be seen:
+   what is selected, a card or a piece of one, is marked as in design, so the
+   properties are seen to change it. */
+.bz-dash-previewing .bz-dash-group.bz-dash-selected {
+    border: 2px solid var(--mud-palette-success);
+}
+
+.bz-dash-previewing .bz-dash-object.bz-dash-selected {
+    outline: 2px solid var(--mud-palette-success);
+    outline-offset: -2px;
 }
 
 .bz-dash-designing .bz-dash-group.bz-dash-blocked {

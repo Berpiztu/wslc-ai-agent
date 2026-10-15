@@ -65,17 +65,38 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
     /// <summary>The groups chosen, as the dashboard holds them.</summary>
     public IReadOnlyList<DashboardGroup> ChosenGroups => [.. _chosen.Select(Layout.FindGroup).OfType<DashboardGroup>()];
 
-    /// <summary>Several chosen, objects standing alone or groups: what Group makes one group of; a card whose pieces live only in it melts into no other.</summary>
-    public bool CanGroup => _chosen.Count >= 2 && ChosenObjects.All(o => o.Group is null && !CardOnly(o)) && !ChosenGroups.Any(Closed);
+    /// <summary>
+    /// Several chosen that Group makes one group of: objects standing alone or
+    /// groups, a card whose pieces live only in it melting into no other; or
+    /// pieces of one card, any of them (<see cref="InOneCard"/>), made a group
+    /// inside it.
+    /// </summary>
+    public bool CanGroup => _chosen.Count >= 2
+        && (InOneCard is not null || (ChosenObjects.All(o => o.Group is null && !CardOnly(o)) && !ChosenGroups.Any(Closed)));
 
-    /// <summary>The groups chosen that can be ungrouped: every one but a card whose pieces live only in it.</summary>
-    public bool CanUngroup => ChosenGroups.Any(group => !Closed(group));
+    /// <summary>The card every one chosen is a piece of, when only objects of one card are chosen; null otherwise.</summary>
+    private string? InOneCard =>
+        _chosen.Count >= 2 && ChosenObjects.Count == _chosen.Count && ChosenObjects.Select(o => o.Group).Distinct().ToList() is [{ } card] ? card : null;
+
+    /// <summary>The groups chosen that can be ungrouped: a group of pieces inside a card, its pieces going back to the card, and on the page every one but a card whose pieces live only in it.</summary>
+    public bool CanUngroup => ChosenGroups.Any(Ungroupable);
+
+    /// <summary>
+    /// A group inside a card that the user or its template made of the card's
+    /// pieces (no template of its own) is ungrouped back into the card; a card
+    /// made already inside another (a container's in a project's) is not.
+    /// </summary>
+    private bool Ungroupable(DashboardGroup group) => group.Parent is null ? !Closed(group) : group.Template is null;
 
     /// <summary>An object of a kind that lives only in its card.</summary>
     public bool CardOnly(ObjectInstance o) => cardOnly?.Invoke(o.Type) == true;
 
-    /// <summary>A card holding a piece that lives only in it, which takes no other object.</summary>
-    public bool Closed(DashboardGroup group) => Layout.Members(group.Id).Any(CardOnly);
+    /// <summary>
+    /// A card holding a piece that lives only in it: it is never ungrouped,
+    /// and what it reads is what those pieces read. It takes other objects
+    /// and cards as any group does; they stand in it, and leave it, as theirs.
+    /// </summary>
+    public bool Closed(DashboardGroup group) => Layout.Pieces(group.Id).Any(CardOnly);
 
     public bool CanUndo => _before is not null;
 
@@ -212,18 +233,23 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
     /// once for them all. Refused where the card would not fit.
     /// </summary>
     /// <param name="card">The card as it is born (<see cref="DashboardTemplates.Born"/>): its objects from its top-left cell, and its size.</param>
-    public async Task<bool> AddCardAsync(BornCard card, int x, int y)
+    /// <param name="parent">The card on the page it is dropped in, where it stands as a card of its own (<see cref="DashboardGroup.Parent"/>); null on the page.</param>
+    public async Task<bool> AddCardAsync(BornCard card, int x, int y, string? parent = null)
     {
         var groupId = Guid.NewGuid().ToString("N");
+        var group = card.Framed(groupId, x, y) with { Parent = parent };
+        // Its groups of its own pieces, each under an id of its own, and each piece in its own.
+        var inner = (card.Inner ?? []).Select(born => PiecesGroup(Guid.NewGuid().ToString("N"), born.Box with { X = x + born.X, Y = y + born.Y }, groupId)
+            with { Anchor = born.Anchor }).ToList();
+        var holderOf = (card.Inner ?? []).SelectMany((born, i) => born.Objects.Select(o => (o, inner[i].Id))).ToDictionary(pair => pair.o, pair => pair.Id);
         IReadOnlyList<ObjectInstance> members =
-            [.. card.Objects.Select(o => o with { Id = Guid.NewGuid().ToString("N"), X = x + o.X, Y = y + o.Y, Group = groupId })];
-        var group = card.Framed(groupId, x, y);
-        if (!Layout.FitsGroup(group, members))
+            [.. card.Objects.Select(o => o with { Id = Guid.NewGuid().ToString("N"), X = x + o.X, Y = y + o.Y, Group = holderOf.GetValueOrDefault(o.Id, groupId) })];
+        if (!Layout.FitsGroup(group))
         {
             return false;
         }
 
-        await ChangeAsync(Layout.With(group, members));
+        await ChangeAsync(inner.Aggregate(Layout.With(group, members), (layout, born) => layout.With(born, [])));
         SelectGroup(groupId);
         return true;
     }
@@ -348,13 +374,13 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
     /// <summary>
     /// An object standing alone, carried into a group's frame and let go
     /// there: it joins the group where the user put it —<paramref name="placed"/> is it at that place, as a member — and
-    /// the group is taken whole. Refused — false, nothing changed — where it
-    /// would take cells another object stands on, or where the group is a card
-    /// whose pieces live only in it.
+    /// the group is taken whole. A card takes it as any group does, beside
+    /// its own pieces. Refused — false, nothing changed — where it would take
+    /// cells another object stands on, or where it lives only in its own card.
     /// </summary>
     public async Task<bool> JoinAsync(ObjectInstance placed)
     {
-        if (placed.Group is not { } groupId || Layout.FindGroup(groupId) is not { } group || Closed(group) || CardOnly(placed) || !Layout.Fits(placed))
+        if (placed.Group is not { } groupId || Layout.FindGroup(groupId) is null || CardOnly(placed) || !Layout.Fits(placed))
         {
             return false;
         }
@@ -379,7 +405,8 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
         }
 
         var next = Layout.With(moved);
-        if (next.Members(groupId).Count <= 1)
+        // A card stays a card: what is left of it is its own pieces, never an object set loose.
+        if (next.Members(groupId) is { Count: <= 1 } left && !left.Any(CardOnly))
         {
             next = next.Ungrouped(groupId);
         }
@@ -391,8 +418,9 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
 
     /// <summary>
     /// A group moved or resized: its objects go with it by as much as its
-    /// corner moved. Refused — false, nothing changed — when it would leave
-    /// one of them out, or take cells that are not its own.
+    /// corner moved. Made smaller than what it holds, what is left outside
+    /// stays where it is, its own still. Refused — false, nothing changed —
+    /// only where it would take cells that are not its own, or pass the canvas.
     /// </summary>
     public Task<bool> SetGroupAsync(DashboardGroup changed)
     {
@@ -410,7 +438,7 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
         var (dx, dy) = (changed.X - current.X, changed.Y - current.Y);
         var members = Moved(changed.Id, dx, dy);
         var cards = MovedCards(changed.Id, dx, dy);
-        return Layout.FitsGroup(changed, members, cards)
+        return Layout.FitsGroup(changed)
             ? ChangeAsync(cards.Aggregate(Layout.With(changed, members), (layout, card) => layout.With(card, Moved(card.Id, dx, dy))))
             : Task.FromResult(false);
     }
@@ -427,9 +455,17 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
         return ReferenceEquals(next, Layout) ? Task.CompletedTask : ChangeAsync(next);
     }
 
-    /// <summary>The cards inside a group as they stand once it is moved by <paramref name="dx"/>, <paramref name="dy"/>.</summary>
+    /// <summary>The cards inside a group, however deep, as they stand once it is moved by <paramref name="dx"/>, <paramref name="dy"/>.</summary>
     public IReadOnlyList<DashboardGroup> MovedCards(string groupId, int dx, int dy) =>
-        [.. Layout.Cards(groupId).Select(card => card with { X = card.X + dx, Y = card.Y + dy })];
+        [.. Layout.Descendants(groupId).Select(card => card with { X = card.X + dx, Y = card.Y + dy })];
+
+    /// <summary>
+    /// A group made of a card's own pieces, inside that card: no look of its
+    /// own — the card's ground showing through it, no line, flat — so the
+    /// pieces look as they did, and moved, wrapped and anchored as one.
+    /// </summary>
+    private static DashboardGroup PiecesGroup(string id, CellBox box, string card) =>
+        new(id, box.X, box.Y, box.W, box.H, Background: ThemeColor.Inherited, Elevation: 0, Border: ThemeColor.Transparent, Parent: card);
 
     /// <summary>The objects of a group as they stand once it is moved by <paramref name="dx"/>, <paramref name="dy"/>.</summary>
     public IReadOnlyList<ObjectInstance> Moved(string groupId, int dx, int dy) =>
@@ -460,6 +496,11 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
             return false;
         }
 
+        if (InOneCard is { } card)
+        {
+            return await GroupInCardAsync(card);
+        }
+
         var id = Guid.NewGuid().ToString("N");
         var groups = ChosenGroups;
         var members = ChosenObjects.Concat(groups.SelectMany(g => Layout.Members(g.Id)))
@@ -468,7 +509,7 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
         var frame = CellBox.Around(members.Select(o => o.Box).Concat(groups.Select(g => g.Box)));
         var group = new DashboardGroup(id, frame.X, frame.Y, frame.W, frame.H);
         var next = groups.Aggregate(Layout, (layout, old) => layout.Ungrouped(old.Id)).With(group, members);
-        if (!next.FitsGroup(group, members))
+        if (!next.FitsGroup(group))
         {
             return false;
         }
@@ -478,10 +519,37 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
         return true;
     }
 
-    /// <summary>Ungroup (Ctrl+Shift+G) on the groups chosen: their frames go, and their objects stand alone where they are, chosen together; a card whose pieces live only in it stays whole.</summary>
+    /// <summary>
+    /// Pieces of one card made a group inside it (<see cref="PiecesGroup"/>):
+    /// a frame round them, and they stand in it; the group taken. Refused —
+    /// false, nothing changed — when the frame would take the cells of
+    /// another piece of the card, or of a card inside it.
+    /// </summary>
+    private async Task<bool> GroupInCardAsync(string card)
+    {
+        var id = Guid.NewGuid().ToString("N");
+        var members = ChosenObjects.Select(o => o with { Group = id }).ToList();
+        var group = PiecesGroup(id, CellBox.Around(members.Select(o => o.Box)), card);
+        var next = Layout.With(group, members);
+        if (!next.FitsGroup(group))
+        {
+            return false;
+        }
+
+        await ChangeAsync(next);
+        SelectGroup(id);
+        return true;
+    }
+
+    /// <summary>
+    /// Ungroup (Ctrl+Shift+G) on the groups chosen: their frames go, and their
+    /// objects stand where they are, chosen together — alone on the page, or
+    /// back in the card a group of its pieces stood in; a card whose pieces
+    /// live only in it stays whole.
+    /// </summary>
     public async Task<bool> UngroupAsync()
     {
-        var groups = ChosenGroups.Where(group => !Closed(group)).ToList();
+        var groups = ChosenGroups.Where(Ungroupable).ToList();
         if (groups.Count == 0)
         {
             return false;

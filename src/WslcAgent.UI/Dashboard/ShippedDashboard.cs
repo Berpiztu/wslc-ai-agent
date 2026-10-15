@@ -23,7 +23,7 @@ internal static class ShippedDashboard
         return layout with
         {
             Objects = objects,
-            Groups = [.. layout.Groups.Where(card => objects.Any(o => o.Group == card.Id))],
+            Groups = [.. layout.Groups.Where(card => objects.Any(o => layout.IsWithin(o.Group, card.Id)))],
             Status = [.. layout.Status.Where(status => objects.Any(o => o.Id == status.Object))],
         };
     }

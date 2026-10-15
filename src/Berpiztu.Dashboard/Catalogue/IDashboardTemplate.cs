@@ -47,7 +47,9 @@ public sealed record TemplateItem(string Type, int X, int Y, int W, int H, TypeS
 
 /// <summary>A card made already as it is born: its template's type, its objects, each where it stands from the card's top-left cell, and its frame's size.</summary>
 /// <param name="Frame">The card's own default in the view, whose look — its colours, its elevation, its anchor — its frame takes; none, and it takes the page's.</param>
-public sealed record BornCard(string Template, IReadOnlyList<ObjectInstance> Objects, int W, int H, ObjectDefault? Frame = null)
+/// <param name="Inner">Groups of its own pieces it is born with (a charts card's charts, each its three pieces): moved, wrapped and anchored as one inside the card.</param>
+public sealed record BornCard(string Template, IReadOnlyList<ObjectInstance> Objects, int W, int H, ObjectDefault? Frame = null,
+    IReadOnlyList<BornGroup>? Inner = null)
 {
     /// <summary>Its frame, standing at a cell under an id, as designed.</summary>
     public DashboardGroup Framed(string id, int x, int y)
@@ -55,6 +57,17 @@ public sealed record BornCard(string Template, IReadOnlyList<ObjectInstance> Obj
         var group = new DashboardGroup(id, x, y, W, H, Template: Template);
         return Frame?.On(group) ?? group;
     }
+}
+
+/// <summary>
+/// A group of a card's own pieces as the card is born: where it stands from
+/// the card's top-left cell, its size, its anchor, and its pieces by their
+/// ids in the born card.
+/// </summary>
+public sealed record BornGroup(int X, int Y, int W, int H, IReadOnlyList<string> Objects, HorizontalAnchor? Anchor = null)
+{
+    /// <summary>Its cells from the card's top-left one.</summary>
+    public CellBox Box => new(X, Y, W, H);
 }
 
 /// <summary>A card made already as it is dropped.</summary>

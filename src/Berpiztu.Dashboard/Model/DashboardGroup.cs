@@ -36,9 +36,10 @@ namespace Berpiztu.Dashboard.Model;
 /// </param>
 /// <param name="Parent">
 /// The card it stands inside, when it is a card of another's (a container's,
-/// in its project's card): that card's frame holds this one's, it goes
-/// where that card goes, and is removed with it. Null for a card on the page.
-/// A card inside another holds none itself: one level, and no more.
+/// in its project's card; one chart of a charts card, in that card): it goes
+/// where that card goes, and is removed with it, wherever in it or past it
+/// it stands. Null for a card on the page. A card inside another may hold
+/// cards itself, as deep as they are put.
 /// </param>
 /// <param name="Border">
 /// The colour of its card's line out of design (the tertiary under the

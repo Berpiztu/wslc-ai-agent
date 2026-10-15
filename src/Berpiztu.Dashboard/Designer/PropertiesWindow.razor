@@ -229,7 +229,7 @@
                       Title="Set these properties on every object of the group at once; in a card that holds cards, on theirs too, and the card's own colours, elevation, line and anchor on those cards" />
             @if (_toEvery)
             {
-                <LookProperties Document="Document" Objects="@Every(frame)" Cards="@Document.Layout.Cards(frame.Id)" Class="mt-2" />
+                <LookProperties Document="Document" Objects="@Every(frame)" Cards="@Document.Layout.Descendants(frame.Id)" Class="mt-2" />
             }
         }
         else
@@ -307,7 +307,7 @@
 
         // "Apply to every object" on a card that holds cards: what was changed of its look is
         // theirs too (a project's elevation, its containers'), each kept as it is otherwise.
-        if (_toEvery && before is not null && Document.Layout.Cards(changed.Id) is { Count: > 0 } cards)
+        if (_toEvery && before is not null && Document.Layout.Descendants(changed.Id) is { Count: > 0 } cards)
         {
             await Document.SetLooksAsync([.. cards.Select(card => card with
             {
@@ -320,9 +320,9 @@
         }
     }
 
-    /// <summary>Every object of a card: its own, and those of the cards inside it. What "Apply to every object" sets.</summary>
+    /// <summary>Every object of a card: its own, and those of the cards inside it, however deep. What "Apply to every object" sets.</summary>
     private IReadOnlyList<ObjectInstance> Every(DashboardGroup card) =>
-        [.. Document.Layout.Members(card.Id), .. Document.Layout.Cards(card.Id).SelectMany(inner => Document.Layout.Members(inner.Id))];
+        [.. Document.Layout.Members(card.Id), .. Document.Layout.Descendants(card.Id).SelectMany(inner => Document.Layout.Members(inner.Id))];
 
     /// <summary>
     /// The object selected as its kind makes it (after trying things, back to
@@ -411,9 +411,14 @@
     private IReadOnlyList<ObjectInstance> ChosenAndTheirs =>
         [.. Document.ChosenObjects, .. Document.ChosenGroups.SelectMany(group => Document.Layout.Members(group.Id))];
 
-    /// <summary>A group's objects that read a source, with their kinds.</summary>
+    /// <summary>
+    /// A group's objects that read a source, with their kinds: of a card
+    /// whose pieces live only in it, those pieces, which are what it reads;
+    /// an object put in it beside them reads its own.
+    /// </summary>
     private IEnumerable<(ObjectInstance Member, ObjectDescriptor Kind)> Readers(DashboardGroup group) =>
-        Document.Layout.Members(group.Id)
+        Document.Layout.Pieces(group.Id)
+            .Where(member => !Document.Closed(group) || Document.CardOnly(member))
             .Select(member => (Member: member, Kind: Catalogue.Find(member.Type)))
             .Where(reader => reader.Kind is { HasSource: true })
             .Select(reader => (reader.Member, reader.Kind!));

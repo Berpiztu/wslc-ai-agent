@@ -70,7 +70,9 @@
 
     /// <summary>What a card reads: the source of its objects, the first that has one; null while none is chosen.</summary>
     public static string? SourceOf(DashboardLayout layout, ObjectCatalogue catalogue, string groupId) =>
-        layout.Members(groupId)
+        layout.Pieces(groupId)
+            // The card's own pieces say it: an object put in it beside them reads something else.
+            .OrderBy(o => catalogue.Find(o.Type)?.About.CardOnly != true)
             .Select(o => catalogue.Find(o.Type) is { HasSource: true } kind ? kind.SourceOf(o) : null)
             .FirstOrDefault(source => source is { Length: > 0 });
 

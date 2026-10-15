@@ -89,6 +89,66 @@ public sealed record DashboardLayout(int Columns, IReadOnlyList<ObjectInstance> 
     public IReadOnlyList<ObjectInstance> Members(string groupId) => [.. Objects.Where(o => o.Group == groupId)];
 
     /// <summary>
+    /// Whether the group of this id is <paramref name="card"/> or stands in it,
+    /// however deep (a chart of a charts card in a project's card is the
+    /// project's); false for none.
+    /// </summary>
+    public bool IsWithin(string? groupId, string card)
+    {
+        // A loop in what a stored file says stands in what would never end: each card is looked at once.
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (var id = groupId; id is not null && seen.Add(id); id = FindGroup(id)?.Parent)
+        {
+            if (id == card)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>How deep a card stands: 0 on the page, 1 inside a card there, and so on.</summary>
+    public int Depth(DashboardGroup group)
+    {
+        var depth = 0;
+        var seen = new HashSet<string>(StringComparer.Ordinal) { group.Id };
+        for (var parent = FindGroup(group.Parent); parent is not null && seen.Add(parent.Id); parent = FindGroup(parent.Parent))
+        {
+            depth++;
+        }
+
+        return depth;
+    }
+
+    /// <summary>The card on the page the group of this id stands in, however deep, or that group itself on the page; null for none.</summary>
+    public string? TopOf(string? groupId)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var id = groupId;
+        while (id is not null && seen.Add(id) && FindGroup(id)?.Parent is { } parent)
+        {
+            id = parent;
+        }
+
+        return id;
+    }
+
+    /// <summary>Every card inside the one of this id, however deep, the cards inside them too.</summary>
+    public IReadOnlyList<DashboardGroup> Descendants(string groupId) =>
+        [.. Groups.Where(group => group.Id != groupId && IsWithin(group.Id, groupId))];
+
+    /// <summary>
+    /// A card's own pieces: its objects, and those of the groups inside it
+    /// that the user or its template made of its pieces — groups of no
+    /// template (a charts card's charts) — however deep. What a card is made
+    /// of, and so what it reads; a card made already inside it (a container's
+    /// in a project's) has its own.
+    /// </summary>
+    public IReadOnlyList<ObjectInstance> Pieces(string groupId) =>
+        [.. Members(groupId), .. Cards(groupId).Where(card => card.Template is null).SelectMany(card => Pieces(card.Id))];
+
+    /// <summary>
     /// Whether <paramref name="candidate"/> can stand where it says: inside the
     /// canvas's columns, on cells no other object takes, and — in a group —
     /// inside that group's frame, or — standing alone — outside every frame.
@@ -110,29 +170,28 @@ public sealed record DashboardLayout(int Columns, IReadOnlyList<ObjectInstance> 
             : Groups.All(group => !group.Box.Overlaps(box));
     }
 
-    /// <summary>The cards that stand inside this one (<see cref="DashboardGroup.Parent"/>): a project's containers, each a card of its own in the project's.</summary>
+    /// <summary>The cards that stand directly inside this one (<see cref="DashboardGroup.Parent"/>): a project's containers, each a card of its own in the project's.</summary>
     public IReadOnlyList<DashboardGroup> Cards(string groupId) => [.. Groups.Where(card => card.Parent == groupId)];
 
     /// <summary>
     /// Whether <paramref name="candidate"/> — a group moved or resized — can
-    /// stand where it says with <paramref name="members"/>, its objects as they
-    /// would then stand: on the canvas, holding all of them, and on no cell of
-    /// another group or of an object that is not its own. A card that holds
-    /// others holds them still, where they would then stand
-    /// (<paramref name="cards"/>; where they stand now when none are given),
-    /// and what is theirs is its own; a card inside another stays inside it,
-    /// and off what else that card holds.
+    /// stand where it says: on the canvas, and on no cell of another group or
+    /// of an object that is not its own. It need not hold its objects nor the
+    /// cards inside it: made smaller than what stands in it, what is left
+    /// outside stays where it is, its own still and moved with it, for the
+    /// user to place (the owner, 15 October 2026: the dashboard does what it
+    /// is told, nothing is refused for it). A card inside another is that
+    /// card's wherever it stands, inside it or left outside it, and keeps off
+    /// what else that card holds.
     /// </summary>
-    public bool FitsGroup(DashboardGroup candidate, IReadOnlyList<ObjectInstance> members, IReadOnlyList<DashboardGroup>? cards = null)
+    public bool FitsGroup(DashboardGroup candidate)
     {
         var box = candidate.Box;
+        // What it stands in, however deep, and what stands in it, however deep, do not count against it.
         return OnCanvas(box)
-            && members.All(member => box.Contains(member.Box))
-            && (cards ?? Cards(candidate.Id)).All(card => box.Contains(card.Box))
-            && (candidate.Parent is not { } parentId || (FindGroup(parentId) is { } parent && parent.Box.Contains(box)))
-            && Groups.All(group => group.Id == candidate.Id || group.Id == candidate.Parent || group.Parent == candidate.Id || !group.Box.Overlaps(box))
+            && Groups.All(group => group.Id == candidate.Id || IsWithin(candidate.Parent, group.Id) || IsWithin(group.Parent, candidate.Id) || !group.Box.Overlaps(box))
             // A hidden piece takes no cells: what it left is free for a card as it is for an object.
-            && Objects.All(o => o.Group == candidate.Id || o.Hidden == true || FindGroup(o.Group)?.Parent == candidate.Id || !o.Box.Overlaps(box));
+            && Objects.All(o => o.Hidden == true || IsWithin(o.Group, candidate.Id) || !o.Box.Overlaps(box));
     }
 
     /// <summary>
@@ -166,8 +225,18 @@ public sealed record DashboardLayout(int Columns, IReadOnlyList<ObjectInstance> 
     /// group, where the user put it.
     /// </summary>
     public DashboardGroup? GroupHolding(CellBox box) =>
-        // The card inside before the one that holds it: both hold the box, and the inner one is where it was put.
-        Groups.Where(group => group.Box.Contains(box)).OrderBy(group => group.Parent is null).FirstOrDefault();
+        // The innermost of those that hold the box: it is where it was put.
+        Groups.Where(group => group.Box.Contains(box)).OrderByDescending(Depth).FirstOrDefault();
+
+    /// <summary>
+    /// The innermost card whose frame holds this box whole, other than
+    /// <paramref name="except"/> and the cards inside it: a card carried
+    /// there, or dropped there from the toolbox, would stand in it as a card
+    /// of its own (<see cref="DashboardGroup.Parent"/>), as deep as that.
+    /// </summary>
+    public DashboardGroup? CardHolding(CellBox box, string? except = null) =>
+        Groups.Where(group => group.Box.Contains(box) && (except is null || !IsWithin(group.Id, except)))
+            .OrderByDescending(Depth).FirstOrDefault();
 
     /// <summary>The dashboard with <paramref name="changed"/> in place of the object of its id, or added when it has none.</summary>
     public DashboardLayout With(ObjectInstance changed) =>
@@ -186,14 +255,14 @@ public sealed record DashboardLayout(int Columns, IReadOnlyList<ObjectInstance> 
     public DashboardLayout MovedTogether(IReadOnlyCollection<string> ids, int dx, int dy) =>
         this with
         {
-            // A card goes with what stands in it: its objects, and the cards inside it with theirs.
-            Objects = [.. Objects.Select(o => ids.Contains(o.Id) || (o.Group is { } g && (ids.Contains(g) || (FindGroup(g)?.Parent is { } holder && ids.Contains(holder)))) ? o.MovedBy(dx, dy) : o)],
-            Groups = [.. Groups.Select(g => ids.Contains(g.Id) || (g.Parent is { } holder && ids.Contains(holder)) ? g with { X = g.X + dx, Y = g.Y + dy } : g)],
+            // A card goes with what stands in it, however deep: its objects, and the cards inside it with theirs.
+            Objects = [.. Objects.Select(o => ids.Contains(o.Id) || ids.Any(id => IsWithin(o.Group, id)) ? o.MovedBy(dx, dy) : o)],
+            Groups = [.. Groups.Select(g => ids.Any(id => IsWithin(g.Id, id)) ? g with { X = g.X + dx, Y = g.Y + dy } : g)],
         };
 
     /// <summary>Whether every object and group these ids name stands where it may, in this dashboard.</summary>
     public bool FitsAll(IReadOnlyCollection<string> ids) =>
-        ids.All(id => Find(id) is { } one ? Fits(one) : FindGroup(id) is not { } group || FitsGroup(group, Members(group.Id)));
+        ids.All(id => Find(id) is { } one ? Fits(one) : FindGroup(id) is not { } group || FitsGroup(group));
 
     /// <summary>
     /// The dashboard with a card put inside another (<see cref="DashboardGroup.Parent"/>):
@@ -228,7 +297,7 @@ public sealed record DashboardLayout(int Columns, IReadOnlyList<ObjectInstance> 
             var around = CellBox.Around([frame.Box, box]);
             var grown = frame with { W = around.W, H = around.H };
             var placed = card with { X = box.X, Y = box.Y, Parent = groupId };
-            return FitsGroup(grown, members, [.. cards, placed])
+            return FitsGroup(grown)
                 ? With(grown, members).With(placed, [.. objects.Select(o => o with { X = box.X + o.X, Y = box.Y + o.Y, Group = placed.Id })])
                 : null;
         }
@@ -268,25 +337,32 @@ public sealed record DashboardLayout(int Columns, IReadOnlyList<ObjectInstance> 
         };
     }
 
-    /// <summary>The dashboard without this object; a group it leaves with no object goes with it.</summary>
+    /// <summary>The dashboard without this object; a group it leaves with nothing in it, however deep, goes with it.</summary>
     public DashboardLayout Without(string id)
     {
         var left = this with { Objects = [.. Objects.Where(o => o.Id != id)] };
-        return left with { Groups = [.. left.Groups.Where(g => left.Objects.Any(o => o.Group == g.Id))] };
+        return left with { Groups = [.. left.Groups.Where(g => left.Objects.Any(o => left.IsWithin(o.Group, g.Id)))] };
     }
 
-    /// <summary>The dashboard without this group, its objects left standing where they are, alone, and the cards inside it cards on the page.</summary>
-    public DashboardLayout Ungrouped(string groupId) =>
-        this with
+    /// <summary>
+    /// The dashboard without this group: its objects, and the cards inside
+    /// it, go to what it stood in, where they are — the card holding it, or
+    /// the page, standing alone.
+    /// </summary>
+    public DashboardLayout Ungrouped(string groupId)
+    {
+        var holder = FindGroup(groupId)?.Parent;
+        return this with
         {
-            Groups = [.. Groups.Where(g => g.Id != groupId).Select(g => g.Parent == groupId ? g with { Parent = null } : g)],
-            Objects = [.. Objects.Select(o => o.Group == groupId ? o with { Group = null } : o)],
+            Groups = [.. Groups.Where(g => g.Id != groupId).Select(g => g.Parent == groupId ? g with { Parent = holder } : g)],
+            Objects = [.. Objects.Select(o => o.Group == groupId ? o with { Group = holder } : o)],
         };
+    }
 
-    /// <summary>The dashboard without this group and every object in it, the cards inside it and theirs gone with it.</summary>
+    /// <summary>The dashboard without this group and every object in it, the cards inside it, however deep, and theirs gone with it.</summary>
     public DashboardLayout WithoutGroup(string groupId)
     {
-        var gone = Groups.Where(g => g.Id == groupId || g.Parent == groupId).Select(g => g.Id).ToHashSet(StringComparer.Ordinal);
+        var gone = Groups.Where(g => IsWithin(g.Id, groupId)).Select(g => g.Id).ToHashSet(StringComparer.Ordinal);
         return this with
         {
             Groups = [.. Groups.Where(g => !gone.Contains(g.Id))],

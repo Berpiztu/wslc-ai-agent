@@ -5,7 +5,9 @@ namespace Berpiztu.Dashboard.Catalogue;
 
 /// <summary>
 /// A card made of other cards made already (the four charts in one), <see cref="PerRow"/> to a row, each born at half its
-/// cells and a type size smaller, so its words fit the half. It is designed
+/// cells and a type size smaller, so its words fit the half, and each a group
+/// of its pieces inside the card (Both), so a fluid view wraps a chart whole,
+/// its figures with it, and never one piece apart from the others. It is designed
 /// on the board of every object as any card is, but its objects stand in
 /// other cards there too, so what is designed of each here is kept under
 /// this card (<see cref="DefaultOf"/>), apart from its kind's.
@@ -39,20 +41,33 @@ public sealed record HalvedCardsTemplate(string Type, string Label, string Icon,
         List<ObjectInstance> objects = [.. (Above ?? []).Select(item => new ObjectInstance(item.Type, item.Type, item.X, item.Y, item.W, item.H,
             Size: item.Size, Vertical: item.Vertical, Parts: item.Parts, MarginY: item.MarginY))];
         var top = objects.Select(o => o.Y + o.H).DefaultIfEmpty(0).Max();
+        var placed = new List<(CellBox Box, IReadOnlyList<string> Types)>();
         foreach (var row in halves.Chunk(PerRow))
         {
-            objects.AddRange(row.SelectMany((half, column) => half.Objects.Select(o => o with { X = column * columnWidth + o.X, Y = top + o.Y })));
+            foreach (var (half, column) in row.Select((half, column) => (half, column)))
+            {
+                objects.AddRange(half.Objects.Select(o => o with { X = column * columnWidth + o.X, Y = top + o.Y }));
+                placed.Add((new CellBox(column * columnWidth, top, half.W, half.H), half.Objects.Select(o => o.Type).ToList()));
+            }
+
             top += row.Max(half => half.H);
         }
 
         var designed = objects.Select(o => defaults?.For(view, DefaultOf(o.Type)) is { } own
             ? own.On(o) with { Id = DefaultOf(o.Type), X = own.X ?? o.X, Y = own.Y ?? o.Y }
             : o with { Id = DefaultOf(o.Type) }).ToList();
+        // Each half a group of its pieces, round them where they were designed to stand.
+        var inner = placed.Select(half =>
+        {
+            var ids = half.Types.Select(DefaultOf).ToList();
+            var around = CellBox.Around([half.Box, .. designed.Where(o => ids.Contains(o.Id)).Select(o => o.Box)]);
+            return new BornGroup(around.X, around.Y, around.W, around.H, ids, HorizontalAnchor.Both);
+        }).ToList();
         var reach = CellBox.Around(designed.Select(o => o.Box));
         var frame = defaults?.For(view, Type);
         return new BornCard(Type, designed,
             Math.Max(frame?.W ?? columnWidth * Math.Min(PerRow, halves.Count), reach.X + reach.W),
-            Math.Max(frame?.H ?? top, reach.Y + reach.H), frame);
+            Math.Max(frame?.H ?? top, reach.Y + reach.H), frame, inner);
     }
 
     private static BornCard Halved(BornCard card) => card with

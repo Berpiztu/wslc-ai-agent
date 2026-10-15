@@ -1,0 +1,26 @@
+@* Preview, in design: the view drawn as it will be seen, what is designed
+   whether saved or not, fitted as the zoom says (Fit, Fill, Width, Stretch,
+   Fluid, 1:1), so an anchor is seen doing what it does. A tap selects and the
+   properties change it there; to carry or resize, Edit goes back to the
+   design's cells. The address carries it (?preview=1), so Back goes from one
+   to the other; Done takes it out with design. *@
+@namespace WslcAgent.UI.Dashboard
+@inject NavigationManager Navigation
+
+<VerbFab StartIcon="@(Previewing ? Icons.Material.Filled.Edit : Icons.Material.Filled.Visibility)"
+         Label="@(Previewing ? "Edit" : "Preview")" OnClick="Toggle"
+         Title="@(Previewing
+                    ? "Back to the design's cells, where the objects are carried and resized"
+                    : "See the view as it will be seen, fitted as the zoom says; select and change the properties there, nothing is carried")" />
+
+@code {
+    /// <summary>The query parameter that says the view designed is previewed.</summary>
+    public const string Query = "preview";
+
+    [Parameter, EditorRequired] public bool Previewing { get; set; }
+
+    /// <summary>Whether the address's value of <see cref="Query"/> says the view is previewed.</summary>
+    public static bool Says(string? value) => value is "1" or "true";
+
+    private void Toggle() => Navigation.NavigateTo(Navigation.GetUriWithQueryParameter(Query, Previewing ? null : "1"));
+}

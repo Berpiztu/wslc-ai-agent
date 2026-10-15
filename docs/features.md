@@ -471,10 +471,12 @@ The Home page is a dashboard designed by each user, not a fixed screen.
   first.
 - **Objects**: host CPU, memory and disk readings and dials; counts of
   containers, images, volumes and networks; CPU, memory, disk and network
-  charts of the host or of any container, with legends; container, Compose
+  charts of the host, of a Compose project (its containers added up) or of
+  any container, with legends; container, Compose
   project, image, volume and network headers, details, dials, shortcuts and
   action buttons (a project's dials are the CPU and the memory of its
-  containers added up, and its details their names);
+  containers added up, and its details a table of them: service, container,
+  status, ports, CPU and memory);
   the session selector; agent, client, `wslc`, Windows and kernel versions;
   Live updates (whether the agent hears `wslc`'s events, or the screens read
   on their own clock); Recent events (what `wslc` reported lately, newest
@@ -488,11 +490,31 @@ The Home page is a dashboard designed by each user, not a fixed screen.
   each (shown in the card, or not); one made later is listed unticked. Its
   line is the project's, as round its cards in Containers: green, the
   primary colour, or stripes of the two.
+  Any card holds more than its own pieces: an object let go in its free
+  room joins it, and a whole card carried, or taken from the toolbox, and
+  let go wholly inside a card on the page stands in it as a card of its
+  own (a project's charts, its recent events), moved with it, and taken
+  out again by carrying it wholly out. A card can be made smaller than what
+  stands in it: what is left outside stays where it is, still its own.
+  Pieces of one card, chosen together (Ctrl and a press on each), become a
+  group inside it with Group (Ctrl+G), moved, anchored and wrapped as one;
+  Ungroup gives them back to the card. Cards go inside cards as deep as they
+  are put, and the charts card is born with each of its four charts such a
+  group, so on a narrow screen a chart goes down whole, its figures with it. A project's line on the dashboard is
+  three times the list's, so its colour changing is seen from afar.
 - **Alarms**: each measure has a threshold; past it the object turns red and
   blinks. Chosen alarms also show as rings in a status bar on every screen.
 - **Zoom and fit**: zoom in and out, and fit the view to any screen: Fit, Fill,
   Width, Stretch or Fluid. Each page and view keeps its own on each device;
-  portrait opens Fluid and landscape Fill until you choose.
+  portrait opens Fluid and landscape Fill until you choose. Fluid lays the
+  view out as each piece's anchor says, and what does not fit beside what
+  stands before it in its row goes down to a line of its own: two cards side
+  by side in a project's card, on a phone where one fits, one under the
+  other; the card grows down and what is under it comes down too. In design,
+  **Preview** shows the view being designed, saved or not, fitted as the zoom
+  says, so an anchor is seen doing what it does in Fluid: a tap selects a card,
+  then a piece of it, and its properties change it there; **Edit** goes back
+  to the cells, where things are carried and resized.
 - **Charts**: any chart opens full size, with zoom.
 - Out of design, tapping a card offers its actions (Run, Pull, Create…) and
   opens its page.

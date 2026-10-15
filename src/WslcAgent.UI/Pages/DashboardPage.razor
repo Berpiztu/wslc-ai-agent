@@ -130,6 +130,13 @@
                 <VerbFab StartIcon="@Icons.Material.Filled.NotificationsActive" Label="Status alarms" OnClick="@(() => _designer?.ShowStatusAlarmsAsync() ?? Task.CompletedTask)"
                          Title="Choose which of this view's alarms the status bar shows, on every screen" />
                 <ViewVerb Portrait="@(_view == BoardView.Portrait)" />
+                <PreviewVerb Previewing="Previewing" />
+                @if (Previewing)
+                {
+                    @* Previewed, the zoom fits the view as it will be: its window, as out of design. *@
+                    <VerbFab StartIcon="@Icons.Material.Filled.ZoomIn" Label="@(_zooming ? "Hide zoom" : "Show zoom")" OnClick="@(() => _zooming = !_zooming)"
+                             Title="@(_zooming ? "Hide the dashboard's zoom" : "Show the dashboard's zoom: how the view previewed is fitted to the screen")" />
+                }
                 @* The server's dashboard made the one a user with none is given:
                    on a development agent written back to the repository for the
                    installer; on an installed one, this agent's own default,
@@ -190,7 +197,7 @@
                    place before, and it kept that one — a switch showed the
                    previous place's dashboard, the server's User page blank
                    after coming back from the device. *@
-                <DashboardDesigner @key="_store" @ref="_designer" Store="_store" Draft="_draft" Framed="true" Fitting="_fitting" CardElevation="Style.Applied.CardElevation" DraftChanged="@(() => StateHasChanged())" Designing="Designing" View="@(_view!)" Defaults="Defaults" Measures="Measures"
+                <DashboardDesigner @key="_store" @ref="_designer" Store="_store" Draft="_draft" Framed="true" Fitting="_fitting" CardElevation="Style.Applied.CardElevation" DraftChanged="@(() => StateHasChanged())" Designing="Designing" Previewing="Previewing" View="@(_view!)" Defaults="Defaults" Measures="Measures"
                                    SelectionChanged="OnSelectionChanged" ToolboxHeader="DesignObjectsButton" />
             }
             else
@@ -202,7 +209,7 @@
         @* Not modal, moved by its title, over the dashboard's top-left corner
            when it opens; the zoom scales the dashboard alone, never this
            window. *@
-        @if (_zooming && !Designing)
+        @if (_zooming && (!Designing || Previewing))
         {
             <FloatingWindow Name="Zoom" Anchor="@(() => _pane)" OnClose="@(() => _zooming = false)">
                 <ZoomControl @key="ZoomOf" Remembered="wslcAgent.dashboardZoom" Of="@ZoomOf" Label="@($"Dashboard zoom, {ZoomOf}")" />
@@ -274,12 +281,17 @@
 
     [SupplyParameterFromQuery(Name = ViewVerb.Query)] public string? ViewQuery { get; set; }
 
+    [SupplyParameterFromQuery(Name = PreviewVerb.Query)] public string? PreviewQuery { get; set; }
+
     [SupplyParameterFromQuery(Name = PageQueryName)] public string? PageQuery { get; set; }
 
     /// <summary>The page on screen: User's name, or null for System.</summary>
     private string? PageKey => PageQuery == UserPage ? UserPage : null;
 
     private bool Designing => DesignVerb.Says(Design);
+
+    /// <summary>In design, the view drawn as it will be seen, fitted as the zoom says (<see cref="PreviewVerb"/>).</summary>
+    private bool Previewing => Designing && PreviewVerb.Says(PreviewQuery);
 
     /// <summary>The view to show: the one chosen in design; out of it, the one the window's orientation asks for, once known.</summary>
     private string? Wanted => Designing ? ViewVerb.Of(ViewQuery)
