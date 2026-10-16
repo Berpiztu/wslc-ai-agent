@@ -25,7 +25,7 @@
             <MudSimpleTable Dense="true" Hover="true" FixedHeader="true">
                 <thead>
                     <tr>
-                        <th></th>
+                        <th class="wslc-col-dot"></th>
                         <th>Service</th>
                         <th>Container</th>
                         <th>Status</th>
@@ -40,13 +40,13 @@
                         @* MudSimpleTable sets each row's colour to inherit, over a class on the row: the tone goes on its cells. *@
                         var tone = Tone(member);
                         <tr @key="member.Id" title="@(member.HasFailed ? member.Failure : null)">
-                            <td><StateDot Active="member.IsRunning" Title="running" Key="@member.Id" Working="@(member.IsRecreating || member.IsUpdating)" /></td>
-                            <td class="@($"text-nowrap {tone}")">@Readings.Dash(member.Service)</td>
-                            <td class="@($"text-nowrap {tone}")">@member.Name</td>
-                            <td class="@($"text-nowrap {tone}")">@member.Status</td>
-                            <td class="text-nowrap"><PortsLink Ports="member.Ports" Container="@member.Id" Publications="member.Published" /></td>
-                            <td class="@($"wslc-col-num text-nowrap {tone}")">@(member.IsRunning ? Readings.Dash(member.CpuPercent) : "—")</td>
-                            <td class="@($"wslc-col-num text-nowrap {tone}")">@Memory(member)</td>
+                            <td class="wslc-col-dot"><StateDot Active="member.IsRunning" Title="running" Key="@member.Id" Working="@(member.IsRecreating || member.IsUpdating)" /></td>
+                            <td class="@tone">@Readings.Dash(member.Service)</td>
+                            <td class="@tone">@member.Name</td>
+                            <td class="@tone">@member.Status</td>
+                            <td><PortsLink Ports="member.Ports" Container="@member.Id" Publications="member.Published" /></td>
+                            <td class="@($"wslc-col-num {tone}")">@(member.IsRunning ? Readings.Dash(member.CpuPercent) : "—")</td>
+                            <td class="@($"wslc-col-num {tone}")">@Memory(member)</td>
                         </tr>
                     }
                 </tbody>
@@ -56,9 +56,13 @@
 }
 
 @code {
-    /// <summary>One that is not running fainter, one that failed in the error colour; a running one as the table's own.</summary>
-    private static string Tone(ContainerSummary member) =>
-        member.HasFailed ? "mud-error-text" : member.IsRunning ? "" : "mud-text-secondary";
+    /// <summary>
+    /// One that failed in the error colour; one not running fainter, unless
+    /// the object has a text colour of its own, which is the one its rows are
+    /// written in; a running one as the object's text.
+    /// </summary>
+    private string Tone(ContainerSummary member) =>
+        member.HasFailed ? "mud-error-text" : member.IsRunning || Instance.Foreground is not null ? "" : "mud-text-secondary";
 
     /// <summary>Its share and what that is ("0.7% · 52MiB"); a dash while it is not running, when there is nothing to measure.</summary>
     private static string Memory(ContainerSummary member) =>

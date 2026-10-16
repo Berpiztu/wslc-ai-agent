@@ -37,7 +37,7 @@
                     @foreach (var happened in shown)
                     {
                         <tr @key="happened">
-                            <td class="text-nowrap">@When(happened.Time)</td>
+                            <td>@When(happened.Time)</td>
                             <td>@happened.Type</td>
                             <td>@What(happened)</td>
                             <td title="@happened.Id">@(happened.Name ?? ShortId(happened.Id))</td>

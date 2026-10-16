@@ -5116,6 +5116,29 @@
     font-size: calc(var(--mud-typography-caption-size) * var(--wslc-dash-scale, 1) * var(--bz-part-rows-scale, 1));
 }
 
+/* A dashboard table's ground and text are the object's, which the designer paints on its
+   cells, as the File transfers card's are: MudSimpleTable's own surface and text colour
+   covered the Background and Foreground chosen in its properties. */
+.wslc-dash-table .mud-simple-table {
+    background-color: transparent;
+    color: inherit;
+}
+
+/* A dashboard table's cells each on one line, as the lists' rows are, and close together:
+   8px either side, where MudBlazor's dense table leaves 16 and the columns stood 32 apart.
+   What does not fit the object scrolls across in it. */
+.wslc-dash-table .mud-simple-table table * tr > td,
+.wslc-dash-table .mud-simple-table table * tr > th {
+    white-space: nowrap;
+    padding: 4px 8px;
+}
+
+/* The state dot's column (a project's containers): as wide as the dot. */
+.wslc-dash-table .mud-simple-table table * tr > .wslc-col-dot {
+    width: 1px;
+    padding-inline-end: 0;
+}
+
 /* A column of numbers (a project's CPU and memory) is read down its last digit, as in the
    lists' tables: its title and its figures at the right. */
 .wslc-dash-table .mud-simple-table table * tr > .wslc-col-num {
@@ -5160,7 +5183,10 @@
     font-weight: var(--bz-part-rows-weight);
 }
 
-.bz-part-rows-background .wslc-dash-table .mud-simple-table table * tr > td {
+/* The rows' ground is the list's whole place, the same height whatever rows there are: painted on
+   each cell it was as tall as the rows, and grew with them. The place is fixed by the object; the
+   rows, each one line, scroll in it when they do not fit. */
+.bz-part-rows-background .wslc-dash-table .mud-simple-table > .mud-table-container {
     background-color: var(--bz-part-rows-background);
 }
 
