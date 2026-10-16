@@ -22,17 +22,6 @@
         <ContainersVerbs Changed="RefreshAsync" />
     </Verbs>
     <ChildContent>
-        @* The two colours a project's ring is drawn in while a verb goes through its
-           containers (the stylesheet points the ring's stroke here): the success colour
-           into the primary, the two its line has. It takes no room. *@
-        <svg class="wslc-progress-mix-defs" aria-hidden="true" focusable="false">
-            <defs>
-                <linearGradient id="wslc-progress-mix" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0.3" style="stop-color: var(--mud-palette-success)" />
-                    <stop offset="0.7" style="stop-color: var(--mud-palette-primary)" />
-                </linearGradient>
-            </defs>
-        </svg>
         <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.NoWrap" Spacing="2" Class="wslc-toolbar mb-1 flex-shrink-0">
             <PageStats>
                 <PageStat Label="CPU" Value="@CpuText" />
