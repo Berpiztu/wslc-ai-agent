@@ -190,6 +190,19 @@
     margin: 0;
 }
 
+/* Previewed, the frame is the screen the view is meant for, its size the
+   designer's (--bz-dash-screen-width, --bz-dash-screen-height), in the middle
+   of the room and its edge drawn, as much of it as the room holds. */
+.bz-dash-previewing .bz-dash-canvas-frame {
+    flex: 0 0 auto;
+    width: var(--bz-dash-screen-width);
+    height: var(--bz-dash-screen-height);
+    max-width: 100%;
+    max-height: 100%;
+    margin: auto;
+    outline: 1px solid var(--mud-palette-lines-default);
+}
+
 .bz-dash-canvas-frame.bz-dash-fit-width {
     overflow-x: hidden;
     scrollbar-gutter: stable;
@@ -201,9 +214,11 @@
    view it leaves would be seen for that moment in the new shape. The rule
    is the browser's, so it holds from the very paint the turn makes. Not in
    design's preview (bz-dash-previewing): there the view is the one chosen to
-   be designed, whatever the screen's way up, and it is the one to be seen. */
+   be designed, whatever the screen's way up, and it is the one to be seen.
+   Nor where the view is meant for either (bz-dash-either-way): the landscape
+   view a page shows on mobile too. */
 @media (orientation: portrait) {
-    .bz-dash-fitted:not(.bz-dash-previewing)[data-bz-view="landscape"] .bz-dash-canvas {
+    .bz-dash-fitted:not(.bz-dash-previewing):not(.bz-dash-either-way)[data-bz-view="landscape"] .bz-dash-canvas {
         visibility: hidden;
     }
 }

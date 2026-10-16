@@ -7,7 +7,10 @@
    Two views, the landscape's and the portrait's, each laid out on its own
    and kept together. Out of design the window's orientation chooses —
    wider than tall, or taller than wide — and chooses again as the window is
-   reshaped or a phone turned; in design the view is chosen (ViewVerb) and
+   reshaped or a phone turned, unless the page's Screens (set on its
+   landscape view) say mobile shows the landscape view too; they say as well
+   how desktop and mobile open it fitted, where the device has chosen
+   nothing in the zoom window. In design the view is chosen (ViewVerb) and
    laid out in a frame of its size in the middle of the page — a phone's for
    the portrait one, 16:9 for the landscape one, until another is set at the
    toolbox's top — and out of design it is zoomed to fit the screen. The
@@ -45,6 +48,7 @@
 @using WslcAgent.UI.Dashboard
 @using BoardView = Berpiztu.Dashboard.Model.DashboardView
 @using ViewFit = Berpiztu.Dashboard.Model.ViewFit
+@using ViewScreens = Berpiztu.Dashboard.Model.ViewScreens
 @using BoardLayout = Berpiztu.Dashboard.Model.DashboardLayout
 @inject NavigationManager Navigation
 @inject DashboardPlace Place
@@ -199,7 +203,7 @@
                    place before, and it kept that one — a switch showed the
                    previous place's dashboard, the server's User page blank
                    after coming back from the device. *@
-                <DashboardDesigner @key="_store" @ref="_designer" Store="_store" Draft="_draft" Framed="true" Fitting="_fitting" CardElevation="Style.Applied.CardElevation" DraftChanged="@(() => StateHasChanged())" Designing="Designing" Previewing="Previewing" View="@(_view!)" Defaults="Defaults" Measures="Measures"
+                <DashboardDesigner @key="_store" @ref="_designer" Store="_store" Draft="_draft" Framed="true" EitherWay="@(!Designing && Screen != _view)" Fitting="_fitting" CardElevation="Style.Applied.CardElevation" DraftChanged="@(() => StateHasChanged())" Designing="Designing" Previewing="Previewing" View="@(_view!)" Defaults="Defaults" Measures="Measures"
                                    SelectionChanged="OnSelectionChanged" ToolboxHeader="DesignObjectsButton" />
             }
             else
@@ -218,7 +222,7 @@
                 @* How the view meets a screen of another aspect (as a
                    television offers it): whole, filling
                    it, or stretched to it; this page's and view's, on this device. *@
-                <MudToggleGroup T="ViewFit" Value="@(_fitting ?? ViewFit.Fill)" ValueChanged="FitAsync" Size="Style.Applied.ToggleSize" Color="Style.Applied.ToggleColor"
+                <MudToggleGroup T="ViewFit" Value="@(_fitting ?? ViewScreens.LandscapeDefault)" ValueChanged="FitAsync" Size="Style.Applied.ToggleSize" Color="Style.Applied.ToggleColor"
                                 Outlined="Style.Applied.ToggleOutlined" Delimiters="Style.Applied.ToggleDelimiters"
                                 Class="@(Style.Applied.ToggleRounded ? "rounded-pill mt-2" : "mt-2")" CheckMark="Style.Applied.ToggleCheckMark">
                     <MudToggleItem Value="ViewFit.Actual" Text="1:1" title="The view at its own size, as in design, from the top-left corner; nothing zoomed, nothing moved; what goes past the screen scrolled to" />
@@ -258,8 +262,14 @@
     /// <summary>The dashboard's zoom window is shown: its verb shows it and hides it, its key closes it.</summary>
     private bool _zooming;
 
-    /// <summary>How the view is fitted to the screen out of design, as this device keeps it for this page and view; unknown until it is read, and the view unseen till then.</summary>
+    /// <summary>How the view is fitted to the screen out of design, as this device keeps it for this page and screen; unknown until it is read, and the view unseen till then.</summary>
     private ViewFit? _fitting;
+
+    /// <summary>The page and screen the zoom and fitting in force were read for (<see cref="ZoomOf"/>).</summary>
+    private string? _fittedFor;
+
+    /// <summary>The page's Screens as its landscape view keeps them, and the place and page they were read for; none until read, and out of design no view is shown till then.</summary>
+    private (string Of, ViewScreens Screens)? _screens;
     private string? _page;
     private DashboardViewStore? _store;
 
@@ -295,10 +305,25 @@
     /// <summary>In design, the view drawn as it will be seen, fitted as the zoom says (<see cref="PreviewVerb"/>).</summary>
     private bool Previewing => Designing && PreviewVerb.Says(PreviewQuery);
 
-    /// <summary>The view to show: the one chosen in design; out of it, the one the window's orientation asks for, once known.</summary>
+    /// <summary>
+    /// The view to show: the one chosen in design; out of it, the one the
+    /// window's orientation asks for, as the page's Screens say, once both are known.
+    /// </summary>
     private string? Wanted => Designing ? ViewVerb.Of(ViewQuery)
-        : _portrait is { } portrait ? portrait ? BoardView.Portrait : BoardView.Landscape
+        : _portrait is { } portrait && _screens is { } read && read.Of == ScreensOf ? read.Screens.ViewOn(portrait)
         : null;
+
+    /// <summary>
+    /// The screen the view is shown on, desktop or mobile, named as the views
+    /// are: in design the view designed; out of it the window's orientation,
+    /// whichever view it shows.
+    /// </summary>
+    private string? Screen => Designing ? _view
+        : _portrait is { } portrait ? portrait ? BoardView.Portrait : BoardView.Landscape
+        : _view;
+
+    /// <summary>The place and page whose Screens are in force.</summary>
+    private string ScreensOf => $"{Named(Place.Scope)}/{PageName(PageKey)}";
 
     /// <summary>The view the one on screen is given to.</summary>
     private string Other => _view == BoardView.Portrait ? BoardView.Landscape : BoardView.Portrait;
@@ -342,13 +367,64 @@
             _selection = DashboardSelection.None;
         }
 
+        if (_screens?.Of != ScreensOf)
+        {
+            _ = ReadScreensAsync();
+        }
+
         Show(Wanted);
         Place.Design(Designing ? Wanted : null);
         if (_wasDesigning != Designing)
         {
+            if (_wasDesigning == true)
+            {
+                // Out of design what was saved there is in force: its Screens too.
+                _ = ReadScreensAsync(again: true);
+            }
+
             _wasDesigning = Designing;
             _ = ReadPagesAsync();
         }
+    }
+
+    /// <summary>
+    /// The page's Screens read from its landscape view where the dashboard is
+    /// kept, and the view and fitting they ask for shown. A page never laid
+    /// out has none, and shows as one without them.
+    /// </summary>
+    private async Task ReadScreensAsync(bool again = false)
+    {
+        if (again)
+        {
+            _screens = null;
+        }
+
+        await ScreensAsync();
+        await InvokeAsync(() =>
+        {
+            Show(Wanted);
+            FitScreen(again);
+            StateHasChanged();
+        });
+    }
+
+    /// <summary>The page's Screens, read once for each place and page.</summary>
+    private async Task<ViewScreens> ScreensAsync()
+    {
+        var of = ScreensOf;
+        if (_screens is { } read && read.Of == of)
+        {
+            return read.Screens;
+        }
+
+        var page = DashboardPages.Read(await Place.Store.LoadAsync(), PageKey);
+        var screens = BoardLayout.Read(DashboardViews.Read(page, BoardView.Landscape)).Screens ?? new ViewScreens();
+        if (of == ScreensOf)
+        {
+            _screens = (of, screens);
+        }
+
+        return screens;
     }
 
     /// <summary>The window's orientation watched from the first render: the browser tells it at once, and again each time it turns.</summary>
@@ -366,7 +442,10 @@
         _portrait = portrait;
         if (!Designing)
         {
+            // The view may stay (the landscape one on mobile too) while the
+            // screen turns: its zoom and fitting are the new screen's.
             Show(Wanted);
+            FitScreen();
             StateHasChanged();
         }
     });
@@ -385,18 +464,33 @@
         _draft = Drafts.For(Named(Place.Scope), PageName(_page), view);
         _selection = DashboardSelection.None;
         _ = ReadPagesAsync();
-        // The zoom this device keeps for this page and view, from its first
-        // paint, not only once the zoom window is opened.
+        FitScreen(again);
+    }
+
+    /// <summary>
+    /// The zoom and fitting this device keeps for this page and screen, from
+    /// the first paint, not only once the zoom window is opened; read again
+    /// only where the page or the screen changed, or when asked to.
+    /// </summary>
+    private void FitScreen(bool again = false)
+    {
+        if (_view is null || (ZoomOf == _fittedFor && !again))
+        {
+            return;
+        }
+
+        _fittedFor = ZoomOf;
         _ = Js.InvokeAsync<int>("wslcAgent.dashboardZoom", ZoomOf).AsTask();
         _fitting = null;
         _ = ReadFittingAsync();
     }
 
     /// <summary>
-    /// Which of the dashboard's zooms is in force: one per page and view,
-    /// kept on the device — System's landscape, User's portrait….
+    /// Which of the dashboard's zooms is in force: one per page and screen,
+    /// kept on the device — System's landscape, User's portrait…; the
+    /// landscape view shown on mobile has mobile's.
     /// </summary>
-    private string ZoomOf => $"{PageName(_page)}/{_view}".ToLowerInvariant();
+    private string ZoomOf => $"{PageName(_page)}/{Screen}".ToLowerInvariant();
 
     /// <summary>The page the verb of the page takes the dashboard to.</summary>
     private string? OtherPage => PageKey == UserPage ? null : UserPage;
@@ -459,6 +553,7 @@
     {
         await Place.UseAsync(Place.Other);
         Show(_view, again: true);
+        await ReadScreensAsync();
     }
 
     /// <summary>
@@ -532,7 +627,11 @@
 
         var source = BoardLayout.Read(DashboardViews.Read(whole, from));
         var columns = to == BoardView.Portrait ? BoardView.PhoneColumns : BoardLayout.Read(whole).Columns;
-        var given = DashboardViews.Given(source, to, columns, Defaults);
+        // The page's Screens stay with its landscape view, whichever is copied over it.
+        var given = DashboardViews.Given(source, to, columns, Defaults) with
+        {
+            Screens = to == BoardView.Landscape ? BoardLayout.Read(DashboardViews.Read(whole, to)).Screens : null,
+        };
         await pageStore.SaveAsync(DashboardViews.Write(whole, to, given.Write()));
         Navigation.NavigateTo(Navigation.GetUriWithQueryParameter(ViewVerb.Query, to == BoardView.Portrait ? BoardView.Portrait : null));
     }
@@ -632,33 +731,31 @@
     }
 
     /// <summary>
-    /// The fitting this device keeps for this page and view
+    /// The fitting this device keeps for this page and screen
     /// (<c>wslcAgent.dashboardViewFit</c>), from its first paint. Where none is,
-    /// the view says: the portrait one, a phone standing or a narrow window,
-    /// opens Fluid, since Fill squeezed the cards that hold several charts and
-    /// Fluid keeps each at its own size; the landscape one opens Fill, the
-    /// screen filled with the view's aspect kept.
+    /// the page's Screens say, desktop's or mobile's (as saved; a change in
+    /// design shows once it is saved); where they say nothing, mobile opens
+    /// Fluid and desktop Fill (<see cref="ViewScreens"/>).
     /// </summary>
     private async Task ReadFittingAsync()
     {
         var asked = ZoomOf;
-        var view = _view;
+        var portrait = Screen == BoardView.Portrait;
         var kept = await Js.InvokeAsync<string?>("wslcAgent.dashboardViewFit", asked);
+        var fitting = Enum.TryParse<ViewFit>(kept, ignoreCase: true, out var chosen) ? chosen : (await ScreensAsync()).FitOn(portrait);
         if (asked != ZoomOf)
         {
-            // The window turned again while this was read: the view on screen
-            // now has read its own. Taken anyway, a portrait view's Fluid read
-            // late was laid on the landscape view a window put back wide.
+            // The window turned again while this was read: the screen it is
+            // now has read its own. Taken anyway, a portrait screen's Fluid read
+            // late was laid on the view a window put back wide.
             return;
         }
 
-        _fitting = Enum.TryParse<ViewFit>(kept, ignoreCase: true, out var fitting)
-            ? fitting
-            : view == BoardView.Portrait ? ViewFit.Fluid : ViewFit.Fill;
+        _fitting = fitting;
         await InvokeAsync(StateHasChanged);
     }
 
-    /// <summary>Fit, Fill or Stretch chosen in the zoom's window: applied at once, and kept on this device for this page and view.</summary>
+    /// <summary>A fitting chosen in the zoom's window: applied at once, and kept on this device for this page and screen, over what the page's Screens say.</summary>
     private async Task FitAsync(ViewFit fitting)
     {
         _fitting = fitting;
@@ -678,6 +775,7 @@
         {
             work.Done("View saved");
             _ = ReadPagesAsync();
+            _ = ReadScreensAsync(again: true);
             return true;
         }
 

@@ -198,7 +198,7 @@ window.wslcAgent = {
     // The dashboard's own zoom, out of design:
     // --bz-dash-zoom, which the dashboard's stylesheet applies to its canvas
     // alone, on top of the page's; remembered on this device apart from it,
-    // one for each page and view ("system/desktop", "user/mobile"…), kept as
+    // one for each page and screen ("system/landscape", "user/portrait"…), kept as
     // one JSON object. Without a percent it applies and answers the one kept.
     dashboardZoom(key, percent) {
         let kept = {};
@@ -224,8 +224,8 @@ window.wslcAgent = {
     // How the dashboard's view is fitted to a screen of another aspect, out of
     // design — "fit", "fill", "width", "stretch" or "fluid", the first as a television offers them —
     // kept on this device beside the dashboard's
-    // zoom, one for each page and view, as one JSON object. Without a mode it
-    // only answers the one kept, null where none is: the page chooses then.
+    // zoom, one for each page and screen, as one JSON object. Without a mode it
+    // only answers the one kept, null where none is: the page's Screens choose then.
     dashboardViewFit(key, mode) {
         let kept = {};
         try {

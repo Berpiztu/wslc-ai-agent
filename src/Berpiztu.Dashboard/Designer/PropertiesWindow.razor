@@ -249,6 +249,34 @@
         else
         {
             <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-1">Select an object on the dashboard to see its properties here.</MudText>
+            @* The page's screens, kept with its landscape view, the desktop's:
+               whether a phone shows it too, and how desktop and mobile open
+               it, where the device has chosen nothing in its zoom window. *@
+            <div class="mt-3">
+                <PropertySection Name="Screens">
+                    @if (View == DashboardView.Landscape)
+                    {
+                        var screens = Document.Layout.Screens ?? new ViewScreens();
+                        <CheckRow Value="@(screens.LandscapeOnPortrait == true)" ValueChanged="@(on => Document.SetScreensAsync(screens with { LandscapeOnPortrait = on ? true : null }))"
+                                  Label="Desktop view on mobile"
+                                  Title="A phone held upright, or any screen taller than wide, shows this view too, even where a mobile view is laid out; not set, it shows the mobile view" />
+                        <div class="bz-dash-props mt-1">
+                            <ChoiceField T="ViewFit" Value="@screens.FitOn(portrait: false)"
+                                         ValueChanged="@(fit => Document.SetScreensAsync(screens with { LandscapeFit = Kept(fit, ViewScreens.LandscapeDefault) }))"
+                                         Options="FitOptions" Label="Desktop zoom" Class="bz-dash-prop-wide"
+                                         Title="How a screen wider than tall opens this page: what its zoom window starts on; a device that chooses another keeps its own" />
+                            <ChoiceField T="ViewFit" Value="@screens.FitOn(portrait: true)"
+                                         ValueChanged="@(fit => Document.SetScreensAsync(screens with { PortraitFit = Kept(fit, ViewScreens.PortraitDefault) }))"
+                                         Options="FitOptions" Label="Mobile zoom" Class="bz-dash-prop-wide"
+                                         Title="How a screen taller than wide opens this page, the desktop view or the mobile one: what its zoom window starts on; a device that chooses another keeps its own" />
+                        </div>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">Set in the landscape view: whether mobile shows it, and the desktop and mobile zoom.</MudText>
+                    }
+                </PropertySection>
+            </div>
             @* Status alarms: the same list the round button's Status alarms opens. *@
             <div class="mt-3">
                 <PropertySection Name="Status alarms">

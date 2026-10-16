@@ -61,6 +61,17 @@ internal static class PropertyChoices
         new(HorizontalAnchor.Both, "Both"),
     ];
 
+    /// <summary>How a view is fitted to the screen, named as the dashboard's zoom window names them.</summary>
+    public static readonly IReadOnlyList<FieldOption<ViewFit>> FitOptions =
+    [
+        new(ViewFit.Actual, "1:1"),
+        new(ViewFit.Fit, "Fit"),
+        new(ViewFit.Fill, "Fill"),
+        new(ViewFit.Width, "Width"),
+        new(ViewFit.Stretch, "Stretch"),
+        new(ViewFit.Fluid, "Fluid"),
+    ];
+
     /// <summary>An alarm's thresholds, in steps of five percent.</summary>
     public static readonly IReadOnlyList<FieldOption<int>> ThresholdOptions =
         [.. Enumerable.Range(1, 20).Select(step => new FieldOption<int>(step * 5, $"{step * 5}%"))];

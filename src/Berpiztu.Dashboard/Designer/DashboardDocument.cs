@@ -347,6 +347,9 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
     /// <summary>The alarms the status bar shows, as ticked in the properties window, in one change undo takes back.</summary>
     public Task SetStatusAsync(IReadOnlyList<StatusAlarm> status) => ChangeAsync(Layout with { Status = status });
 
+    /// <summary>How the page meets desktop and mobile screens, set in the properties window, in one change undo takes back.</summary>
+    public Task SetScreensAsync(ViewScreens screens) => ChangeAsync(Layout with { Screens = screens });
+
     /// <summary>The view's size in cells, set in design, in one change undo takes back; a size under one cell is not a size, and changes nothing.</summary>
     public Task SetCanvasSizeAsync(int width, int height) =>
         width < 1 || height < 1 || (Layout.CanvasWidth == width && Layout.CanvasHeight == height)

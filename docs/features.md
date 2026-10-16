@@ -513,8 +513,13 @@ The Home page is a dashboard designed by each user, not a fixed screen.
 - **Alarms**: each measure has a threshold; past it the object turns red and
   blinks. Chosen alarms also show as rings in a status bar on every screen.
 - **Zoom and fit**: zoom in and out, and fit the view to any screen: Fit, Fill,
-  Width, Stretch or Fluid. Each page and view keeps its own on each device;
-  portrait opens Fluid and landscape Fill until you choose. Fluid lays the
+  Width, Stretch or Fluid. Each page's **Screens**, set in design on its
+  landscape view with nothing selected, say how desktop and mobile open it:
+  **Desktop view on mobile** shows the landscape view on a phone too, so a
+  page needs no mobile view, and **Desktop zoom** and **Mobile zoom** are
+  the fit each screen starts on (Fill and Fluid until set). A device that
+  chooses another in its zoom window keeps its own, for each page and
+  screen. Fluid lays the
   view out as each piece's anchor says, and what does not fit beside what
   stands before it in its row goes down to a line of its own, in reading
   order (where each begins, top first, then left), each line's pieces side by
@@ -522,8 +527,9 @@ The Home page is a dashboard designed by each user, not a fixed screen.
   or card set to **New line in Fluid** beginning a line of its own: two cards side
   by side in a project's card, on a phone where one fits, one under the
   other; the card grows down and what is under it comes down too. In design,
-  **Preview** shows the view being designed, saved or not, fitted as the zoom
-  says, so an anchor is seen doing what it does in Fluid: a tap selects a card,
+  **Preview** shows the view being designed, saved or not, in the screen it is
+  meant for (the canvas size's W px × H px, a phone's for the mobile view),
+  fitted as the zoom says, so an anchor is seen doing what it does in Fluid: a tap selects a card,
   then a piece of it, and its properties change it there; **Edit** goes back
   to the cells, where things are carried and resized.
 - **Charts**: any chart opens full size, with zoom.

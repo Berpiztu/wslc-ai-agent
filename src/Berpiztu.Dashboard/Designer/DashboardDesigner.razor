@@ -35,7 +35,7 @@
     _flow = FlowNow();
 }
 <CascadingValue Value="_document" IsFixed="true">
-    <div class="@($"bz-dash-designer{(Editing ? " bz-dash-designing" : Framed ? " bz-dash-fitted" : "")}{(Previewing ? " bz-dash-previewing" : "")}{(Waiting ? " bz-dash-waiting" : "")}")" style="@DesignerStyle" data-bz-view="@(Framed ? View : null)" @ref="_root">
+    <div class="@($"bz-dash-designer{(Editing ? " bz-dash-designing" : Framed ? " bz-dash-fitted" : "")}{(Previewing ? " bz-dash-previewing" : "")}{(EitherWay ? " bz-dash-either-way" : "")}{(Waiting ? " bz-dash-waiting" : "")}")" style="@DesignerStyle" data-bz-view="@(Framed ? View : null)" @ref="_root">
         @* Until the dashboard is read and fitted the canvas is not seen
            (bz-dash-unread): a ring in its middle says it is on its way. *@
         @if (Waiting)
@@ -44,7 +44,7 @@
                 <MudProgressCircular Indeterminate="true" Color="Color.Primary" Class="bz-dash-loading-dial" />
             </div>
         }
-        <div class="@FrameClass" @ref="_frame">
+        <div class="@FrameClass" style="@PreviewRoom" @ref="_frame">
             <div class="@CanvasClass" @ref="_canvas" tabindex="0" style="@CanvasStyle"
                  @onpointerdown="PressCanvasAsync" @onpointermove="Follow" @onpointerup="ReleaseAsync" @onpointercancel="Abandon" @onwheel="Wheeled" @onkeydown="KeyAsync"
                  @onclick="TapFloorAsync">
@@ -296,6 +296,13 @@
     /// agent's System card — lays its objects out unframed.
     /// </summary>
     [Parameter] public bool Framed { get; set; }
+
+    /// <summary>
+    /// The view is meant for a screen of either orientation (the landscape
+    /// one on a phone held upright, where its page says so: <see cref="ViewScreens"/>),
+    /// so it is not hidden on a screen of the other.
+    /// </summary>
+    [Parameter] public bool EitherWay { get; set; }
 
     /// <summary>
     /// How a framed dashboard's view is fitted to a screen of another aspect,
@@ -1143,6 +1150,18 @@
         : Fitting is ViewFit.Width or ViewFit.Fluid ? "bz-dash-canvas-frame bz-dash-fit-width"
         : Fitting is ViewFit.Actual ? "bz-dash-canvas-frame bz-dash-fit-actual"
         : "bz-dash-canvas-frame";
+
+    /// <summary>
+    /// Previewed, the frame is the screen the view is meant for (<see cref="Screen"/>,
+    /// the canvas size window's W px and H px): the portrait view in a phone's
+    /// room, not across the window it is designed in, so it is fitted and
+    /// wrapped as that phone will show it. Where the window is smaller, the
+    /// room is as much of it as the window holds, and the canvas size window
+    /// says how much that is.
+    /// </summary>
+    private string? PreviewRoom => Previewing
+        ? FormattableString.Invariant($"--bz-dash-screen-width: {Screen.Width}px; --bz-dash-screen-height: {Screen.Height}px")
+        : null;
 
     /// <summary>
     /// Once the dashboard is read, its frame's size watched; in design, the

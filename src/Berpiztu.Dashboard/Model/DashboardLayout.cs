@@ -76,6 +76,13 @@ public sealed record DashboardLayout(int Columns, IReadOnlyList<ObjectInstance> 
     /// <summary>The view's first row on the canvas, set with <see cref="CanvasLeft"/>.</summary>
     public int? CanvasTop { get; init; }
 
+    /// <summary>
+    /// How the page meets desktop and mobile screens: whether a phone shows
+    /// this view too, and how each opens fitted. Set on the landscape view
+    /// alone, which a page always has; null where nothing is set.
+    /// </summary>
+    public ViewScreens? Screens { get; init; }
+
     /// <summary>Where the view starts on the canvas, its first column and row: the canvas's first cell until it is drawn elsewhere.</summary>
     public (int Column, int Row) CanvasOrigin => (CanvasLeft ?? 0, CanvasTop ?? 0);
 
@@ -477,7 +484,8 @@ public sealed record DashboardLayout(int Columns, IReadOnlyList<ObjectInstance> 
         };
     }
 
-    public string Write() => JsonSerializer.Serialize(new Stored(FormVersion, Columns, Objects, Groups, Status.Count > 0 ? Status : null, CanvasWidth, CanvasHeight, CanvasLeft, CanvasTop), Json);
+    public string Write() => JsonSerializer.Serialize(new Stored(FormVersion, Columns, Objects, Groups, Status.Count > 0 ? Status : null, CanvasWidth, CanvasHeight, CanvasLeft, CanvasTop,
+        Screens == new ViewScreens() ? null : Screens), Json);
 
     /// <summary>
     /// A stored dashboard read back; an empty or unreadable one is an empty
@@ -503,6 +511,7 @@ public sealed record DashboardLayout(int Columns, IReadOnlyList<ObjectInstance> 
                     CanvasHeight = stored.CanvasHeight is > 0 ? stored.CanvasHeight : null,
                     CanvasLeft = stored.CanvasLeft is > 0 ? stored.CanvasLeft : null,
                     CanvasTop = stored.CanvasTop is > 0 ? stored.CanvasTop : null,
+                    Screens = stored.Screens,
                 }
                 : Empty;
         }
@@ -516,5 +525,6 @@ public sealed record DashboardLayout(int Columns, IReadOnlyList<ObjectInstance> 
 
     /// <summary>The written form: the layout and the version of the form it was written in.</summary>
     private sealed record Stored(int Version, int Columns, IReadOnlyList<ObjectInstance>? Objects, IReadOnlyList<DashboardGroup>? Groups,
-        IReadOnlyList<StatusAlarm>? Status = null, int? CanvasWidth = null, int? CanvasHeight = null, int? CanvasLeft = null, int? CanvasTop = null);
+        IReadOnlyList<StatusAlarm>? Status = null, int? CanvasWidth = null, int? CanvasHeight = null, int? CanvasLeft = null, int? CanvasTop = null,
+        ViewScreens? Screens = null);
 }
