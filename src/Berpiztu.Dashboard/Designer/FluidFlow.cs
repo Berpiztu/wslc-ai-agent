@@ -11,18 +11,25 @@ namespace Berpiztu.Dashboard.Designer;
 /// (the view, or its card), and the rules are the same at every level.
 /// <list type="bullet">
 /// <item>What holds things (the view, a card) has them in bands: those whose
-/// rows meet stand in one band, side by side, in the design's order.</item>
+/// rows meet stand in one band, in the design's order.</item>
 /// <item>A band whose pieces, each placed by its anchor, all stand inside
 /// their holder at no less than their own size (Scale at any) and none on
-/// another is placed so, as fluid always placed it:
-/// Scale spread in proportion, Left and Right at its own size to that edge,
-/// Both widened or narrowed by what the holder gained or lost.</item>
-/// <item>A band that does not (a piece past the holder's edge, or two on
-/// each other) is broken into lines, each taking what fits at its own size
-/// (the first always at least one): Left at its own size from the left,
-/// Right at its own size to the right, Both and Scale sharing what is left
-/// over, in proportion to their size, and taking the whole line when alone
-/// on it.</item>
+/// another — the same columns and the same rows — is placed so, as fluid
+/// always placed it: Scale spread in proportion, Left and Right at its own
+/// size to that edge, Both widened or narrowed by what the holder gained or
+/// lost.</item>
+/// <item>A band that does not (a piece past the holder's edge, squeezed, or
+/// on another) is broken into lines, its pieces in reading order — where each
+/// begins, the highest first and, at one height, the leftmost —, each line
+/// taking as many as fit at their own size (the first always at least one):
+/// Left at its own size from the left, Right to the right, Both and Scale
+/// sharing what is left over in proportion to their size, the whole line when
+/// alone on it; a piece set to begin a new line (its New line) begins one,
+/// whatever would fit before it; every piece of a line from its top, the rows that stood
+/// between them in the design not kept (the owner, 15 October 2026). Nothing
+/// is kept together but what the user grouped: a group
+/// goes to a line as one piece (the owner, 15 October 2026: the dashboard
+/// decides nothing of its own).</item>
 /// <item>A card grows down by what its own lines took, the band it stands in
 /// with it, and what stands under it, in its holder and in the view, comes
 /// down as much. Nothing grows across.</item>
@@ -65,8 +72,8 @@ internal sealed class FluidFlow
     /// <summary>Where a card or an object stands; null for one not laid out (not drawn).</summary>
     public Spot? SpotOf(string id) => _spots.TryGetValue(id, out var spot) ? spot : null;
 
-    /// <summary>A card or an object as the flow sees it: its id, its cells, its anchor, and whether it is a card holding others.</summary>
-    private sealed record Piece(string Id, CellBox Box, HorizontalAnchor Anchor, bool Card);
+    /// <summary>A card or an object as the flow sees it: its id, its cells, its anchor, whether it is a card holding others, and whether it begins a line of its own.</summary>
+    private sealed record Piece(string Id, CellBox Box, HorizontalAnchor Anchor, bool Card, bool NewLine);
 
     /// <summary>
     /// What stands directly in a card (its objects and the cards inside it),
@@ -77,9 +84,9 @@ internal sealed class FluidFlow
     private List<Piece> Children(string? card) =>
     [
         .. _layout.Groups.Where(group => group.Parent == card && (card is not null || _seen(group.Box)))
-            .Select(group => new Piece(group.Id, group.Box, group.Anchor ?? HorizontalAnchor.Scale, true)),
+            .Select(group => new Piece(group.Id, group.Box, group.Anchor ?? HorizontalAnchor.Scale, true, group.NewLine == true)),
         .. _layout.Objects.Where(o => o.Group == card && o.Hidden != true && (card is not null || _seen(o.Box)))
-            .Select(o => new Piece(o.Id, o.Box, _anchorOf(o), false)),
+            .Select(o => new Piece(o.Id, o.Box, _anchorOf(o), false, o.NewLine == true)),
     ];
 
     /// <summary>
@@ -96,36 +103,61 @@ internal sealed class FluidFlow
             var bandRow = band.Min(piece => piece.Box.Y);
             var bandRows = band.Max(piece => piece.Box.Y + piece.Box.H) - bandRow;
             var bandTop = top + (bandRow - row) * _cell + grown;
-            var wrapped = !Fits(band, from, room, x, w);
-            List<List<Piece>> lines = wrapped ? Lines(band, room) : [band];
-            var lineTop = bandTop;
-            foreach (var line in lines)
-            {
-                var lineRow = line.Min(piece => piece.Box.Y);
-                List<(double Left, double Width)> across = wrapped ? Wrapped(line, from, room) : [.. line.Select(piece => Across(piece, from, room, x, w))];
-                var lineHeight = 0.0;
-                for (var i = 0; i < line.Count; i++)
-                {
-                    var piece = line[i];
-                    var pieceTop = lineTop + (piece.Box.Y - lineRow) * _cell;
-                    var height = piece.Card
-                        ? Lay(Children(piece.Id), across[i].Left, across[i].Width, piece.Box.X, piece.Box.W, pieceTop, piece.Box.Y, piece.Box.H)
-                        : piece.Box.H * _cell;
-                    _spots[piece.Id] = new Spot(across[i].Left, pieceTop, across[i].Width, height);
-                    lineHeight = Math.Max(lineHeight, pieceTop - lineTop + height);
-                }
-
-                lineTop += lineHeight;
-            }
-
-            grown += Math.Max(0, lineTop - bandTop - bandRows * _cell);
+            var height = Fits(band, from, room, x, w)
+                ? Place(band, from, room, x, w, bandTop, bandRow)
+                : Wrap(band, from, room, bandTop);
+            grown += Math.Max(0, height - bandRows * _cell);
         }
 
         // As tall as designed, and taller by what its lines added.
         return rows * _cell + grown;
     }
 
-    /// <summary>The pieces in bands, top to bottom: those whose rows meet stand in one, each band left to right.</summary>
+    /// <summary>Pieces placed each by its anchor in a holder (<paramref name="from"/>, <paramref name="room"/>, its cells), from a top on the screen and the row it stands for; answers how tall they stand.</summary>
+    private double Place(IEnumerable<Piece> pieces, double from, double room, int x, int w, double top, int row)
+    {
+        var height = 0.0;
+        foreach (var piece in pieces)
+        {
+            var (left, width) = Across(piece, from, room, x, w);
+            var pieceTop = top + (piece.Box.Y - row) * _cell;
+            var own = piece.Card
+                ? Lay(Children(piece.Id), left, width, piece.Box.X, piece.Box.W, pieceTop, piece.Box.Y, piece.Box.H)
+                : piece.Box.H * _cell;
+            _spots[piece.Id] = new Spot(left, pieceTop, width, own);
+            height = Math.Max(height, pieceTop - top + own);
+        }
+
+        return height;
+    }
+
+    /// <summary>A band too wide in lines, its pieces in reading order, from its top; answers how tall the lines stand.</summary>
+    private double Wrap(List<Piece> band, double from, double room, double top)
+    {
+        var lineTop = top;
+        foreach (var line in Lines([.. band.OrderBy(piece => piece.Box.Y).ThenBy(piece => piece.Box.X)], room))
+        {
+            var spots = Wrapped(line, from, room);
+            var lineHeight = 0.0;
+            for (var i = 0; i < line.Count; i++)
+            {
+                // Every piece of a line from its top, side by side, as the Containers screen's cards flow.
+                var piece = line[i];
+                var pieceTop = lineTop;
+                var height = piece.Card
+                    ? Lay(Children(piece.Id), spots[i].Left, spots[i].Width, piece.Box.X, piece.Box.W, pieceTop, piece.Box.Y, piece.Box.H)
+                    : piece.Box.H * _cell;
+                _spots[piece.Id] = new Spot(spots[i].Left, pieceTop, spots[i].Width, height);
+                lineHeight = Math.Max(lineHeight, pieceTop - lineTop + height);
+            }
+
+            lineTop += lineHeight;
+        }
+
+        return lineTop - top;
+    }
+
+    /// <summary>The pieces in bands, top to bottom: those whose rows meet stand in one.</summary>
     private static List<List<Piece>> Bands(List<Piece> pieces)
     {
         var bands = new List<List<Piece>>();
@@ -146,43 +178,56 @@ internal sealed class FluidFlow
             bands[^1].Add(piece);
         }
 
-        return [.. bands.Select(band => band.OrderBy(piece => piece.Box.X).ThenBy(piece => piece.Box.Y).ToList())];
+        return bands;
     }
 
     /// <summary>
     /// A band fits its holder when each of its pieces, placed by its anchor,
     /// stands inside the holder at no less than its own size, and none stands
-    /// on another: two cards of 24 columns side by side in a card of 24 do
-    /// not, nor do two kept to both edges of a card that narrowed, which
-    /// would each be squeezed under its own size. Scale spreads in
-    /// proportion, and fits whatever the width.
+    /// on another — in the same columns and the same rows: two cards of 24
+    /// columns side by side in a card of 24 do not, nor do two kept to both
+    /// edges of a card that narrowed, which would each be squeezed under its
+    /// own size; a figure over its dial in the same columns does. Scale
+    /// spreads in proportion, and fits whatever the width.
     /// </summary>
     private bool Fits(List<Piece> band, double from, double room, int x, int w)
     {
-        var placed = band.Select(piece => (Piece: piece, Spot: Across(piece, from, room, x, w))).OrderBy(one => one.Spot.Left).ToList();
-        for (var i = 0; i < placed.Count; i++)
+        var placed = band.Select(piece => (Piece: piece, Spot: Across(piece, from, room, x, w))).ToList();
+        foreach (var (piece, (left, width)) in placed)
         {
-            var (piece, (left, width)) = placed[i];
             var squeezed = piece.Anchor != HorizontalAnchor.Scale && width < piece.Box.W * _cell - 0.5;
-            if (width < 1 || squeezed || left < from - 0.5 || left + width > from + room + 0.5
-                || (i > 0 && left < placed[i - 1].Spot.Left + placed[i - 1].Spot.Width - 0.5))
+            if (width < 1 || squeezed || left < from - 0.5 || left + width > from + room + 0.5)
             {
                 return false;
+            }
+        }
+
+        for (var i = 0; i < placed.Count; i++)
+        {
+            for (var j = i + 1; j < placed.Count; j++)
+            {
+                var (a, b) = (placed[i], placed[j]);
+                var rowsMeet = a.Piece.Box.Y < b.Piece.Box.Y + b.Piece.Box.H && b.Piece.Box.Y < a.Piece.Box.Y + a.Piece.Box.H;
+                var columnsMeet = a.Spot.Left < b.Spot.Left + b.Spot.Width - 0.5 && b.Spot.Left < a.Spot.Left + a.Spot.Width - 0.5;
+                if (rowsMeet && columnsMeet)
+                {
+                    return false;
+                }
             }
         }
 
         return true;
     }
 
-    /// <summary>A band too wide broken into lines, left to right: each takes what fits at its own size, and at least one.</summary>
-    private List<List<Piece>> Lines(List<Piece> band, double room)
+    /// <summary>Pieces in reading order broken into lines: each line takes what fits at its own size, and at least one; one set to begin a new line begins one.</summary>
+    private List<List<Piece>> Lines(List<Piece> pieces, double room)
     {
         var lines = new List<List<Piece>>();
         var used = 0.0;
-        foreach (var piece in band)
+        foreach (var piece in pieces)
         {
             var width = piece.Box.W * _cell;
-            if (lines.Count == 0 || used + width > room + 0.5)
+            if (lines.Count == 0 || (piece.NewLine && lines[^1].Count > 0) || used + width > room + 0.5)
             {
                 lines.Add([]);
                 used = 0;

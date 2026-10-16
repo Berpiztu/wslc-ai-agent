@@ -66,7 +66,9 @@
 @* The title bar names the page on screen, with the view on screen beside it,
    landscape or portrait, in design as out of it, so which of the dashboard's
    alarms are in force is read at a glance; under them, where the dashboard is
-   kept: "System, server". *@
+   kept: "System, server". In design it says too, in words, which view is
+   designed and whether it is edited or previewed — "User, server · portrait ·
+   Preview" —, so a screenshot taken there says what it was of. *@
 <PageShell Title="@Title">
     <TitleContent>
         Dashboard
@@ -77,7 +79,7 @@
             </span>
         }
     </TitleContent>
-    <Subtitle>@PageName(PageKey), @Named(Place.Scope)</Subtitle>
+    <Subtitle>@PageName(PageKey), @Named(Place.Scope)@InDesign</Subtitle>
     <Verbs>
         @if (!Designing && _selection.Objects.Count > 0)
         {
@@ -314,7 +316,12 @@
     private static string Named(DashboardScope scope) => scope == DashboardScope.User ? "server" : "device";
 
     /// <summary>The page's name as the browser's tab shows it, where the view's icon cannot go.</summary>
-    private string Title => $"Dashboard ({PageName(PageKey)}, {Named(Place.Scope)})";
+    private string Title => $"Dashboard ({PageName(PageKey)}, {Named(Place.Scope)}{InDesign})";
+
+    /// <summary>In design, the view designed and whether it is edited or previewed: " · portrait · Preview"; nothing out of design.</summary>
+    private string InDesign => Designing && _view is not null
+        ? $" · {ViewVerb.Name(_view == BoardView.Portrait)} · {(Previewing ? "Preview" : "Design")}"
+        : "";
 
     protected override async Task OnInitializedAsync()
     {

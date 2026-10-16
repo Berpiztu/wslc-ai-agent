@@ -97,9 +97,16 @@ public enum VerticalAlign
 /// (<see cref="HorizontalAnchor"/>); null is <see cref="HorizontalAnchor.Scale"/>.
 /// </param>
 /// <param name="Border">
-/// Standing alone, where it is drawn as a card: the colour of that card's
-/// line, as a card's <see cref="DashboardGroup.Border"/>; Transparent is none,
-/// null its default. In a card its card's line is the one drawn.
+/// The colour of its line out of design, as a card's <see cref="DashboardGroup.Border"/>;
+/// Transparent is none. Null is its default: standing alone, where it is
+/// drawn as a card, the card's line; in a card, none of its own, its card's
+/// line the one drawn.
+/// </param>
+/// <param name="NewLine">
+/// In a fluid view whose row is broken into lines (<see cref="ViewFit.Fluid"/>),
+/// it begins a line of its own, whatever would fit before it on the line
+/// under way; where its row is not broken, nothing. Set by the user, null
+/// is not set.
 /// </param>
 public sealed record ObjectInstance(
     string Id,
@@ -123,7 +130,8 @@ public sealed record ObjectInstance(
     IReadOnlyList<ObjectAlarm>? Alarms = null,
     int? Elevation = null,
     HorizontalAnchor? Anchor = null,
-    ThemeColor? Border = null)
+    ThemeColor? Border = null,
+    bool? NewLine = null)
 {
     /// <summary>The cells it stands on; worked out, never stored.</summary>
     [JsonIgnore]

@@ -160,16 +160,21 @@
             }
             <PropertiesWindow Document="_document" Defaults="Defaults" View="@View" />
         }
-        @if (Editing)
+        @* In design, edited or previewed: previewed, it says too how large the view is shown now, and how
+           many columns fit across at their own size, which is what decides where a fluid row breaks. *@
+        @if (Designing)
         {
             <FloatingWindow Name="Canvas size" Class="bz-dash-canvas-window" Hideable="true" StartsFolded="true"
                             FoldedIcon="@Icons.Material.Filled.AspectRatio" FoldedColor="Color.Info">
                 <ChildContent>@CanvasSize</ChildContent>
                 <Verbs>
-                    <MudIconButton Icon="@Icons.Material.Filled.Crop" Size="Size.Small"
-                                   Color="@(_framing ? Color.Primary : Color.Default)" Variant="@(_framing ? Variant.Filled : Variant.Text)"
-                                   OnClick="ToggleFraming"
-                                   title="Draw the canvas: the whole screen opens to draw on; press anywhere and drag, cell by cell, or pull a side or a corner of the canvas, larger or smaller; let go and the canvas is that box. Nothing moves; what stands outside it is not shown out of design (undo takes it back). Press again to finish" />
+                    @if (Editing)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Crop" Size="Size.Small"
+                                       Color="@(_framing ? Color.Primary : Color.Default)" Variant="@(_framing ? Variant.Filled : Variant.Text)"
+                                       OnClick="ToggleFraming"
+                                       title="Draw the canvas: the whole screen opens to draw on; press anywhere and drag, cell by cell, or pull a side or a corner of the canvas, larger or smaller; let go and the canvas is that box. Nothing moves; what stands outside it is not shown out of design (undo takes it back). Press again to finish" />
+                    }
                 </Verbs>
             </FloatingWindow>
         }
@@ -221,9 +226,11 @@
     /// A group being moved or resized: as it was, the cell the pointer took it
     /// at, and where it would stand now. <paramref name="Tapped"/>: the object
     /// of the group the press fell on while the group was already taken, which
-    /// a press let go without moving gives the focus to.
+    /// a press let go without moving gives the focus to; <paramref name="Outward"/>:
+    /// the card a press let go without moving takes instead, the next one out.
     /// </summary>
-    private sealed record GroupDrag(bool Resizing, DashboardGroup Origin, int Column, int Row, DashboardGroup Preview, ObjectInstance? Tapped);
+    private sealed record GroupDrag(bool Resizing, DashboardGroup Origin, int Column, int Row, DashboardGroup Preview, ObjectInstance? Tapped,
+        string? Outward = null);
 
     private GroupDrag? _groupDrag;
 
@@ -344,6 +351,7 @@
         _document = new DashboardDocument(Store, type => Catalogue.Find(type)?.About.CardOnly == true, Draft);
         _document.Changed += OnChanged;
         _document.SaveFailed += OnSaveFailed;
+        _document.Refused += OnRefused;
         if (Measures is not null)
         {
             Measures.Changed += OnChanged;
@@ -457,9 +465,11 @@
     }
 
     /// <summary>
-    /// A tap on an object: previewed, the card it stands in is taken, and
-    /// tapped again the object itself, as a press does in design, so the
-    /// properties change either; out of design, it counts for its card.
+    /// A tap on an object: previewed, it goes round what the object stands in
+    /// as a press does in design — its card, the object, then each card
+    /// holding that card, one further out each time, and from the one on the
+    /// page back to its own — so the properties change any of them; out of
+    /// design, it counts for its card on the page.
     /// </summary>
     private Task TapObjectAsync(ObjectInstance instance)
     {
@@ -468,13 +478,29 @@
             return TapAsync(UnitOf(instance));
         }
 
-        if (instance.Group is { } card && _document.SelectedFrame?.Id != card && _document.Selected != instance.Id)
+        var layout = _document.Layout;
+        if (instance.Group is not { } card)
         {
-            _document.SelectGroup(card);
+            _document.Select(instance.Id);
+        }
+        else if (_document.Selected == instance.Id)
+        {
+            _document.SelectGroup(layout.FindGroup(card)?.Parent ?? card);
+        }
+        else if (_document.SelectedFrame is { } taken && layout.IsWithin(card, taken.Id))
+        {
+            if (taken.Id == card)
+            {
+                _document.Select(instance.Id);
+            }
+            else
+            {
+                _document.SelectGroup(taken.Parent ?? card);
+            }
         }
         else
         {
-            _document.Select(instance.Id);
+            _document.SelectGroup(card);
         }
 
         return Task.CompletedTask;
@@ -557,6 +583,7 @@
     {
         _document.Changed -= OnChanged;
         _document.SaveFailed -= OnSaveFailed;
+        _document.Refused -= OnRefused;
         if (Measures is not null)
         {
             Measures.Changed -= OnChanged;
@@ -595,6 +622,9 @@
             await DraftChanged.InvokeAsync();
         }
     });
+
+    /// <summary>What the document would not do, said where the designer says what it could not keep.</summary>
+    private void OnRefused(string why) => _ = InvokeAsync(() => Snackbar.Add(why, Severity.Warning));
 
     private void OnSaveFailed(Exception failure) =>
         _ = InvokeAsync(() => Snackbar.Add(Draft is null
@@ -821,6 +851,9 @@
     /// <summary>A design cell's side in pixels, measured as the view was fitted: what a piece measures at its own size.</summary>
     private double _cellPx;
 
+    /// <summary>The room the view was last fitted to, measured: what the canvas size window says it is shown in while previewed.</summary>
+    private FrameRoom? _room;
+
     /// <summary>
     /// Fluid, the view laid out by its flow (<see cref="FluidFlow"/>): its
     /// cells counted from the view's first one, its width the screen's, and
@@ -921,7 +954,7 @@
             + Colour("background-color", background == ThemeColor.Inherited && group is not null ? GroupBackground(group) : background)
             + Colour("color", foreground == ThemeColor.Inherited && group is not null ? GroupForeground(group) : foreground)
             + Margins(o)
-            + (group is null ? BorderStyle(o.Border) : "")
+            + (group is null || o.Border is not null ? BorderStyle(o.Border) : "")
             + PartCss.Style(o);
     }
 
@@ -952,6 +985,11 @@
         // Standing alone it is a card of its own, drawn as one; in a group,
         // the group's card is drawn round it.
         var classes = shown.Group is null ? "bz-dash-object bz-dash-loose" : "bz-dash-object bz-dash-member";
+        // In a card, a line of its own where one was chosen in its properties, drawn out of design as a card's is.
+        if (!Editing && shown.Group is not null && shown.Border is not null)
+        {
+            classes += " bz-dash-bordered";
+        }
         // Chosen, or under the rectangle being drawn, which marks what it
         // touches as it goes.
         if (Designing && (_document.Chosen.Contains(shown.Id) || (_marquee is { } marquee && Caught(marquee).Contains(shown.Id))))
@@ -1412,6 +1450,14 @@
         <MudText Typo="Typo.caption" Class="mud-text-secondary bz-dash-prop-wide" title="The cells the screen holds at their own size, across and down">
             @FormattableString.Invariant($"Screen · {Math.Floor(Screen.Width / DashboardLayout.CellPixels):0} × {Math.Floor(Screen.Height / DashboardLayout.CellPixels):0} cells")
         </MudText>
+        @if (Previewing && _room is { Width: > 0 } room && _cellPx > 0)
+        {
+            @* As short as the window's other lines, so it is read whole in its width: longer, it was cut before its columns. *@
+            <MudText Typo="Typo.caption" Class="bz-dash-prop-wide"
+                     title="Previewed: the room the view is shown in now, in pixels, and how many of the design's columns fit across it at their own size — where more than that stand side by side, a fluid row breaks">
+                @FormattableString.Invariant($"Now {room.Width - room.Bar:0} × {room.Height:0} px · {Math.Floor((room.Width - room.Bar) / _cellPx):0} cols")
+            </MudText>
+        }
     </div>;
 
     private IReadOnlyList<CanvasProportion> Proportions => CanvasProportion.For(View);
@@ -1522,6 +1568,7 @@
             // The room inside the frame with no scrollbar, whether one shows
             // now or not, so a scrollbar coming or going never refits it.
             var room = await Interop.MeasureInsideAsync(_frame);
+            _room = room;
             var cell = (await Interop.MeasureAsync(_baseProbe)).Width;
             if (cell > 0)
             {
@@ -1735,7 +1782,11 @@
     /// pressed is taken, and moves inside the frame, and with Ctrl it is chosen
     /// with them or taken back; otherwise the press takes the group whole and
     /// a drag moves it — and once the group is taken, a press let go without moving
-    /// gives the focus to the object it fell on.
+    /// gives the focus to the object it fell on. Presses let go without moving
+    /// go round what it stands in: its card, the object, then each card that
+    /// holds that card, one further out each time, and from the one on the
+    /// page back to its own card. While one of those further out is taken, a
+    /// drag moves that one.
     /// </summary>
     private Task PressObjectAsync(ObjectInstance instance, PointerEventArgs pointer)
     {
@@ -1749,6 +1800,12 @@
         // that group, when it counts for itself too, so Ctrl chooses several
         // of a card's objects.
         var unit = instance.Group is not { } groupOf || FocusInside(groupOf) ? instance.Id : groupOf;
+        if ((pointer.CtrlKey || pointer.MetaKey) && ChosenLevelOf(instance) is { } level)
+        {
+            // Added to what is chosen: what the press fell in, on the level of what is chosen.
+            unit = level;
+        }
+
         if (ChooseAmongSeveral(unit, pointer) is { } carried)
         {
             return carried;
@@ -1760,7 +1817,47 @@
             return BeginObjectAsync(instance, pointer, resizing: false);
         }
 
+        // A card holding the object's own, further out, is taken: a drag moves it, a tap goes one further out.
+        if (_document.SelectedFrame is { } outer && outer.Id != groupId && _document.Layout.IsWithin(groupId, outer.Id))
+        {
+            return BeginGroupAsync(outer, pointer, resizing: false, outward: outer.Parent ?? groupId);
+        }
+
         return BeginGroupAsync(group, pointer, resizing: false, tapped: _document.SelectedGroup == groupId ? instance : null);
+    }
+
+    /// <summary>
+    /// What a press on <paramref name="instance"/> stands for on the level of
+    /// what is chosen (<see cref="DashboardDocument.LevelOf"/>): the object
+    /// itself, when it stands in the same card as what is chosen; otherwise
+    /// the card holding it, however far out, that stands there — a charts
+    /// card, pressed on one of its charts, beside a project's details. Null
+    /// when nothing is chosen, or it stands on no such level.
+    /// </summary>
+    private string? ChosenLevelOf(ObjectInstance instance)
+    {
+        if (_document.Chosen.Count == 0)
+        {
+            return null;
+        }
+
+        var level = _document.LevelOf(_document.Chosen[0]);
+        if (instance.Group == level)
+        {
+            return instance.Id;
+        }
+
+        // Each card looked at once: a loop in what a stored file says stands in what would never end.
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (var card = _document.Layout.FindGroup(instance.Group); card is not null && seen.Add(card.Id); card = _document.Layout.FindGroup(card.Parent))
+        {
+            if (card.Parent == level)
+            {
+                return card.Id;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>The focus is inside this group: what is chosen is one or several of its objects, and nothing else.</summary>
@@ -1840,7 +1937,8 @@
     /// <paramref name="tapped"/> is the object the press fell on when the group
     /// was already taken: let go without moving, it gets the focus.
     /// </summary>
-    private async Task BeginGroupAsync(DashboardGroup group, PointerEventArgs pointer, bool resizing, ObjectInstance? tapped = null)
+    /// <param name="outward">The card a press let go without moving takes instead: the next one out from it, or back to the object's own.</param>
+    private async Task BeginGroupAsync(DashboardGroup group, PointerEventArgs pointer, bool resizing, ObjectInstance? tapped = null, string? outward = null)
     {
         if (!Editing || !Pressed(pointer))
         {
@@ -1850,7 +1948,7 @@
         _document.SelectGroup(group.Id);
         await MeasureCanvasAsync();
         var (column, row) = CellAt(pointer.ClientX, pointer.ClientY);
-        _groupDrag = new GroupDrag(resizing, group, column, row, group, tapped);
+        _groupDrag = new GroupDrag(resizing, group, column, row, group, tapped, outward);
         await Interop.CaptureAsync(_canvas, pointer.PointerId);
     }
 
@@ -2085,8 +2183,9 @@
             else if (drag is { BackToGroup: true, Origin.Group: { } groupId } && drag.Preview == drag.Origin)
             {
                 // Pressed again and let go without moving: the object lets go,
-                // and the focus goes back to its group.
-                _document.SelectGroup(groupId);
+                // and the focus goes to the card holding its own, or, on the
+                // page, back to its own.
+                _document.SelectGroup(_document.Layout.FindGroup(groupId)?.Parent ?? groupId);
             }
         }
         else if (_groupDrag is { } moving)
@@ -2100,6 +2199,11 @@
             {
                 // A tap on an object of the taken group: the focus goes to it.
                 _document.Select(tapped.Id);
+            }
+            else if (moving.Outward is { } outward)
+            {
+                // A tap while a card further out is taken: the next one out, or back to the object's own.
+                _document.SelectGroup(outward);
             }
         }
     }

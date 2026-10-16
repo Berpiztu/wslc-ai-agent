@@ -460,7 +460,8 @@ The Home page is a dashboard designed by each user, not a fixed screen.
   container, Compose project, image, volume or network card — come only with their card: the
   toolbox does not offer them alone, they never leave it, and removing one
   hides it. Select several with a marquee, group them
-  into a card (Ctrl+G), undo (Ctrl+Z), delete. A floating properties window
+  into a card (Ctrl+G, wrapping what is chosen as it is; Ungroup takes off
+  that one level), undo (Ctrl+Z, change after change, the last hundred), delete. A floating properties window
   sets each object's source, size, type size, colours, elevation, alignment,
   margins, the parts it shows and how it widens on a wider screen. Each part
   takes a size of its own, a part of text its colour and weight, and a part
@@ -484,7 +485,14 @@ The Home page is a dashboard designed by each user, not a fixed screen.
   connected or disconnected, health changes); the agent's log; file transfers;
   free text.
 - **Ready-made cards**: container, Compose project, image, volume, network, system, charts.
-  A project's card is one card with its containers in it, each a
+  A project's card is born with a place for its containers, an empty group
+  under its own pieces where they go when its project is chosen, and again
+  each time another is; a group you make of cards all of one kind (the
+  containers' cards) becomes that place. That place keeps the size you gave
+  it unless you set it to: **Auto-expand** grows it down to hold more cards,
+  what is under it moving down as much, and **Auto-shrink** shrinks it to
+  fewer, what is under it moving up; each view keeps its own, so a phone's
+  can grow while a desktop's stays as designed. A project's card is one card with its containers in it, each a
   container's card of its own inside it, taken and moved whole: choosing the
   project puts them in, and the card's properties list them with a tick
   each (shown in the card, or not); one made later is listed unticked. Its
@@ -508,7 +516,10 @@ The Home page is a dashboard designed by each user, not a fixed screen.
   Width, Stretch or Fluid. Each page and view keeps its own on each device;
   portrait opens Fluid and landscape Fill until you choose. Fluid lays the
   view out as each piece's anchor says, and what does not fit beside what
-  stands before it in its row goes down to a line of its own: two cards side
+  stands before it in its row goes down to a line of its own, in reading
+  order (where each begins, top first, then left), each line's pieces side by
+  side from its top, nothing kept together but what you grouped, and a piece
+  or card set to **New line in Fluid** beginning a line of its own: two cards side
   by side in a project's card, on a phone where one fits, one under the
   other; the card grows down and what is under it comes down too. In design,
   **Preview** shows the view being designed, saved or not, fitted as the zoom

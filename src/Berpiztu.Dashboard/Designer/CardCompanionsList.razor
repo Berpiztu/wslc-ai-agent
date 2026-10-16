@@ -78,19 +78,52 @@
 
     /// <summary>The cards inside the card that show this one of them: the companions' template, reading its value.</summary>
     public static IReadOnlyList<DashboardGroup> Cards(DashboardLayout layout, ObjectCatalogue catalogue, ICardCompanions set, string groupId, string value) =>
-        [.. layout.Cards(groupId).Where(card => card.Template == set.Card.Type && SourceOf(layout, catalogue, card.Id) == value)];
+        // However deep: put in a group of the card's own (two containers grouped), they are its still.
+        [.. layout.Descendants(groupId).Where(card => card.Template == set.Card.Type && SourceOf(layout, catalogue, card.Id) == value)];
 
     /// <summary>
     /// These of them put in the card, each as its own card is born and a
     /// card of its own inside it, its objects that read a source reading its
-    /// value; how many found no room.
+    /// value; how many found no room. Where the card has a group for them
+    /// (<see cref="DashboardGroup.Holds"/>: born with it, or made by the user
+    /// of them) that group is where they go, as many to a row as its width
+    /// takes; otherwise the card.
     /// </summary>
     public static Task<int> AddAsync(DashboardDocument document, ObjectCatalogue catalogue, ICardCompanions set, DashboardGroup frame,
         IReadOnlyList<string> values, IObjectDefaults? defaults, string view)
     {
+        var (place, born, each, perRow) = Placing(document.Layout, catalogue, set, frame, values, defaults, view);
+        return document.AddInsideAsync(place, [.. values.Select(_ => born)], each, perRow);
+    }
+
+    /// <summary>
+    /// What the card reads chosen anew, and its own cards with it, all at
+    /// once (<see cref="DashboardDocument.ReadAnewAsync"/>): its pieces
+    /// reading <paramref name="source"/>, the cards of what it read before
+    /// taken out, and one card for each of <paramref name="values"/> put in;
+    /// how many found no room, and then nothing is changed.
+    /// </summary>
+    public static Task<int> ReadAnewAsync(DashboardDocument document, ObjectCatalogue catalogue, ICardCompanions set, DashboardGroup frame,
+        IReadOnlyList<ObjectInstance> readers, IReadOnlyList<string> values, IObjectDefaults? defaults, string view)
+    {
+        IReadOnlyCollection<string> gone = [.. document.Layout.Descendants(frame.Id).Where(card => card.Template == set.Card.Type).Select(card => card.Id)];
+        var (place, born, each, perRow) = Placing(document.Layout, catalogue, set, frame, values, defaults, view);
+        return document.ReadAnewAsync(readers, frame.Id, gone, place, [.. values.Select(_ => born)], each, perRow);
+    }
+
+    /// <summary>
+    /// Where the card's own cards go and how: the innermost group of it that
+    /// is their place (<see cref="DashboardGroup.Holds"/>), as many to a row
+    /// as its width takes, or the card itself; each born as its card is, its
+    /// objects that read a source reading its value.
+    /// </summary>
+    private static (string Place, BornCard Born, Func<int, ObjectInstance, ObjectInstance> Each, int PerRow) Placing(DashboardLayout layout,
+        ObjectCatalogue catalogue, ICardCompanions set, DashboardGroup frame, IReadOnlyList<string> values, IObjectDefaults? defaults, string view)
+    {
         var born = set.Card.Born(defaults, view);
-        return document.AddInsideAsync(frame.Id, [.. values.Select(_ => born)],
+        var place = layout.Descendants(frame.Id).Where(group => group.Holds == set.Card.Type).OrderByDescending(layout.Depth).FirstOrDefault();
+        return (place?.Id ?? frame.Id, born,
             (index, o) => catalogue.Find(o.Type) is { HasSource: true } kind ? o with { Source = kind.Kept(values[index]) } : o,
-            set.PerRow);
+            place is null ? set.PerRow : Math.Max(1, place.W / Math.Max(1, born.W)));
     }
 }

@@ -29,7 +29,11 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
     private readonly SemaphoreSlim _saving = new(1, 1);
 
     /// <summary>The layout before the last change, for undo; one step only.</summary>
-    private DashboardLayout? _before;
+    /// <summary>The dashboard as it stood before each change, the last one last: what Undo takes back, one at a time.</summary>
+    private readonly List<DashboardLayout> _before = [];
+
+    /// <summary>How many changes Undo takes back, one after another.</summary>
+    private const int UndoSteps = 100;
 
     /// <summary>The layout as the store holds it; the one on the screen until a change is made with a draft.</summary>
     private DashboardLayout _saved = DashboardLayout.Empty;
@@ -66,17 +70,14 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
     public IReadOnlyList<DashboardGroup> ChosenGroups => [.. _chosen.Select(Layout.FindGroup).OfType<DashboardGroup>()];
 
     /// <summary>
-    /// Several chosen that Group makes one group of: objects standing alone or
-    /// groups, a card whose pieces live only in it melting into no other; or
-    /// pieces of one card, any of them (<see cref="InOneCard"/>), made a group
-    /// inside it.
+    /// Several chosen on one level (<see cref="LevelOf"/>) — objects standing
+    /// alone and cards on the page, or what stands directly in one card, its
+    /// pieces and the cards inside it — that Group puts in one group there.
     /// </summary>
-    public bool CanGroup => _chosen.Count >= 2
-        && (InOneCard is not null || (ChosenObjects.All(o => o.Group is null && !CardOnly(o)) && !ChosenGroups.Any(Closed)));
+    public bool CanGroup => _chosen.Count >= 2 && _chosen.Select(LevelOf).Distinct().Count() == 1;
 
-    /// <summary>The card every one chosen is a piece of, when only objects of one card are chosen; null otherwise.</summary>
-    private string? InOneCard =>
-        _chosen.Count >= 2 && ChosenObjects.Count == _chosen.Count && ChosenObjects.Select(o => o.Group).Distinct().ToList() is [{ } card] ? card : null;
+    /// <summary>Group could not be done, and why, for the designer to say.</summary>
+    public event Action<string>? Refused;
 
     /// <summary>The groups chosen that can be ungrouped: a group of pieces inside a card, its pieces going back to the card, and on the page every one but a card whose pieces live only in it.</summary>
     public bool CanUngroup => ChosenGroups.Any(Ungroupable);
@@ -98,7 +99,7 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
     /// </summary>
     public bool Closed(DashboardGroup group) => Layout.Pieces(group.Id).Any(CardOnly);
 
-    public bool CanUndo => _before is not null;
+    public bool CanUndo => _before.Count > 0;
 
     /// <summary>Anything shown changed: the layout, the selection, whether undo can be pressed.</summary>
     public event Action? Changed;
@@ -111,7 +112,7 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
     {
         _saved = DashboardLayout.Read(await store.LoadAsync(cancellationToken));
         Layout = _saved;
-        _before = null;
+        _before.Clear();
         Changed?.Invoke();
     }
 
@@ -127,7 +128,7 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
         }
 
         Layout = DashboardLayout.Read(kept) with { Columns = Layout.Columns };
-        _before = null;
+        _before.Clear();
         LetGoOfWhatIsGone();
         Changed?.Invoke();
     }
@@ -176,7 +177,7 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
         }
 
         Layout = _saved;
-        _before = null;
+        _before.Clear();
         LetGoOfWhatIsGone();
         Changed?.Invoke();
         await KeepAsync();
@@ -197,14 +198,23 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
     }
 
     /// <summary>
+    /// What an object or a card chosen stands directly in: an object's card, a
+    /// card's own holder; null on the page. Several are chosen on one such
+    /// level.
+    /// </summary>
+    public string? LevelOf(string id) => Layout.Find(id)?.Group ?? Layout.FindGroup(id)?.Parent;
+
+    /// <summary>
     /// Ctrl with a press: what it pressed joins what is chosen, or leaves it if
-    /// it was there. Several are chosen on one level: objects standing alone
-    /// and whole groups together, or objects of one group together; what was chosen on another level lets go first.
+    /// it was there. Several are chosen on one level (<see cref="LevelOf"/>):
+    /// objects standing alone and cards on the page together, or what stands
+    /// in one card together, its pieces and the cards inside it alike; what
+    /// was chosen on another level lets go first.
     /// </summary>
     public void Toggle(string id)
     {
-        var level = Layout.Find(id)?.Group;
-        if (_chosen.Any(chosen => Layout.Find(chosen)?.Group != level))
+        var level = LevelOf(id);
+        if (_chosen.Any(chosen => LevelOf(chosen) != level))
         {
             _chosen.Clear();
         }
@@ -240,7 +250,7 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
         var group = card.Framed(groupId, x, y) with { Parent = parent };
         // Its groups of its own pieces, each under an id of its own, and each piece in its own.
         var inner = (card.Inner ?? []).Select(born => PiecesGroup(Guid.NewGuid().ToString("N"), born.Box with { X = x + born.X, Y = y + born.Y }, groupId)
-            with { Anchor = born.Anchor }).ToList();
+            with { Anchor = born.Anchor, Holds = born.Holds }).ToList();
         var holderOf = (card.Inner ?? []).SelectMany((born, i) => born.Objects.Select(o => (o, inner[i].Id))).ToDictionary(pair => pair.o, pair => pair.Id);
         IReadOnlyList<ObjectInstance> members =
             [.. card.Objects.Select(o => o with { Id = Guid.NewGuid().ToString("N"), X = x + o.X, Y = y + o.Y, Group = holderOf.GetValueOrDefault(o.Id, groupId) })];
@@ -264,7 +274,44 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
     /// </summary>
     public async Task<int> AddInsideAsync(string groupId, IReadOnlyList<BornCard> cards, Func<int, ObjectInstance, ObjectInstance> each, int perRow)
     {
-        var layout = Layout;
+        var (layout, none) = PlacedInside(Layout, groupId, cards, each, perRow);
+        if (!ReferenceEquals(layout, Layout))
+        {
+            await ChangeAsync(layout);
+        }
+
+        return none;
+    }
+
+    /// <summary>
+    /// What a card reads chosen anew, all at once or not at all: its pieces
+    /// that read a source given it (<paramref name="readers"/>), the cards of
+    /// what it read before taken out of it (<paramref name="gone"/>), and the
+    /// cards of what it reads now put in <paramref name="place"/> — the card,
+    /// or the group in it they go in. One change, so one undo takes it all
+    /// back. Where they do not all fit, nothing is changed, and how many did
+    /// not fit is answered.
+    /// </summary>
+    public async Task<int> ReadAnewAsync(IReadOnlyList<ObjectInstance> readers, string card, IReadOnlyCollection<string> gone, string place,
+        IReadOnlyList<BornCard> cards, Func<int, ObjectInstance, ObjectInstance> each, int perRow)
+    {
+        var read = readers.Aggregate(Layout, (layout, reader) => layout.With(reader));
+        var left = gone.Count == 0 ? read : read.WithoutInside(card, gone);
+        var (next, none) = PlacedInside(left, place, cards, each, perRow);
+        if (none > 0)
+        {
+            return none;
+        }
+
+        // A place set to shrink with its cards is as tall as the ones it holds now.
+        await ChangeAndKeepSelectionAsync(next.Shrunk(place));
+        return 0;
+    }
+
+    /// <summary>Cards made already put inside a group of <paramref name="layout"/>, one after another, as many as fit; with how many did not.</summary>
+    private static (DashboardLayout Layout, int None) PlacedInside(DashboardLayout layout, string groupId, IReadOnlyList<BornCard> cards,
+        Func<int, ObjectInstance, ObjectInstance> each, int perRow)
+    {
         var none = 0;
         for (var index = 0; index < cards.Count; index++)
         {
@@ -280,17 +327,22 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
             }
         }
 
-        if (!ReferenceEquals(layout, Layout))
-        {
-            await ChangeAsync(layout);
-        }
-
-        return none;
+        return (layout, none);
     }
 
     /// <summary>These cards of a group removed, each with its objects, and its frame drawn back to what is left, in one change undo takes back whole.</summary>
-    public Task RemoveInsideAsync(string groupId, IReadOnlyCollection<string> cardIds) =>
-        cardIds.Count == 0 ? Task.CompletedTask : ChangeAndKeepSelectionAsync(Layout.WithoutInside(groupId, cardIds));
+    public Task RemoveInsideAsync(string groupId, IReadOnlyCollection<string> cardIds)
+    {
+        if (cardIds.Count == 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        // The places in it set to shrink with their cards (AutoShrink) are as tall as what is left in them.
+        var left = Layout.WithoutInside(groupId, cardIds);
+        return ChangeAndKeepSelectionAsync(left.Descendants(groupId).Where(group => group.Holds is not null)
+            .Aggregate(left, (layout, place) => layout.Shrunk(place.Id)));
+    }
 
     /// <summary>The alarms the status bar shows, as ticked in the properties window, in one change undo takes back.</summary>
     public Task SetStatusAsync(IReadOnlyList<StatusAlarm> status) => ChangeAsync(Layout with { Status = status });
@@ -483,11 +535,14 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
     }
 
     /// <summary>
-    /// Group (Ctrl+G) with several chosen, objects standing alone and whole
-    /// groups: one frame drawn round all of
-    /// them, the groups chosen melted into it — no group holds another — and
-    /// the group taken whole. Refused — false, nothing changed — when the frame
-    /// would take the cells of anything else.
+    /// Group (Ctrl+G) with several chosen on one level: a frame round them at
+    /// that level — on the page, or inside the card they stand in (<see cref="PiecesGroup"/>) —,
+    /// and they stand in it as they are, a card with all it holds (cards all of
+    /// one template make it the place more of them go, <see cref="DashboardGroup.Holds"/>); nothing
+    /// chosen is taken apart, so Ungroup takes off this one level and no
+    /// other. The group is taken whole. Refused — false, nothing changed, and
+    /// said (<see cref="Refused"/>) — when the frame would take the cells of
+    /// anything not chosen.
     /// </summary>
     public async Task<bool> GroupChosenAsync()
     {
@@ -496,43 +551,18 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
             return false;
         }
 
-        if (InOneCard is { } card)
-        {
-            return await GroupInCardAsync(card);
-        }
-
-        var id = Guid.NewGuid().ToString("N");
-        var groups = ChosenGroups;
-        var members = ChosenObjects.Concat(groups.SelectMany(g => Layout.Members(g.Id)))
-            .Select(o => o with { Group = id })
-            .ToList();
-        var frame = CellBox.Around(members.Select(o => o.Box).Concat(groups.Select(g => g.Box)));
-        var group = new DashboardGroup(id, frame.X, frame.Y, frame.W, frame.H);
-        var next = groups.Aggregate(Layout, (layout, old) => layout.Ungrouped(old.Id)).With(group, members);
-        if (!next.FitsGroup(group))
-        {
-            return false;
-        }
-
-        await ChangeAsync(next);
-        SelectGroup(id);
-        return true;
-    }
-
-    /// <summary>
-    /// Pieces of one card made a group inside it (<see cref="PiecesGroup"/>):
-    /// a frame round them, and they stand in it; the group taken. Refused —
-    /// false, nothing changed — when the frame would take the cells of
-    /// another piece of the card, or of a card inside it.
-    /// </summary>
-    private async Task<bool> GroupInCardAsync(string card)
-    {
+        var level = LevelOf(_chosen[0]);
         var id = Guid.NewGuid().ToString("N");
         var members = ChosenObjects.Select(o => o with { Group = id }).ToList();
-        var group = PiecesGroup(id, CellBox.Around(members.Select(o => o.Box)), card);
-        var next = Layout.With(group, members);
+        var cards = ChosenGroups.Select(g => g with { Parent = id }).ToList();
+        var frame = CellBox.Around([.. members.Select(o => o.Box), .. cards.Select(g => g.Box)]);
+        // Cards all of one template, and nothing else: the group is where more of them go (Holds).
+        var holds = members.Count == 0 && cards.Select(g => g.Template).Distinct().ToList() is [{ } template] ? template : null;
+        var group = (level is null ? new DashboardGroup(id, frame.X, frame.Y, frame.W, frame.H) : PiecesGroup(id, frame, level)) with { Holds = holds };
+        var next = cards.Aggregate(Layout.With(group, members), (layout, inner) => layout.With(inner, []));
         if (!next.FitsGroup(group))
         {
+            Refused?.Invoke("They cannot be grouped: the frame round them would cover something that is not chosen. Choose it too, or move it out of the way.");
             return false;
         }
 
@@ -619,16 +649,16 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
         Layout = unsaved ? Layout with { Columns = columns } : _saved;
     }
 
-    /// <summary>The last change taken back; the selection stays where it was if that is still there.</summary>
+    /// <summary>The last change taken back, and pressed again the one before it, back to the last hundred; the selection stays where it was if that is still there.</summary>
     public async Task UndoAsync()
     {
-        if (_before is not { } before)
+        if (_before.Count == 0)
         {
             return;
         }
 
-        Layout = before;
-        _before = null;
+        Layout = _before[^1];
+        _before.RemoveAt(_before.Count - 1);
         LetGoOfWhatIsGone();
         Changed?.Invoke();
         await KeepAsync();
@@ -649,7 +679,12 @@ public sealed class DashboardDocument(IDashboardStore store, Func<string, bool>?
 
     private async Task<bool> ChangeAsync(DashboardLayout next)
     {
-        _before = Layout;
+        _before.Add(Layout);
+        if (_before.Count > UndoSteps)
+        {
+            _before.RemoveAt(0);
+        }
+
         Layout = next;
         Changed?.Invoke();
         await KeepAsync();

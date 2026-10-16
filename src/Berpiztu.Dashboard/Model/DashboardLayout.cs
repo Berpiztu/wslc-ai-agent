@@ -297,12 +297,115 @@ public sealed record DashboardLayout(int Columns, IReadOnlyList<ObjectInstance> 
             var around = CellBox.Around([frame.Box, box]);
             var grown = frame with { W = around.W, H = around.H };
             var placed = card with { X = box.X, Y = box.Y, Parent = groupId };
-            return FitsGroup(grown)
-                ? With(grown, members).With(placed, [.. objects.Select(o => o with { X = box.X + o.X, Y = box.Y + o.Y, Group = placed.Id })])
-                : null;
+            if (frame.AutoGrow == true && grown.H > frame.H)
+            {
+                // Set to grow: what stands under it makes room, and the cards holding it grow with it.
+                var heightened = Heightened(groupId, grown.H - frame.H);
+                heightened = heightened.With(heightened.FindGroup(groupId)! with { W = grown.W }, heightened.Members(groupId));
+                return heightened.HoldingFits(groupId)
+                    ? heightened.With(placed, [.. objects.Select(o => o with { X = box.X + o.X, Y = box.Y + o.Y, Group = placed.Id })])
+                    : null;
+            }
+
+            if (!FitsGroup(grown))
+            {
+                return null;
+            }
+
+            // The cards holding it grow too, down and across, so a place for a card's own cards inside it keeps them in it.
+            var next = With(grown, members);
+            for (var inner = grown; next.FindGroup(inner.Parent) is { } holder;)
+            {
+                var wider = holder with
+                {
+                    W = Math.Max(holder.W, inner.X + inner.W - holder.X),
+                    H = Math.Max(holder.H, inner.Y + inner.H - holder.Y),
+                };
+                if (wider == holder)
+                {
+                    break;
+                }
+
+                if (!next.FitsGroup(wider))
+                {
+                    return null;
+                }
+
+                next = next.With(wider, next.Members(wider.Id));
+                inner = wider;
+            }
+
+            return next.With(placed, [.. objects.Select(o => o with { X = box.X + o.X, Y = box.Y + o.Y, Group = placed.Id })]);
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The group of this id taller by <paramref name="rows"/> (shorter where
+    /// they are fewer than none): what stands under its bottom in what holds it
+    /// moves down as much (up, shorter), and so does each card holding it,
+    /// taller by as much, and what stands under that one, up to the page. What
+    /// a group set to grow or shrink with its cards does
+    /// (<see cref="DashboardGroup.AutoGrow"/>, <see cref="DashboardGroup.AutoShrink"/>).
+    /// </summary>
+    public DashboardLayout Heightened(string groupId, int rows)
+    {
+        if (rows == 0 || FindGroup(groupId) is not { } level)
+        {
+            return this;
+        }
+
+        var layout = this;
+        while (true)
+        {
+            var bottom = level.Y + level.H;
+            var holder = level.Parent;
+            var taller = level with { H = level.H + rows };
+            layout = layout.With(taller, layout.Members(taller.Id));
+            IReadOnlyCollection<string> under =
+            [
+                .. layout.Objects.Where(o => o.Group == holder && o.Y >= bottom).Select(o => o.Id),
+                .. layout.Groups.Where(g => g.Parent == holder && g.Id != level.Id && g.Y >= bottom).Select(g => g.Id),
+            ];
+            layout = layout.MovedTogether(under, 0, rows);
+            if (layout.FindGroup(holder) is not { } next)
+            {
+                return layout;
+            }
+
+            level = next;
+        }
+    }
+
+    /// <summary>
+    /// The group of this id, set to shrink with its cards (<see cref="DashboardGroup.AutoShrink"/>),
+    /// as tall as what stands in it, and what stands under it moved up as much;
+    /// any other group, or one already that tall, as it is.
+    /// </summary>
+    public DashboardLayout Shrunk(string groupId)
+    {
+        if (FindGroup(groupId) is not { AutoShrink: true } group)
+        {
+            return this;
+        }
+
+        var reach = Members(groupId).Select(o => o.Y + o.H).Concat(Cards(groupId).Select(g => g.Y + g.H)).DefaultIfEmpty(group.Y + 1).Max();
+        return reach < group.Y + group.H ? Heightened(groupId, reach - (group.Y + group.H)) : this;
+    }
+
+    /// <summary>The group of this id and every card holding it stand where they may.</summary>
+    private bool HoldingFits(string groupId)
+    {
+        for (var group = FindGroup(groupId); group is not null; group = FindGroup(group.Parent))
+        {
+            if (!FitsGroup(group))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -312,7 +415,7 @@ public sealed record DashboardLayout(int Columns, IReadOnlyList<ObjectInstance> 
     /// </summary>
     public DashboardLayout WithoutInside(string groupId, IReadOnlyCollection<string> cardIds)
     {
-        var left = cardIds.Aggregate(this, (layout, id) => layout.FindGroup(id)?.Parent == groupId ? layout.WithoutGroup(id) : layout);
+        var left = cardIds.Aggregate(this, (layout, id) => id != groupId && layout.IsWithin(id, groupId) ? layout.WithoutGroup(id) : layout);
         if (left.FindGroup(groupId) is not { } frame)
         {
             return left;
@@ -337,11 +440,15 @@ public sealed record DashboardLayout(int Columns, IReadOnlyList<ObjectInstance> 
         };
     }
 
-    /// <summary>The dashboard without this object; a group it leaves with nothing in it, however deep, goes with it.</summary>
+    /// <summary>
+    /// The dashboard without this object; a group it leaves with nothing in
+    /// it, however deep, goes with it, but a group that is a card's place for
+    /// its own cards (<see cref="DashboardGroup.Holds"/>), which waits empty.
+    /// </summary>
     public DashboardLayout Without(string id)
     {
         var left = this with { Objects = [.. Objects.Where(o => o.Id != id)] };
-        return left with { Groups = [.. left.Groups.Where(g => left.Objects.Any(o => left.IsWithin(o.Group, g.Id)))] };
+        return left with { Groups = [.. left.Groups.Where(g => g.Holds is not null || left.Objects.Any(o => left.IsWithin(o.Group, g.Id)))] };
     }
 
     /// <summary>

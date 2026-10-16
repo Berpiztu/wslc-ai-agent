@@ -34,7 +34,7 @@
                  ValueChanged="@(color => SetAsync((o, _) => color is { } chosen ? o with { Border = Kept(chosen, ThemeColors.CardBorder) } : o,
                      card => color is { } chosen ? card with { Border = Kept(chosen, ThemeColors.CardBorder) } : card))"
                  Options="SomeBorderOptions" Label="Border color"
-                 Title="Standing alone, drawn as a card: the colour of its line, None for no line, the tertiary under the pointer; in a card its card's line is drawn" />
+                 Title="The colour of its line, None for no line: standing alone, drawn as a card, the tertiary under the pointer; in a card, a line of its own round it once one is chosen" />
     @* Which of its card's edges it keeps to as a fluid view widens the card
        (as Visual Basic's Anchor). *@
     <ChoiceField T="HorizontalAnchor?" Value="@Alike(Kinds.Select(k => k.Kind.AnchorOf(k.Object)))"
@@ -42,6 +42,10 @@
                  Options="AnchorOptions" Label="Anchor"
                  Title="As a fluid view widens its card: Scale spreads it in proportion; Left or Right keeps its size and its distance to that edge; Both keeps both distances and widens it" />
 </div>
+@* In a fluid view whose row is broken into lines, it begins one of its own. *@
+<CheckRow Value="@(Objects.Count > 0 && Objects.All(o => o.NewLine == true))"
+          ValueChanged="@(on => SetAsync((o, _) => o with { NewLine = on ? true : null }))" Label="New line in Fluid" Class="mt-1"
+          Title="In Fluid, when its row does not fit and is broken into lines, it begins a line of its own, even where it would fit after what is before it" />
 @* Each alignment with its margin at its end: left, centre, right and the margin across; top, middle, bottom and the
    margin down. *@
 <div class="bz-dash-align-rows mt-2">

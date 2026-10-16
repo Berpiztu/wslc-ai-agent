@@ -46,8 +46,34 @@ namespace Berpiztu.Dashboard.Model;
 /// pointer); <see cref="ThemeColor.Transparent"/> is none, null its default,
 /// <see cref="ThemeColors.CardBorder"/>.
 /// </param>
+/// <param name="NewLine">
+/// In a fluid view whose row is broken into lines (<see cref="ViewFit.Fluid"/>),
+/// it begins a line of its own, whatever would fit before it on the line
+/// under way; where its row is not broken, nothing. Set by the user, null
+/// is not set.
+/// </param>
+/// <param name="Holds">
+/// For a group the user made of cards all made already from one template (a
+/// project's container cards), that template's type: the place the card it
+/// stands in puts more of them, as what it reads changes or one is ticked
+/// in its properties, instead of anywhere in itself. Not shown; it goes with
+/// the group. Null for any other group.
+/// </param>
+/// <param name="AutoGrow">
+/// For a place of a card's own cards (<see cref="Holds"/>), set by the user:
+/// where more of them come than it holds, it grows down to hold them, what
+/// stands under it moves down as much and the cards holding it grow with it.
+/// Not set, it grows only where nothing is in the way, and otherwise they
+/// are refused.
+/// </param>
+/// <param name="AutoShrink">
+/// For such a place, set by the user: where fewer of them are left, it
+/// shrinks to them, what stands under it moves up as much and the cards
+/// holding it shrink with it. Not set, it keeps the size it was given.
+/// </param>
 public sealed record DashboardGroup(string Id, int X, int Y, int W, int H, ThemeColor? Background = null, ThemeColor? Foreground = null,
-    string? Template = null, int? Elevation = null, HorizontalAnchor? Anchor = null, ThemeColor? Border = null, string? Parent = null)
+    string? Template = null, int? Elevation = null, HorizontalAnchor? Anchor = null, ThemeColor? Border = null, string? Parent = null,
+    bool? NewLine = null, string? Holds = null, bool? AutoGrow = null, bool? AutoShrink = null)
 {
     /// <summary>The highest elevation a card takes, MudBlazor's highest shadow but one, as the application's settings allow.</summary>
     public const int MaxElevation = 24;

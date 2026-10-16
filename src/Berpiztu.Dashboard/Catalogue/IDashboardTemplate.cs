@@ -33,6 +33,9 @@ public interface IDashboardTemplate
 
     /// <summary>Its objects and where each stands in the card, from the card's top-left cell.</summary>
     IReadOnlyList<TemplateItem> Items { get; }
+
+    /// <summary>The groups it is born with, from the card's top-left cell (a project card's place for its containers); none by default.</summary>
+    IReadOnlyList<BornGroup>? Inner => null;
 }
 
 /// <summary>
@@ -60,11 +63,13 @@ public sealed record BornCard(string Template, IReadOnlyList<ObjectInstance> Obj
 }
 
 /// <summary>
-/// A group of a card's own pieces as the card is born: where it stands from
-/// the card's top-left cell, its size, its anchor, and its pieces by their
-/// ids in the born card.
+/// A group a card is born with: where it stands from the card's top-left
+/// cell, its size, its anchor, and its pieces by their ids in the born card
+/// (a charts card's chart, its three pieces); or none, and the template of
+/// the cards it is the place of (<see cref="DashboardGroup.Holds"/>: a project
+/// card's group its containers go in, empty until its project is chosen).
 /// </summary>
-public sealed record BornGroup(int X, int Y, int W, int H, IReadOnlyList<string> Objects, HorizontalAnchor? Anchor = null)
+public sealed record BornGroup(int X, int Y, int W, int H, IReadOnlyList<string> Objects, HorizontalAnchor? Anchor = null, string? Holds = null)
 {
     /// <summary>Its cells from the card's top-left one.</summary>
     public CellBox Box => new(X, Y, W, H);
@@ -97,8 +102,9 @@ public static class DashboardTemplates
                 ? designed.On(born) with { X = designed.X ?? item.X, Y = designed.Y ?? item.Y }
                 : born;
         })];
-        var reach = CellBox.Around(objects.Select(o => o.Box));
+        var reach = CellBox.Around([.. objects.Select(o => o.Box), .. (template.Inner ?? []).Select(group => group.Box)]);
         var frame = defaults?.For(view, template.Type);
-        return new BornCard(template.Type, objects, Math.Max(frame?.W ?? 0, reach.X + reach.W), Math.Max(frame?.H ?? 0, reach.Y + reach.H), frame);
+        return new BornCard(template.Type, objects, Math.Max(frame?.W ?? 0, reach.X + reach.W), Math.Max(frame?.H ?? 0, reach.Y + reach.H), frame,
+            template.Inner);
     }
 }

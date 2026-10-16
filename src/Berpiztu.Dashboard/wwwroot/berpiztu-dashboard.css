@@ -277,6 +277,15 @@
     margin: 2px;
 }
 
+/* An object in a card with a line of its own, its Border chosen in its
+   properties: out of design that line is drawn round it, in that colour,
+   as a card's is (None is the line kept unseen). Without one, its card's
+   line is the one drawn. */
+.bz-dash-object.bz-dash-member.bz-dash-bordered {
+    border: 1px solid var(--bz-dash-border);
+    border-radius: var(--mud-default-borderradius);
+}
+
 /* A card inside another (a container's, in its project's card) keeps clear of
    that card's line, as the cards of a project keep from the project's line in
    the list: the line at its widest, two pixels, and two of air. As large as

@@ -64,7 +64,10 @@ public static class WslcCards
     /// in the cells a volume's two take, and its verbs in the rest.
     /// </summary>
     public static readonly CardTemplate Project = new("wslc.project-card", "Project card", Icons.Material.Filled.AccountTree, UserCards,
-        Resource("project", 7, dials: [("cpu", SmallRing), ("memory", SmallRing)], shortcuts: 12));
+        Resource("project", 7, dials: [("cpu", SmallRing), ("memory", SmallRing)], shortcuts: 12),
+        // Under its own pieces, the place its containers go, as wide as the card and a container card tall:
+        // empty until its project is chosen, and where they go whenever it is chosen again.
+        Inner: [new BornGroup(0, HeaderRows + 7 + ActionRows, CardWidth, HeaderRows + 7 + ActionRows, [], HorizontalAnchor.Both, "wslc.container-card")]);
 
     public static readonly CardTemplate Image = new("wslc.image-card", "Image card", Icons.Material.Filled.Layers, UserCards,
         Resource("image", 6, dials: [], shortcuts: 10));

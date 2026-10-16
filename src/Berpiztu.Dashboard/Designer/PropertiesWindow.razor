@@ -218,6 +218,20 @@
                              Options="AnchorOptions" Label="Anchor"
                              Title="As a fluid view widens: Scale spreads the card in proportion; Left or Right keeps its size and its distance to that edge of the view; Both keeps both distances and widens it" />
             </div>
+            @* In a fluid view whose row is broken into lines, the card begins one of its own. *@
+            <CheckRow Value="@(frame.NewLine == true)" ValueChanged="@(on => SetFrameAsync(frame with { NewLine = on ? true : null }))"
+                      Label="New line in Fluid" Class="mt-1"
+                      Title="In Fluid, when its row does not fit and is broken into lines, the card begins a line of its own, even where it would fit after what is before it" />
+            @* A place of its card's own cards (a project's containers): whether it grows and shrinks with them, view by view. *@
+            @if (frame.Holds is not null)
+            {
+                <CheckRow Value="@(frame.AutoGrow == true)" ValueChanged="@(on => SetFrameAsync(frame with { AutoGrow = on ? true : null }))"
+                          Label="Auto-expand"
+                          Title="Where more cards come than it holds, it grows down to hold them, and what is under it moves down as much; not set, it keeps its size and they are refused where it cannot grow" />
+                <CheckRow Value="@(frame.AutoShrink == true)" ValueChanged="@(on => SetFrameAsync(frame with { AutoShrink = on ? true : null }))"
+                          Label="Auto-shrink"
+                          Title="Where fewer cards are left, it shrinks to them, and what is under it moves up as much; not set, it keeps the size it was given" />
+            }
             @* The cards the card holds beside its own pieces (a project's containers), each with its tick: in the card, or not. *@
             @if (Companions.Find(frame.Template) is { } companions && GroupSource(frame) is { Length: > 0 } read)
             {
@@ -245,13 +259,13 @@
     </ChildContent>
     <Verbs>
             <MudIconButton Icon="@Icons.Material.Filled.Undo" Size="Size.Small" Disabled="@(!Document.CanUndo)"
-                           OnClick="Document.UndoAsync" title="Undo the last change (Ctrl+Z)" />
+                           OnClick="Document.UndoAsync" title="Undo the last change, and pressed again the one before it (Ctrl+Z)" />
             <MudIconButton Icon="@Icons.Material.Filled.SettingsBackupRestore" Size="Size.Small" Disabled="@(!CanReset)"
                            OnClick="ResetAsync" title="Reset what is selected, one object or every one chosen, to its kind's size, cells, alignment, margins, colours and parts; where it stands and what it reads kept (undo takes it back)" />
             <MudIconButton Icon="@Icons.Material.Filled.Link" Size="Size.Small" Disabled="@(!Document.CanGroup)"
-                           OnClick="@(() => Document.GroupChosenAsync())" title="Group what is chosen, objects and groups, in one frame (Ctrl+G)" />
+                           OnClick="@(() => Document.GroupChosenAsync())" title="Group what is chosen, objects and cards on one level, in one frame there, each as it is (Ctrl+G)" />
             <MudIconButton Icon="@Icons.Material.Filled.LinkOff" Size="Size.Small" Disabled="@(!Document.CanUngroup)"
-                           OnClick="@(() => Document.UngroupAsync())" title="Ungroup the groups chosen: their frames go, their objects stay where they are (Ctrl+Shift+G)" />
+                           OnClick="@(() => Document.UngroupAsync())" title="Ungroup the groups chosen: their frames go, one level only, and what they held stays where it is (Ctrl+Shift+G)" />
             <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" Disabled="@(Document.Chosen.Count == 0)"
                            OnClick="RemoveAsync" title="Remove what is selected from the dashboard, a group with every object in it (Delete)" />
     </Verbs>
@@ -353,6 +367,7 @@
             MarginY = null,
             Elevation = null,
             Anchor = null,
+            NewLine = null,
         };
 
     /// <summary>
@@ -380,7 +395,7 @@
     /// <summary>Something selected is not as its kind makes it: an object or several, or a card's colours and elevation.</summary>
     private bool CanReset =>
         ToReset.Any(pair => Reset(pair.Object, pair.Kind) != pair.Object)
-        || Frame is { Background: not null } or { Foreground: not null } or { Elevation: not null } or { Anchor: not null };
+        || Frame is { Background: not null } or { Foreground: not null } or { Elevation: not null } or { Anchor: not null } or { NewLine: not null };
 
     /// <summary>
     /// Reset: each object as its kind makes it, in one change undo takes back
@@ -400,7 +415,7 @@
         }
         else if (Frame is { } frame)
         {
-            await SetFrameAsync(frame with { Background = null, Foreground = null, Elevation = null, Anchor = null });
+            await SetFrameAsync(frame with { Background = null, Foreground = null, Elevation = null, Anchor = null, NewLine = null });
         }
     }
 
@@ -434,27 +449,29 @@
     /// <summary>
     /// The source chosen for a group: every one of its objects that reads
     /// one reads it, in one change. A card that holds others
-    /// (<see cref="ICardCompanions"/>) takes them in now: the cards of what
-    /// it read before go, and every one of what it reads now comes into the
-    /// card, a card of its own in it, so a project is put on the dashboard
-    /// with its containers in it and not as a name alone. It is done here,
-    /// when the source is chosen, and never again by itself: what appears
-    /// later is the user's to tick.
+    /// (<see cref="ICardCompanions"/>) takes them in with it, in that same
+    /// change: the cards of what it read before go, and every one of what it
+    /// reads now comes into the card (into the group of it that is their
+    /// place, where it has one), so a project is put on the dashboard with its
+    /// containers in it and not as a name alone. Where they do not all fit,
+    /// nothing is changed and it is said: the card goes on reading what it
+    /// read, with its own cards, and one undo never leaves half of it. It is
+    /// done here, when the source is chosen, and never again by itself: what
+    /// appears later is the user's to tick.
     /// </summary>
     private async Task SetGroupSourceAsync(DashboardGroup group, string source)
     {
-        await Document.SetEachAsync([.. Readers(group).Select(reader => reader.Member with { Source = reader.Kind.Kept(source) })]);
+        IReadOnlyList<ObjectInstance> readers = [.. Readers(group).Select(reader => reader.Member with { Source = reader.Kind.Kept(source) })];
         if (Companions.Find(group.Template) is not { } companions)
         {
+            await Document.SetEachAsync(readers);
             return;
         }
 
-        await Document.RemoveInsideAsync(group.Id,
-            [.. Document.Layout.Cards(group.Id).Where(card => card.Template == companions.Card.Type).Select(card => card.Id)]);
-        if (source.Length > 0 && await companions.ListAsync(source) is { Count: > 0 } listed
-            && await CardCompanionsList.AddAsync(Document, Catalogue, companions, group, [.. listed.Select(one => one.Value)], Defaults, View) is > 0 and var none)
+        IReadOnlyList<string> values = source.Length > 0 ? [.. (await companions.ListAsync(source)).Select(one => one.Value)] : [];
+        if (await CardCompanionsList.ReadAnewAsync(Document, Catalogue, companions, group, readers, values, Defaults, View) is > 0 and var none)
         {
-            Snackbar.Add($"There is no room in the card for {none} {companions.Noun}(s): it would pass the dashboard's edge, or take cells of what stands beside it. Move it, and tick them in its properties.", Severity.Warning);
+            Snackbar.Add($"Nothing was changed: there is no room for {none} of its {values.Count} {companions.Noun}(s) where they go — it would pass the dashboard's edge, or take cells of what stands beside it. Make room, and choose it again.", Severity.Warning);
         }
     }
 
