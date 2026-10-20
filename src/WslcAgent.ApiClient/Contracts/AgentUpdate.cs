@@ -7,7 +7,8 @@ namespace WslcAgent.ApiClient.Contracts;
 /// </summary>
 /// <param name="AutoUpdate">On, the agent updates itself when a newer installer appears and nothing is being transferred; off, only Update now does.</param>
 /// <param name="PackageFolder">The package folder chosen in Settings, a full path; empty for the one the agent was installed with (<see cref="AgentUpdateStatus.AutomaticPackageFolder"/>).</param>
-public sealed record AgentUpdateSettings(bool AutoUpdate, string PackageFolder = "");
+/// <param name="IncludePreviews">On, Settings → Update and Install from GitHub offer the newest release of all, previews (GitHub pre-releases) included; off, the default, official releases only, unless the agent itself came from a preview, which is always offered the next one or an official release above it.</param>
+public sealed record AgentUpdateSettings(bool AutoUpdate, string PackageFolder = "", bool IncludePreviews = false);
 
 /// <summary>
 /// Body of <c>GET /api/v1/agent/update</c>: Settings → Agent update, the
@@ -50,8 +51,9 @@ public sealed record AgentUpdateStatus(
 /// <summary>
 /// Body of <c>GET /api/v1/agent/update/latest</c>: the newest release of the agent
 /// on GitHub for the agent running, for Settings → Update to show beside the
-/// version running. An agent from an official release is offered official
-/// releases only; one from a preview, the newest of all.
+/// version running: the newest of all, previews included, for an agent that
+/// came from a preview or whose <see cref="AgentUpdateSettings.IncludePreviews"/>
+/// is on; official releases only otherwise.
 /// </summary>
 /// <param name="Version">Its version, without the tag's <c>v</c>.</param>
 /// <param name="PublishedAt">When it was published, when GitHub says.</param>

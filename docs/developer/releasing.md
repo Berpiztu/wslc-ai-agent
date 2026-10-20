@@ -49,10 +49,11 @@ release is made on `main`, and taken into `develop` straight after, so it is
 not lost.
 
 A pre-release is never in GitHub's `releases/latest`, so an agent from an
-official release is never offered a preview: not in Settings → Update, not
-by the install line. An agent from a preview is offered the newest of all,
-the next preview, or an official release above it, and Install from GitHub
-runs that release's own install script ([api-v1.md](../api-v1.md)).
+official release is not offered a preview, by Settings → Update or by the
+install line, unless its Settings → Update → **Include pre-releases** is
+on. An agent from a preview is always offered the newest of all, the next
+preview, or an official release above it, and Install from GitHub runs that
+release's own install script ([api-v1.md](../api-v1.md)).
 
 ## A security patch
 

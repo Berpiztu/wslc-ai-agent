@@ -331,10 +331,14 @@
                 else
                 {
                     <MudText Typo="Typo.body2" Class="mb-2">Now: <b>@UpdateStateText</b></MudText>
-                    @* The newest release on GitHub for this agent (previews too, for one from a preview), and the line that installs it. *@
+                    @* The newest release on GitHub, previews too when Include pre-releases is on, and the line that installs it. *@
                     <MudText Typo="Typo.body2" Class="mb-2">Latest on GitHub: <b>@LatestText</b></MudText>
                     <MudSwitch T="bool" Value="_update.Settings.AutoUpdate" ValueChanged="SaveUpdateAsync"
                                Label="Auto update" LabelPlacement="Placement.Start" Color="Color.Primary" Disabled="_updateBusy" />
+                    @* Previews are GitHub's pre-releases, made for a WSL that is itself a preview: offered to an agent that came from one, and to any other only when asked for. *@
+                    <MudSwitch T="bool" Value="_update.Settings.IncludePreviews" ValueChanged="SaveIncludePreviewsAsync"
+                               Label="Include pre-releases" LabelPlacement="Placement.Start" Color="Color.Primary" Disabled="_updateBusy"
+                               title="On, Latest on GitHub and Install from GitHub offer previews too: the newest release of all. Off, official releases only; an agent installed from a pre-release is offered pre-releases anyway." />
                     @* Empty is the folder the agent was installed with, shown as the placeholder. *@
                     <div class="wslc-field-pick has-note mt-3">
                         <MudTextField T="string" @bind-Value="_packageFolder" Label="Package folder" Placeholder="@_update.AutomaticPackageFolder"
@@ -1218,6 +1222,16 @@
 
     private Task SaveUpdateAsync(bool on) =>
         AskUpdateAsync(() => Api.SetAgentUpdateSettingsAsync(_update!.Settings with { AutoUpdate = on }), on ? "Auto update on" : "Auto update off: only Update now installs");
+
+    /// <summary>Saved, then GitHub asked again: what Latest on GitHub names depends on it.</summary>
+    private async Task SaveIncludePreviewsAsync(bool on)
+    {
+        await AskUpdateAsync(() => Api.SetAgentUpdateSettingsAsync(_update!.Settings with { IncludePreviews = on }),
+            on ? "Pre-releases included: the newest release of all is offered" : "Official releases only");
+        _latest = null;
+        _latestError = "";
+        await ReadLatestReleaseAsync();
+    }
 
     /// <summary>The package folder as typed, apart from the one saved, so a refresh from the agent does not overwrite what is being typed.</summary>
     private string _packageFolder = "";

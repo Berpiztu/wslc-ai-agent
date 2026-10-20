@@ -6,20 +6,21 @@ using WslcAgent.Mcp;
 namespace WslcAgent.Server.Updates;
 
 /// <summary>
-/// The agent's releases on GitHub, for Settings → Update: the newest one for
-/// the agent running, and installing it with the README's own line
+/// The agent's releases on GitHub, for Settings → Update: the newest one, and
+/// installing it with the README's own line
 /// (<see cref="LatestRelease.InstallCommand"/>), run on this machine as a
 /// person would paste it into a terminal.
 /// <para>
-/// Which is the newest depends on what the agent is. One that came from an
-/// official release, or a build of one, is offered official releases only, as
-/// <c>releases/latest</c> would. One that came from a preview (a pre-release
-/// published from develop), or a build of one, is offered the newest of all:
-/// the next preview, or an official release above it. What it came from is
-/// the release with the highest version not above its own.
+/// The newest is of all releases, previews (pre-releases published from
+/// develop) included, the next preview or an official release above it, for
+/// an agent that came from a preview, or a build of one, and for any agent
+/// whose Settings → Update includes pre-releases
+/// (<see cref="AgentUpdateSettings.IncludePreviews"/>). Otherwise it is of the
+/// official releases alone, as <c>releases/latest</c> would say. What an agent
+/// came from is the release with the highest version not above its own.
 /// </para>
 /// </summary>
-public sealed class GitHubReleases(HttpClient http, IAgentInfo agent, ILogger<GitHubReleases> logger)
+public sealed class GitHubReleases(HttpClient http, IAgentInfo agent, AgentUpdateSettingsStore settings, ILogger<GitHubReleases> logger)
 {
     /// <summary>The most recent releases, newest first: far more than the previews published between two official ones.</summary>
     private const string ReleasesUrl = "https://api.github.com/repos/Berpiztu/wslc-ai-agent/releases?per_page=50";
@@ -27,12 +28,13 @@ public sealed class GitHubReleases(HttpClient http, IAgentInfo agent, ILogger<Gi
     /// <summary>GitHub allows 60 unauthenticated calls an hour; a release is not published by the minute.</summary>
     private static readonly TimeSpan Fresh = TimeSpan.FromMinutes(10);
 
-    private (LatestRelease Release, DateTimeOffset ReadAt)? _latest;
+    private (LatestRelease Release, bool Previews, DateTimeOffset ReadAt)? _latest;
 
-    /// <summary>The newest release for this agent, read again when the one known is older than ten minutes.</summary>
+    /// <summary>The newest release for this agent; read again when the one known is older than ten minutes, or Settings changed.</summary>
     public async Task<LatestRelease> LatestAsync(CancellationToken cancellationToken = default)
     {
-        if (_latest is { } known && DateTimeOffset.UtcNow - known.ReadAt < Fresh)
+        var asked = settings.Get().IncludePreviews;
+        if (_latest is { } known && known.Previews == asked && DateTimeOffset.UtcNow - known.ReadAt < Fresh)
         {
             return known.Release;
         }
@@ -51,10 +53,11 @@ public sealed class GitHubReleases(HttpClient http, IAgentInfo agent, ILogger<Gi
 
         var running = Comparable(agent.Version);
         var cameFrom = running is null ? null : published.Where(release => release.Number <= running).MaxBy(release => release.Number);
-        var offered = cameFrom is { Release.Preview: true } ? published : published.Where(release => !release.Release.Preview);
+        var previews = asked || cameFrom is { Release.Preview: true };
+        var offered = previews ? published : published.Where(release => !release.Release.Preview);
         var newest = offered.MaxBy(release => release.Number)
             ?? throw new HttpRequestException("GitHub lists no release of the agent.");
-        _latest = (newest.Release, DateTimeOffset.UtcNow);
+        _latest = (newest.Release, asked, DateTimeOffset.UtcNow);
         return newest.Release;
     }
 
