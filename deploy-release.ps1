@@ -136,8 +136,8 @@ if (-not (Get-WslcAgentReleaseNotes "v$planned")) {
 }
 Write-Host "Release notes found: docs\release-notes\$planned.md" -ForegroundColor Cyan
 
-# And no release of a branch whose libraries security-watch says are vulnerable.
-Test-SecurityWatch -Ref $target
+# And no release of a list security-watch has not checked, nor of one it says is vulnerable.
+Test-SecurityWatch -Ref $target -Release
 
 # 1. What this checkout holds goes into the release, made on its branch. The
 # changes not committed yet are carried there and committed, with no message
