@@ -387,6 +387,18 @@ logon, because wslc only works inside a user session. Android APKs are
 signed with a key kept outside the repository, in `private/`; see
 [docs/developer/private-files.md](docs/developer/private-files.md).
 
+## The history of the project
+
+### A Python dashboard (June 2026)
+
+WSLC AI Agent began on 2026-06-30 as a small Python project, `wslc-dashboard`:
+a simpler Docker Desktop for everyday use, for the containers WSL had just
+learned to run with `wslc`. FastAPI and HTMX served a web page; the first day
+brought a containers table with live stats and actions, and an Images page
+that showed a pull's progress as it went.
+
+[Read the whole story →](docs/history.md): SSH and Entra ID, an agent in the user's session, the rebuild in .NET, the dashboard, remote access, publishing, Compose and security.
+
 ## Contributing
 
 Issues and pull requests are welcome: [CONTRIBUTING.md](CONTRIBUTING.md) says
@@ -402,6 +414,8 @@ their licenses are listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 WSLC AI Agent is built by [Berpiztu](https://github.com/Berpiztu), a team
 that builds AI agents and the tools they work with, and the team behind
-[Virtus](https://github.com/berpiztu/virtus).
+[Virtus](https://github.com/berpiztu/virtus). It began on 2026-06-30 as a
+Python dashboard for `wslc` and was rebuilt in .NET before it was published:
+[the history of the project](#the-history-of-the-project).
 
 Special thanks to Alex, the AI agent who helped me create this project.
