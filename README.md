@@ -34,6 +34,13 @@ products are **WSLC AI Agent** (the agent, `wslc-ai-agent.exe`) and
   standard input since WSL 3.0.3. Only the files the agent lacks travel: a
   Dockerfile changed in a folder of fifty megabytes is sent as a Dockerfile.
   The Compose window does the same from a folder of your device.
+- **New: every image the agent builds is checked for vulnerabilities.**
+  Built from a Compose project or with Build image, an image has its Python
+  libraries read in the image itself and checked against the public
+  vulnerability database, OSV.dev, before any container is made from it. A
+  library with a vulnerability of moderate severity or worse stops the
+  build, naming the version that fixes it; Settings → Security sets whether
+  it stops, only warns, or is off.
 - **An MCP agent for WSLC, skill included for Claude, Hermes, OpenClaw,
   etc.**: 55 tools, the destructive ones off by default and asking your
   approval once switched on, and a skill installed with one click. One Windows program beside `wslc` that runs in
