@@ -1,0 +1,76 @@
+@* Zaindari's patch: the image built again on itself with its system packages
+   upgraded, as a Windows update patches Windows, tagged …-patched, and the
+   containers ticked moved to it. Every container of the image is listed and
+   ticked; a project's are not, since its compose file names its image. The
+   agent does the rest: the dialog closes, and the end is a notification. *@
+@using WslcAgent.ApiClient
+@inject WslcAgentApi Api
+
+<FormDialog SubmitText="Patch" BusyText="Starting…" OnSubmit="PatchAsync">
+    <MudText Typo="Typo.body2">
+        Builds <b>@Patch</b> from @Image with its system packages upgraded, then moves the containers ticked to it with their ports, mounts, environment and name.
+        Python libraries are not patched: raise them in the requirements and build again.
+    </MudText>
+    @if (_containers is null)
+    {
+        <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="mt-2" />
+    }
+    else
+    {
+        foreach (var container in _containers)
+        {
+            <SquareCheckBox Value="@_ticked.Contains(container.Id)" ValueChanged="@((bool on) => Tick(container.Id, on))" Label="@container.Name" />
+        }
+
+        if (_containers.Count == 0)
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">No container outside a project runs this image: the patch is only built.</MudText>
+        }
+
+        if (_inProjects.Count > 0)
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
+                Left as they are, since their project's compose file names the image: @string.Join(", ", _inProjects).
+            </MudText>
+        }
+    }
+</FormDialog>
+
+@code {
+    /// <summary>The image patched, as Zaindari checked it.</summary>
+    [Parameter, EditorRequired] public string Image { get; set; } = "";
+
+    /// <summary>The patch's tag, as the agent named it (<see cref="ImageVulnerabilities.Patch"/>).</summary>
+    [Parameter, EditorRequired] public string Patch { get; set; } = "";
+
+    private List<ContainerSummary>? _containers;
+    private List<string> _inProjects = [];
+    private readonly HashSet<string> _ticked = new(StringComparer.Ordinal);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var image = ImageReference.Split(ImageReference.Normalize(Image));
+        var users = (await Api.GetContainersAsync(all: true)).Containers
+            .Where(container => ImageReference.Split(ImageReference.Normalize(container.Image)) == image)
+            .OrderBy(container => container.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        _inProjects = [.. users.Where(container => container.Project.Length > 0).Select(container => container.Name)];
+        _containers = [.. users.Where(container => container.Project.Length == 0)];
+        _ticked.UnionWith(_containers.Select(container => container.Id));
+    }
+
+    private void Tick(string id, bool on)
+    {
+        if (on)
+        {
+            _ticked.Add(id);
+        }
+        else
+        {
+            _ticked.Remove(id);
+        }
+    }
+
+    private Task PatchAsync() =>
+        Api.PatchImageAsync(new PatchImageRequest(Image, [.. _ticked]));
+}

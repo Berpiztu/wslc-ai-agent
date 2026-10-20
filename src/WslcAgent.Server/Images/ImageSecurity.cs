@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Formats.Tar;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using WslcAgent.ApiClient.Contracts;
 using WslcAgent.Server.Host;
@@ -13,53 +14,63 @@ namespace WslcAgent.Server.Images;
 public sealed class ImageSecuritySettingsStore(IOptions<WslcOptions> options)
     : SavedSettings<ImageSecuritySettings>(Path.Combine(options.Value.DataDirectory, "image-security.json"), new ImageSecuritySettings());
 
-/// <summary>A known vulnerability of one Python library in an image.</summary>
+/// <summary>A known vulnerability of one package in an image: a Python library, or a system package of its distribution (<see cref="Ecosystem"/>).</summary>
 /// <param name="Severity"><c>low</c>, <c>moderate</c>, <c>high</c>, <c>critical</c>, or <c>unknown</c> when neither the advisory, its GHSA alias nor its CVSS vector gives one.</param>
 /// <param name="FixedIn">The first version that fixes it; empty when none does yet.</param>
-public sealed record ImageVulnerability(string Package, string Version, string Advisory, string Cve, string Severity, string FixedIn, string Url)
+public sealed record ImageVulnerability(string Package, string Version, string Advisory, string Cve, string Severity, string FixedIn, string Url, string Ecosystem = "PyPI")
 {
+    /// <summary>The package as a line names it: a Python library by its name, a system package with its distribution (<c>openssl (Debian:12)</c>).</summary>
+    public string Named => Ecosystem == Installed.PyPI ? Package : $"{Package} ({Ecosystem})";
+
     /// <summary>Moderate or worse: what stops a build under <see cref="ImageSecurityPolicy.Block"/>.</summary>
     public bool Blocks => Severity is "moderate" or "high" or "critical";
 
     public override string ToString() =>
-        $"{Package} {Version}, {Severity}: {Advisory}{(Cve.Length > 0 ? $" ({Cve})" : "")}, {(FixedIn.Length > 0 ? $"fixed in {FixedIn}" : "no version fixes it yet")}";
+        $"{Named} {Version}, {Severity}: {Advisory}{(Cve.Length > 0 ? $" ({Cve})" : "")}, {(FixedIn.Length > 0 ? $"fixed in {FixedIn}" : "no version fixes it yet")}";
 }
 
 /// <summary>
-/// The agent makes no container from the image and starts none: built on this
-/// machine, a vulnerability moderate or worse, Settings → Security set to
-/// Block. <see cref="Said"/> is what the container is marked with, a line each;
-/// <see cref="Worst"/> the worst severity among them; the container not
-/// started, when it was one that exists (empty for a new one).
+/// One package installed in an image: a Python library (<see cref="PyPI"/>), or
+/// a system package of its distribution, in OSV.dev's name for it
+/// (<c>Alpine:v3.20</c>, <c>Debian:12</c>, <c>Ubuntu:22.04</c>), named as
+/// OSV.dev knows it: Alpine's by its origin, Debian's and Ubuntu's by their
+/// source package.
 /// </summary>
-public sealed class ImageRefusedException(string message, IReadOnlyList<string> said, string worst, string containerId = "", string containerName = "")
-    : InvalidOperationException(message)
+internal readonly record struct Installed(string Ecosystem, string Name, string Version)
 {
-    public IReadOnlyList<string> Said => said;
-
-    public string Worst => worst;
-
-    public string ContainerId => containerId;
-
-    public string ContainerName => containerName;
+    public const string PyPI = "PyPI";
 }
 
 /// <summary>
 /// The check every image the agent builds goes through before a container is
 /// made from it (<see cref="ImageSecuritySettings"/>): the image's Python
-/// libraries, read from the image's own files and never by running it, so the versions
-/// are the ones it carries whatever its requirements pin, asked of OSV.dev,
-/// each library once. An image with no Python has nothing to check. The
+/// libraries and its system packages (Alpine's apk, Debian's and Ubuntu's
+/// dpkg), read from the image's own files and never by running it, so the
+/// versions are the ones it carries whatever its requirements pin, asked of
+/// OSV.dev, each package once. An image with neither is said to be unchecked,
+/// never clean. The
 /// check is a safety net, not the build: when OSV.dev cannot be reached, or
 /// the image cannot be read, it says so in the log and the build goes on.
-/// It is made again before every new container (<see cref="GuardLaunchAsync"/>)
-/// and every start of one (<see cref="GuardStartAsync"/>), since an advisory
-/// found after the build is no less there.
+/// It is made again before every new container (<see cref="GuardLaunchAsync"/>),
+/// since an advisory found after the build is no less there; a container that
+/// exists is started and stopped whatever its image carries. What every check
+/// finds is kept on the image (<paramref name="marks"/>, <see cref="ImageMarks"/>),
+/// which its containers read.
 /// <paramref name="keptIn"/>: the folder where each image's libraries are kept
 /// once read, by its id, so a restart of the agent does not read a large image
-/// again; none, and they are kept only while it runs.
+/// again; <paramref name="advisoriesIn"/>, where each advisory read from OSV.dev
+/// is kept for a day, so Zaindari's window opens at once after a restart too.
+/// None, and they are kept only while it runs.
 /// </summary>
-public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuritySettingsStore settings, ILogger<ImageSecurity> logger, string? keptIn = null) : WslcAgent.Mcp.IImageSecurity
+public sealed class ImageSecurity(
+    IWslcRunner wslc,
+    HttpClient http,
+    ImageSecuritySettingsStore settings,
+    ILogger<ImageSecurity> logger,
+    string? keptIn = null,
+    string? advisoriesIn = null,
+    ImageMarks? marks = null)
+    : WslcAgent.Mcp.IImageSecurity
 {
     /// <summary>A large image's container made and its files exported, a gigabyte and more.</summary>
     private static readonly TimeSpan ListTimeout = TimeSpan.FromMinutes(5);
@@ -80,13 +91,13 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
     private readonly ConcurrentDictionary<string, (JsonNode? Advisory, DateTimeOffset Read)> _advisories = new();
 
     /// <summary>
-    /// The Python libraries of each image read so far, by the image's id: an
+    /// The packages of each image read so far, by the image's id: an
     /// image never changes under its id, so a second container made from it
     /// costs no second reading of its files, nor does a restart of the agent
-    /// (<c>keptIn</c>); null for an image with no Python libraries. What the
+    /// (<c>keptIn</c>); null for an image with no package to read. What the
     /// libraries are vulnerable to is asked anew each time.
     /// </summary>
-    private readonly ConcurrentDictionary<string, List<(string Name, string Version)>?> _packages = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, List<Installed>?> _packages = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Checks the images just built, writing what it does and finds through
@@ -107,9 +118,10 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
         var stopping = new List<(string Image, ImageVulnerability Vulnerability)>();
         foreach (var image in images)
         {
-            note("INFO", $"Checking {image}'s Python libraries for known vulnerabilities");
+            note("INFO", $"Checking {image}'s Python libraries and system packages for known vulnerabilities");
             // By its id, so the containers made from it next find its libraries already read.
-            var found = await CheckAsync(image, (await OriginAsync(image, cancellationToken)).Id, note, cancellationToken);
+            var (id, built) = await OriginAsync(image, cancellationToken);
+            var found = await CheckAsync(image, id, built, note, cancellationToken);
             foreach (var vulnerability in found)
             {
                 note("WARNING", $"{image}: {vulnerability}");
@@ -126,14 +138,14 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
         if (policy == ImageSecurityPolicy.Block)
         {
             // Each vulnerability is a line above; what is to be done is said once per library, a line each.
-            var libraries = stopping.GroupBy(s => (s.Image, s.Vulnerability.Package, s.Vulnerability.Version)).ToList();
+            var libraries = stopping.GroupBy(s => (s.Image, s.Vulnerability.Ecosystem, s.Vulnerability.Package, s.Vulnerability.Version)).ToList();
             foreach (var library in libraries)
             {
                 note("ERROR", Remedy(library.Key.Image, [.. library.Select(s => s.Vulnerability)]));
             }
 
             throw new InvalidOperationException(
-                $"{libraries.Count} Python librar{(libraries.Count == 1 ? "y" : "ies")} with a vulnerability moderate or worse, so no container was made. "
+                $"{libraries.Count} package{(libraries.Count == 1 ? "" : "s")} with a vulnerability moderate or worse, so no container was made. "
                 + "Raise each to the version named, replace the ones no version fixes, and build again; Settings → Security → Image security check set to Warn builds anyway.");
         }
 
@@ -143,7 +155,7 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
     /// <summary>
     /// Before a container is made from <paramref name="image"/> (Run, Create,
     /// View &amp; edit's recreate, an image update, a project's save): its
-    /// Python libraries asked of OSV.dev as after a build, since what was clean
+    /// packages asked of OSV.dev as after a build, since what was clean
     /// when it was built may not be today. An image built on this machine with
     /// one moderate or worse is refused under <see cref="ImageSecurityPolicy.Block"/>
     /// (<see cref="InvalidOperationException"/>): no container is made, and the
@@ -152,149 +164,84 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
     /// ours to mend: what it carries comes back as notes for the user, as
     /// Warn's do. Containers already made are never stopped by the check.
     /// </summary>
-    public async Task<(IReadOnlyList<string> Said, string Worst)> GuardLaunchAsync(string image, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<string>> GuardLaunchAsync(string image, CancellationToken cancellationToken)
     {
         var policy = settings.Get().Policy;
         image = image.Trim();
         if (policy == ImageSecurityPolicy.Off || image.Length == 0)
         {
-            return ([], "");
+            return [];
         }
 
         // Not on the machine: the run pulls it, from a registry, and it is not ours to stop.
-        var (built, remedies, worst) = await RemediesAsync(image, "before a container", cancellationToken);
+        var (built, remedies) = await RemediesAsync(image, "before a container", cancellationToken);
         if (remedies.Count == 0)
         {
-            return ([], "");
+            return [];
         }
 
         if (built && policy == ImageSecurityPolicy.Block)
         {
-            var first = $"{image} was built on this machine and has Python libraries with a vulnerability moderate or worse, so no container was made from it; "
-                + "a container it was to replace runs on as it was.";
-            throw new ImageRefusedException(
-                first + "\n\n" + string.Join("\n", remedies)
-                + "\n\nRaise each to the version named, replace the ones no version fixes, and build the image again; Settings → Security → Image security check set to Warn makes it anyway.",
-                [first, .. remedies], worst);
+            throw new InvalidOperationException(
+                $"{image} was built on this machine and has packages with a vulnerability moderate or worse, so no container was made from it; "
+                + "a container it was to replace runs on as it was.\n\n"
+                + string.Join("\n", remedies)
+                + "\n\nRaise each to the version named, replace the ones no version fixes, and build the image again; Settings → Security → Image security check set to Warn makes it anyway.");
         }
 
-        return (
+        return
         [
             built
-                ? $"{image} has Python libraries with a vulnerability moderate or worse; made anyway, as Settings → Security → Image security check is set to Warn."
-                : $"{image} comes from a registry and has Python libraries with a vulnerability moderate or worse. It is not built here, so it is not stopped: a newer version of it may mend them.",
+                ? $"{image} has packages with a vulnerability moderate or worse; made anyway, as Settings → Security → Image security check is set to Warn."
+                : $"{image} comes from a registry and has packages with a vulnerability moderate or worse. It is not built here, so it is not stopped: a newer version of it may mend them.",
             .. remedies,
-        ], worst);
+        ];
     }
 
     /// <summary>
-    /// Before a container that exists is started (Start, Restart, a project's
-    /// start, its restart policy): its image checked as a new container's is.
-    /// One built on this machine with a vulnerability moderate or worse is not
-    /// started under <see cref="ImageSecurityPolicy.Block"/>
-    /// (<see cref="ImageRefusedException"/>): it is ours to mend, and is built
-    /// again. One from a registry always starts, since it is not ours to mend:
-    /// whether it runs is the user's to decide, and it is marked instead
-    /// (<see cref="ImageWarnings"/>). A container that runs is never stopped by
-    /// the check, so a start of one that runs passes; a <paramref name="restart"/>,
-    /// which would stop it first, is refused before anything is touched, and it
-    /// runs on. Nothing when the container cannot be read: its start says why.
+    /// The image of a container the agent did not make (<c>wslc</c> run around
+    /// it, a script's), or made before the check was, checked after the fact:
+    /// nothing is refused, since the container is made already, and what is
+    /// found is kept on the image (<see cref="ImageMarks"/>), which the
+    /// container reads. Nothing when the check is off.
     /// </summary>
-    public async Task GuardStartAsync(string container, CancellationToken cancellationToken, string? session = null, bool restart = false)
-    {
-        if (settings.Get().Policy != ImageSecurityPolicy.Block)
-        {
-            return;
-        }
-
-        Containers.ContainerInspection inspected;
-        try
-        {
-            inspected = Containers.ContainerInspection.Parse(
-                await wslc.RunAsync(["container", "inspect", container, "--format", "json"], cancellationToken: cancellationToken, session: session));
-        }
-        catch (Exception ex) when (ex is WslcException or WslcNotFoundException or TimeoutException or JsonException)
-        {
-            return;
-        }
-
-        if (inspected.IsRunning && !restart)
-        {
-            return;
-        }
-
-        var image = inspected.Image;
-        var (built, remedies, worst) = await RemediesAsync(image, $"before container {container} starts", cancellationToken);
-        if (!built || remedies.Count == 0)
-        {
-            return;
-        }
-
-        var first = $"{image} was built on this machine and has Python libraries with a vulnerability moderate or worse, so container {inspected.Name} was not {(restart ? "restarted; it runs on as it was" : "started")}.";
-        throw new ImageRefusedException(
-            first + "\n\n" + string.Join("\n", remedies)
-            + "\n\nRaise each to the version named, replace the ones no version fixes, build the image again and save the container or its project again; "
-            + "Settings → Security → Image security check set to Warn starts it anyway.",
-            [first, .. remedies], worst, inspected.Id, inspected.Name);
-    }
-
-    /// <summary>
-    /// A container the agent did not make (<c>wslc</c> run around it, a
-    /// script's), or made before the check was: its image checked as a new
-    /// container's is, after the fact. Nothing is refused, since it is made
-    /// already and was not the agent's to stop: what it carries comes back
-    /// for the container to be marked with (<see cref="ImageWarnings"/>).
-    /// None when the check is off, the image is not on the machine, or it is clean.
-    /// </summary>
-    public async Task<(IReadOnlyList<string> Said, bool Refused, string Worst)> AuditAsync(string image, string container, CancellationToken cancellationToken)
+    public async Task MarkAsync(string image, CancellationToken cancellationToken)
     {
         image = image.Trim();
-        var policy = settings.Get().Policy;
-        if (policy == ImageSecurityPolicy.Off || image.Length == 0)
+        if (settings.Get().Policy != ImageSecurityPolicy.Off && image.Length > 0)
         {
-            return ([], false, "");
+            await RemediesAsync(image, "of a container's image", cancellationToken);
         }
-
-        var (built, remedies, worst) = await RemediesAsync(image, $"of container {container}, already made", cancellationToken);
-        return remedies.Count == 0 ? ([], false, "") : (
-        [
-            built
-                ? $"{image} was built on this machine and has Python libraries with a vulnerability moderate or worse. Container {container} was made without its image being checked (around the agent, or before the check was), so nothing stopped it; it runs on."
-                : $"{image} comes from a registry and has Python libraries with a vulnerability moderate or worse. It is not built here, so container {container} is not stopped: a newer version of the image may mend them.",
-            .. remedies,
-        ], built && policy == ImageSecurityPolicy.Block, worst);
     }
 
     /// <summary>
     /// What a container of the image would carry: whether it was built here,
     /// and a line per library with a vulnerability moderate or worse
     /// (<see cref="Remedy"/>), each written in the log as a warning saying
-    /// <paramref name="when"/> it was found, and the worst severity among them.
-    /// None for an image not on the machine.
+    /// <paramref name="when"/> it was found. None for an image not on the machine.
     /// </summary>
-    private async Task<(bool Built, List<string> Remedies, string Worst)> RemediesAsync(string image, string when, CancellationToken cancellationToken)
+    private async Task<(bool Built, List<string> Remedies)> RemediesAsync(string image, string when, CancellationToken cancellationToken)
     {
         var (id, built) = await OriginAsync(image, cancellationToken);
         if (id is null)
         {
-            return (false, [], "");
+            return (false, []);
         }
 
-        var found = await CheckAsync(image, id, (level, text) =>
+        var found = await CheckAsync(image, id, built, (level, text) =>
         {
             if (level == "WARNING")
             {
                 logger.LogWarning("image security check {When} of {Image}: {Text}", when, image, text);
             }
         }, cancellationToken);
-        var remedies = found.Where(v => v.Blocks).GroupBy(v => (v.Package, v.Version)).Select(library => Remedy(image, [.. library])).ToList();
+        var remedies = found.Where(v => v.Blocks).GroupBy(v => (v.Ecosystem, v.Package, v.Version)).Select(library => Remedy(image, [.. library])).ToList();
         foreach (var remedy in remedies)
         {
             logger.LogWarning("image security check {When} of {Image}: {Remedy}", when, image, remedy);
         }
 
-        var worst = found.Where(v => v.Blocks).Select(v => v.Severity).MaxBy(severity => Array.IndexOf(SeverityOrder, severity)) ?? "";
-        return (built, remedies, worst);
+        return (built, remedies);
     }
 
     /// <summary>
@@ -335,27 +282,9 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
         var remedy = unfixed is not null
             ? $"no version fixes {unfixed.Advisory} yet: replace it"
             : $"{vulnerabilities.Select(v => v.FixedIn).Order(VersionOrder.Instance).Last()} fixes {(vulnerabilities.Count == 1 ? "it" : "them all")}";
-        return $"{image}: {first.Package} {first.Version}: {counted} moderate or worse{WorstSaid}{worst}; {remedy}.";
-    }
-
-    /// <summary>How a <see cref="Remedy"/> line says its worst severity, written there and read back by <see cref="LogLevelOf"/>.</summary>
-    private const string WorstSaid = ", the worst ";
-
-    /// <summary>
-    /// The level a line of the image check is written in at the end of a
-    /// log: ERROR, in red, for a library whose worst vulnerability is high or
-    /// critical, as the state chip says it; WARNING for any other line.
-    /// </summary>
-    public static string LogLevelOf(string line)
-    {
-        var at = line.IndexOf(WorstSaid, StringComparison.Ordinal);
-        if (at < 0)
-        {
-            return "WARNING";
-        }
-
-        var severity = line[(at + WorstSaid.Length)..].Split(';', 2)[0];
-        return severity is "high" or "critical" ? "ERROR" : "WARNING";
+        // A system package is not in the requirements: it comes with the base image, or an upgrade in the Dockerfile.
+        var how = first.Ecosystem == Installed.PyPI ? "" : ": build on a newer base image, or upgrade it in the Dockerfile";
+        return $"{image}: {first.Named} {first.Version}: {counted} moderate or worse{ImageRemedies.WorstSaid}{worst}; {remedy}{how}.";
     }
 
     /// <summary>Versions in the order PyPI releases them, closely enough for picking the highest fix: number by number, a part that is not one compared as text.</summary>
@@ -384,12 +313,12 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
         }
     }
 
-    /// <summary>The image's vulnerabilities; none when it has no Python, or when it could not be checked (said through <paramref name="note"/>).</summary>
     /// <summary>
-    /// What View image packages and CVEs shows: every library of the image and
-    /// every known vulnerability of them, the low ones too, the worst first,
-    /// with the lines a refusal would give. Nothing is refused nor marked by
-    /// asking, whatever Settings → Security says; it is only read.
+    /// What Zaindari's window shows: every package of the image and every known
+    /// vulnerability of them, the low ones too, the worst first, with the lines
+    /// a refusal would give and the patch it can be given
+    /// (<see cref="ImagePatches"/>). Nothing is refused by asking, whatever
+    /// Settings → Security says; what is found marks the image.
     /// </summary>
     public async Task<ImageVulnerabilities> ReportAsync(string image, CancellationToken cancellationToken = default)
     {
@@ -400,7 +329,7 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
             return new ImageVulnerabilities(image, false, false, false, false, false, [], [], [], $"{image} is not on this machine.");
         }
 
-        List<(string Name, string Version)>? packages;
+        List<Installed>? packages;
         try
         {
             packages = await PackagesAsync(image, id, cancellationToken);
@@ -412,10 +341,11 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
 
         if (packages is null)
         {
-            return new ImageVulnerabilities(image, true, built, false, true, false, [], [], [], $"{image} has no Python libraries: nothing to check.");
+            Mark(id, image, built, []);
+            return new ImageVulnerabilities(image, true, built, false, true, false, [], [], [], $"{image} has no package to check: no Python library, and no package database of a distribution OSV.dev knows (Alpine's apk, Debian's or Ubuntu's dpkg). That is not a clean image.");
         }
 
-        var listed = packages.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).Select(p => new ImagePackage(p.Name, p.Version)).ToList();
+        var listed = packages.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).Select(p => new ImagePackage(p.Name, p.Version, p.Ecosystem)).ToList();
         List<ImageVulnerability> found;
         try
         {
@@ -426,18 +356,19 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
             return new ImageVulnerabilities(image, true, built, true, false, false, listed, [], [], $"OSV.dev could not be reached ({ex.Message}): the libraries are listed unchecked.");
         }
 
-        var remedies = found.Where(v => v.Blocks).GroupBy(v => (v.Package, v.Version)).Select(library => Remedy(image, [.. library])).ToList();
+        Mark(id, image, built, found);
+        var remedies = found.Where(v => v.Blocks).GroupBy(v => (v.Ecosystem, v.Package, v.Version)).Select(library => Remedy(image, [.. library])).ToList();
         var advisories = found
             .OrderByDescending(v => Array.IndexOf(SeverityOrder, v.Severity))
             .ThenBy(v => v.Package, StringComparer.OrdinalIgnoreCase)
-            .Select(v => new ImageAdvisory(v.Package, v.Version, v.Advisory, v.Cve, v.Severity, v.FixedIn, v.Url))
+            .Select(v => new ImageAdvisory(v.Package, v.Version, v.Advisory, v.Cve, v.Severity, v.FixedIn, v.Url, v.Ecosystem))
             .ToList();
         return new ImageVulnerabilities(image, true, built, true, true, built && remedies.Count > 0 && settings.Get().Policy == ImageSecurityPolicy.Block,
-            listed, advisories, remedies);
+            listed, advisories, remedies, Patch: ImagePatches.PatchOf(image, packages, found));
     }
 
-    /// <summary>The image's Python libraries, from what was read under its id already, or read now and kept; null for an image with no Python.</summary>
-    private async Task<List<(string Name, string Version)>?> PackagesAsync(string image, string? id, CancellationToken cancellationToken)
+    /// <summary>The image's packages, from what was read under its id already, or read now and kept; null for an image with none to read.</summary>
+    private async Task<List<Installed>?> PackagesAsync(string image, string? id, CancellationToken cancellationToken)
     {
         if (id is not null && (_packages.TryGetValue(id, out var kept) || Kept(id, out kept)))
         {
@@ -445,7 +376,7 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
             return kept;
         }
 
-        var packages = await PythonPackagesAsync(image, cancellationToken);
+        var packages = await InstalledPackagesAsync(image, cancellationToken);
         if (id is not null)
         {
             _packages[id] = packages;
@@ -456,7 +387,7 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
     }
 
     /// <summary>What an image's file in <c>keptIn</c> says: its libraries, null for none; false when it has no file, or one that cannot be read.</summary>
-    private bool Kept(string id, out List<(string Name, string Version)>? packages)
+    private bool Kept(string id, out List<Installed>? packages)
     {
         packages = null;
         if (KeptPath(id) is not { } path || !File.Exists(path))
@@ -472,7 +403,7 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
                 return false;
             }
 
-            packages = kept.Packages?.Select(p => (p.Name, p.Version)).ToList();
+            packages = kept.Packages?.Select(p => new Installed(p.Ecosystem, p.Name, p.Version)).ToList();
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
@@ -482,7 +413,7 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
         }
     }
 
-    private void Keep(string id, List<(string Name, string Version)>? packages)
+    private void Keep(string id, List<Installed>? packages)
     {
         if (KeptPath(id) is not { } path)
         {
@@ -492,7 +423,7 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, JsonSerializer.Serialize(new KeptPackages(packages?.Select(p => new KeptPackage(p.Name, p.Version)).ToList()), KeptJson));
+            File.WriteAllText(path, JsonSerializer.Serialize(new KeptPackages(packages?.Select(p => new KeptPackage(p.Ecosystem, p.Name, p.Version)).ToList()), KeptJson));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -500,20 +431,41 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
         }
     }
 
-    /// <summary>The image's file in <c>keptIn</c>, named by its id (<c>sha256-…</c>); null when nothing is kept on disk.</summary>
+    /// <summary>
+    /// The image's file in <c>keptIn</c>, named by its id (<c>sha256-…</c>) and the
+    /// reading's kind (<c>.packages</c>: libraries and system packages; an older
+    /// file, of libraries alone, is not read, and the image is read once more);
+    /// null when nothing is kept on disk.
+    /// </summary>
     private string? KeptPath(string id) =>
-        keptIn is null ? null : Path.Combine(keptIn, $"{id.Replace(':', '-')}.json");
+        keptIn is null ? null : Path.Combine(keptIn, $"{id.Replace(':', '-')}.packages.json");
 
     private static readonly JsonSerializerOptions KeptJson = new(JsonSerializerDefaults.Web);
 
-    /// <summary>An image's libraries as kept on disk; null for an image with no Python.</summary>
+    /// <summary>An image's packages as kept on disk; null for an image with none to read.</summary>
     private sealed record KeptPackages(List<KeptPackage>? Packages);
 
-    private sealed record KeptPackage(string Name, string Version);
+    private sealed record KeptPackage(string Ecosystem, string Name, string Version);
 
-    private async Task<List<ImageVulnerability>> CheckAsync(string image, string? id, Action<string, string> note, CancellationToken cancellationToken)
+    /// <summary>
+    /// What the check found, kept on the image (<see cref="ImageMarks"/>) by its
+    /// id and the name it was checked by: the worst of its vulnerabilities
+    /// moderate or worse, and whether the agent refuses it; none when it is clean.
+    /// </summary>
+    private void Mark(string? id, string image, bool built, IReadOnlyList<ImageVulnerability> found)
     {
-        List<(string Name, string Version)>? packages;
+        if (marks is null || id is null)
+        {
+            return;
+        }
+
+        var worst = found.Where(v => v.Blocks).Select(v => v.Severity).MaxBy(severity => Array.IndexOf(SeverityOrder, severity)) ?? "";
+        marks.Record(id, image, worst, built && worst.Length > 0 && settings.Get().Policy == ImageSecurityPolicy.Block);
+    }
+
+    private async Task<List<ImageVulnerability>> CheckAsync(string image, string? id, bool built, Action<string, string> note, CancellationToken cancellationToken)
+    {
+        List<Installed>? packages;
         try
         {
             packages = await PackagesAsync(image, id, cancellationToken);
@@ -526,7 +478,8 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
 
         if (packages is null)
         {
-            note("INFO", $"{image} has no Python libraries: nothing to check.");
+            Mark(id, image, built, []);
+            note("INFO", $"{image} has no package to check: no Python library, and no package database of a distribution OSV.dev knows (Alpine's apk, Debian's or Ubuntu's dpkg). That is not a clean image.");
             return [];
         }
 
@@ -535,9 +488,10 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
             var found = await OsvAsync(packages, cancellationToken);
             if (found.Count == 0)
             {
-                note("INFO", $"{image}: {packages.Count} Python libraries, no known vulnerability.");
+                note("INFO", $"{image}: {packages.Count} packages, no known vulnerability.");
             }
 
+            Mark(id, image, built, found);
             return found;
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
@@ -549,16 +503,16 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
     }
 
     /// <summary>
-    /// The image's Python libraries, read from its files and never by running
-    /// it: anything run in an image runs its code (a Python reads its own
+    /// The image's packages, read from its files and never by running it:
+    /// anything run in an image runs its code (a Python reads its own
     /// sitecustomize and .pth files as it starts), and a scanner that runs what
     /// it scans is a way in. A container of it is made and never started, its
-    /// files exported to a temporary archive, and every installed library's
-    /// metadata read from it (<c>*.dist-info/METADATA</c>, <c>*.egg-info</c>),
-    /// in every site-packages it has, a virtual environment's too; then both
-    /// are let go. Null when it has no Python library.
+    /// files exported to a temporary archive, and what is installed read from it
+    /// (<see cref="InstalledAsync"/>): every Python library, a virtual
+    /// environment's too, and the distribution's packages; then both are let
+    /// go. Null when it has no package to read.
     /// </summary>
-    private async Task<List<(string Name, string Version)>?> PythonPackagesAsync(string image, CancellationToken cancellationToken)
+    private async Task<List<Installed>?> InstalledPackagesAsync(string image, CancellationToken cancellationToken)
     {
         var name = $"{CheckPrefix}{Guid.NewGuid():N}"[..32];
         var archive = Path.Combine(Path.GetTempPath(), $"{name}.tar");
@@ -596,23 +550,56 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
     }
 
     /// <summary>
-    /// Every installed library an exported filesystem holds, by its metadata:
-    /// a <c>Name:</c> and a <c>Version:</c> among the headers each library's
-    /// METADATA (or PKG-INFO) begins with, in a site-packages or dist-packages
-    /// folder; each name and version once. Null when there is none. An
-    /// installer may keep the file elsewhere and link it into site-packages
-    /// (uv links from its cache): a hard link in the archive carries no data,
-    /// only the path it is to, so every metadata file is kept as it comes, and
-    /// a link is read through the one it names.
+    /// Every installed package an exported filesystem holds, each once: its
+    /// Python libraries, by their metadata (a <c>Name:</c> and a
+    /// <c>Version:</c> among the headers each library's METADATA or PKG-INFO
+    /// begins with, in a site-packages or dist-packages folder), and its
+    /// distribution's packages, by the distribution's own database
+    /// (<c>lib/apk/db/installed</c>, <c>var/lib/dpkg/status</c> and a distroless
+    /// image's <c>status.d</c>), in the ecosystem its <c>os-release</c> names.
+    /// Null when there is none. An installer may keep a library's metadata
+    /// elsewhere and link it into site-packages (uv links from its cache): a
+    /// hard link in the archive carries no data, only the path it is to, so
+    /// every metadata file is kept as it comes, and a link is read through the
+    /// one it names. A distribution OSV.dev has no name for (Kali, say) gives
+    /// no system package: it is not checked, and never reads as clean.
     /// </summary>
-    internal static async Task<List<(string Name, string Version)>?> InstalledAsync(string archive, CancellationToken cancellationToken)
+    internal static async Task<List<Installed>?> InstalledAsync(string archive, CancellationToken cancellationToken)
     {
-        var found = new HashSet<(string Name, string Version)>();
-        var seen = new Dictionary<string, (string Name, string Version)?>(StringComparer.Ordinal);
+        var found = new HashSet<Installed>();
+        var seen = new Dictionary<string, Installed?>(StringComparer.Ordinal);
+        var system = new List<(string Name, string Version)>();
+        var release = new Dictionary<string, string>(StringComparer.Ordinal);
         await using var file = File.OpenRead(archive);
         await using var reader = new TarReader(file);
         while (await reader.GetNextEntryAsync(copyData: false, cancellationToken) is { } entry)
         {
+            var path = Normalized(entry.Name);
+            if (entry.DataStream is { } content && entry.EntryType != TarEntryType.HardLink)
+            {
+                if (path is "etc/os-release" or "usr/lib/os-release")
+                {
+                    foreach (var (key, value) in await OsReleaseAsync(content, cancellationToken))
+                    {
+                        release.TryAdd(key, value);
+                    }
+
+                    continue;
+                }
+
+                if (path == "lib/apk/db/installed")
+                {
+                    system.AddRange(await ApkAsync(content, cancellationToken));
+                    continue;
+                }
+
+                if (path == "var/lib/dpkg/status" || (path.StartsWith("var/lib/dpkg/status.d/", StringComparison.Ordinal) && !path.EndsWith(".md5sums", StringComparison.Ordinal)))
+                {
+                    system.AddRange(await DpkgAsync(content, cancellationToken));
+                    continue;
+                }
+            }
+
             if (!IsMetadataFile(entry.Name))
             {
                 continue;
@@ -621,21 +608,159 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
             var library = entry.EntryType == TarEntryType.HardLink
                 ? seen.GetValueOrDefault(Normalized(entry.LinkName))
                 : entry.DataStream is { } data ? await HeadersAsync(data, cancellationToken) : null;
-            seen[Normalized(entry.Name)] = library;
+            seen[path] = library;
             if (library is { } installed && IsInstalled(entry.Name))
             {
                 found.Add(installed);
             }
         }
 
-        return found.Count == 0 ? null : [.. found.OrderBy(library => library.Name, StringComparer.OrdinalIgnoreCase)];
+        if (Ecosystem(release) is { } ecosystem)
+        {
+            found.UnionWith(system.Select(package => new Installed(ecosystem, package.Name, package.Version)));
+        }
+
+        return found.Count == 0 ? null : [.. found.OrderBy(package => package.Ecosystem, StringComparer.Ordinal).ThenBy(package => package.Name, StringComparer.OrdinalIgnoreCase)];
 
         // An archive names a link's target as it names its entries, with or without a leading ./ or /.
         static string Normalized(string path) => path.TrimStart('.').TrimStart('/');
     }
 
+    /// <summary>
+    /// The distribution's ecosystem in OSV.dev's names, from its <c>os-release</c>:
+    /// <c>Alpine:v3.20</c> (the major and minor of its version), <c>Debian:12</c>,
+    /// <c>Ubuntu:22.04</c>; null for one OSV.dev does not know, or no version (a
+    /// rolling one).
+    /// </summary>
+    internal static string? Ecosystem(IReadOnlyDictionary<string, string> release)
+    {
+        var id = release.GetValueOrDefault("ID", "");
+        var version = release.GetValueOrDefault("VERSION_ID", "");
+        if (version.Length == 0)
+        {
+            return null;
+        }
+
+        return id switch
+        {
+            "alpine" when Regex.Match(version, @"^\d+\.\d+") is { Success: true } minor => $"Alpine:v{minor.Value}",
+            "debian" when Regex.Match(version, @"^\d+") is { Success: true } major => $"Debian:{major.Value}",
+            "ubuntu" when Regex.Match(version, @"^\d+\.\d+") is { Success: true } numbered => $"Ubuntu:{numbered.Value}",
+            _ => null,
+        };
+    }
+
+    /// <summary>An <c>os-release</c> file's <c>KEY=value</c> lines, the value's quotes taken off.</summary>
+    private static async Task<List<(string Key, string Value)>> OsReleaseAsync(Stream data, CancellationToken cancellationToken)
+    {
+        var pairs = new List<(string, string)>();
+        using var text = new StreamReader(data);
+        while (await text.ReadLineAsync(cancellationToken) is { } line)
+        {
+            var at = line.IndexOf('=');
+            if (at > 0)
+            {
+                pairs.Add((line[..at].Trim(), line[(at + 1)..].Trim().Trim('"', '\'')));
+            }
+        }
+
+        return pairs;
+    }
+
+    /// <summary>Alpine's installed packages, a block each: <c>P:</c> the package, <c>o:</c> its origin, which OSV.dev names it by, <c>V:</c> its version.</summary>
+    private static async Task<List<(string Name, string Version)>> ApkAsync(Stream data, CancellationToken cancellationToken)
+    {
+        var packages = new List<(string, string)>();
+        string? name = null, origin = null, version = null;
+        using var text = new StreamReader(data);
+        while (true)
+        {
+            var line = await text.ReadLineAsync(cancellationToken);
+            if (line is null || line.Length == 0)
+            {
+                if ((origin ?? name) is { Length: > 0 } named && version is { Length: > 0 })
+                {
+                    packages.Add((named, version));
+                }
+
+                (name, origin, version) = (null, null, null);
+                if (line is null)
+                {
+                    return packages;
+                }
+
+                continue;
+            }
+
+            if (line.StartsWith("P:", StringComparison.Ordinal))
+            {
+                name = line[2..].Trim();
+            }
+            else if (line.StartsWith("o:", StringComparison.Ordinal))
+            {
+                origin = line[2..].Trim();
+            }
+            else if (line.StartsWith("V:", StringComparison.Ordinal))
+            {
+                version = line[2..].Trim();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Debian's or Ubuntu's installed packages, a paragraph each, named as OSV.dev
+    /// names them: by their <c>Source:</c> package, at the source's version when
+    /// it gives one (<c>Source: openssl (3.0.11-1)</c>), else by the package
+    /// itself; only one whose <c>Status:</c> says installed.
+    /// </summary>
+    private static async Task<List<(string Name, string Version)>> DpkgAsync(Stream data, CancellationToken cancellationToken)
+    {
+        var packages = new List<(string, string)>();
+        string? name = null, source = null, version = null, status = null;
+        using var text = new StreamReader(data);
+        while (true)
+        {
+            var line = await text.ReadLineAsync(cancellationToken);
+            if (line is null || line.Length == 0)
+            {
+                if (name is { Length: > 0 } && version is { Length: > 0 } && (status is null || status.EndsWith(" installed", StringComparison.Ordinal)))
+                {
+                    var from = source is { Length: > 0 } ? Regex.Match(source, @"^(?<name>\S+)(\s+\((?<version>[^)]+)\))?") : null;
+                    packages.Add(from is { Success: true }
+                        ? (from.Groups["name"].Value, from.Groups["version"].Success ? from.Groups["version"].Value : version)
+                        : (name, version));
+                }
+
+                (name, source, version, status) = (null, null, null, null);
+                if (line is null)
+                {
+                    return packages;
+                }
+
+                continue;
+            }
+
+            if (line.StartsWith("Package:", StringComparison.Ordinal))
+            {
+                name = line[8..].Trim();
+            }
+            else if (line.StartsWith("Source:", StringComparison.Ordinal))
+            {
+                source = line[7..].Trim();
+            }
+            else if (line.StartsWith("Version:", StringComparison.Ordinal))
+            {
+                version = line[8..].Trim();
+            }
+            else if (line.StartsWith("Status:", StringComparison.Ordinal))
+            {
+                status = line[7..].Trim();
+            }
+        }
+    }
+
     /// <summary>The <c>Name:</c> and <c>Version:</c> of a metadata file; the headers end at the first empty line, and the description after it is not read.</summary>
-    private static async Task<(string Name, string Version)?> HeadersAsync(Stream data, CancellationToken cancellationToken)
+    private static async Task<Installed?> HeadersAsync(Stream data, CancellationToken cancellationToken)
     {
         string? name = null, version = null;
         using var text = new StreamReader(data);
@@ -651,7 +776,7 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
             }
         }
 
-        return name is { Length: > 0 } && version is { Length: > 0 } ? (name, version) : null;
+        return name is { Length: > 0 } && version is { Length: > 0 } ? new Installed(Installed.PyPI, name, version) : null;
     }
 
     /// <summary>A library's metadata wherever it is: <c>x-1.0.dist-info/METADATA</c>, <c>x.egg-info/PKG-INFO</c>, or an <c>x.egg-info</c> file.</summary>
@@ -663,15 +788,15 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
     /// <summary>Installed where Python imports from: a site-packages or dist-packages folder, not an installer's cache.</summary>
     private static bool IsInstalled(string path) => path.Contains("-packages/", StringComparison.Ordinal);
 
-    /// <summary>OSV.dev's known vulnerabilities of these PyPI libraries, one batch question, each advisory read once.</summary>
-    private async Task<List<ImageVulnerability>> OsvAsync(List<(string Name, string Version)> packages, CancellationToken cancellationToken)
+    /// <summary>OSV.dev's known vulnerabilities of these packages, each in its own ecosystem, one batch question, each advisory read once.</summary>
+    private async Task<List<ImageVulnerability>> OsvAsync(List<Installed> packages, CancellationToken cancellationToken)
     {
         var found = new List<ImageVulnerability>();
         foreach (var batch in packages.Chunk(500))
         {
             using var response = await http.PostAsJsonAsync("https://api.osv.dev/v1/querybatch", new
             {
-                queries = batch.Select(p => new { package = new { name = p.Name, ecosystem = "PyPI" }, version = p.Version }),
+                queries = batch.Select(p => new { package = new { name = p.Name, ecosystem = p.Ecosystem }, version = p.Version }),
             }, cancellationToken);
             response.EnsureSuccessStatusCode();
             var results = JsonNode.Parse(await response.Content.ReadAsStringAsync(cancellationToken))?["results"]?.AsArray() ?? [];
@@ -705,15 +830,61 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
 
     private async Task<JsonNode?> AdvisoryAsync(string id, CancellationToken cancellationToken)
     {
-        if (_advisories.TryGetValue(id, out var kept) && DateTimeOffset.UtcNow - kept.Read < AdvisoryKept)
+        if ((_advisories.TryGetValue(id, out var kept) || KeptAdvisory(id, out kept)) && DateTimeOffset.UtcNow - kept.Read < AdvisoryKept)
         {
+            _advisories[id] = kept;
             return kept.Advisory;
         }
 
-        var advisory = JsonNode.Parse(await http.GetStringAsync($"https://api.osv.dev/v1/vulns/{id}", cancellationToken));
+        var text = await http.GetStringAsync($"https://api.osv.dev/v1/vulns/{id}", cancellationToken);
+        var advisory = JsonNode.Parse(text);
         _advisories[id] = (advisory, DateTimeOffset.UtcNow);
+        KeepAdvisory(id, text);
         return advisory;
     }
+
+    /// <summary>An advisory as kept on disk, with when it was read: the file's own time.</summary>
+    private bool KeptAdvisory(string id, out (JsonNode? Advisory, DateTimeOffset Read) kept)
+    {
+        kept = default;
+        if (AdvisoryPath(id) is not { } path || !File.Exists(path))
+        {
+            return false;
+        }
+
+        try
+        {
+            kept = (JsonNode.Parse(File.ReadAllText(path)), new DateTimeOffset(File.GetLastWriteTimeUtc(path), TimeSpan.Zero));
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            logger.LogWarning("image security check: {Path} could not be read, the advisory is asked again: {Message}", path, ex.Message);
+            return false;
+        }
+    }
+
+    private void KeepAdvisory(string id, string text)
+    {
+        if (AdvisoryPath(id) is not { } path)
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, text);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning("image security check: {Path} could not be written, the advisory will be asked again after a restart: {Message}", path, ex.Message);
+        }
+    }
+
+    /// <summary>The advisory's file in <c>advisoriesIn</c>, named by its id (<c>GHSA-…</c>, <c>PYSEC-…</c>); null when none is kept on disk.</summary>
+    private string? AdvisoryPath(string id) =>
+        advisoriesIn is null || id.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ? null : Path.Combine(advisoriesIn, id + ".json");
 
     private static IEnumerable<string> Aliases(JsonNode? advisory) =>
         (advisory?["aliases"]?.AsArray() ?? []).Select(a => (string?)a).OfType<string>();
@@ -724,7 +895,7 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
     /// else the one its CVSS vector scores: left unknown, a critical one would
     /// not stop the build.
     /// </summary>
-    private async Task<ImageVulnerability> ReadAsync(string id, JsonNode? advisory, (string Name, string Version) package, CancellationToken cancellationToken)
+    private async Task<ImageVulnerability> ReadAsync(string id, JsonNode? advisory, Installed package, CancellationToken cancellationToken)
     {
         var read = Read(id, advisory, package);
         if (read.Severity != Unknown)
@@ -748,22 +919,24 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
         }
 
         var vectors = (advisory?["severity"]?.AsArray() ?? [])
-            .Where(s => ((string?)s?["type"] ?? "").StartsWith("CVSS_V3", StringComparison.Ordinal))
+            .Where(s => (string?)s?["type"] is "CVSS_V3" or "CVSS_V4")
             .Select(s => (string?)s?["score"]).OfType<string>();
         return read with { Severity = vectors.Select(CvssSeverity).FirstOrDefault(s => s != Unknown) ?? Unknown };
     }
 
-    private static ImageVulnerability Read(string id, JsonNode? advisory, (string Name, string Version) package)
+    private static ImageVulnerability Read(string id, JsonNode? advisory, Installed package)
     {
-        var aliases = Aliases(advisory).ToList();
+        var aliases = Aliases(advisory).Concat((advisory?["upstream"]?.AsArray() ?? []).Select(a => (string?)a).OfType<string>()).ToList();
         var fixedIn = (advisory?["affected"]?.AsArray() ?? [])
-            .Where(a => Normalized((string?)a?["package"]?["name"]) == Normalized(package.Name))
+            .Where(a => package.Ecosystem == Installed.PyPI
+                ? Normalized((string?)a?["package"]?["name"]) == Normalized(package.Name)
+                : (string?)a?["package"]?["name"] == package.Name && ((string?)a?["package"]?["ecosystem"] ?? "").StartsWith(package.Ecosystem, StringComparison.Ordinal))
             .SelectMany(a => a?["ranges"]?.AsArray() ?? [])
             .SelectMany(r => r?["events"]?.AsArray() ?? [])
             .Select(e => (string?)e?["fixed"]).OfType<string>()
             .FirstOrDefault() ?? "";
         return new ImageVulnerability(package.Name, package.Version, id, aliases.FirstOrDefault(a => a.StartsWith("CVE-", StringComparison.Ordinal)) ?? "",
-            Severity(advisory), fixedIn, $"https://osv.dev/vulnerability/{id}");
+            Severity(advisory), fixedIn, $"https://osv.dev/vulnerability/{id}", package.Ecosystem);
     }
 
     /// <summary>The severity the advisory's database gives it (GitHub's: low, moderate or medium, high, critical).</summary>
@@ -776,13 +949,19 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
         };
 
     /// <summary>
-    /// The severity a CVSS 3.x vector scores, by its base score as the
-    /// specification computes it (FIRST, CVSS v3.1, section 7): under 4 low,
-    /// under 7 moderate, under 9 high, else critical; a vector that cannot be
-    /// read, or that scores 0, is unknown.
+    /// The severity a CVSS vector scores, by its base score as the
+    /// specification computes it: a 3.x one by FIRST's CVSS v3.1, section 7,
+    /// a 4.0 one by <see cref="Cvss4"/>. Under 4 low, under 7 moderate, under
+    /// 9 high, else critical; a vector that cannot be read, or that scores 0,
+    /// is unknown.
     /// </summary>
     internal static string CvssSeverity(string vector)
     {
+        if (vector.StartsWith("CVSS:4.0/", StringComparison.Ordinal))
+        {
+            return Cvss4.Score(vector) is double scored and > 0 ? Band(scored) : Unknown;
+        }
+
         var metrics = vector.Split('/').Select(part => part.Split(':')).Where(pair => pair.Length == 2)
             .ToDictionary(pair => pair[0], pair => pair[1], StringComparer.Ordinal);
         string Metric(string name) => metrics.GetValueOrDefault(name, "");
@@ -807,9 +986,12 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
         }
 
         var exploitability = 8.22 * av.Value * ac.Value * pr.Value * ui.Value;
-        var score = RoundUp(Math.Min((changed ? 1.08 : 1) * (impact + exploitability), 10));
-        return score switch { < 4 => "low", < 7 => "moderate", < 9 => "high", _ => "critical" };
+        return Band(RoundUp(Math.Min((changed ? 1.08 : 1) * (impact + exploitability), 10)));
     }
+
+    /// <summary>The severity of a CVSS base score above 0, by the bands both versions share.</summary>
+    private static string Band(double score) =>
+        score switch { < 4 => "low", < 7 => "moderate", < 9 => "high", _ => "critical" };
 
     /// <summary>The specification's Roundup: up to one decimal, read through whole numbers so 4.0000001 is not 4.1.</summary>
     private static double RoundUp(double value)

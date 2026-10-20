@@ -1,11 +1,16 @@
 @* Container state as a coloured chip (cards); the table uses StateDot. One whose
-   image has known vulnerabilities says CVE after its state, in the yellow of a
-   moderate one or the red of a high or a critical one (CardTone.Alarm), whatever
-   its state, so whoever sees it goes to its logs, which end with what they are;
-   a recreate says only that, until it is over. Any other warning (a name it
+   image has known vulnerabilities says CVE after its state, in the colour its
+   menu's Zaindari item wears (ImageSecurityFlow.Tone): red for a high or a
+   critical one, or for an image the agent refuses (ours, to be built again,
+   which will not start), the yellow for any other (CardTone.Alarm), whatever
+   its state, so whoever sees it opens Zaindari, which checks it again and says
+   what they are. One that runs a patch Zaindari built (…-patched) says patched
+   after its state, so it is seen that its image is ours and not the one
+   published. No tooltip: what matters is seen, on a phone too. A recreate
+   says only that, until it is over. Any other warning (a name it
    holds, a project with a service missing) wears the yellow without the word. *@
 <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@(Paint is null ? StateColors.For(State) : Color.Default)"
-         Style="@Paint" title="@(HasCve ? $"CVE: {Cve} vulnerabilities — see Logs" : null)">@(HasCve ? $"{State} · CVE" : State)</MudChip>
+         Style="@Paint">@Text</MudChip>
 
 @code {
     [Parameter, EditorRequired] public string State { get; set; } = "";
@@ -16,10 +21,20 @@
     /// <summary>The worst severity its image's vulnerabilities reach (<see cref="ContainerSummary.ImageWorst"/>); empty for none.</summary>
     [Parameter] public string Cve { get; set; } = "";
 
+    /// <summary>The colour its image is offered in (<see cref="ImageSecurityFlow.Tone(ContainerSummary)"/>, or of a project's containers).</summary>
+    [Parameter] public Color Tone { get; set; } = Color.Default;
+
+    /// <summary>It runs a patch Zaindari built (<see cref="ImageSecurityFlow.IsPatched(ContainerSummary)"/>, or one of a project's containers does).</summary>
+    [Parameter] public bool Patched { get; set; }
+
     private bool HasCve => Cve.Length > 0 && State != ContainerSummary.Recreating;
 
+    private bool ShowsPatched => Patched && State != ContainerSummary.Recreating;
+
+    private string Text => State + (ShowsPatched ? " · patched" : "") + (HasCve ? " · CVE" : "");
+
     private string? Paint =>
-        HasCve ? CardTone.Alarm(ImageSecurityFlow.SeverityTone(Cve))
+        HasCve ? CardTone.Alarm(Tone == Color.Default ? Color.Warning : Tone)
         : Warned ? CardTone.Alarm(Color.Warning)
         : null;
 }

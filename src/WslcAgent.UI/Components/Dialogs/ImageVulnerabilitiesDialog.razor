@@ -1,23 +1,30 @@
-@* View image packages and CVEs, in the window logs open in and drawn by the
-   same view (LogsView: search, levels, wrap, copy): for each image, what it
-   carries, then every vulnerability a line, from the low to the critical,
-   coloured by its severity (critical and high as errors, moderate as
-   warnings, low as information), each with its advisory, its CVE and the
-   version that fixes it; then a line per library with the version that
-   fixes all of its own; and last what the image is, how many of its
-   vulnerabilities there are and whether the agent refuses it: the view
-   stands at the end, where the worst is read first. What Docker shows for an image, read in the image
-   itself whatever it is built from. *@
+@* Zaindari, the image check, in the window logs open in and drawn by the same
+   view (LogsView: search, levels, wrap, copy). Opening it checks each image now,
+   reading OSV.dev, so it says "Checking Zaindari - Vulnerabilities for …" beside a turning wheel
+   until it is done, and the containers made from the image are marked again by
+   what it finds. Only vulnerabilities: every one a line, from the low to the
+   critical, coloured by its severity (ImageRemedies.LevelOf), each with its
+   advisory, its CVE and the version that fixes it; then a line per library with
+   the version that fixes all of its own, red when its worst is high or critical;
+   and last what the image is, how many vulnerabilities there are and whether the
+   agent refuses it: the view stands at the end, where the worst is read first.
+   Opened for one container or one image whose system packages have a fix
+   published, Patch on the title line builds the image's patch (ImagePatches). *@
 @inject WslcAgentApi Api
+@inject IDialogService Dialogs
 
 <MudDialog ContentClass="wslc-dialog-action">
     <TitleContent>
         <DialogTitle Title="@Dialog.Title">
+            @if (_patch is { } patch)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => PatchAsync(patch))">Patch</MudButton>
+            }
             <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
         </DialogTitle>
     </TitleContent>
     <DialogContent>
-        <LogsView Read="ReadAsync" />
+        <LogsView Read="ReadAsync" Waiting="@($"Checking {ImageSecurityFlow.Label} for {About}…")" />
     </DialogContent>
 </MudDialog>
 
@@ -27,8 +34,17 @@
     /// <summary>The images to show, one after the other: a container's own, or every one of a project's.</summary>
     [Parameter, EditorRequired] public IReadOnlyList<string> Images { get; set; } = [];
 
-    /// <summary>The report as read the first time: an image does not change under the window, and each read runs pip in it.</summary>
+    /// <summary>What is checked, as the window's title names it: a container, a project, an image.</summary>
+    [Parameter] public string About { get; set; } = "";
+
+    /// <summary>Opened for one container or one image, not a project's: the patch is offered.</summary>
+    [Parameter] public bool Patchable { get; set; }
+
+    /// <summary>The report as read the first time: the check is made once per opening, not at each refresh of the view.</summary>
     private string? _text;
+
+    /// <summary>The image and its patch, when the check found one to build and the window offers it.</summary>
+    private (string Image, string Patch)? _patch;
 
     private async Task<string> ReadAsync()
     {
@@ -47,7 +63,16 @@
 
             try
             {
-                lines.AddRange(Lines(await Api.GetImageVulnerabilitiesAsync(image)));
+                var report = await Api.GetImageVulnerabilitiesAsync(image);
+                lines.AddRange(Lines(report));
+                if (Patchable && report.Patch.Length > 0)
+                {
+                    _patch = (report.Image, report.Patch);
+                    lines.Add(Line("INFO", $"Patch builds {report.Patch}: {report.Image} with its system packages upgraded, as a Windows update patches Windows, and moves its containers to it."));
+                    // The title line is drawn by the dialog's own container: it is told too, or Patch never shows.
+                    StateHasChanged();
+                    Dialog.StateHasChanged();
+                }
             }
             catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
             {
@@ -58,12 +83,23 @@
         return _text = string.Join('\n', lines);
     }
 
+    /// <summary>The patch's window; once it has started, the agent builds it and this window closes.</summary>
+    private async Task PatchAsync((string Image, string Patch) patch)
+    {
+        if (await DialogFlow.ShowAsync<PatchImageDialog>(Dialogs, $"Patch {patch.Image}",
+                new DialogParameters<PatchImageDialog> { { d => d.Image, patch.Image }, { d => d.Patch, patch.Patch } }))
+        {
+            Dialog.Close();
+        }
+    }
+
     /// <summary>
     /// One image's lines, the least first: the view stands at the end, as a
     /// log's does, so what is read without scrolling is the worst. Its
-    /// libraries, then its vulnerabilities from the low to the critical, then
-    /// what fixes each library, and last the image in a line and, when the
-    /// agent makes no container from it, that it does not.
+    /// vulnerabilities from the low to the critical, then what fixes each
+    /// library, and last the image in a line and, when the agent makes no
+    /// container from it, that it does not. Its libraries themselves are not
+    /// listed: only what is wrong with them.
     /// </summary>
     private static IEnumerable<string> Lines(ImageVulnerabilities report)
     {
@@ -73,22 +109,16 @@
             yield break;
         }
 
-        yield return Line("INFO", $"{report.Image}: its {report.Packages.Count} Python libraries:");
-        foreach (var package in report.Packages)
-        {
-            yield return Line("INFO", $"{package.Name} {package.Version}");
-        }
-
         foreach (var v in report.Vulnerabilities.Reverse())
         {
-            yield return Line(LevelOf(v.Severity),
-                $"{v.Package} {v.Version}, {v.Severity}: {v.Advisory}{(v.Cve.Length > 0 ? $" ({v.Cve})" : "")}, "
+            yield return Line(ImageRemedies.LevelOf(v.Severity),
+                $"{Named(v.Package, v.Ecosystem)} {v.Version}, {v.Severity}: {v.Advisory}{(v.Cve.Length > 0 ? $" ({v.Cve})" : "")}, "
                 + $"{(v.FixedIn.Length > 0 ? $"fixed in {v.FixedIn}" : "no version fixes it yet")}  {v.Url}");
         }
 
         foreach (var remedy in report.Remedies)
         {
-            yield return Line(report.Refused ? "ERROR" : "WARNING", remedy);
+            yield return Line(ImageRemedies.LevelOfLine(remedy), remedy);
         }
 
         if (report.Note.Length > 0)
@@ -100,9 +130,9 @@
             .Select(severity => (severity, count: report.Vulnerabilities.Count(v => v.Severity == severity)))
             .Where(pair => pair.count > 0)
             .Select(pair => $"{pair.count} {pair.severity}"));
-        var worst = report.Vulnerabilities.Count == 0 ? "INFO" : LevelOf(report.Vulnerabilities[0].Severity);
+        var worst = report.Vulnerabilities.Count == 0 ? "INFO" : ImageRemedies.LevelOf(report.Vulnerabilities[0].Severity);
         yield return Line(worst,
-            $"{report.Image}, {(report.Built ? "built on this machine" : "from a registry")}: {report.Packages.Count} Python libraries, "
+            $"{report.Image}, {(report.Built ? "built on this machine" : "from a registry")}: {Counted(report.Packages)}, "
             + (report.Vulnerabilities.Count == 0 ? "no known vulnerability." : $"{report.Vulnerabilities.Count} known vulnerabilities ({counted})."));
         if (report.Refused)
         {
@@ -110,13 +140,20 @@
         }
     }
 
-    /// <summary>Critical and high as errors, moderate as a warning, the rest as information: the colours the logs view gives each level.</summary>
-    private static string LevelOf(string severity) => severity switch
+    /// <summary>A package as a line names it: a Python library by its name, a system package with its distribution (<c>openssl (Debian:12)</c>).</summary>
+    private static string Named(string package, string ecosystem) => ecosystem == "PyPI" ? package : $"{package} ({ecosystem})";
+
+    /// <summary>How many packages were read, Python libraries and system packages apart.</summary>
+    private static string Counted(IReadOnlyList<ImagePackage> packages)
     {
-        "critical" or "high" => "ERROR",
-        "moderate" => "WARNING",
-        _ => "INFO",
-    };
+        var python = packages.Count(package => package.Ecosystem == "PyPI");
+        var system = packages.Count - python;
+        return string.Join(" and ", new[]
+        {
+            python > 0 ? $"{python} Python librar{(python == 1 ? "y" : "ies")}" : "",
+            system > 0 ? $"{system} system package{(system == 1 ? "" : "s")} ({packages.First(package => package.Ecosystem != "PyPI").Ecosystem})" : "",
+        }.Where(part => part.Length > 0));
+    }
 
     /// <summary>A line as the agent's log writes one, which the logs view colours by its level.</summary>
     private static string Line(string level, string text) => $"{level,-8} | {text}";

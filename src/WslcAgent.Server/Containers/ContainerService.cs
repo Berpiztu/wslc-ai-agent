@@ -30,7 +30,7 @@ public sealed partial class ContainerService(
     ProjectDependencies dependencies,
     StartFailures failures,
     Images.ImageSecurity security,
-    Images.ImageWarnings imageWarnings,
+    Images.ImageMarks imageMarks,
     Images.ContainerAudit audit,
     ProjectGaps gaps,
     ILogger<ContainerService> logger) : IContainerService
@@ -56,7 +56,7 @@ public sealed partial class ContainerService(
         var owned = rows.Where(c => !IsHelper(c.Name)).ToList();
         var uids = registry.Reconcile(Resources.ResourceRegistry.Container, [.. owned.Select(c => (c.Id, c.Name))], complete: all);
         var containers = recreations.Overlay([.. (helpers ? rows : owned).Select(c => c with { Uid = uids.GetValueOrDefault(c.Id) })], complete: all);
-        var annotated = await gaps.AnnotateAsync(imageWarnings.Annotate(failures.Annotate(updates.Annotate(publications.Annotate(policies.Annotate(containers)))), complete: all), complete: all, cancellationToken);
+        var annotated = await gaps.AnnotateAsync(imageMarks.AnnotateContainers(failures.Annotate(updates.Annotate(publications.Annotate(policies.Annotate(containers))))), complete: all, cancellationToken);
         // What wslc was asked around the agent shows here first: every container the agent did not make has its image checked once.
         if (all)
         {
@@ -66,41 +66,26 @@ public sealed partial class ContainerService(
         return new ContainerListResponse(annotated, Aggregate(annotated));
     }
 
-    /// <summary>
-    /// <c>wslc container start</c>; a project's container is not started while
-    /// a service its own depends on is not running, nor one whose image the
-    /// agent refuses (409).
-    /// </summary>
+    /// <summary><c>wslc container start</c>; a project's container is not started while a service its own depends on is not running (409).</summary>
     public async Task StartAsync(string container, CancellationToken cancellationToken = default)
     {
-        await RequireStartableAsync(container, restart: false, cancellationToken);
+        await RequireDependenciesAsync(container, cancellationToken);
         await StartedAsync(container, () => wslc.RunAsync(["container", "start", WslcArgs.Require(container, "container")], cancellationToken: cancellationToken));
         policies.SetDesired(container, RestartPolicyInfo.Running);
     }
 
     /// <summary>
     /// A project's container is not started while a service its own depends
-    /// on does not run in its project (<see cref="ProjectDependencies"/>), nor
-    /// one whose image was built here with a vulnerability moderate or worse
-    /// under Block (<see cref="Images.ImageSecurity.GuardStartAsync"/>), which
-    /// is also marked with what its image carries. Refused, why is kept for it
-    /// as a start <c>wslc</c> refused is (<see cref="StartFailures"/>), so the
-    /// container says it in red and its logs end with it, and is not only told
-    /// to whoever asked.
+    /// on does not run in its project (<see cref="ProjectDependencies"/>);
+    /// refused, why is kept for it as a start <c>wslc</c> refused is
+    /// (<see cref="StartFailures"/>), so the container says it in red and its
+    /// logs end with it, and is not only told to whoever asked.
     /// </summary>
-    private async Task RequireStartableAsync(string container, bool restart, CancellationToken cancellationToken)
+    private async Task RequireDependenciesAsync(string container, CancellationToken cancellationToken)
     {
         try
         {
             await dependencies.RequireRunningAsync(WslcArgs.Require(container, "container"), cancellationToken);
-            await security.GuardStartAsync(container, cancellationToken, restart: restart);
-        }
-        catch (Images.ImageRefusedException ex)
-        {
-            failures.Failed(container, ex.Message);
-            imageWarnings.Remember(ex.ContainerId, ex.ContainerName, ex.Said, refused: true, worst: ex.Worst);
-            events.Publish(new ChangeNotice([ChangeNotice.Container]));
-            throw;
         }
         catch (InvalidOperationException ex)
         {
@@ -137,10 +122,10 @@ public sealed partial class ContainerService(
         policies.SetDesired(container, RestartPolicyInfo.Stopped);
     }
 
-    /// <summary>The restart verb lives in <see cref="ContainerRestarter"/>; a container is not restarted when it would not be started (409), and runs on as it was.</summary>
+    /// <summary>The restart verb lives in <see cref="ContainerRestarter"/>; a project's container is not restarted while a service its own depends on is not running (409), as it is not started.</summary>
     public async Task RestartAsync(string container, CancellationToken cancellationToken = default)
     {
-        await RequireStartableAsync(container, restart: true, cancellationToken);
+        await RequireDependenciesAsync(container, cancellationToken);
         await StartedAsync(container, () => restarter.RestartAsync(container, cancellationToken));
     }
 
@@ -172,17 +157,13 @@ public sealed partial class ContainerService(
     /// </summary>
     private async Task<ContainerCreated> LaunchCheckedAsync(ContainerLaunchRequest request, bool start, CancellationToken cancellationToken)
     {
-        var (said, worst) = await security.GuardLaunchAsync(request.Image, cancellationToken);
-        return Noted(await LaunchAsync(request, start, cancellationToken), request.Name, said, worst);
+        var said = await security.GuardLaunchAsync(request.Image, cancellationToken);
+        return Noted(await LaunchAsync(request, start, cancellationToken), said);
     }
 
-    /// <summary>The new container with what the image check said: on the answer's notes, and kept on the container itself (<see cref="Images.ImageWarnings"/>).</summary>
-    private ContainerCreated Noted(ContainerCreated created, string name, IReadOnlyList<string> said, string worst)
-    {
-        imageWarnings.Remember(created.Id, name, said, worst: worst);
-        audit.Seen(created.Id);
-        return said.Count == 0 ? created : created with { Notes = [.. created.Notes, .. said], ImageWarnings = said };
-    }
+    /// <summary>The new container with what the image check said, on the answer's notes; what it found is kept on the image (<see cref="Images.ImageMarks"/>).</summary>
+    private static ContainerCreated Noted(ContainerCreated created, IReadOnlyList<string> said) =>
+        said.Count == 0 ? created : created with { Notes = [.. created.Notes, .. said], ImageWarnings = said };
 
 
     /// <summary>
@@ -228,7 +209,7 @@ public sealed partial class ContainerService(
     {
         // The new image is checked before the container is touched: refused, the container runs on as it
         // was. Its own restore below is not checked, since it is what was already running.
-        var (said, worst) = await security.GuardLaunchAsync(request.Image, cancellationToken);
+        var said = await security.GuardLaunchAsync(request.Image, cancellationToken);
         var previousPolicy = policies.Get(id);
         var launch = request with { RestartPolicy = request.RestartPolicy.Length == 0 ? previousPolicy.Policy : request.RestartPolicy };
         // Public names that cannot be applied fail here, before the container is
@@ -251,7 +232,7 @@ public sealed partial class ContainerService(
 
         try
         {
-            return Noted(await LaunchAsync(launch, request.Start, cancellationToken), TargetOf(request, snapshot.Name), said, worst);
+            return Noted(await LaunchAsync(launch, request.Start, cancellationToken), said);
         }
         catch (WslcException failure)
         {
@@ -385,13 +366,10 @@ public sealed partial class ContainerService(
         }
 
         // What is to be mended about it, last on a whole reading, where the view stands when it
-        // opens: what the image check found when it was made, and a project container's name it
-        // holds, which it took. The reading of the lines since a moment does not repeat them.
-        if (since.Length == 0 && !timestamps && imageWarnings.Of(container) is { } warning)
-        {
-            text = $"{text.TrimEnd()}\n{string.Join("\n", warning.Lines.Select(line => $"{warning.At:yyyy-MM-dd HH:mm:ss} | {Images.ImageSecurity.LogLevelOf(line),-9}| {line}"))}\n".TrimStart('\n');
-        }
-
+        // opens: a project container's name it holds, which it took. The reading of the lines
+        // since a moment does not repeat it. What its image carries is not said here but in
+        // Zaindari's window, which checks it when it opens: a log with no line about it would
+        // read as an image with nothing wrong.
         if (since.Length == 0 && !timestamps && gaps.HeldBy(container) is { } held)
         {
             text = ($"{text.TrimEnd()}\n{held.Gap.Since:yyyy-MM-dd HH:mm:ss} | WARNING  | This container holds the name of service {held.Service} of project {held.Gap.Project}, "

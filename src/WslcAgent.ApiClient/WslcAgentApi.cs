@@ -519,8 +519,8 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
         PostJsonAsync<ContainerLaunchRequest, ContainerCreated>($"api/v1/containers/{Escape(container)}/recreate", request, cancellationToken);
 
     /// <summary>Starts moving the container to another image: the pull started (its console follows it), then a recreate the agent runs on its own.</summary>
-    public Task<ImagePullState> UpdateContainerImageAsync(string container, string image, CancellationToken cancellationToken = default) =>
-        PostJsonAsync<UpdateContainerImageRequest, ImagePullState>($"api/v1/containers/{Escape(container)}/update-image", new UpdateContainerImageRequest(image), cancellationToken);
+    public Task<ImagePullState> UpdateContainerImageAsync(string container, string image, bool patch = false, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<UpdateContainerImageRequest, ImagePullState>($"api/v1/containers/{Escape(container)}/update-image", new UpdateContainerImageRequest(image, patch), cancellationToken);
 
     public Task KillContainerAsync(string container, CancellationToken cancellationToken = default) =>
         PostAsync($"api/v1/containers/{Escape(container)}/kill", cancellationToken);
@@ -784,6 +784,10 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     /// <summary>View image packages and CVEs: the image's Python libraries and every known vulnerability of them, read only.</summary>
     public Task<ImageVulnerabilities> GetImageVulnerabilitiesAsync(string image, CancellationToken cancellationToken = default) =>
         GetAsync<ImageVulnerabilities>($"api/v1/image-security/vulnerabilities?image={Uri.EscapeDataString(image)}", cancellationToken);
+
+    /// <summary>Zaindari's patch: the image built again with its system packages upgraded, then the containers named moved to it; a build job to follow.</summary>
+    public Task<BuildJob> PatchImageAsync(PatchImageRequest request, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<PatchImageRequest, BuildJob>("api/v1/image-security/patch", request, cancellationToken);
 
     /// <summary>The project's last save or build: the one under way, or the last one kept however it ended (404 when none was).</summary>
     public Task<ProjectJob> GetProjectLastJobAsync(string name, CancellationToken cancellationToken = default) =>

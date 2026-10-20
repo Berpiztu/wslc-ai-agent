@@ -1,16 +1,21 @@
 @* Move a container to another version of its image: the repository it runs
    and the version to go to. The agent pulls it, then recreates the container
-   with everything else it has; the dialog closes and the container's row shows the pull. *@
+   with everything else it has; the dialog closes and the container's row shows the pull.
+   When the image named is on the machine and Zaindari finds a patch for it
+   (ImageSecurityFlow.PatchNote), a note says pulling it again does not mend it,
+   and Patch it, unticked, has the agent patch it and use the patch. A
+   container that runs a patch is offered its original: the note says that
+   without Patch it, the container goes back to the image as published. *@
 @using WslcAgent.ApiClient
 @inject WslcAgentApi Api
 
 <FormDialog SubmitText="Update" BusyText="Starting…" OnSubmit="UpdateAsync">
     <MudTextField T="string" Value="Current" Label="Current image" ReadOnly="true" Variant="Variant.Filled" Margin="Margin.Dense" />
-    <MudTextField T="string" Value="_repository" ValueChanged="@(text => _repository = ImageReference.Normalize(text ?? ""))" Label="Repository" Immediate="true"
+    <MudTextField T="string" Value="_repository" ValueChanged="@(text => _repository = ImageReference.Normalize(text ?? ""))" Label="Repository" Immediate="true" OnBlur="CheckPatchAsync"
                   Required="true" RequiredError="A repository is required"
                   autocapitalize="none" autocorrect="off" spellcheck="false"
                   Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
-    <MudTextField T="string" @bind-Value="_version" Label="Version" Placeholder="1.5" Immediate="true"
+    <MudTextField T="string" @bind-Value="_version" Label="Version" Placeholder="1.5" Immediate="true" OnBlur="CheckPatchAsync"
                   Required="true" RequiredError="A version is required"
                   autocapitalize="none" autocorrect="off" spellcheck="false"
                   Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
@@ -18,6 +23,15 @@
         The image is pulled, then the container is recreated with its ports, mounts, environment and name. If the new version does not start, the previous container stays as it was.
         Leave latest for the version published last, or type one (1.4) to go to that one, or back to it.
     </MudText>
+    @if (ImageReference.IsPatched(Current))
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">@PatchedNote</MudText>
+    }
+    @if (_report is { } report && ImageSecurityFlow.PatchNote(report) is { Length: > 0 } note)
+    {
+        <MudText Typo="Typo.caption" Class="mud-warning-text mt-2">@note</MudText>
+        <SquareCheckBox @bind-Value="_patch" Label="@ImageSecurityFlow.PatchLabel(report)" />
+    }
 </FormDialog>
 
 @code {
@@ -33,11 +47,48 @@
     /// <summary>Told the image being pulled, once the update has started.</summary>
     [Parameter, EditorRequired] public Action<string> Started { get; set; } = default!;
 
-    protected override void OnInitialized() => _repository = ImageReference.RepositoryOf(ImageReference.Normalize(Current));
+    /// <summary>What Zaindari found on the image named, when it is on the machine: a patch to offer, or none.</summary>
+    private ImageVulnerabilities? _report;
+
+    /// <summary>Patch it: unticked unless the user ticks it.</summary>
+    private bool _patch;
+
+    private string Target => $"{_repository}:{_version.Trim()}";
+
+    /// <summary>A container on a patch is offered its original: what that means, said before it happens.</summary>
+    private string PatchedNote =>
+        $"{Current} is a patch built on this machine. The update goes to {Target} as published"
+        + (_report is { Patch.Length: > 0 } ? ", which still carries what the patch mended: tick Patch it to stay on a patch." : ".");
+
+    protected override async Task OnInitializedAsync()
+    {
+        _repository = ImageReference.RepositoryOf(ImageReference.Normalize(Current));
+        await CheckPatchAsync();
+    }
+
+    /// <summary>Asks Zaindari about the image named once a field is left; another image unticks the box.</summary>
+    private async Task CheckPatchAsync()
+    {
+        if (_report?.Image == Target)
+        {
+            return;
+        }
+
+        _patch = false;
+        try
+        {
+            _report = await Api.GetImageVulnerabilitiesAsync(Target);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _report = null;
+        }
+    }
 
     private async Task UpdateAsync()
     {
-        var pull = await Api.UpdateContainerImageAsync(Container, $"{_repository}:{_version.Trim()}");
+        var patch = _patch && _report is { } report && report.Image == Target && report.Patch.Length > 0;
+        var pull = await Api.UpdateContainerImageAsync(Container, Target, patch);
         Started(pull.Image);
     }
 }

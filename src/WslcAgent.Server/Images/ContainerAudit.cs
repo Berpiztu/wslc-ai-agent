@@ -5,43 +5,33 @@ using WslcAgent.Server.Wslc;
 namespace WslcAgent.Server.Images;
 
 /// <summary>
-/// Every container the agent sees and did not make, or made before the image
-/// check was, has its image checked once, after the fact
-/// (<see cref="ImageSecurity.AuditAsync"/>): <c>wslc</c> can be run around
-/// the agent, and a container of a vulnerable image is as vulnerable whoever
-/// made it. Nothing is stopped; what is found marks the container as the
-/// check marks one it let be made (<see cref="ImageWarnings"/>), and every
-/// client is told to read the list again. One container at a time, in the
-/// background, so the list never waits on it; each once while the agent
-/// runs, its image's libraries read once by the image's id.
+/// The image of every container the agent sees with no mark on it yet
+/// (<see cref="ImageMarks"/>) is checked once, after the fact
+/// (<see cref="ImageSecurity.MarkAsync"/>): <c>wslc</c> can be run around the
+/// agent, and a container of a vulnerable image is as vulnerable whoever made
+/// it. Nothing is stopped; what is found marks the image, which its containers
+/// read, and every client is told to read the list again. One image at a
+/// time, in the background, so the list never waits on it; each once while
+/// the agent runs, its libraries read once by the image's id.
 /// </summary>
-public sealed class ContainerAudit(ImageSecurity security, ImageWarnings warnings, WslcEvents events, ILogger<ContainerAudit> logger)
+public sealed class ContainerAudit(ImageSecurity security, ImageMarks marks, WslcEvents events, ILogger<ContainerAudit> logger)
 {
-    /// <summary>The containers checked already, or made by the agent and checked as they were made, by id.</summary>
+    /// <summary>The images checked already while the agent runs, by name.</summary>
     private readonly ConcurrentDictionary<string, bool> _seen = new(StringComparer.OrdinalIgnoreCase);
 
-    private readonly ConcurrentQueue<ContainerSummary> _waiting = new();
+    private readonly ConcurrentQueue<string> _waiting = new();
     private int _running;
 
-    /// <summary>A container the agent has just made, its image checked as it was: not to be checked again.</summary>
-    public void Seen(string id)
-    {
-        if (id.Trim().Length > 0)
-        {
-            _seen[id.Trim()] = true;
-        }
-    }
-
-    /// <summary>The containers of a list not checked yet, queued; the check goes on in the background.</summary>
+    /// <summary>The images of a list's containers not checked yet, queued; the check goes on in the background.</summary>
     public void Schedule(IReadOnlyList<ContainerSummary> containers)
     {
-        // One already marked was found as it was made, or at an earlier start of the agent; a mark
-        // kept before the worst severity was is made again, so its chip says how bad.
-        foreach (var container in containers.Where(container => !container.IsRecreating && (!container.HasImageWarning || container.ImageWorst.Length == 0)
-            && container.Image.Length > 0 && !Known(container.Id)))
+        foreach (var image in containers
+            .Where(container => !container.IsRecreating && container.Image.Trim().Length > 0)
+            .Select(container => container.Image.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(image => marks.Of(image) is null && _seen.TryAdd(image, true)))
         {
-            _seen[container.Id] = true;
-            _waiting.Enqueue(container);
+            _waiting.Enqueue(image);
         }
 
         if (!_waiting.IsEmpty && Interlocked.CompareExchange(ref _running, 1, 0) == 0)
@@ -50,34 +40,24 @@ public sealed class ContainerAudit(ImageSecurity security, ImageWarnings warning
         }
     }
 
-    /// <summary>A short id and a full one alike: the list gives the short, a launch the full.</summary>
-    private bool Known(string id) =>
-        _seen.ContainsKey(id) || _seen.Keys.Any(seen => seen.StartsWith(id, StringComparison.OrdinalIgnoreCase) || id.StartsWith(seen, StringComparison.OrdinalIgnoreCase));
-
     private async Task DrainAsync()
     {
         try
         {
-            while (_waiting.TryDequeue(out var container))
+            while (_waiting.TryDequeue(out var image))
             {
                 try
                 {
-                    var (said, refused, worst) = await security.AuditAsync(container.Image, container.Name, CancellationToken.None);
-                    if (said.Count > 0)
+                    await security.MarkAsync(image, CancellationToken.None);
+                    if (marks.Of(image) is not null)
                     {
-                        warnings.Remember(container.Id, container.Name, said, refused, worst);
-                        events.Publish(new ChangeNotice([ChangeNotice.Container]));
-                    }
-                    else if (container.HasImageWarning)
-                    {
-                        warnings.Forget(container.Id);
                         events.Publish(new ChangeNotice([ChangeNotice.Container]));
                     }
                 }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
-                    // One container that cannot be checked says nothing of the next.
-                    logger.LogWarning("image security check of container {Container} could not be made: {Message}", container.Name, ex.Message);
+                    // One image that cannot be checked says nothing of the next.
+                    logger.LogWarning("image security check of image {Image} could not be made: {Message}", image, ex.Message);
                 }
             }
         }

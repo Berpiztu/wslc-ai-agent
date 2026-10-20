@@ -23,8 +23,6 @@ public sealed class ProjectLifecycle(
     IVolumeService volumes,
     ProjectStore store,
     Containers.StartFailures failures,
-    Images.ImageWarnings imageWarnings,
-    Images.ImageSecurity security,
     ProjectGaps gaps,
     WslcEvents events)
 {
@@ -102,13 +100,6 @@ public sealed class ProjectLifecycle(
                 lines.Add(new ProjectLogLine(member.Name, member.Service, time, stamped ? line[StampLength..].TrimStart(' ') : line));
             }
 
-            // Made from an image with known vulnerabilities: what the check found, at the moment the container was made.
-            if (imageWarnings.Of(member.Id) is { } warning)
-            {
-                var made = warning.At.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffffff00Z", System.Globalization.CultureInfo.InvariantCulture);
-                lines.AddRange(warning.Lines.Select(found => new ProjectLogLine(member.Name, member.Service, made, $"{Images.ImageSecurity.LogLevelOf(found)} {found}")));
-            }
-
             if (failures.Of(member.Id) is { } failure)
             {
                 lines.Add(new ProjectLogLine(member.Name, member.Service, failure.At.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffffff00Z", System.Globalization.CultureInfo.InvariantCulture),
@@ -182,29 +173,14 @@ public sealed class ProjectLifecycle(
     /// container whose dependency is missing from the project does not start
     /// again, whatever another container is named (<see cref="ProjectDependencies"/>),
     /// so it sends its work to nothing that is not its own; one left stopped
-    /// stays so. One whose image the agent would not start again (built here,
-    /// vulnerable, Block: <see cref="Images.ImageSecurity.GuardStartAsync"/>)
-    /// is not touched and runs on: the check never stops what runs. The
-    /// containers that did not start again, each with why.
+    /// stays so. The containers that did not start again, each with why.
     /// </summary>
     public async Task<IReadOnlyList<string>> RenewAsync(string name, CancellationToken cancellationToken = default)
     {
         var plan = await dependencies.PlanAsync(name, cancellationToken);
-        var running = new List<ContainerSummary>();
+        var running = (await MembersAsync(name, plan, cancellationToken)).Where(member => member.IsRunning).ToList();
         var done = new List<string>();
         var failed = new List<string>();
-        foreach (var member in (await MembersAsync(name, plan, cancellationToken)).Where(member => member.IsRunning))
-        {
-            try
-            {
-                await security.GuardStartAsync(member.Id, cancellationToken, restart: true);
-                running.Add(member);
-            }
-            catch (Images.ImageRefusedException ex)
-            {
-                failed.Add($"{member.Name}: left running, not started again: {ex.Said[0]}");
-            }
-        }
 
         foreach (var member in Enumerable.Reverse(running))
         {

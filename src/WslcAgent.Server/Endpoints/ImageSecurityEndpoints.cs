@@ -1,6 +1,7 @@
 using WslcAgent.ApiClient.Contracts;
 using WslcAgent.Mcp;
 using WslcAgent.Server.Images;
+using WslcAgent.Server.Wslc;
 
 namespace WslcAgent.Server.Endpoints;
 
@@ -19,12 +20,24 @@ public static class ImageSecurityEndpoints
                         statusCode: StatusCodes.Status400BadRequest, title: "Unknown policy"))
             .WithName("SetImageSecuritySettings");
 
-        // View image packages and CVEs: every library and every known vulnerability, read only.
-        api.MapGet("/image-security/vulnerabilities", (string image, IImageSecurity security, CancellationToken ct) =>
-                string.IsNullOrWhiteSpace(image)
-                    ? throw new ArgumentException("image is required", nameof(image))
-                    : security.ReportAsync(image, ct))
+        // Zaindari's window: the image checked now, every library and every known vulnerability;
+        // what is found marks the image, worse, better or clean, and its containers read it.
+        api.MapGet("/image-security/vulnerabilities", async (string image, IImageSecurity security, WslcEvents events, CancellationToken ct) =>
+            {
+                if (string.IsNullOrWhiteSpace(image))
+                {
+                    throw new ArgumentException("image is required", nameof(image));
+                }
+
+                var report = await security.ReportAsync(image, ct);
+                events.Publish(new ChangeNotice([ChangeNotice.Container, ChangeNotice.Image]));
+                return report;
+            })
             .WithName("GetImageVulnerabilities");
+
+        // Zaindari's patch: the image built again with its system packages upgraded, the containers chosen moved to it.
+        api.MapPost("/image-security/patch", (PatchImageRequest request, ImagePatches patches, CancellationToken ct) => patches.StartAsync(request, ct))
+            .WithName("PatchImage");
 
         return api;
     }

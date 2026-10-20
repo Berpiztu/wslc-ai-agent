@@ -65,8 +65,7 @@ public sealed class ContainersEndpointTests(WebApplicationFactory<Program> facto
         var response = await client.PostAsync($"/api/v1/containers/agent-zero/{verb}", content: null);
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        // Besides the image check's reading of the container before a start or a restart.
-        Assert.Equal(["container", verb, "agent-zero"], runner.Calls.Single(call => call is not ["container", "inspect", ..]));
+        Assert.Equal(["container", verb, "agent-zero"], runner.Calls.Single());
     }
 
     [Fact]

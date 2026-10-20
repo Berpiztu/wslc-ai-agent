@@ -41,7 +41,13 @@
             @if (!_readOnce)
             {
                 <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
-                <div class="wslc-log-line wslc-log-empty">Reading…</div>
+                <div class="wslc-log-line wslc-log-empty wslc-log-waiting">
+                    @if (Waiting is not null)
+                    {
+                        <MudProgressCircular Indeterminate="true" Color="Color.Primary" Size="Size.Small" />
+                    }
+                    @(Waiting ?? "Reading…")
+                </div>
             }
             else if (_lines.Count == 0)
             {
@@ -142,6 +148,9 @@
     /// read. Given, the view reads this and nothing of a container's.
     /// </summary>
     [Parameter] public Func<Task<string>>? Read { get; set; }
+
+    /// <summary>What the view says, beside a turning wheel, while a reading that takes a while is made (Zaindari's: "Checking Zaindari for …"); none, "Reading…" under the bar.</summary>
+    [Parameter] public string? Waiting { get; set; }
 
     protected override async Task OnInitializedAsync()
     {

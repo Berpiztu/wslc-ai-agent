@@ -2931,6 +2931,22 @@
     color: var(--mud-palette-text-secondary);
 }
 
+/* A grid row that raises an alarm (an image Zaindari found vulnerable): the row
+   carries CardTone.Alarm's ground and ink, and every cell takes them, the sticky
+   ones too, which keep a ground of their own otherwise. */
+.mud-table-row.wslc-row-alarm > td {
+    background-color: inherit !important;
+    color: inherit !important;
+}
+
+/* A long reading says what it is doing beside a turning wheel (Zaindari's check). */
+.wslc-log-line.wslc-log-waiting {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-top: 8px;
+}
+
 .wslc-log-line.log-level-debug {
     color: #60a5fa;
 }

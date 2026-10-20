@@ -32,7 +32,9 @@
         @if (View == ViewMode.Table)
         {
             <ListGrid TItem="ListRow<ImageSummary>" Items="Rows" Loading="Loading" Page="Page" PageChanged="p => Page = p" SortChanged="SortChanged" EmptyText="No images."
-                      MultiSelection="true" @bind-SelectedItems="Selected">
+                      MultiSelection="true" @bind-SelectedItems="Selected"
+                      RowClassFunc="@((row, _) => Alarmed(row.Value) ? $"{CardTone.AlarmClass} wslc-row-alarm" : "")"
+                      RowStyleFunc="@((row, _) => CardTone.Alarm(AlarmOf(row.Value)) ?? "")">
                 <Columns>
                     <SelectColumn T="ListRow<ImageSummary>" Size="Size.Small" StickyLeft="true" HeaderClass="@GridColumn.Select" CellClass="@GridColumn.Select" />
                     @* The dot sorts the list by state: in use first, then the rest. *@
@@ -85,7 +87,8 @@
         {
             <CardsGrid TItem="ImageSummary" Items="Visible" Loading="Loading" EmptyText="No images.">
                 <ItemTemplate Context="i">
-                    <EntityCard Title="@(i.IsDangling ? "<none>" : i.Repository)" Subtitle="@Dash(i.Tag)" AvatarColor="@(i.InUse ? Color.Success : Color.Default)" Key="@i.Reference">
+                    <EntityCard Title="@(i.IsDangling ? "<none>" : i.Repository)" Subtitle="@Dash(i.Tag)" AvatarColor="@(i.InUse ? Color.Success : Color.Default)" Key="@i.Reference"
+                                BodyTone="@AlarmOf(i)">
                         <HeaderActions>
                             @if (i.InUse)
                             {
@@ -273,4 +276,14 @@
     /// <summary>The id, and under it the manifest digest when the registry gave one.</summary>
     private static string DigestTitle(ImageSummary i) =>
         i.Digest.Length > 0 ? $"{i.Id}\n{i.Digest}" : i.Id;
+
+    /// <summary>
+    /// The alarm an image raises, as a container's card raises one (CardTone.Alarm):
+    /// red or yellow by what Zaindari last found in it (ImageSecurityFlow.Tone), its
+    /// whole row and its whole card; none for an image with nothing against it.
+    /// </summary>
+    private static Color? AlarmOf(ImageSummary image) => ImageSecurityFlow.Tone(image) is var tone && tone != Color.Default ? tone : null;
+
+    private static bool Alarmed(ImageSummary image) => AlarmOf(image) is not null;
+
 }

@@ -79,6 +79,15 @@
     </div>
     <MudTextField Margin="Margin.Dense" T="string" @bind-Value="Form.ImageTag" Label="Tag" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled"
                   HelperText="Example: latest. Leave empty if the image has no tag." Error="@Has(LaunchFields.Image)" ErrorText="@Error(LaunchFields.Image)" OnBlur="OnImageBlurAsync" />
+    @* View & edit: the image named carries a system package with a fix published that it does not
+       have, so recreating on it does not mend it; Patch it, unticked, saves on its patch instead. *@
+    @if (Mode == LaunchMode.Edit && _patchReport is { } patchReport && ImageSecurityFlow.PatchNote(patchReport) is { Length: > 0 } patchNote)
+    {
+        <div class="wslc-span2">
+            <MudText Typo="Typo.caption" Class="mud-warning-text">@patchNote</MudText>
+            <SquareCheckBox @bind-Value="_patch" Label="@ImageSecurityFlow.PatchLabel(patchReport)" />
+        </div>
+    }
     @* Name is the filled field as MudBlazor gives it, with nothing added. *@
     <MudTextField Margin="Margin.Dense" T="string" @bind-Value="Form.Name" Label="Name" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" HelperText="Example: my-app"
                   Error="@Has(LaunchFields.Name)" ErrorText="@Error(LaunchFields.Name)" />
@@ -358,6 +367,32 @@
         Snapshot();
         await LoadImageDefaultsAsync(replaced: true, ask: false);
         Snapshot();
+        await CheckPatchAsync();
+    }
+
+    /// <summary>View &amp; edit: what Zaindari found on the image named, for the Patch it box; null when there is nothing to offer.</summary>
+    private ImageVulnerabilities? _patchReport;
+
+    /// <summary>Patch it: unticked unless the user ticks it.</summary>
+    private bool _patch;
+
+    /// <summary>View &amp; edit asks Zaindari about the image named, when the form opens and once its fields are left; another image unticks the box.</summary>
+    private async Task CheckPatchAsync()
+    {
+        if (Mode != LaunchMode.Edit || _patchReport?.Image == Form.Image)
+        {
+            return;
+        }
+
+        _patch = false;
+        try
+        {
+            _patchReport = await Api.GetImageVulnerabilitiesAsync(Form.Image);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _patchReport = null;
+        }
     }
 
     private void Snapshot()
@@ -546,6 +581,8 @@
         {
             await LoadImageDefaultsAsync(replaced: false, ask: false);
         }
+
+        await CheckPatchAsync();
     }
 
     /// <summary>True while the fields hold something other than what the form was opened with.</summary>
@@ -885,7 +922,7 @@
             // The form closes at once, as Run's does: the image check and the rehearsal take their
             // time, the agent finishes the recreate whatever happens to this window, and how it
             // ends is said on the activity line, or in a window of its own when it did not happen.
-            Recreates.Start(SourceId, Named, request);
+            Recreates.Start(SourceId, Named, request, _patch && _patchReport is { } patched && patched.Image == Form.Image ? patched.Patch : "");
             await OnDone.InvokeAsync("");
             return;
         }

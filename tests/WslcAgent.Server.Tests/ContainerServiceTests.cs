@@ -27,9 +27,9 @@ public sealed class ContainerServiceTests
         return new ContainerService(runner, networks, policies, publications, publishing, restarter, registry, new ContainerRecreations(), new ImageUpdatesUnderWay(), new WslcEvents(),
             new ProjectDependencies(new ProjectStore(options), new ProjectService(), runner), new StartFailures(),
             new Images.ImageSecurity(runner, new HttpClient(), new Images.ImageSecuritySettingsStore(options), NullLogger<Images.ImageSecurity>.Instance),
-            new Images.ImageWarnings(options, NullLogger<Images.ImageWarnings>.Instance),
+            new Images.ImageMarks(options, NullLogger<Images.ImageMarks>.Instance),
             new Images.ContainerAudit(new Images.ImageSecurity(runner, new HttpClient(), new Images.ImageSecuritySettingsStore(options), NullLogger<Images.ImageSecurity>.Instance),
-                new Images.ImageWarnings(options, NullLogger<Images.ImageWarnings>.Instance), new WslcEvents(), NullLogger<Images.ContainerAudit>.Instance),
+                new Images.ImageMarks(options, NullLogger<Images.ImageMarks>.Instance), new WslcEvents(), NullLogger<Images.ContainerAudit>.Instance),
             new ProjectGaps(new ProjectStore(options), new ProjectDependencies(new ProjectStore(options), new ProjectService(), runner), NullLogger<ProjectGaps>.Instance),
             NullLogger<ContainerService>.Instance);
     }
@@ -169,8 +169,7 @@ public sealed class ContainerServiceTests
 
         await Service(runner).RestartAsync("web");
 
-        // Besides the image check's reading of the container, before it is touched.
-        Assert.Equal(["container", "restart", "web"], runner.Calls.Single(call => call is not ["container", "inspect", ..]));
+        Assert.Equal(["container", "restart", "web"], runner.Calls.Single());
     }
 
     [Fact]
@@ -185,7 +184,7 @@ public sealed class ContainerServiceTests
 
         Assert.Equal(
             ["container restart web", "container stop web", "container start web"],
-            runner.Calls.Where(call => call is not ["container", "inspect", ..]).Select(call => string.Join(' ', call)));
+            runner.Calls.Select(call => string.Join(' ', call)));
     }
 
     [Fact]

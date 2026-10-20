@@ -30,9 +30,9 @@ namespace WslcAgent.ApiClient.Contracts;
 /// <param name="StartError">Why it did not start, the last time it was asked to, as <c>wslc</c> said it; empty once it has started, and for one never asked. Its logs end with the same.</param>
 /// <param name="MissingServices">The services of its project that no container stands for, by the file kept with the project: the project is incomplete (a container was removed around the agent, or a save stopped half way), and a save makes them again. Null when it is complete, or the container is of no project.</param>
 /// <param name="HoldsNameOf">The service of another project whose container is gone and whose name this one holds (<c>service backend of project shop</c>): a container made around the agent under it, so that project cannot make its own again while this one has the name. Empty otherwise.</param>
-/// <param name="ImageRefused">Its image is one the agent makes no container from (built here, a vulnerability moderate or worse, Settings → Security set to Block): the container was made around the agent, or before the check. Said in red where its image's vulnerabilities are offered.</param>
-/// <param name="ImageWorst">The worst severity among what <see cref="ImageWarning"/> says: <c>moderate</c>, <c>high</c> or <c>critical</c>; empty when it says nothing. The state chip says CVE in yellow for a moderate one and in red for a high or a critical one.</param>
-/// <param name="ImageWarning">What the image check found when the container was made and let it be made all the same (an image from a registry, or Settings → Security set to Warn): its libraries with a vulnerability moderate or worse, a line each. Empty when it found none, or the container was made before the check.</param>
+/// <param name="ImageRefused">Its image is one the agent makes no new container from (built here, a vulnerability moderate or worse, Settings → Security set to Block): the image's own mark, read by its name (<see cref="ImageSummary.ImageRefused"/>).</param>
+/// <param name="ImageWorst">The worst severity of its image's vulnerabilities moderate or worse, as Zaindari last found it in the image: <c>moderate</c>, <c>high</c> or <c>critical</c>; empty for an image with none, or not checked.</param>
+/// <param name="ImageCheckedAt">When Zaindari last checked its image (<c>yyyy-MM-dd HH:mm</c>, the agent's time); empty with no mark.</param>
 public sealed record ContainerSummary(
     string Id,
     string Name,
@@ -61,11 +61,11 @@ public sealed record ContainerSummary(
     string Project = "",
     string Service = "",
     string StartError = "",
-    string ImageWarning = "",
     IReadOnlyList<string>? MissingServices = null,
     string HoldsNameOf = "",
     bool ImageRefused = false,
-    string ImageWorst = "")
+    string ImageWorst = "",
+    string ImageCheckedAt = "")
 {
     /// <summary>The agent's own state while a change to the container is being applied (a recreate).</summary>
     public const string Recreating = "recreating";
@@ -103,11 +103,8 @@ public sealed record ContainerSummary(
         : StartError.Length > 0 ? $"Could not start: {StartError}"
         : $"Exited with code {ExitCode}: its logs say why";
 
-    /// <summary>It was made from an image with known vulnerabilities (<see cref="ImageWarning"/>).</summary>
-    public bool HasImageWarning => ImageWarning.Length > 0;
-
-    /// <summary>Its image has a vulnerability high or critical (<see cref="ImageWorst"/>): its chip and its menu's CVE item are red.</summary>
-    public bool HasSevereImage => ImageWorst is "high" or "critical";
+    /// <summary>Its image has known vulnerabilities moderate or worse (<see cref="ImageWorst"/>).</summary>
+    public bool HasImageWarning => ImageWorst.Length > 0;
 
     /// <summary>Something about it to mend that stops nothing: an image with known vulnerabilities, or another project's container's name it holds (<see cref="HoldsNameOf"/>). Drawn in the yellow, for whoever sees it to look why.</summary>
     public bool IsWarned => HasImageWarning || HoldsNameOf.Length > 0;

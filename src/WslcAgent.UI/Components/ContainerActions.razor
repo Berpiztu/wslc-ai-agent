@@ -214,7 +214,7 @@
     }
 
     /// <summary>The image's Python libraries and their known vulnerabilities (<see cref="ImageSecurityFlow"/>).</summary>
-    private Task ViewImagePackagesAsync() => ImageSecurityFlow.ShowAsync(Dialogs, Container.Image, [Container.Image]);
+    private Task ViewImagePackagesAsync() => ImageSecurityFlow.ShowAsync(Dialogs, Container.Image, [Container.Image], patchable: true);
 
     private Task OpenWithBrowserAsync() => BrowserFlow.OpenAsync(Dialogs, Snackbar, Js, Links, Http.BaseAddress, Simulated, Container.Id, Container.Ports, Container.Published);
 

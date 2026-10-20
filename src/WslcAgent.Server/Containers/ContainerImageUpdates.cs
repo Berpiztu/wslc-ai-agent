@@ -13,10 +13,13 @@ namespace WslcAgent.Server.Containers;
 /// Images page pulls (its console, its cancel), then the container recreated with
 /// everything else it has — ports, mounts, environment, name, policy — and started
 /// if it was running. The recreate is the View &amp; edit one, so a version that does
-/// not start leaves the previous container in place. Started here and returned at
-/// once: the agent owns the rest, and its end is a notification.
+/// not start leaves the previous container in place. Asked to patch, the image
+/// pulled is patched (<see cref="ImagePatches"/>) and the container moved to the
+/// patch by the patch's own build job; an image with nothing to patch is used as
+/// pulled. Started here and returned at once: the agent owns the rest, and its end
+/// is a notification.
 /// </summary>
-public sealed class ContainerImageUpdates(IContainerService containers, ImagePulls pulls, ImageUpdatesUnderWay underWay, Notifier notifier, ILogger<ContainerImageUpdates> logger)
+public sealed class ContainerImageUpdates(IContainerService containers, ImagePulls pulls, ImagePatches patches, ImageUpdatesUnderWay underWay, Notifier notifier, ILogger<ContainerImageUpdates> logger)
 {
     private static readonly TimeSpan PullTimeout = TimeSpan.FromHours(1);
     private static readonly TimeSpan PollEvery = TimeSpan.FromMilliseconds(500);
@@ -30,11 +33,11 @@ public sealed class ContainerImageUpdates(IContainerService containers, ImagePul
         // The container's row shows the pull from the moment it starts.
         underWay.Begin(details.Id, image);
         var pull = pulls.Start(image);
-        _ = Task.Run(() => FinishAsync(details.Id, details.Name, image));
+        _ = Task.Run(() => FinishAsync(details.Id, details.Name, image, request.Patch));
         return pull;
     }
 
-    private async Task FinishAsync(string id, string name, string image)
+    private async Task FinishAsync(string id, string name, string image, bool patch)
     {
         var elapsed = Stopwatch.StartNew();
         string? error;
@@ -46,6 +49,23 @@ public sealed class ContainerImageUpdates(IContainerService containers, ImagePul
         {
             // The pull is over: the recreate marks the row from here, or nothing does.
             underWay.End(id);
+        }
+
+        if (error is null && patch)
+        {
+            try
+            {
+                // The patch's build job moves the container, and says how it ended.
+                if (await patches.StartIfAnyAsync(new PatchImageRequest(image, [id])) is { } job)
+                {
+                    logger.LogInformation("image update of {Container} to {Image}: patched as {Patch}", name, image, job.Tag);
+                    return;
+                }
+            }
+            catch (Exception ex) when (ex is WslcException or WslcNotFoundException or TimeoutException or ArgumentException or InvalidOperationException or IOException)
+            {
+                error = ex.Message;
+            }
         }
 
         if (error is null)

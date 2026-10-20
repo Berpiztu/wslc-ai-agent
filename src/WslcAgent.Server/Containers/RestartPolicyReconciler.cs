@@ -16,16 +16,12 @@ namespace WslcAgent.Server.Containers;
 /// container is named, is not started, so it does not send its work to what
 /// is not its own. The pass goes round while it starts something, so one
 /// listed before what it depends on waits for it instead of being refused.
-/// Nor is one whose image the agent refuses (<see cref="Images.ImageSecurity.GuardStartAsync"/>):
-/// built here with a vulnerability moderate or worse, it is built again first.
 /// </summary>
 public sealed class RestartPolicyReconciler(
     RestartPolicyStore policies,
     IWslcRunner wslc,
     ProjectDependencies dependencies,
     StartFailures failures,
-    Images.ImageSecurity security,
-    Images.ImageWarnings imageWarnings,
     Notifier notifier,
     ILogger<RestartPolicyReconciler> logger)
 {
@@ -63,20 +59,6 @@ public sealed class RestartPolicyReconciler(
                 waiting.Remove(key);
                 refused.Remove(key);
                 moved = true;
-                try
-                {
-                    await security.GuardStartAsync(key, cancellationToken, session);
-                }
-                catch (Images.ImageRefusedException ex)
-                {
-                    failures.Failed(key, ex.Message);
-                    imageWarnings.Remember(ex.ContainerId, ex.ContainerName, ex.Said, refused: true, worst: ex.Worst);
-                    logger.LogWarning("restart policy did not start {Container}: {Message}", key, ex.Message);
-                    notifier.Raise(NotificationKind.ContainerNotRestarted, NotificationSeverity.Error, $"{key} not started",
-                        $"Its restart policy did not start it: {ex.Message}", NotificationLink.Containers);
-                    continue;
-                }
-
                 try
                 {
                     await wslc.RunAsync(["container", "start", key], cancellationToken: cancellationToken, session: session);

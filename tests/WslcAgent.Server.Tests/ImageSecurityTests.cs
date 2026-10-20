@@ -27,7 +27,7 @@ public sealed class ImageSecurityTests
         var stopped = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             security.GuardAsync(["app:1"], (level, text) => lines.Add($"{level} {text}"), CancellationToken.None));
 
-        Assert.StartsWith("1 Python library with a vulnerability moderate or worse", stopped.Message, StringComparison.Ordinal);
+        Assert.StartsWith("1 package with a vulnerability moderate or worse", stopped.Message, StringComparison.Ordinal);
         Assert.Contains("WARNING app:1: flask 3.0.2, moderate: GHSA-test-0001 (CVE-2026-0001), fixed in 3.0.3", lines);
         Assert.Contains("ERROR app:1: flask 3.0.2: 1 vulnerability moderate or worse, the worst moderate; 3.0.3 fixes it.", lines);
         Assert.DoesNotContain(lines, line => line.Contains("requests", StringComparison.Ordinal));
@@ -37,25 +37,33 @@ public sealed class ImageSecurityTests
     public async Task A_new_container_of_an_image_built_here_is_refused_and_of_a_pulled_one_only_said()
     {
         var built = Launching(repoDigests: "[]");
-        var refused = await Assert.ThrowsAsync<ImageRefusedException>(() => built.GuardLaunchAsync("app:1", CancellationToken.None));
+        var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => built.GuardLaunchAsync("app:1", CancellationToken.None));
         Assert.Contains("app:1: flask 3.0.2: 1 vulnerability moderate or worse, the worst moderate; 3.0.3 fixes it.", refused.Message);
 
         var pulled = Launching(repoDigests: """["ghcr.io/x/app@sha256:abc"]""");
-        var (notes, worst) = await pulled.GuardLaunchAsync("app:1", CancellationToken.None);
+        var notes = await pulled.GuardLaunchAsync("app:1", CancellationToken.None);
         Assert.Contains(notes, note => note.Contains("comes from a registry", StringComparison.Ordinal));
-        Assert.Equal("moderate", worst);
     }
 
     [Fact]
-    public async Task A_container_of_an_image_built_here_is_not_started_one_that_runs_is_left_alone_and_one_pulled_always_starts()
+    public async Task A_check_marks_the_image_and_its_containers_read_it_by_name_and_tag()
     {
-        var refused = await Assert.ThrowsAsync<ImageRefusedException>(() => Launching("[]", "exited").GuardStartAsync("web", CancellationToken.None));
-        Assert.Equal("moderate", refused.Worst);
-        Assert.Contains("was not started", refused.Message);
+        var marks = new ImageMarks(Options.Create(new WslcOptions { DataDirectory = TestHost.TempDataDirectory() }), NullLogger<ImageMarks>.Instance);
+        await Launching(repoDigests: "[]", marks).ReportAsync("app:1");
 
-        await Launching("[]", "running").GuardStartAsync("web", CancellationToken.None);
-        await Assert.ThrowsAsync<ImageRefusedException>(() => Launching("[]", "running").GuardStartAsync("web", CancellationToken.None, restart: true));
-        await Launching("""["ghcr.io/x/app@sha256:abc"]""", "exited").GuardStartAsync("web", CancellationToken.None);
+        var mark = marks.Of("app:1");
+        Assert.NotNull(mark);
+        Assert.Equal("moderate", mark.Worst);
+        Assert.True(mark.Refused);
+
+        ContainerSummary Of(string image) => new("c1", "web", image, "running", "Up", "", "", "", [], "", "", "", "");
+        var rows = marks.AnnotateContainers([Of("app:1"), Of("app:2")]);
+        Assert.Equal("moderate", rows[0].ImageWorst);
+        Assert.True(rows[0].ImageRefused);
+        Assert.Equal("", rows[1].ImageWorst);
+
+        var images = marks.Annotate([new ImageSummary("2", "app", "1", "app:1", "", "", "", null, true)]);
+        Assert.Equal("moderate", Assert.Single(images).ImageWorst);
     }
 
     [Fact]
@@ -71,13 +79,12 @@ public sealed class ImageSecurityTests
         Assert.False((await Launching(repoDigests: """["ghcr.io/x/app@sha256:abc"]""").ReportAsync("app:1")).Refused);
     }
 
-    /// <summary>The check before a container: app:1 on the machine, built here when it has no digest, and container web of it, in <paramref name="state"/>.</summary>
-    private static ImageSecurity Launching(string repoDigests, string state = "exited")
+    /// <summary>The check before a container: app:1 on the machine, built here when it has no digest.</summary>
+    private static ImageSecurity Launching(string repoDigests, ImageMarks? marks = null)
     {
         var runner = Exporting(Libraries)
-            .Answer("image inspect app:1", $$"""[{"Id": "sha256:{{repoDigests.Length}}", "RepoDigests": {{repoDigests}}}]""")
-            .Answer("container inspect web --format json", $$"""[{"Id": "abc123", "Name": "/web", "Config": {"Image": "app:1"}, "State": {"Status": "{{state}}"}}]""");
-        return new ImageSecurity(runner, new HttpClient(new Osv()), Store(ImageSecurityPolicy.Block), NullLogger<ImageSecurity>.Instance);
+            .Answer("image inspect app:1", $$"""[{"Id": "sha256:{{repoDigests.Length}}", "RepoDigests": {{repoDigests}}}]""");
+        return new ImageSecurity(runner, new HttpClient(new Osv()), Store(ImageSecurityPolicy.Block), NullLogger<ImageSecurity>.Instance, marks: marks);
     }
 
     [Fact]
@@ -93,6 +100,35 @@ public sealed class ImageSecurityTests
     }
 
     [Fact]
+    public void A_system_package_with_a_fix_is_patched_by_a_patched_tag_that_upgrades_it()
+    {
+        Installed[] alpine = [new("Alpine:v3.24", "apk-tools", "3.0.8-r0"), new("Alpine:v3.24", "zlib", "1.3.2-r0")];
+        ImageVulnerability[] zlib = [new("zlib", "1.3.2-r0", "ALPINE-CVE-2026-85091", "CVE-2026-85091", "high", "1.3.2-r1", "", "Alpine:v3.24")];
+        Assert.Equal("alpine:latest-patched", ImagePatches.PatchOf("alpine:latest", alpine, zlib));
+        Assert.Equal("alpine:latest-patched", ImagePatches.PatchOf("alpine:latest-patched", alpine, zlib));
+        // No package manager (distroless), no fix published, or only a Python library: nothing to patch.
+        Assert.Equal("", ImagePatches.PatchOf("alpine:latest", [alpine[1]], zlib));
+        Assert.Equal("", ImagePatches.PatchOf("alpine:latest", alpine, [zlib[0] with { FixedIn = "" }]));
+        Assert.Equal("", ImagePatches.PatchOf("app:1", alpine, [new("black", "23.1", "PYSEC-1", "", "high", "24.3", "")]));
+
+        Assert.Equal("FROM alpine:latest\nUSER root\nRUN apk upgrade --no-cache\n", ImagePatches.Dockerfile("alpine:latest", "Alpine:v3.24", ""));
+        Assert.EndsWith("apt-get upgrade -y && rm -rf /var/lib/apt/lists/*\nUSER app\n", ImagePatches.Dockerfile("web:1", "Debian:12", "app"));
+    }
+
+    [Fact]
+    public void A_cvss_4_vector_scores_as_nvd_scores_it()
+    {
+        // Alpine's zlib advisory, which gives only this vector: 8.3 at NVD.
+        Assert.Equal(8.3, Cvss4.Score("CVSS:4.0/AV:N/AC:H/AT:N/PR:N/UI:N/VC:N/VI:H/VA:H/SC:N/SI:N/SA:N"));
+        Assert.Equal("high", ImageSecurity.CvssSeverity("CVSS:4.0/AV:N/AC:H/AT:N/PR:N/UI:N/VC:N/VI:H/VA:H/SC:N/SI:N/SA:N/E:X/CR:X/IR:X/AR:X"));
+        // 5.65 in floating point is 5.6499999: NVD says 5.7.
+        Assert.Equal(5.7, Cvss4.Score("CVSS:4.0/AV:L/AC:H/AT:P/PR:H/UI:N/VC:H/VI:L/VA:N/SC:N/SI:N/SA:N"));
+        Assert.Equal(10.0, Cvss4.Score("CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:H/SI:H/SA:H"));
+        Assert.Equal("unknown", ImageSecurity.CvssSeverity("CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:N/SC:N/SI:N/SA:N"));
+        Assert.Null(Cvss4.Score("CVSS:4.0/AV:N/AC:L"));
+    }
+
+    [Fact]
     public void A_library_is_raised_to_its_highest_fix_or_replaced_when_one_has_none()
     {
         ImageVulnerability Found(string severity, string fixedIn, string advisory = "GHSA-x") =>
@@ -105,14 +141,14 @@ public sealed class ImageSecurityTests
     }
 
     [Fact]
-    public void A_library_whose_worst_is_high_or_critical_is_written_in_the_log_as_an_error()
+    public void A_library_whose_worst_is_high_or_critical_is_shown_as_an_error()
     {
         ImageVulnerability Found(string severity) => new("pypdf", "4.0.2", "GHSA-x", "", severity, "6.19.0", "");
 
-        Assert.Equal("ERROR", ImageSecurity.LogLevelOf(ImageSecurity.Remedy("img", [Found("high")])));
-        Assert.Equal("ERROR", ImageSecurity.LogLevelOf(ImageSecurity.Remedy("img", [Found("critical")])));
-        Assert.Equal("WARNING", ImageSecurity.LogLevelOf(ImageSecurity.Remedy("img", [Found("moderate")])));
-        Assert.Equal("WARNING", ImageSecurity.LogLevelOf("img comes from a registry and has Python libraries with a vulnerability moderate or worse."));
+        Assert.Equal("ERROR", ImageRemedies.LevelOfLine(ImageSecurity.Remedy("img", [Found("high")])));
+        Assert.Equal("ERROR", ImageRemedies.LevelOfLine(ImageSecurity.Remedy("img", [Found("critical")])));
+        Assert.Equal("WARNING", ImageRemedies.LevelOfLine(ImageSecurity.Remedy("img", [Found("moderate")])));
+        Assert.Equal("WARNING", ImageRemedies.LevelOfLine("img comes from a registry and has Python libraries with a vulnerability moderate or worse."));
     }
 
     [Fact]
@@ -158,7 +194,76 @@ public sealed class ImageSecurityTests
         var archive = Path.Combine(TestHost.TempDataDirectory(), "image.tar");
         WriteArchive(archive, [("flask", "3.0.2")], venv: [("flask", "3.0.2"), ("rich", "13.7.1")]);
 
-        Assert.Equal([("flask", "3.0.2"), ("rich", "13.7.1")], await ImageSecurity.InstalledAsync(archive, CancellationToken.None));
+        Assert.Equal([("flask", "3.0.2"), ("rich", "13.7.1")], Named(await ImageSecurity.InstalledAsync(archive, CancellationToken.None)));
+    }
+
+    [Fact]
+    public async Task An_alpine_image_s_packages_are_read_by_their_origin_in_its_release()
+    {
+        var archive = Path.Combine(TestHost.TempDataDirectory(), "alpine.tar");
+        WriteFiles(archive,
+            ("etc/os-release", "NAME=\"Alpine Linux\"
+ID=alpine
+VERSION_ID=3.18.4
+"),
+            ("lib/apk/db/installed", "C:Q1
+P:libcrypto3
+V:3.1.0-r0
+o:openssl
+
+P:busybox
+V:1.36.0-r0
+o:busybox
+
+P:libssl3
+V:3.1.0-r0
+o:openssl
+"));
+
+        var installed = await ImageSecurity.InstalledAsync(archive, CancellationToken.None);
+
+        // libcrypto3 and libssl3 are both openssl, as OSV.dev names them: once.
+        Assert.Equal(["Alpine:v3.18 busybox 1.36.0-r0", "Alpine:v3.18 openssl 3.1.0-r0"], installed!.Select(p => $"{p.Ecosystem} {p.Name} {p.Version}"));
+    }
+
+    [Fact]
+    public async Task A_debian_image_s_installed_packages_are_read_by_their_source()
+    {
+        var archive = Path.Combine(TestHost.TempDataDirectory(), "debian.tar");
+        WriteFiles(archive,
+            ("usr/lib/os-release", "ID=debian
+VERSION_ID=\"12\"
+"),
+            ("var/lib/dpkg/status",
+                "Package: libssl3
+Status: install ok installed
+Source: openssl
+Version: 3.0.9-1
+
+"
+                + "Package: zlib1g
+Status: install ok installed
+Source: zlib (1:1.2.13.dfsg-1)
+Version: 1:1.2.13.dfsg-1+b1
+
+"
+                + "Package: oldlib
+Status: deinstall ok config-files
+Version: 1.0
+"));
+
+        var installed = await ImageSecurity.InstalledAsync(archive, CancellationToken.None);
+
+        // By source, at the source's version when it gives one; a package removed but for its configuration is not installed.
+        Assert.Equal(["Debian:12 openssl 3.0.9-1", "Debian:12 zlib 1:1.2.13.dfsg-1"], installed!.Select(p => $"{p.Ecosystem} {p.Name} {p.Version}"));
+    }
+
+    [Fact]
+    public void A_distribution_osv_dev_does_not_know_gives_no_ecosystem()
+    {
+        Assert.Equal("Ubuntu:22.04", ImageSecurity.Ecosystem(new Dictionary<string, string> { ["ID"] = "ubuntu", ["VERSION_ID"] = "22.04" }));
+        Assert.Null(ImageSecurity.Ecosystem(new Dictionary<string, string> { ["ID"] = "kali", ["VERSION_ID"] = "2026.2" }));
+        Assert.Null(ImageSecurity.Ecosystem(new Dictionary<string, string> { ["ID"] = "debian" }));
     }
 
     [Fact]
@@ -181,7 +286,21 @@ public sealed class ImageSecurityTests
         }
 
         // pypdf is installed through its link; black is only in the cache.
-        Assert.Equal([("pypdf", "6.21.1")], await ImageSecurity.InstalledAsync(archive, CancellationToken.None));
+        Assert.Equal([("pypdf", "6.21.1")], Named(await ImageSecurity.InstalledAsync(archive, CancellationToken.None)));
+    }
+
+    /// <summary>The names and versions read, for the tests of Python libraries.</summary>
+    private static List<(string, string)> Named(List<Installed>? installed) => [.. (installed ?? []).Select(p => (p.Name, p.Version))];
+
+    /// <summary>An exported filesystem holding these files and nothing else.</summary>
+    private static void WriteFiles(string path, params (string Name, string Text)[] files)
+    {
+        using var file = File.Create(path);
+        using var tar = new TarWriter(file);
+        foreach (var (name, text) in files)
+        {
+            tar.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, name) { DataStream = new MemoryStream(Encoding.UTF8.GetBytes(text)) });
+        }
     }
 
     /// <summary>wslc as the check asks it: a container of the image made, and its files exported as an archive holding these libraries' metadata.</summary>

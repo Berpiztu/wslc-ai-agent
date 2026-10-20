@@ -12,19 +12,21 @@ namespace WslcAgent.Server.Images;
 /// and cancelled from it. <c>plain</c> is what makes the output usable from an
 /// agent with no console: <c>auto</c> would draw with cursor control. Each
 /// tagged image built is then checked (<see cref="ImageSecurity"/>): under
-/// Block, a vulnerable Python library fails the job.
+/// Block, a vulnerability moderate or worse fails the job. What a build is
+/// for once it is done (a patch's containers moved to it) runs in the same
+/// job, after the check: its lines in its console, its failure the job's.
 /// </summary>
 public sealed class ImageBuilds(IWslcRunner wslc, Notifier notifier, ImageSecurity security, ILogger<ImageBuilds> logger)
 {
     private const int MaxLines = 2000;
     private readonly ConcurrentDictionary<string, Job> _jobs = new();
 
-    public BuildJob Start(BuildImageRequest request)
+    public BuildJob Start(BuildImageRequest request, Func<Action<string>, CancellationToken, Task>? then = null)
     {
         var args = Args(request);
         var job = new Job(Guid.NewGuid().ToString("N"), request.Tag.Trim());
         _jobs[job.Id] = job;
-        job.Run = RunAsync(job, args);
+        job.Run = RunAsync(job, args, then);
         return job.Snapshot();
     }
 
@@ -72,7 +74,7 @@ public sealed class ImageBuilds(IWslcRunner wslc, Notifier notifier, ImageSecuri
     private static IEnumerable<string> Lines(string text) =>
         text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-    private async Task RunAsync(Job job, List<string> args)
+    private async Task RunAsync(Job job, List<string> args, Func<Action<string>, CancellationToken, Task>? then)
     {
         var took = Stopwatch.StartNew();
         try
@@ -88,6 +90,11 @@ public sealed class ImageBuilds(IWslcRunner wslc, Notifier notifier, ImageSecuri
             else
             {
                 job.Add("INFO: An image with no tag is not checked for vulnerabilities: give it one to have it checked.");
+            }
+
+            if (then is not null)
+            {
+                await then(job.Add, job.Cancellation.Token);
             }
 
             job.Finish("done", "");
