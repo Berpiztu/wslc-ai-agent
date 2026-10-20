@@ -62,6 +62,12 @@ MudBlazor, .NET MAUI Blazor Hybrid, the official MCP C# SDK.
 - **Unsaved work asks before leaving** (a location-changing handler).
 - **Clean code.** Small units, names that say what they do, comments that
   explain why, no dead or commented-out code, no temporary hacks.
+- **A vulnerable dependency is patched at once.** A package with a known
+  high or critical vulnerability stops every restore (NU1903, NU1904), and
+  the Audit workflow checks main and develop every morning. The fix is a
+  patch on `main` straight away, the .NET SDK raised too when the runtime it
+  bundles is the vulnerable part, then taken into `develop`
+  ([releasing.md](docs/developer/releasing.md#a-security-patch)).
 - **No secrets, nothing machine-specific.** Keys and Firebase files live in
   `private/`, which git ignores.
 
