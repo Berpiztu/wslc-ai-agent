@@ -78,6 +78,21 @@ Set-Location $RepoRoot
 $Props = Join-Path $RepoRoot "Directory.Build.props"
 $Csproj = Join-Path $RepoRoot "src\WslcAgent.App\WslcAgent.App.csproj"
 
+# Run on main, the release is an official one, made on main; run on develop,
+# or on any other branch, it is a preview, made on develop and published as a
+# pre-release.
+$branch = (git branch --show-current)
+$target = if ($branch -eq "main") { "main" } else { "develop" }
+$preview = $target -eq "develop"
+
+# The last official release, as main holds it on GitHub.
+function Get-OfficialVersion {
+    git fetch --quiet origin main 2>$null
+    $text = (git show origin/main:Directory.Build.props) -join "`n"
+    if ($text -notmatch '<Version>([^<]+)</Version>') { throw "Could not read main's version (origin/main:Directory.Build.props)." }
+    return $Matches[1].Trim()
+}
+
 # The release's versions. A patch by default: the next fourth part after the
 # last release and every local build of it (1.6.1.3 built here, so 1.6.1.4),
 # the counter they share. -Version for anything else: a preview (1.6.4) or a
@@ -89,6 +104,12 @@ function Get-ReleaseVersions {
     $agentNext = (Get-WslcAgentLocalVersion $agentNow $local["WslcLocalAgentVersion"]).Version
     $clientNext = (Get-WslcAgentLocalVersion $clientNow $local["WslcLocalClientVersion"]).Version
     if (-not $Version) {
+        # A patch of a preview is a patch of develop's own release; while that
+        # is still the official one, a patch would carry its number into the
+        # previews (1.6.1.3), so the first preview names WSL's (1.6.4).
+        if ($preview -and (ConvertTo-WslcAgentComparableVersion $agentNow) -eq (ConvertTo-WslcAgentComparableVersion (Get-OfficialVersion))) {
+            throw "develop is still at $agentNow, the official release: the first preview after it takes the WSL preview's patch number, .\deploy-release.ps1 -Version x.y.N (WSL 3.0.4 makes 1.6.4). Its patches then need no -Version. Nothing was committed, merged or pushed."
+        }
         return [pscustomobject]@{ AgentNow = $agentNow; ClientNow = $clientNow; Agent = $agentNext; Client = $clientNext }
     }
 
@@ -115,13 +136,9 @@ if (-not (Get-WslcAgentReleaseNotes "v$planned")) {
 }
 Write-Host "Release notes found: docs\release-notes\$planned.md" -ForegroundColor Cyan
 
-# 1. What this checkout holds goes into the release. Run on main, the release
-# is an official one, made on main; run on develop, or on any other branch, it
-# is a preview, made on develop and published as a pre-release. The changes
-# not committed yet are carried there and committed, with no message to write.
-$branch = (git branch --show-current)
-$target = if ($branch -eq "main") { "main" } else { "develop" }
-$preview = $target -eq "develop"
+# 1. What this checkout holds goes into the release, made on its branch. The
+# changes not committed yet are carried there and committed, with no message
+# to write.
 if ($branch -ne $target) {
     $ahead = [int](git rev-list --count "$target..HEAD")
     if ($ahead -gt 0) {

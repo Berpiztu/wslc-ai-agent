@@ -29,7 +29,9 @@ Local builds and patches share the fourth part as one counter, so a patch is
 always above the builds before it and neither ever takes the other's number.
 A patch's number therefore jumps (`1.6.1.4`, then `1.6.1.9`): the numbers in
 between were local builds, never published. The third part of a release for
-a WSL preview says which preview it was made for; a WSL preview whose patch
+a WSL preview says which preview it was made for: on `develop`, while its
+version is still `main`'s, the script asks for `-Version` rather than make a
+patch of the official release a preview; a WSL preview whose patch
 number would not be above the last release (a `.0`) is decided when it comes.
 
 ## Branches
