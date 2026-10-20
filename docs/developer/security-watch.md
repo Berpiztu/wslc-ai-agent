@@ -38,19 +38,25 @@ every project restored here at the version it resolved (the transitive ones
 included), the central version of the ones not restored here (the MAUI
 client without its workloads), the pinned lines of every tracked
 requirements file, the .NET SDK of `global.json`, and the images of every
-Dockerfile and Compose file. It sends it to
-`inventories/wslc-ai-agent/<ref>.json` only when it differs from the list
-security-watch already has, and only for `main`, `develop` and release
-tags. security-watch checks it within minutes, so the next build already
+Dockerfile and Compose file. It sends it only when it differs from the
+list security-watch already has (`inventories/wslc-ai-agent/<ref>.json`),
+and only for `main`, `develop` and release tags, as an **issue** in
+security-watch titled `inventory: wslc-ai-agent@<ref>`, the list in a
+```json block. security-watch takes it in, checks it, answers the issue
+with the result and closes it, within minutes, so the next build already
 knows.
 
 ## The token
 
-Sending needs `SECURITY_WATCH_TOKEN`, a token that writes to
-security-watch alone: GitHub → Settings → Developer settings →
-Fine-grained tokens → Generate new token, resource owner **Berpiztu**,
-repository access **Only select repositories: security-watch**, permission
-**Contents: Read and write**.
+Sending needs `SECURITY_WATCH_TOKEN`, a token that can **open issues** in
+security-watch and nothing else: no project can write a file there, so a
+token that leaks cannot change a result, the watcher or the history. GitHub
+→ Settings → Developer settings → Fine-grained tokens → Generate new token:
+resource owner **Berpiztu**, repository access **Only select repositories:
+security-watch**, repository permission **Issues: Read and write**, nothing
+else. Its owner's account has to be in security-watch's `submitters.txt`,
+and this project in its `projects.txt`: the repository is public, and an
+inventory issue from anyone else is refused.
 
 - On a machine: in `private\env.psd1` ([private-files.md](private-files.md#settings-envpsd1)).
 - On GitHub: the repository secret `SECURITY_WATCH_TOKEN`, which `ci.yml`

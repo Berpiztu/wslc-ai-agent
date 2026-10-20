@@ -15,9 +15,9 @@
 
     Send-WslcAgentInventory, once a build succeeded: the list of every library
     this checkout uses, sent only when it differs from the one security-watch
-    has, and only for main, develop and release tags. It writes with
-    SECURITY_WATCH_TOKEN (private\env.psd1, or a secret on GitHub), a token
-    that writes to security-watch alone.
+    has, and only for main, develop and release tags, as an issue in
+    security-watch, opened with SECURITY_WATCH_TOKEN (private\env.psd1, or a
+    secret on GitHub): a token that can open issues there and nothing else.
 #>
 
 $WslcAgentSecurityProject = "wslc-ai-agent"
@@ -167,19 +167,12 @@ function Send-WslcAgentInventory {
 
     Import-WslcAgentPrivateSettings
     $inventory = Get-WslcAgentInventory -Ref $Ref
-    $path = "inventories/$WslcAgentSecurityProject/$($Ref.Name).json"
-    $api = "https://api.github.com/repos/$WslcAgentSecurityRepository/contents/$path"
-    $headers = @{ Accept = "application/vnd.github+json"; "User-Agent" = "wslc-ai-agent" }
-    if ($env:SECURITY_WATCH_TOKEN) { $headers.Authorization = "Bearer $env:SECURITY_WATCH_TOKEN" }
 
     # The same libraries, whenever and from whichever commit they were sent, are the same list.
     $sameness = { param($list) ConvertTo-Json -Compress -Depth 5 @{ packages = @($list.packages | ForEach-Object { "$($_.ecosystem)|$($_.name)|$($_.version)|$($_.direct)" }); dotnetSdk = $list.dotnetSdk; images = @($list.images) } }
-    $sha = $null
+    $known = "https://raw.githubusercontent.com/$WslcAgentSecurityRepository/main/inventories/$WslcAgentSecurityProject/$($Ref.Name).json"
     try {
-        $current = Invoke-RestMethod -Uri $api -Headers $headers -TimeoutSec 20
-        $sha = $current.sha
-        $known = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(($current.content -replace '\s', ''))) | ConvertFrom-Json
-        if ((& $sameness $known) -eq (& $sameness $inventory)) {
+        if ((& $sameness (Invoke-RestMethod -Uri $known -TimeoutSec 20)) -eq (& $sameness $inventory)) {
             Write-Host "security-watch already has this list of $($Ref.Name): nothing sent." -ForegroundColor DarkGray
             return
         }
@@ -194,14 +187,23 @@ function Send-WslcAgentInventory {
         Write-Warning "The list of $($Ref.Name) changed, and SECURITY_WATCH_TOKEN is not set (private\env.psd1): it was not sent to security-watch."
         return
     }
-    $body = [ordered]@{
-        message = "${WslcAgentSecurityProject}: libraries of $($Ref.Name) ($($inventory.commit))"
-        content = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((ConvertTo-Json -Depth 5 $inventory) + "`n"))
+
+    # Sent as an issue: the token can open issues there and nothing else, so
+    # no project can write a file in security-watch. Its watcher takes the
+    # list in, answers the issue with the result and closes it.
+    $issue = [ordered]@{
+        title = "inventory: $WslcAgentSecurityProject@$($Ref.Name)"
+        body = "Libraries of $WslcAgentSecurityProject at $($Ref.Name) ($($inventory.commit)), sent by its build.`n`n``````json`n$(ConvertTo-Json -Compress -Depth 5 $inventory)`n``````"
     }
-    if ($sha) { $body.sha = $sha }
+    if ($issue.body.Length -gt 65000) {
+        Write-Warning "security-watch: the list of $($Ref.Name) is longer than an issue holds ($($issue.body.Length) characters): it was not sent."
+        return
+    }
+    $headers = @{ Accept = "application/vnd.github+json"; "User-Agent" = "wslc-ai-agent"; Authorization = "Bearer $env:SECURITY_WATCH_TOKEN" }
     try {
-        Invoke-RestMethod -Method Put -Uri $api -Headers $headers -ContentType "application/json" -Body (ConvertTo-Json $body) -TimeoutSec 30 | Out-Null
-        Write-Host "security-watch: the list of $($Ref.Name) was sent ($(@($inventory.packages).Count) libraries); it is checked within minutes." -ForegroundColor Green
+        $opened = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$WslcAgentSecurityRepository/issues" -Headers $headers `
+            -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes((ConvertTo-Json $issue))) -TimeoutSec 30
+        Write-Host "security-watch: the list of $($Ref.Name) was sent ($(@($inventory.packages).Count) libraries, $($opened.html_url)); it is checked within minutes." -ForegroundColor Green
     } catch {
         Write-Warning "security-watch: the list of $($Ref.Name) could not be sent ($($_.Exception.Message))."
     }

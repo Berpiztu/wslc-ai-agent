@@ -21,7 +21,8 @@
     WSLC_AGENT_PUSH_KEY         = ''
 
     # The token a build sends this checkout's list of libraries to
-    # Berpiztu/security-watch with: fine-grained, that repository alone,
-    # Contents read and write. Without it nothing is sent.
+    # Berpiztu/security-watch with, as an issue: fine-grained, that
+    # repository alone, Issues read and write, nothing else. Without it
+    # nothing is sent.
     SECURITY_WATCH_TOKEN        = ''
 }
