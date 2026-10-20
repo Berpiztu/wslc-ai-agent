@@ -28,7 +28,7 @@ that showed a pull's progress as it went.
 
 <details>
 <summary><b>Read the whole story</b>: SSH and Entra ID, an agent in the user's session, the rebuild in .NET, the dashboard, remote access, publishing, Compose and security</summary>
-<blockquote>
+<dl><dd>
 
 ### Reaching `wslc` from somewhere else (July)
 
@@ -231,7 +231,7 @@ release, and `develop`, which follows the newest WSL preview and publishes
 its own previews, the first of them 1.6.4, for WSL 3.0.4.
 
 
-</blockquote>
+</dd></dl>
 </details>
 
 ## Features
