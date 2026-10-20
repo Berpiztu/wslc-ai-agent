@@ -634,3 +634,6 @@ function Find-WslcAgentKeytool {
     }
     throw "keytool.exe not found. Install a JDK (the Android workload's OpenJDK is enough) or set JAVA_HOME."
 }
+
+# security-watch: asked before every build, told after one.
+. (Join-Path $PSScriptRoot "SecurityWatch.ps1")

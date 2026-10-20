@@ -27,6 +27,10 @@ $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $RepoRoot
 . (Join-Path $RepoRoot "packaging\Packaging.ps1")
 
+# security-watch first: a library this build would use with a known
+# vulnerability, moderate or worse, stops it before anything is built.
+Test-WslcAgentSecurity
+
 # The whole solution; without the client, the projects that are everything
 # else: the tests (and through them the agent, its web UI and the dashboard),
 # the tray with its toasts, and the wslc-compose command.
@@ -60,4 +64,6 @@ if (-not $NoTest) {
     if ($LASTEXITCODE -ne 0) { throw "dotnet test failed with exit code $LASTEXITCODE" }
 }
 
+# Built: security-watch gets this checkout's list of libraries when it changed.
+Send-WslcAgentInventory
 Write-Host "Done." -ForegroundColor Green

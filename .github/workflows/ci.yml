@@ -41,8 +41,13 @@ jobs:
       - name: Check private files
         run: .\check-private.ps1
 
+      # build.ps1 asks security-watch first and sends it this branch's list
+      # of libraries after; a pull request from a fork has no token, and
+      # sends nothing.
       - name: Build and test
         run: .\build.ps1 -Configuration Release -NoClient
+        env:
+          SECURITY_WATCH_TOKEN: ${{ secrets.SECURITY_WATCH_TOKEN }}
 
       # A build must not change what git tracks.
       - name: Nothing tracked changed

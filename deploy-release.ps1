@@ -136,6 +136,9 @@ if (-not (Get-WslcAgentReleaseNotes "v$planned")) {
 }
 Write-Host "Release notes found: docs\release-notes\$planned.md" -ForegroundColor Cyan
 
+# And no release of a branch whose libraries security-watch says are vulnerable.
+Test-WslcAgentSecurity -Ref $target
+
 # 1. What this checkout holds goes into the release, made on its branch. The
 # changes not committed yet are carried there and committed, with no message
 # to write.
@@ -270,6 +273,9 @@ git push origin $target
 if ($LASTEXITCODE -ne 0) { throw "git push failed with exit code $LASTEXITCODE" }
 git push origin $tag
 if ($LASTEXITCODE -ne 0) { throw "git push of $tag failed with exit code $LASTEXITCODE" }
+
+# A release built on GitHub sends its list of libraries from there; one built here sends it now.
+if ($Local) { Send-WslcAgentInventory -Ref ([pscustomobject]@{ Name = $tag; Type = "release" }) }
 
 if (-not $Local) {
     $repository = (gh repo view --json nameWithOwner --jq .nameWithOwner 2>$null)

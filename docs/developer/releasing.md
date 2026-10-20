@@ -60,7 +60,10 @@ A package with a known high or critical vulnerability, direct or
 transitive, stops every restore (NU1903, NU1904, in `Directory.Build.props`),
 so no build, local, CI or release, goes on with it; the **Audit** workflow
 restores `main` and `develop` every morning and fails, with GitHub's mail,
-on an advisory published while nobody pushed. It is fixed at once:
+on an advisory published while nobody pushed; and every build asks
+[security-watch](security-watch.md) first, which stops it on anything
+moderate or worse in any library it uses, the .NET runtime included. It is
+fixed at once:
 
 1. On `main`: the package raised to the version the advisory names as
    patched (`Directory.Packages.props`). When it is part of .NET itself

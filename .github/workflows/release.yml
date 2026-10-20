@@ -76,8 +76,12 @@ jobs:
           "WSLC_AGENT_KEYSTORE_PASS=$env:KEYSTORE_PASS" >> $env:GITHUB_ENV
           "WSLC_AGENT_GOOGLE_SERVICES=$(Join-Path $folder 'google-services.json')" >> $env:GITHUB_ENV
 
+      # Each build asks security-watch first; the first to end sends it the
+      # release's list of libraries, and the others find it there.
       - name: Build the installers
         if: steps.tag.outputs.local != 'true'
+        env:
+          SECURITY_WATCH_TOKEN: ${{ secrets.SECURITY_WATCH_TOKEN }}
         run: |
           .\build-agent-installer.ps1 -NoBump -Release
           .\build-client-installer.ps1 -NoBump
