@@ -202,23 +202,8 @@ public sealed class ImageSecurityTests
     {
         var archive = Path.Combine(TestHost.TempDataDirectory(), "alpine.tar");
         WriteFiles(archive,
-            ("etc/os-release", "NAME=\"Alpine Linux\"
-ID=alpine
-VERSION_ID=3.18.4
-"),
-            ("lib/apk/db/installed", "C:Q1
-P:libcrypto3
-V:3.1.0-r0
-o:openssl
-
-P:busybox
-V:1.36.0-r0
-o:busybox
-
-P:libssl3
-V:3.1.0-r0
-o:openssl
-"));
+            ("etc/os-release", "NAME=\"Alpine Linux\"\nID=alpine\nVERSION_ID=3.18.4\n"),
+            ("lib/apk/db/installed", "C:Q1\nP:libcrypto3\nV:3.1.0-r0\no:openssl\n\nP:busybox\nV:1.36.0-r0\no:busybox\n\nP:libssl3\nV:3.1.0-r0\no:openssl\n"));
 
         var installed = await ImageSecurity.InstalledAsync(archive, CancellationToken.None);
 
@@ -231,26 +216,11 @@ o:openssl
     {
         var archive = Path.Combine(TestHost.TempDataDirectory(), "debian.tar");
         WriteFiles(archive,
-            ("usr/lib/os-release", "ID=debian
-VERSION_ID=\"12\"
-"),
+            ("usr/lib/os-release", "ID=debian\nVERSION_ID=\"12\"\n"),
             ("var/lib/dpkg/status",
-                "Package: libssl3
-Status: install ok installed
-Source: openssl
-Version: 3.0.9-1
-
-"
-                + "Package: zlib1g
-Status: install ok installed
-Source: zlib (1:1.2.13.dfsg-1)
-Version: 1:1.2.13.dfsg-1+b1
-
-"
-                + "Package: oldlib
-Status: deinstall ok config-files
-Version: 1.0
-"));
+                "Package: libssl3\nStatus: install ok installed\nSource: openssl\nVersion: 3.0.9-1\n\n"
+                + "Package: zlib1g\nStatus: install ok installed\nSource: zlib (1:1.2.13.dfsg-1)\nVersion: 1:1.2.13.dfsg-1+b1\n\n"
+                + "Package: oldlib\nStatus: deinstall ok config-files\nVersion: 1.0\n"));
 
         var installed = await ImageSecurity.InstalledAsync(archive, CancellationToken.None);
 
