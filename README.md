@@ -185,8 +185,7 @@ Dockerfiles, no cache: Docker did it in 208 seconds, and we took about
 1,100. Docker had seen that eight services from two Dockerfiles are two
 images with eight names; we had built the same image four times, twice
 over. Fixed before lunch, same file, same machine, same morning: 216
-seconds, eight behind Docker
-([the whole story](docs/features/wslc-compose.md#the-part-where-we-were-slow)).
+seconds, eight behind Docker.
 
 Three days later a project could be built on another machine from the
 sources on yours: the build context travels as a tar archive, and only the
