@@ -10,9 +10,11 @@ namespace WslcAgent.Server.Images;
 /// The build jobs: one long <c>wslc build --progress plain</c> the
 /// agent owns and whose lines it keeps (the last 2000), followed by the page
 /// and cancelled from it. <c>plain</c> is what makes the output usable from an
-/// agent with no console: <c>auto</c> would draw with cursor control.
+/// agent with no console: <c>auto</c> would draw with cursor control. Each
+/// tagged image built is then checked (<see cref="ImageSecurity"/>): under
+/// Block, a vulnerable Python library fails the job.
 /// </summary>
-public sealed class ImageBuilds(IWslcRunner wslc, Notifier notifier, ILogger<ImageBuilds> logger)
+public sealed class ImageBuilds(IWslcRunner wslc, Notifier notifier, ImageSecurity security, ILogger<ImageBuilds> logger)
 {
     private const int MaxLines = 2000;
     private readonly ConcurrentDictionary<string, Job> _jobs = new();
@@ -76,6 +78,18 @@ public sealed class ImageBuilds(IWslcRunner wslc, Notifier notifier, ILogger<Ima
         try
         {
             await wslc.StreamAsync(args, job.Add, job.Cancellation.Token);
+
+            // Checked as a Compose build is (ImageSecurity): an image with no tag
+            // has no name to run it by, and is said so.
+            if (job.Tag.Length > 0)
+            {
+                await security.GuardAsync([job.Tag], (level, text) => job.Add($"{level}: {text}"), job.Cancellation.Token);
+            }
+            else
+            {
+                job.Add("INFO: An image with no tag is not checked for vulnerabilities: give it one to have it checked.");
+            }
+
             job.Finish("done", "");
             notifier.JobEnded("Build", Named(job), null, took.Elapsed, NotificationLink.Images, CliTraceDescription.Images);
         }
@@ -83,7 +97,7 @@ public sealed class ImageBuilds(IWslcRunner wslc, Notifier notifier, ILogger<Ima
         {
             job.Finish("cancelled", "");
         }
-        catch (Exception ex) when (ex is WslcException or WslcNotFoundException or ArgumentException)
+        catch (Exception ex) when (ex is WslcException or WslcNotFoundException or ArgumentException or InvalidOperationException)
         {
             logger.LogError("build {Tag} failed: {Message}", job.Tag, ex.Message);
             job.Finish("error", ex.Message);

@@ -287,6 +287,14 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<TestingSettings> SetTestingSettingsAsync(TestingSettings settings, CancellationToken cancellationToken = default) =>
         PostJsonAsync<TestingSettings, TestingSettings>("api/v1/testing", settings, cancellationToken, HttpMethod.Put);
 
+    // Image security check (Settings → Security)
+
+    public Task<ImageSecuritySettings> GetImageSecuritySettingsAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<ImageSecuritySettings>("api/v1/image-security", cancellationToken);
+
+    public Task<ImageSecuritySettings> SetImageSecuritySettingsAsync(ImageSecuritySettings settings, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<ImageSecuritySettings, ImageSecuritySettings>("api/v1/image-security", settings, cancellationToken, HttpMethod.Put);
+
     // Publishing (Settings → Publishing, and Publish on a container)
 
     public Task<PublishingSettings> GetPublishingSettingsAsync(CancellationToken cancellationToken = default) =>

@@ -109,6 +109,10 @@ builder.Services.AddSingleton<IMcpSwitches, SavedMcpSwitches>();
 builder.Services.AddSingleton(services => new ApprovalGate(
     () => services.GetRequiredService<IMcpSwitches>().AllowDestructiveTools));
 builder.Services.AddSingleton<IImageService, ImageService>();
+builder.Services.AddSingleton<ImageSecuritySettingsStore>();
+builder.Services.AddSingleton(services => new ImageSecurity(
+    services.GetRequiredService<IWslcRunner>(), new HttpClient { Timeout = TimeSpan.FromSeconds(30) },
+    services.GetRequiredService<ImageSecuritySettingsStore>(), services.GetRequiredService<ILogger<ImageSecurity>>()));
 builder.Services.AddSingleton<ImageBuilds>();
 builder.Services.AddSingleton<ImagePulls>();
 builder.Services.AddSingleton<ImagePushes>();
@@ -207,6 +211,7 @@ app.MapGroup("/api/v1")
     .MapLoginEndpoints()
     .MapSavedLoginEndpoints()
     .MapTestingEndpoints()
+    .MapImageSecurityEndpoints()
     .MapMcpSettingsEndpoints()
     .MapSessionEndpoints()
     .MapEventEndpoints()

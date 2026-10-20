@@ -42,6 +42,7 @@ public sealed class ProjectRunner(
     ProjectStore store,
     Publishing.PublishingService publishing,
     ProjectContexts contexts,
+    Images.ImageSecurity security,
     ILogger<ProjectRunner> logger)
 {
     /// <summary>What a project's row says in the Image column: it is no container's image.</summary>
@@ -385,6 +386,10 @@ public sealed class ProjectRunner(
         {
             await wslc.StreamAsync(args, job.Add, stop);
         }
+
+        // Every build is checked before anything is made from it: under Block,
+        // a vulnerable library fails the job here, with no container made.
+        await security.GuardAsync(images, job.Note, stop);
 
         // The job counts a build a service: the one build is all of theirs.
         foreach (var _ in same)

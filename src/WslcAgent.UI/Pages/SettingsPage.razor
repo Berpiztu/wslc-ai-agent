@@ -92,6 +92,28 @@
                 </MudButton>
             </MudPaper>
             }
+            <MudPaper Outlined="true" Class="pa-4">
+                <MudText Typo="Typo.h6">Image security check</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+                    Every image this agent builds, a Compose project's or one from Build image, has its Python libraries read in the
+                    image itself and checked against the known vulnerabilities (OSV.dev) before any container is made from it. What is
+                    found is written in the build's log, with the version that fixes it. An image with no Python has nothing to check;
+                    when OSV.dev cannot be reached, the log says so and the build goes on.
+                </MudText>
+                @if (_imageSecurity is { } imageSecurity)
+                {
+                    <MudSelect T="string" Value="imageSecurity.Policy" ValueChanged="SaveImageSecurityAsync" Label="A vulnerability moderate or worse"
+                               Variant="Variant.Filled" Margin="Margin.Dense" Dense="true" Disabled="_imageSecurityBusy">
+                        <MudSelectItem T="string" Value="@ImageSecurityPolicy.Block">Stops the build: no container is made</MudSelectItem>
+                        <MudSelectItem T="string" Value="@ImageSecurityPolicy.Warn">Is written in the log; the build goes on</MudSelectItem>
+                        <MudSelectItem T="string" Value="@ImageSecurityPolicy.Off">Nothing: images are not checked</MudSelectItem>
+                    </MudSelect>
+                }
+                else
+                {
+                    <MudProgressLinear Indeterminate="true" />
+                }
+            </MudPaper>
         </div>
             </div>
         </MudTabPanel>
@@ -917,6 +939,10 @@
     private bool _busy;
     private McpStatus? _mcp;
     private bool _mcpBusy;
+
+    /// <summary>Settings → Security → Image security check; null while unknown.</summary>
+    private ImageSecuritySettings? _imageSecurity;
+    private bool _imageSecurityBusy;
     private AgentUpdateStatus? _update;
     private bool _updateBusy;
     private string _skillClient = "Hermes";
@@ -988,6 +1014,39 @@
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
         {
             Snackbar.Add($"MCP server: {ex.Message}", Severity.Error);
+        }
+
+        try
+        {
+            _imageSecurity = await Api.GetImageSecuritySettingsAsync();
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"Image security check: {ex.Message}", Severity.Error);
+        }
+    }
+
+    /// <summary>Saved on the agent and in force at once: the next build already obeys it.</summary>
+    private async Task SaveImageSecurityAsync(string policy)
+    {
+        _imageSecurityBusy = true;
+        try
+        {
+            _imageSecurity = await Api.SetImageSecuritySettingsAsync(new ImageSecuritySettings(policy));
+            Snackbar.Add(policy switch
+            {
+                ImageSecurityPolicy.Block => "Image security check: a vulnerability moderate or worse stops the build",
+                ImageSecurityPolicy.Warn => "Image security check: vulnerabilities are written in the log, builds go on",
+                _ => "Image security check off: images are not checked",
+            }, Severity.Success);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"Image security check: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _imageSecurityBusy = false;
         }
     }
 
