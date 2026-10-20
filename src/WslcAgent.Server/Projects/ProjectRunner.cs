@@ -95,13 +95,53 @@ public sealed class ProjectRunner(
             [
                 .. plan.Networks.Where(network => network.External && !state.Networks.Contains(network.Name)).Select(network => $"network {network.Name}"),
                 .. plan.Volumes.Where(volume => volume.External && !state.Volumes.Contains(volume.Name)).Select(volume => $"volume {volume.Name}"),
-            ]);
+            ],
+            FormerFile(plan, request.File));
     }
+
+    /// <summary>
+    /// The file the project was last saved from, when this save comes from
+    /// another: two Compose files that give themselves the same name are one
+    /// project, and the second one's save leaves the first one's other
+    /// services behind. A file is known by its path, on the machine that sent
+    /// it or else on this one; a pasted file has none, and is not compared.
+    /// </summary>
+    private string? FormerFile(ComposePlan plan, ComposePlanRequest file)
+    {
+        var now = Origin(file.ClientFile, plan.File);
+        var former = FormerFile(store.Read(plan.Name), now);
+        if (former is not null)
+        {
+            logger.LogWarning("project {Project}: saving it from {File} would replace {Former}, the file it was last saved from", plan.Name, now, former);
+        }
+
+        return former;
+    }
+
+    /// <summary>The kept project's file when <paramref name="now"/> is another; null when either has no path.</summary>
+    internal static string? FormerFile(StoredProject? kept, string now)
+    {
+        var former = kept is null ? "" : Origin(kept.ClientFile, kept.File);
+        return former.Length == 0 || now.Length == 0 || string.Equals(former, now, StringComparison.OrdinalIgnoreCase) ? null : former;
+    }
+
+    /// <summary>A file's path on the machine that sent it, or else on this one.</summary>
+    private static string Origin(string clientFile, string agentFile) => (clientFile.Trim().Length > 0 ? clientFile : agentFile).Trim();
 
     /// <summary>Starts the save. The file is read first, so one that cannot be read is refused here and no job is begun.</summary>
     public async Task<ProjectJob> StartAsync(ProjectUpRequest request, CancellationToken cancellationToken = default)
     {
         var plan = await projects.PlanAsync(request.File, cancellationToken);
+
+        // Checked here, and not only by the client that asked first: one too old to ask would
+        // replace the project's file without a word, and leave its other containers over.
+        if (!request.ReplaceFile && FormerFile(plan, request.File) is { } former)
+        {
+            throw new InvalidOperationException(
+                $"Project {plan.Name} was last saved from {former}, and this file would take its place. Nothing was done. "
+                + "Save it again saying it replaces that file: the Compose window and wslc-compose ask for it (wslc-compose up -y), from version 1.6.4.1 on.");
+        }
+
         return Begin(plan, (job, stop) => SaveAsync(job, plan, request, stop));
     }
 

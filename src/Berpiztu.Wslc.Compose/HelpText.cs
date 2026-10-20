@@ -55,6 +55,9 @@ internal static class HelpText
                                        have a build, from the cache where nothing changed.
               --no-start               Create the containers and leave them stopped.
               --remove-orphans         Remove the project's containers whose service the file no longer has.
+          -y, --yes                    Answer yes to what up asks: whether this file is to replace another one
+                                       the project was saved from. Without a terminal to ask on, up stops there
+                                       unless it is given.
 
         Of 'logs':
           -f, --follow                 Go on showing what is written, until Ctrl+C.

@@ -149,9 +149,32 @@ public static class DialogFlow
         await reference.Result;
     }
 
-    /// <summary>Yes/cancel; the yes text is the verb, in the error colour when <paramref name="destructive"/>.</summary>
-    public static async Task<bool> ConfirmAsync(IDialogService dialogs, string title, string message, string yes, bool destructive = false) =>
-        (await AskAsync(dialogs, title, message, yes, destructive)).Yes;
+    /// <summary>
+    /// Yes/cancel; the yes text is the verb, in the error colour when <paramref name="destructive"/>.
+    /// <paramref name="danger"/>, when there is one, is what the yes destroys, in a filled red alert above the message.
+    /// </summary>
+    public static async Task<bool> ConfirmAsync(IDialogService dialogs, string title, string message, string yes, bool destructive = false, string danger = "") =>
+        (await AskAsync(dialogs, title, message, yes, destructive || danger.Length > 0, danger: danger)).Yes;
+
+    /// <summary>
+    /// A confirmation of what cannot be undone and is easily done by mistake:
+    /// <paramref name="danger"/> in a filled red alert above the message, the
+    /// verb in the error colour, and pressed only once <paramref name="typed"/>
+    /// (the name of what is lost) has been typed.
+    /// </summary>
+    public static async Task<bool> ConfirmIrreversibleAsync(IDialogService dialogs, string title, string danger, string message, string yes, string typed)
+    {
+        var parameters = new DialogParameters<Dialogs.ConfirmDialog>
+        {
+            { d => d.Message, message },
+            { d => d.YesText, yes },
+            { d => d.Destructive, true },
+            { d => d.Danger, danger },
+            { d => d.TypeToConfirm, typed },
+        };
+        var reference = await dialogs.ShowAsync<Dialogs.ConfirmDialog>(title, parameters, Confirmation);
+        return await reference.Result is { Canceled: false, Data: Confirmed { Yes: true } };
+    }
 
     /// <summary>
     /// The same confirmation, with a box that answers the rest the same way,
@@ -172,7 +195,7 @@ public static class DialogFlow
     public static Task<Confirmed> AskEitherAsync(IDialogService dialogs, string title, string message, string yes, string other) =>
         AskAsync(dialogs, title, message, yes, destructive: false, other: other);
 
-    private static async Task<Confirmed> AskAsync(IDialogService dialogs, string title, string message, string yes, bool destructive, string forAll = "", string other = "")
+    private static async Task<Confirmed> AskAsync(IDialogService dialogs, string title, string message, string yes, bool destructive, string forAll = "", string other = "", string danger = "")
     {
         var parameters = new DialogParameters<Dialogs.ConfirmDialog>
         {
@@ -181,6 +204,7 @@ public static class DialogFlow
             { d => d.Destructive, destructive },
             { d => d.ForAll, forAll },
             { d => d.OtherText, other },
+            { d => d.Danger, danger },
         };
         var reference = await dialogs.ShowAsync<Dialogs.ConfirmDialog>(title, parameters, Confirmation);
         var result = await reference.Result;

@@ -932,17 +932,38 @@
                     "A project uses what its file calls external and does not create it. Create it first (Networks, Volumes), give its real name in the file (name:), or take external out of the file so the project makes its own.");
                 return;
             }
-            if (!await DialogFlow.ConfirmAsync(Dialogs, start ? "Run project" : "Save project", Question(preview, start), start ? "Run" : "Save"))
+
+            // Two files that give themselves the same name are one project: asked apart, before
+            // anything else, since saving this one by mistake leaves the other's containers over.
+            if (preview.FormerFile is { } former && !await DialogFlow.ConfirmIrreversibleAsync(Dialogs, "Replace project",
+                    $"This replaces project {preview.Name} with another Compose file. It cannot be undone.",
+                    $"The project was made from:\n\n{Listed([former])}\n\n"
+                    + "Saving this file takes its place: the project forgets that file"
+                    + (preview.Orphans.Count > 0 ? $", and these containers, whose services this file does not have, are left over for removal:\n\n{Listed(preview.Orphans)}" : ".")
+                    + "\n\nIf you opened the wrong file, cancel.",
+                    "Replace", preview.Name))
             {
                 return;
             }
 
+            // Asked before the summary, so the summary says it: what is removed is gone for good,
+            // and it is said in red above everything else the save does.
             var remove = preview.Orphans.Count > 0 && await DialogFlow.ConfirmAsync(Dialogs, "Remove containers",
-                $"These containers belong to project {preview.Name} and their services are no longer in the file:\n\n{Listed(preview.Orphans)}\n\n"
+                $"These containers belong to project {preview.Name} and their services are not in this file"
+                + (preview.FormerFile is { } made ? $" (the project was last saved from {made})" : "") + $":\n\n{Listed(preview.Orphans)}\n\n"
                 + "Remove them? What they hold is lost unless it is in a volume. Cancel leaves them as they are and goes on with the rest.",
                 "Remove", destructive: true);
 
-            var save = new ProjectUpRequest(request, start, remove);
+            var removed = remove
+                ? $"These containers will be removed and are gone for good. What they hold is lost unless it is in a volume:\n\n{Listed(preview.Orphans)}"
+                : "";
+            if (!await DialogFlow.ConfirmAsync(Dialogs, start ? "Run project" : "Save project", Question(preview, start), start ? "Run" : "Save", danger: removed))
+            {
+                return;
+            }
+
+            // Replace project was answered yes, or not asked: the agent takes a save from another file only when told so.
+            var save = new ProjectUpRequest(request, start, remove, ReplaceFile: preview.FormerFile is not null);
             if (folder is not { } sending || read.Count == 0)
             {
                 Busy($"{(start ? "Starting" : "Saving")} project {preview.Name}…");

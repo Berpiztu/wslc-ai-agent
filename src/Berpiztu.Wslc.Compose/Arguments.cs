@@ -33,6 +33,7 @@ internal sealed class Arguments
     public const string Follow = "follow";
     public const string Timestamps = "timestamps";
     public const string NoLogPrefix = "no-log-prefix";
+    public const string Yes = "yes";
 
     private const string FileOption = "file";
     private const string ProjectOption = "project-name";
@@ -65,7 +66,7 @@ internal sealed class Arguments
         ["-m"] = "memory",
         ["-o"] = "output",
         ["-w"] = "watch",
-        ["-y"] = "yes",
+        ["-y"] = Yes,
         ["-V"] = "renew-anon-volumes",
     };
 
@@ -95,10 +96,10 @@ internal sealed class Arguments
             Same: [Quiet, "with-dependencies", "compress", "force-rm", "no-rm"],
             Later: ["build-arg", "builder", "check", "memory", "print", "push", "ssh", "provenance", "sbom"]),
         ["up"] = new(
-            Done: [Detach, NoStart, RemoveOrphans, NoLogPrefix, Timestamps, "no-color"],
+            Done: [Detach, NoStart, RemoveOrphans, NoLogPrefix, Timestamps, "no-color", Yes],
             // It always builds what has a build, and what it attaches to is every service it brought up:
             // what these ask for is what happens, or is about a choice this command does not offer.
-            Same: ["build", "quiet-pull", "quiet-build", "menu", "attach", "no-attach", "attach-dependencies", "yes"],
+            Same: ["build", "quiet-pull", "quiet-build", "menu", "attach", "no-attach", "attach-dependencies"],
             Later: ["force-recreate", "no-recreate", "always-recreate-deps", "no-build", "no-deps", Pull, "scale", "timeout", "wait", "wait-timeout",
                 "abort-on-container-exit", "abort-on-container-failure", "exit-code-from", "renew-anon-volumes", "watch"]),
         ["down"] = new(Done: [Volumes], Same: [], Later: [RemoveOrphans, "rmi", "timeout"]),

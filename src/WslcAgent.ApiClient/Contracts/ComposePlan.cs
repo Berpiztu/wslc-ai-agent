@@ -179,7 +179,13 @@ public sealed record ComposeVariable(string Name, string Value, bool Set);
 /// project is kept with its services by name, the ones the save took even
 /// when none was named: it is what its window shows ticked.
 /// </param>
-public sealed record ProjectUpRequest(ComposePlanRequest File, bool Start = false, bool RemoveOrphans = false, bool AddServices = false);
+/// <param name="ReplaceFile">
+/// The project was last saved from another file (<see cref="ProjectPreview.FormerFile"/>),
+/// and the user said this one is to take its place. Without it the agent
+/// refuses such a save (409) and does nothing, whichever client sends it: a
+/// client too old to ask cannot replace a project by mistake.
+/// </param>
+public sealed record ProjectUpRequest(ComposePlanRequest File, bool Start = false, bool RemoveOrphans = false, bool AddServices = false, bool ReplaceFile = false);
 
 /// <summary>
 /// Body of <c>POST /api/v1/projects/build</c>: a Compose file whose images
@@ -205,6 +211,14 @@ public sealed record ProjectBuildRequest(ComposePlanRequest File, bool NoCache =
 /// <param name="Volumes">Volumes to create.</param>
 /// <param name="Builds">Images to build.</param>
 /// <param name="Missing">What the file names as external and the machine does not have, each as <c>network NAME</c> or <c>volume NAME</c>: the project does not create them, so the save would stop there. Null from an agent too old to say.</param>
+/// <param name="FormerFile">
+/// The file the project was last saved from, when it is another than this
+/// one: two files that give themselves the same name are one project, and
+/// saving this one takes the other's place, its services' containers that
+/// this file does not have left over (<paramref name="Orphans"/>). Asked
+/// before the save. Null when it is the same file, the project is new, either
+/// file was pasted (it has no path to tell), or the agent is too old to say.
+/// </param>
 public sealed record ProjectPreview(
     string Name,
     bool Exists,
@@ -218,7 +232,8 @@ public sealed record ProjectPreview(
     IReadOnlyList<string> Unsupported,
     IReadOnlyList<string> Warnings,
     IReadOnlyList<string>? Edited = null,
-    IReadOnlyList<string>? Missing = null);
+    IReadOnlyList<string>? Missing = null,
+    string? FormerFile = null);
 
 /// <summary>A project's save, or a build of its images, under way or over: <c>POST /api/v1/projects/up</c> and <c>/projects/build</c> answer it at once, <c>GET /api/v1/projects/jobs/{id}</c> as it goes.</summary>
 /// <param name="Step">What it is doing now, in words for the window that waits.</param>
