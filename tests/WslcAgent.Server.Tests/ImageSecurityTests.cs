@@ -165,7 +165,7 @@ public sealed class ImageSecurityTests
     }
 
     [Fact]
-    public async Task An_image_with_no_python_has_nothing_to_check()
+    public async Task An_image_with_no_package_to_read_is_said_to_be_unchecked()
     {
         var store = Store(ImageSecurityPolicy.Block);
         var security = new ImageSecurity(Exporting(), new HttpClient(new Osv()), store, NullLogger<ImageSecurity>.Instance);
@@ -173,7 +173,7 @@ public sealed class ImageSecurityTests
 
         await security.GuardAsync(["static:1"], (level, text) => lines.Add($"{level} {text}"), CancellationToken.None);
 
-        Assert.Contains(lines, line => line.Contains("has no Python libraries", StringComparison.Ordinal));
+        Assert.Contains(lines, line => line.Contains("has no package to check", StringComparison.Ordinal) && line.Contains("not a clean image", StringComparison.Ordinal));
     }
 
     [Fact]
