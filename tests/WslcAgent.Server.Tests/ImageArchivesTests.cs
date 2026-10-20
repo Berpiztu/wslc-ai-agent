@@ -36,7 +36,10 @@ public sealed class ImageArchivesTests(WebApplicationFactory<Program> factory)
         }
 
         Assert.Equal("done", job?.State);
-        Assert.Equal(["#1 load", "#2 done"], job?.Output);
+        // What wslc printed, then the security check of the image it built:
+        // the scripted runner has no Python to read in it.
+        Assert.Equal(["#1 load", "#2 done"], job!.Output.Take(2));
+        Assert.Contains(job.Output, line => line.Contains("app:1 has no Python with pip", StringComparison.Ordinal));
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/v1/images/build", new BuildImageRequest(""))).StatusCode);
     }
 

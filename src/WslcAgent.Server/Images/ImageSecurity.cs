@@ -21,7 +21,7 @@ public sealed record ImageVulnerability(string Package, string Version, string A
     public bool Blocks => Severity is "moderate" or "high" or "critical";
 
     public override string ToString() =>
-        $"{Package} {Version}, {Severity}: {Advisory}{(Cve.Length > 0 ? $" ({Cve})" : "")}, fixed in {(FixedIn.Length > 0 ? FixedIn : "no version yet")}";
+        $"{Package} {Version}, {Severity}: {Advisory}{(Cve.Length > 0 ? $" ({Cve})" : "")}, {(FixedIn.Length > 0 ? $"fixed in {FixedIn}" : "no version fixes it yet")}";
 }
 
 /// <summary>
@@ -41,6 +41,8 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
     /// <summary>An advisory changes seldom: each is read once a day.</summary>
     private static readonly TimeSpan AdvisoryKept = TimeSpan.FromDays(1);
 
+    private static readonly string[] SeverityOrder = ["unknown", "low", "moderate", "high", "critical"];
+
     private readonly ConcurrentDictionary<string, (JsonNode? Advisory, DateTimeOffset Read)> _advisories = new();
 
     /// <summary>
@@ -59,7 +61,7 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
             return;
         }
 
-        var stopping = new List<string>();
+        var stopping = new List<(string Image, ImageVulnerability Vulnerability)>();
         foreach (var image in images)
         {
             note("INFO", $"Checking {image}'s Python libraries for known vulnerabilities");
@@ -69,7 +71,7 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
                 note("WARNING", $"{image}: {vulnerability}");
             }
 
-            stopping.AddRange(found.Where(v => v.Blocks).Select(v => $"{image}: {v}"));
+            stopping.AddRange(found.Where(v => v.Blocks).Select(v => (image, v)));
         }
 
         if (stopping.Count == 0)
@@ -79,13 +81,62 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
 
         if (policy == ImageSecurityPolicy.Block)
         {
+            // Each vulnerability is a line above; what is to be done is said once per library, a line each.
+            var libraries = stopping.GroupBy(s => (s.Image, s.Vulnerability.Package, s.Vulnerability.Version)).ToList();
+            foreach (var library in libraries)
+            {
+                note("ERROR", Remedy(library.Key.Image, [.. library.Select(s => s.Vulnerability)]));
+            }
+
             throw new InvalidOperationException(
-                $"{stopping.Count} Python librar{(stopping.Count == 1 ? "y" : "ies")} with a vulnerability moderate or worse, so no container was made: "
-                + string.Join("; ", stopping)
-                + ". Raise them to a version that fixes it and build again; Settings → Security → Image security check set to Warn builds anyway.");
+                $"{libraries.Count} Python librar{(libraries.Count == 1 ? "y" : "ies")} with a vulnerability moderate or worse, so no container was made. "
+                + "Raise each to the version named, replace the ones no version fixes, and build again; Settings → Security → Image security check set to Warn builds anyway.");
         }
 
         note("WARNING", $"{stopping.Count} vulnerabilit{(stopping.Count == 1 ? "y" : "ies")} moderate or worse; built anyway, as Settings → Security → Image security check is set to Warn.");
+    }
+
+    /// <summary>
+    /// One library's line: how many of its vulnerabilities stop the build, the
+    /// worst of them, and the version that fixes them all (the highest of their
+    /// fixes), or, when one has no fix, that the library has to be replaced.
+    /// </summary>
+    internal static string Remedy(string image, IReadOnlyList<ImageVulnerability> vulnerabilities)
+    {
+        var first = vulnerabilities[0];
+        var worst = vulnerabilities.MaxBy(v => Array.IndexOf(SeverityOrder, v.Severity))!.Severity;
+        var counted = vulnerabilities.Count == 1 ? "1 vulnerability" : $"{vulnerabilities.Count} vulnerabilities";
+        var unfixed = vulnerabilities.FirstOrDefault(v => v.FixedIn.Length == 0);
+        var remedy = unfixed is not null
+            ? $"no version fixes {unfixed.Advisory} yet: replace it"
+            : $"{vulnerabilities.Select(v => v.FixedIn).Order(VersionOrder.Instance).Last()} fixes {(vulnerabilities.Count == 1 ? "it" : "them all")}";
+        return $"{image}: {first.Package} {first.Version}: {counted} moderate or worse, the worst {worst}; {remedy}.";
+    }
+
+    /// <summary>Versions in the order PyPI releases them, closely enough for picking the highest fix: number by number, a part that is not one compared as text.</summary>
+    private sealed class VersionOrder : IComparer<string>
+    {
+        public static readonly VersionOrder Instance = new();
+
+        public int Compare(string? x, string? y)
+        {
+            var left = (x ?? "").Split('.');
+            var right = (y ?? "").Split('.');
+            for (var i = 0; i < Math.Max(left.Length, right.Length); i++)
+            {
+                var a = i < left.Length ? left[i] : "0";
+                var b = i < right.Length ? right[i] : "0";
+                var order = long.TryParse(a, out var na) && long.TryParse(b, out var nb)
+                    ? na.CompareTo(nb)
+                    : string.CompareOrdinal(a, b);
+                if (order != 0)
+                {
+                    return order;
+                }
+            }
+
+            return 0;
+        }
     }
 
     /// <summary>The image's vulnerabilities; none when it has no Python, or when it could not be checked (said through <paramref name="note"/>).</summary>

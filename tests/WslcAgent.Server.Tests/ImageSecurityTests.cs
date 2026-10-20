@@ -26,9 +26,22 @@ public sealed class ImageSecurityTests
         var stopped = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             security.GuardAsync(["app:1"], (level, text) => lines.Add($"{level} {text}"), CancellationToken.None));
 
-        Assert.Contains("flask 3.0.2, moderate: GHSA-test-0001 (CVE-2026-0001), fixed in 3.0.3", stopped.Message);
-        Assert.DoesNotContain("requests", stopped.Message);
-        Assert.Contains(lines, line => line.StartsWith("WARNING app:1: flask 3.0.2", StringComparison.Ordinal));
+        Assert.StartsWith("1 Python library with a vulnerability moderate or worse", stopped.Message, StringComparison.Ordinal);
+        Assert.Contains("WARNING app:1: flask 3.0.2, moderate: GHSA-test-0001 (CVE-2026-0001), fixed in 3.0.3", lines);
+        Assert.Contains("ERROR app:1: flask 3.0.2: 1 vulnerability moderate or worse, the worst moderate; 3.0.3 fixes it.", lines);
+        Assert.DoesNotContain(lines, line => line.Contains("requests", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_library_is_raised_to_its_highest_fix_or_replaced_when_one_has_none()
+    {
+        ImageVulnerability Found(string severity, string fixedIn, string advisory = "GHSA-x") =>
+            new("pypdf", "4.0.2", advisory, "", severity, fixedIn, "");
+
+        Assert.Equal("img: pypdf 4.0.2: 3 vulnerabilities moderate or worse, the worst high; 6.19.0 fixes them all.",
+            ImageSecurity.Remedy("img", [Found("moderate", "6.9.2"), Found("high", "6.19.0"), Found("moderate", "6.10.0")]));
+        Assert.Equal("img: pypdf 4.0.2: 2 vulnerabilities moderate or worse, the worst critical; no version fixes GHSA-none yet: replace it.",
+            ImageSecurity.Remedy("img", [Found("moderate", "6.9.2"), Found("critical", "", "GHSA-none")]));
     }
 
     [Fact]
