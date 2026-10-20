@@ -1,0 +1,40 @@
+name: Audit
+
+# Every morning, main and develop restored against nuget.org's list of known
+# vulnerabilities, with nothing pushed: an advisory published on a quiet week
+# fails this run, and GitHub mails the failure, where a build would only have
+# found it at the next push. A high or critical one is an error in every
+# restore (Directory.Build.props), so a run that restores fails on it. The
+# MAUI client is left out, as the quick build leaves it (its workloads take
+# minutes to install); its packages are audited by every client build.
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [main, develop]
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore against the known vulnerabilities
+        run: |
+          $projects = git ls-files '*.csproj' | Where-Object { $_ -notlike '*WslcAgent.App*' }
+          foreach ($project in $projects) {
+            dotnet restore $project --force-evaluate
+            if ($LASTEXITCODE -ne 0) { throw "$project has a package with a known high or critical vulnerability, or did not restore (see above)." }
+          }

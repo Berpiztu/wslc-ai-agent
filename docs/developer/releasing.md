@@ -54,6 +54,25 @@ by the install line. An agent from a preview is offered the newest of all,
 the next preview, or an official release above it, and Install from GitHub
 runs that release's own install script ([api-v1.md](../api-v1.md)).
 
+## A security patch
+
+A package with a known high or critical vulnerability, direct or
+transitive, stops every restore (NU1903, NU1904, in `Directory.Build.props`),
+so no build, local, CI or release, goes on with it; the **Audit** workflow
+restores `main` and `develop` every morning and fails, with GitHub's mail,
+on an advisory published while nobody pushed. It is fixed at once:
+
+1. On `main`: the package raised to the version the advisory names as
+   patched (`Directory.Packages.props`). When it is part of .NET itself
+   (ASP.NET Core, the runtime), the SDK in `global.json` too: the agent and
+   the clients are published with the runtime inside, and an SDK bundles
+   the runtime of its own release.
+2. Its notes, `docs/release-notes/<version>.md`, say what was vulnerable and
+   that this version fixes it, above everything its minor brought.
+3. `.\deploy-release.ps1` on `main`: an official patch, offered to every
+   agent.
+4. `main` taken into `develop`, and the next preview's notes say it too.
+
 ## One command
 
 From the root of the repository, on any branch, straight after a build:

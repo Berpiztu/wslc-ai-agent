@@ -81,6 +81,10 @@ The full set is in [docs/architecture.md](docs/architecture.md) and
   previews included; what a preview brings is used when the agent's `wslc`
   has it, and the official one goes on as before, so `develop` can go to
   `main` at any time. What cannot work without a preview waits in `develop`.
+- **A vulnerable dependency is patched at once.** A package with a known
+  high or critical vulnerability stops the restore; it is patched on `main`
+  straight away and taken into `develop`
+  ([releasing.md](docs/developer/releasing.md#a-security-patch)).
 - **No secrets and nothing machine-specific** in the repository. Signing keys
   and Firebase files live in `private/`, which git ignores
   ([docs/developer/private-files.md](docs/developer/private-files.md)).

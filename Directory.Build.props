@@ -8,6 +8,13 @@
     <LangVersion>latest</LangVersion>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <!-- A package with a known high (NU1903) or critical (NU1904) vulnerability,
+         direct or transitive, stops the restore, and with it every build, the
+         CI's and the release's: a warning scrolled past in a long log, and
+         ASP.NET Core 10.0.12's remote code execution went unseen for a week. -->
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1903;NU1904</WarningsAsErrors>
   </PropertyGroup>
 
   <PropertyGroup>
