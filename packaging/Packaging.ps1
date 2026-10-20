@@ -635,5 +635,8 @@ function Find-WslcAgentKeytool {
     throw "keytool.exe not found. Install a JDK (the Android workload's OpenJDK is enough) or set JAVA_HOME."
 }
 
-# security-watch: asked before every build, told after one.
+# security-watch: asked before every build, told after one. SecurityWatch.ps1
+# is a copy of security-watch's client/SecurityWatch.ps1, the same in every
+# project; this one is wslc-ai-agent.
+$SecurityWatchProject = "wslc-ai-agent"
 . (Join-Path $PSScriptRoot "SecurityWatch.ps1")

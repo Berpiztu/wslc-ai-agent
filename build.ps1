@@ -29,7 +29,7 @@ Set-Location $RepoRoot
 
 # security-watch first: a library this build would use with a known
 # vulnerability, moderate or worse, stops it before anything is built.
-Test-WslcAgentSecurity
+Test-SecurityWatch
 
 # The whole solution; without the client, the projects that are everything
 # else: the tests (and through them the agent, its web UI and the dashboard),
@@ -65,5 +65,5 @@ if (-not $NoTest) {
 }
 
 # Built: security-watch gets this checkout's list of libraries when it changed.
-Send-WslcAgentInventory
+Send-SecurityWatchInventory
 Write-Host "Done." -ForegroundColor Green

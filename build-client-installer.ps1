@@ -28,7 +28,7 @@ Set-Location $RepoRoot
 
 # security-watch first: a library this build would use with a known
 # vulnerability, moderate or worse, stops it before anything is built.
-Test-WslcAgentSecurity
+Test-SecurityWatch
 
 Import-WslcAgentPrivateSettings
 
@@ -78,6 +78,6 @@ Set-WslcAgentMsiExplorerVersion -Path $MsiDest -Name "WSLC AI Client" -Version $
 
 Write-Host ""
 # Built: security-watch gets this checkout's list of libraries when it changed.
-Send-WslcAgentInventory
+Send-SecurityWatchInventory
 Write-Host "WSLC AI Client MSI ready: $MsiDest (version $msiVersion, build $($client.Build))" -ForegroundColor Green
 Write-Host "Install (per-user): msiexec /i `"$MsiDest`" [WSLC_AGENTURL=http://host:8069/]"

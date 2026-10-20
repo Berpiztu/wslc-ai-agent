@@ -29,7 +29,7 @@ Set-Location $RepoRoot
 
 # security-watch first: a library this build would use with a known
 # vulnerability, moderate or worse, stops it before anything is built.
-Test-WslcAgentSecurity
+Test-SecurityWatch
 
 Import-WslcAgentPrivateSettings
 
@@ -75,6 +75,6 @@ if (-not $apk) { throw "Publish succeeded but no signed APK was found under $sea
 Copy-Item -LiteralPath $apk.FullName -Destination $ApkDest -Force
 Write-Host ""
 # Built: security-watch gets this checkout's list of libraries when it changed.
-Send-WslcAgentInventory
+Send-SecurityWatchInventory
 Write-Host "WSLC AI Client APK ready: $ApkDest ($([math]::Round($apk.Length / 1MB, 1)) MB, $abiLabel)" -ForegroundColor Green
 Write-Host "versionName $($client.Display) / versionCode $($client.Build); signed with $($signing.Keystore)"

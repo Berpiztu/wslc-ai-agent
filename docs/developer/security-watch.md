@@ -6,7 +6,10 @@ vulnerabilities and the newest versions, each library once for all the
 projects that use it. It reads no project: each one sends its own list of
 libraries, and reads its own result.
 
-This repository does both from its builds ([packaging/SecurityWatch.ps1](../../packaging/SecurityWatch.ps1)):
+This repository does both from its builds with
+[packaging/SecurityWatch.ps1](../../packaging/SecurityWatch.ps1), a copy of
+security-watch's [client/SecurityWatch.ps1](https://github.com/Berpiztu/security-watch/blob/main/client/SecurityWatch.ps1),
+the same in every project (a change there is copied here):
 `build.ps1`, `build-agent-installer.ps1`, `build-client-installer.ps1`,
 `build-client-apk.ps1` (and `-full`) and `build-wslc-compose.ps1`, on this
 machine and on GitHub Actions. `start-agent.ps1` and the `debug-*.ps1`
