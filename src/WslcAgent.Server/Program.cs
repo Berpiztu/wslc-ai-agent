@@ -144,7 +144,7 @@ builder.Services.AddSingleton<IClientPackageService, ClientPackageService>();
 builder.Services.AddSingleton<AgentUpdateSettingsStore>();
 builder.Services.AddSingleton<AgentUpdateLauncher>();
 builder.Services.AddSingleton<AgentUpdater>();
-builder.Services.AddSingleton(services => new GitHubReleases(new HttpClient { Timeout = TimeSpan.FromSeconds(30) }, services.GetRequiredService<ILogger<GitHubReleases>>()));
+builder.Services.AddSingleton(services => new GitHubReleases(new HttpClient { Timeout = TimeSpan.FromSeconds(30) }, services.GetRequiredService<IAgentInfo>(), services.GetRequiredService<AgentUpdateSettingsStore>(), services.GetRequiredService<ILogger<GitHubReleases>>()));
 builder.Services.AddHostedService(services => services.GetRequiredService<AgentUpdater>());
 builder.Services
     .AddMcpServer(options => options.ServerInfo = new() { Name = "wslc-ai-agent", Version = agentInfo.Version })

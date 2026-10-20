@@ -25,7 +25,7 @@ public static class AgentUpdateEndpoints
         group.MapPost("/cancel", (AgentUpdater updater) => updater.Cancel())
             .WithName("CancelAgentUpdate");
 
-        // The latest release on GitHub; 502 with the reason when GitHub does not answer.
+        // The newest release on GitHub for this agent; 502 with the reason when GitHub does not answer.
         group.MapGet("/latest", async Task<Results<Ok<LatestRelease>, ProblemHttpResult>> (GitHubReleases releases, CancellationToken ct) =>
             {
                 try
@@ -39,11 +39,18 @@ public static class AgentUpdateEndpoints
             })
             .WithName("GetLatestAgentRelease");
 
-        // Install from GitHub: the README's line, run on the agent's machine in a window of its own.
-        group.MapPost("/from-github", (GitHubReleases releases) =>
+        // Install from GitHub: the newest release's line, run on the agent's machine in a window of its own.
+        group.MapPost("/from-github", async Task<Results<NoContent, ProblemHttpResult>> (GitHubReleases releases, CancellationToken ct) =>
             {
-                releases.RunInstallLine();
-                return TypedResults.NoContent();
+                try
+                {
+                    await releases.RunInstallLineAsync(ct);
+                    return TypedResults.NoContent();
+                }
+                catch (Exception ex) when (ex is HttpRequestException or JsonException or KeyNotFoundException)
+                {
+                    return TypedResults.Problem(ex.Message, statusCode: StatusCodes.Status502BadGateway, title: "GitHub did not answer");
+                }
             })
             .WithName("InstallAgentFromGitHub");
 

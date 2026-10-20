@@ -7,7 +7,8 @@ namespace WslcAgent.ApiClient.Contracts;
 /// </summary>
 /// <param name="AutoUpdate">On, the agent updates itself when a newer installer appears and nothing is being transferred; off, only Update now does.</param>
 /// <param name="PackageFolder">The package folder chosen in Settings, a full path; empty for the one the agent was installed with (<see cref="AgentUpdateStatus.AutomaticPackageFolder"/>).</param>
-public sealed record AgentUpdateSettings(bool AutoUpdate, string PackageFolder = "");
+/// <param name="IncludePreviews">On, Settings → Update and Install from GitHub offer the newest release of all, previews (GitHub pre-releases) included; off, the default, official releases only, unless the agent itself came from a preview, which is always offered the next one or an official release above it.</param>
+public sealed record AgentUpdateSettings(bool AutoUpdate, string PackageFolder = "", bool IncludePreviews = false);
 
 /// <summary>
 /// Body of <c>GET /api/v1/agent/update</c>: Settings → Agent update, the
@@ -48,16 +49,29 @@ public sealed record AgentUpdateStatus(
     string AutomaticPackageFolder);
 
 /// <summary>
-/// Body of <c>GET /api/v1/agent/update/latest</c>: the latest release of the agent
-/// on GitHub, for Settings → Update to show beside the version running.
+/// Body of <c>GET /api/v1/agent/update/latest</c>: the newest release of the agent
+/// on GitHub for the agent running, for Settings → Update to show beside the
+/// version running: the newest of all, previews included, for an agent that
+/// came from a preview or whose <see cref="AgentUpdateSettings.IncludePreviews"/>
+/// is on; official releases only otherwise.
 /// </summary>
 /// <param name="Version">Its version, without the tag's <c>v</c>.</param>
 /// <param name="PublishedAt">When it was published, when GitHub says.</param>
 /// <param name="Url">Its page on GitHub.</param>
-public sealed record LatestRelease(string Version, DateTimeOffset? PublishedAt, string Url)
+/// <param name="Preview">A preview: a pre-release, published from develop.</param>
+public sealed record LatestRelease(string Version, DateTimeOffset? PublishedAt, string Url, bool Preview = false)
 {
-    /// <summary>The README's line that installs the latest release, or updates an agent already installed.</summary>
+    /// <summary>The README's line that installs the latest official release, or updates an agent already installed.</summary>
     public const string InstallLine = "irm https://berpiztu.github.io/wslc-ai-agent/install.ps1 | iex";
+
+    /// <summary>
+    /// The line that installs this release: the README's for an official one;
+    /// for a preview, which <c>releases/latest</c> never names, the install
+    /// script of its own tag, told its version.
+    /// </summary>
+    public string InstallCommand() => Preview
+        ? $"& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Berpiztu/wslc-ai-agent/v{Version}/install.ps1))) -Version {Version}"
+        : InstallLine;
 }
 
 /// <summary>Where an update stands.</summary>
