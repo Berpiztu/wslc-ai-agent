@@ -26,7 +26,9 @@ builds and the tests pass without WSLC.
 
 ## Pull requests
 
-1. Fork the repository and branch from `main`.
+1. Fork the repository and branch from `develop`, where the work is done.
+   `main` holds what works with the official WSL, and takes `develop` when
+   it does ([releasing.md](docs/developer/releasing.md#branches)).
 2. Keep a pull request to one concern: a fix, a feature, a refactor. Several
    small pull requests are reviewed faster than one large one.
 3. Run `.\build.ps1` before pushing: it builds everything and runs the tests,
@@ -42,7 +44,7 @@ builds and the tests pass without WSLC.
 6. Commit messages are in English, with a short subject line that says what
    the commit does.
 
-Pull requests are squash-merged into `main`.
+Pull requests go into `develop`, squash-merged.
 
 ## The rules the code keeps
 
@@ -75,6 +77,10 @@ The full set is in [docs/architecture.md](docs/architecture.md) and
   ([docs/RULES.md](docs/RULES.md)). A change to that scale, or to the CSS behind
   fields, is agreed in an issue first.
 - **Never `docker`.** The product is WSLC: the agent runs `wslc`, nothing else.
+- **The official WSL keeps working.** `develop` follows the newest WSL,
+  previews included; what a preview brings is used when the agent's `wslc`
+  has it, and the official one goes on as before, so `develop` can go to
+  `main` at any time. What cannot work without a preview waits in `develop`.
 - **No secrets and nothing machine-specific** in the repository. Signing keys
   and Firebase files live in `private/`, which git ignores
   ([docs/developer/private-files.md](docs/developer/private-files.md)).

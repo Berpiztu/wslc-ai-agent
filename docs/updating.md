@@ -95,7 +95,8 @@ the installed agent picks it up and updates itself.
 
 - `build-agent-installer.ps1` counts each build as a fourth part of the last
   release's version (`1.0.27.1`, `1.0.27.2`…), which is what makes the
-  installer newer; the next release, `1.0.28`, is newer than all of them. It
+  installer newer; the next release is newer than all of them (a patch takes
+  the next fourth part, `1.0.27.3`). It
   writes it to `private\version.props`, never tracked, so building changes
   nothing in git. `-NoBump` builds the same version again, which the agent
   does not take as an update.

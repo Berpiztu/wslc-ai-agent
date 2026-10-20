@@ -309,7 +309,7 @@
                 else
                 {
                     <MudText Typo="Typo.body2" Class="mb-2">Now: <b>@UpdateStateText</b></MudText>
-                    @* The latest release on GitHub, and the README's own line to install it. *@
+                    @* The newest release on GitHub for this agent (previews too, for one from a preview), and the line that installs it. *@
                     <MudText Typo="Typo.body2" Class="mb-2">Latest on GitHub: <b>@LatestText</b></MudText>
                     <MudSwitch T="bool" Value="_update.Settings.AutoUpdate" ValueChanged="SaveUpdateAsync"
                                Label="Auto update" LabelPlacement="Placement.Start" Color="Color.Primary" Disabled="_updateBusy" />
@@ -329,7 +329,7 @@
                                    OnClick="UpdateNowAsync">Update now</MudButton>
                         <MudButton Variant="Variant.Filled" Color="Color.Info" StartIcon="@Icons.Material.Filled.CloudDownload"
                                    Disabled="@(_updateBusy || _latest is null || _update.State == AgentUpdateState.Installing)"
-                                   title="@LatestRelease.InstallLine" OnClick="InstallFromGitHubAsync">Install from GitHub</MudButton>
+                                   title="@InstallLine" OnClick="InstallFromGitHubAsync">Install from GitHub</MudButton>
                         @if (_update.State is AgentUpdateState.Announced or AgentUpdateState.Waiting)
                         {
                             <MudButton Variant="Variant.Filled" Color="Color.Error" Disabled="_updateBusy" OnClick="CancelUpdateAsync">Cancel</MudButton>
@@ -1103,10 +1103,16 @@
 
     private string LatestText => _latest switch
     {
-        { PublishedAt: { } at } => $"{_latest.Version}, published {at.ToLocalTime():d MMMM yyyy}",
-        { } => _latest.Version,
+        { PublishedAt: { } at } => $"{LatestName}, published {at.ToLocalTime():d MMMM yyyy}",
+        { } => LatestName,
         null => _latestError.Length > 0 ? $"unknown ({_latestError})" : "asking…",
     };
+
+    /// <summary>The release's version, and that it is a preview when it is one.</summary>
+    private string LatestName => _latest is { Preview: true } ? $"{_latest.Version} (preview)" : _latest?.Version ?? "";
+
+    /// <summary>The line Install from GitHub runs: the newest release's for this agent, the README's until it is known.</summary>
+    private string InstallLine => _latest?.InstallCommand() ?? LatestRelease.InstallLine;
 
     private async Task ReadLatestReleaseAsync()
     {
@@ -1121,15 +1127,15 @@
     }
 
     /// <summary>
-    /// The README's line, run by the agent on its machine as if pasted into a terminal:
-    /// with the agent installed it puts the latest installers in the package folder and
+    /// The newest release's line, run by the agent on its machine as if pasted into a terminal:
+    /// with the agent installed it puts that release's installers in the package folder and
     /// the agent installs its own, stopping for a minute or two.
     /// </summary>
     private async Task InstallFromGitHubAsync()
     {
         if (!await DialogFlow.ConfirmAsync(Dialogs, "Install from GitHub",
-                $"Run on the agent's machine the line the web page gives:\n\n{LatestRelease.InstallLine}\n\n"
-                + $"It downloads release {_latest?.Version}'s installers into the package folder, and the agent installs its own at once: "
+                $"Run on the agent's machine the line that installs release {LatestName}:\n\n{InstallLine}\n\n"
+                + $"It downloads that release's installers into the package folder, and the agent installs its own at once: "
                 + "it waits for any transfer, stops for a minute or two and starts again. A PowerShell window on that machine shows it.", "Install"))
         {
             return;

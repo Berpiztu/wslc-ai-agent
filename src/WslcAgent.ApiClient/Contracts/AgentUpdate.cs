@@ -48,16 +48,28 @@ public sealed record AgentUpdateStatus(
     string AutomaticPackageFolder);
 
 /// <summary>
-/// Body of <c>GET /api/v1/agent/update/latest</c>: the latest release of the agent
-/// on GitHub, for Settings → Update to show beside the version running.
+/// Body of <c>GET /api/v1/agent/update/latest</c>: the newest release of the agent
+/// on GitHub for the agent running, for Settings → Update to show beside the
+/// version running. An agent from an official release is offered official
+/// releases only; one from a preview, the newest of all.
 /// </summary>
 /// <param name="Version">Its version, without the tag's <c>v</c>.</param>
 /// <param name="PublishedAt">When it was published, when GitHub says.</param>
 /// <param name="Url">Its page on GitHub.</param>
-public sealed record LatestRelease(string Version, DateTimeOffset? PublishedAt, string Url)
+/// <param name="Preview">A preview: a pre-release, published from develop.</param>
+public sealed record LatestRelease(string Version, DateTimeOffset? PublishedAt, string Url, bool Preview = false)
 {
-    /// <summary>The README's line that installs the latest release, or updates an agent already installed.</summary>
+    /// <summary>The README's line that installs the latest official release, or updates an agent already installed.</summary>
     public const string InstallLine = "irm https://berpiztu.github.io/wslc-ai-agent/install.ps1 | iex";
+
+    /// <summary>
+    /// The line that installs this release: the README's for an official one;
+    /// for a preview, which <c>releases/latest</c> never names, the install
+    /// script of its own tag, told its version.
+    /// </summary>
+    public string InstallCommand() => Preview
+        ? $"& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Berpiztu/wslc-ai-agent/v{Version}/install.ps1))) -Version {Version}"
+        : InstallLine;
 }
 
 /// <summary>Where an update stands.</summary>

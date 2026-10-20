@@ -12,6 +12,13 @@
     with -Client):
 
         irm https://berpiztu.github.io/wslc-ai-agent/install-client.ps1 | iex
+
+    A given release instead of the latest, a preview (a pre-release, which
+    releases/latest never names) among them: its tag's own copy of this
+    script, told its version, which is what an agent from a preview runs for
+    Install from GitHub:
+
+        & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Berpiztu/wslc-ai-agent/v1.6.4/install.ps1))) -Version 1.6.4
 .DESCRIPTION
     Downloads the installer of the latest GitHub release into the Downloads
     folder and opens it: a per-user installer, no administrator rights. Says
@@ -30,16 +37,20 @@
     GitHub Pages serves this file (.github/workflows/pages.yml); the README's
     Quick start runs it.
 #>
-param([switch]$Client)
+param([switch]$Client, [string]$Version)
 
 # In a block of its own: `iex` runs the script in the caller's session, whose
 # preferences must stay as they were.
 & {
-    param([switch]$Client)
+    param([switch]$Client, [string]$Version)
 
     $ErrorActionPreference = "Stop"
     # Windows PowerShell draws a progress bar that slows a large download to a crawl.
     $ProgressPreference = "SilentlyContinue"
+
+    # Where the release's files are: the one -Version names, or the latest.
+    $releaseFiles = if ($Version) { "https://github.com/Berpiztu/wslc-ai-agent/releases/download/v$Version" } else { "https://github.com/Berpiztu/wslc-ai-agent/releases/latest/download" }
+    $releaseName = if ($Version) { "release $Version" } else { "the latest release" }
 
     # The installed agent's address, where its installer's wizard left the
     # bind address and port, the agent's own source of them; none when the
@@ -60,7 +71,7 @@ param([switch]$Client)
         foreach ($file in @("wslc-object-defaults.json", "wslc-dashboard-default.json")) {
             $temp = Join-Path $env:TEMP $file
             try {
-                Invoke-WebRequest -Uri "https://github.com/Berpiztu/wslc-ai-agent/releases/latest/download/$file" -OutFile $temp -UseBasicParsing
+                Invoke-WebRequest -Uri "$releaseFiles/$file" -OutFile $temp -UseBasicParsing
                 $published = [IO.File]::ReadAllText($temp) | ConvertFrom-Json
             } catch {
                 continue
@@ -82,7 +93,7 @@ param([switch]$Client)
 
     $name = if ($Client) { "wslc-ai-client.msi" } else { "wslc-ai-agent.msi" }
     $product = if ($Client) { "WSLC AI Client" } else { "WSLC AI Agent" }
-    $url = "https://github.com/Berpiztu/wslc-ai-agent/releases/latest/download/$name"
+    $url = "$releaseFiles/$name"
     $downloads = Join-Path $env:USERPROFILE "Downloads"
     $msi = Join-Path $downloads $name
 
@@ -109,19 +120,19 @@ param([switch]$Client)
         $status = try { Invoke-RestMethod -Uri "$agent/api/v1/agent/update" -TimeoutSec 15 } catch { $null }
         if ($status) {
             $running = [version](($status.version -split '[^0-9.]')[0])
-            $latest = [version](Invoke-RestMethod -Uri "https://api.github.com/repos/Berpiztu/wslc-ai-agent/releases/latest" -TimeoutSec 30).tag_name.TrimStart("v")
+            $latest = if ($Version) { [version]$Version } else { [version](Invoke-RestMethod -Uri "https://api.github.com/repos/Berpiztu/wslc-ai-agent/releases/latest" -TimeoutSec 30).tag_name.TrimStart("v") }
             New-Item -ItemType Directory -Force -Path $status.packageFolder | Out-Null
             # The defaults change between releases too, so they are looked at
             # even when the agent is up to date.
             SyncDefaults $status.packageFolder
             if ($latest -le $running) {
-                Write-Host "WSLC AI Agent $running is installed: the latest release. Nothing to update." -ForegroundColor Green
+                Write-Host "WSLC AI Agent $running is installed, not below $releaseName. Nothing to update." -ForegroundColor Green
                 return
             }
             Write-Host "Updating WSLC AI Agent $running to $latest..." -ForegroundColor Cyan
             foreach ($package in @("wslc-ai-agent.msi", "wslc-ai-client.msi", "wslc-ai-client.apk")) {
                 Write-Host "Downloading $package into the agent's package folder..." -ForegroundColor Cyan
-                Invoke-WebRequest -Uri "https://github.com/Berpiztu/wslc-ai-agent/releases/latest/download/$package" -OutFile (Join-Path $status.packageFolder $package) -UseBasicParsing
+                Invoke-WebRequest -Uri "$releaseFiles/$package" -OutFile (Join-Path $status.packageFolder $package) -UseBasicParsing
             }
             try {
                 Invoke-RestMethod -Method Post -Uri "$agent/api/v1/agent/update" -TimeoutSec 30 | Out-Null
@@ -136,7 +147,7 @@ param([switch]$Client)
     }
 
     New-Item -ItemType Directory -Force -Path $downloads | Out-Null
-    Write-Host "Downloading $product from the latest release..." -ForegroundColor Cyan
+    Write-Host "Downloading $product from $releaseName..." -ForegroundColor Cyan
     Invoke-WebRequest -Uri $url -OutFile $msi -UseBasicParsing
     Write-Host "Opening the installer: $msi" -ForegroundColor Cyan
     Start-Process -FilePath $msi -Wait
@@ -175,7 +186,7 @@ param([switch]$Client)
         Copy-Item -LiteralPath $msi -Destination (Join-Path $folder "wslc-ai-agent.msi") -Force
         foreach ($package in @("wslc-ai-client.msi", "wslc-ai-client.apk")) {
             Write-Host "Downloading $package into the agent's package folder..." -ForegroundColor Cyan
-            Invoke-WebRequest -Uri "https://github.com/Berpiztu/wslc-ai-agent/releases/latest/download/$package" -OutFile (Join-Path $folder $package) -UseBasicParsing
+            Invoke-WebRequest -Uri "$releaseFiles/$package" -OutFile (Join-Path $folder $package) -UseBasicParsing
         }
         Write-Host "The Windows and Android clients can now be downloaded from the agent's web page ($folder)." -ForegroundColor Green
         SyncDefaults $folder
@@ -235,4 +246,4 @@ param([switch]$Client)
     Write-Host ""
     Write-Host "Now set your domain and name suffix in Settings > Publish: $agent/settings" -ForegroundColor Green
     Write-Host "The whole route, domain, certificate and VPS: https://github.com/Berpiztu/wslc-ai-agent/blob/main/docs/developer/remote-access.md" -ForegroundColor Green
-} -Client:$Client
+} -Client:$Client -Version $Version

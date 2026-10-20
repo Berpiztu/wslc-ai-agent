@@ -15,17 +15,6 @@ function Get-WslcAgentRepoRoot {
 
 # ---------------------------------------------------------------- versions --
 
-function Get-NextPatchVersion {
-    param([Parameter(Mandatory = $true)][string]$Version)
-    $parts = @()
-    foreach ($piece in ($Version.Trim() -split '\.')) {
-        if ($piece -ne "") { $parts += [int]$piece }
-    }
-    while ($parts.Count -lt 3) { $parts += 0 }
-    $parts[2] = [int]$parts[2] + 1
-    return ($parts[0..2] -join '.')
-}
-
 function Get-WslcAgentReleasePart {
     <# A version's first three parts, major.minor.patch: the release it is or counts from. #>
     param([Parameter(Mandatory = $true)][string]$Version)
@@ -37,12 +26,38 @@ function Get-WslcAgentReleasePart {
     return ($parts[0..2] -join '.')
 }
 
+function Get-WslcAgentBuildPart {
+    <#
+    A version's fourth part, one counter for a published patch and a local
+    build alike (1.6.1.4); 0 when it has none (1.6.1, the release itself).
+    #>
+    param([Parameter(Mandatory = $true)][string]$Version)
+    $parts = @($Version.Trim() -split '\.' | Where-Object { $_ -ne "" })
+    if ($parts.Count -ge 4) { return [int]$parts[3] }
+    return 0
+}
+
+function ConvertTo-WslcAgentVersionText {
+    <# A version as it is written: three parts when its fourth is 0 (1.6.4), four otherwise (1.6.1.4). #>
+    param([Parameter(Mandatory = $true)][string]$Version)
+    $build = Get-WslcAgentBuildPart $Version
+    $release = Get-WslcAgentReleasePart $Version
+    if ($build -gt 0) { return "$release.$build" }
+    return $release
+}
+
+function ConvertTo-WslcAgentComparableVersion {
+    <# Four parts always: [version] puts 1.6.4 below 1.6.4.0, which are the same version here. #>
+    param([Parameter(Mandatory = $true)][string]$Version)
+    return [version]"$(Get-WslcAgentReleasePart $Version).$(Get-WslcAgentBuildPart $Version)"
+}
+
 function ConvertTo-WixProductVersion {
     <#
-    MSI ProductVersion: major.minor.build, and a local build's fourth part.
-    Windows Installer compares the first three only (the installers replace
-    an equal one); the agent and the clients read all four to tell a newer
-    local build.
+    MSI ProductVersion: major.minor.build, and a patch's or a local build's
+    fourth part. Windows Installer compares the first three only (the
+    installers replace an equal one); the agent and the clients read all four
+    to tell a newer patch or local build.
     #>
     param([Parameter(Mandatory = $true)][string]$Display)
     $parts = @()
@@ -55,13 +70,13 @@ function ConvertTo-WixProductVersion {
 
 function Get-WslcAgentVersionCode {
     <#
-    The Android versionCode of a release: its version as one number
-    (1.0.18 is 100018000), leaving a local build counted from it the
-    thousand that follow, so every later release is above all of them.
+    The Android versionCode of a version: its four parts as one number
+    (1.0.18 is 100018000, 1.6.1.4 is 106001004), the fourth part, patch or
+    local build, in the last three digits, so each one is above the last.
     #>
-    param([Parameter(Mandatory = $true)][string]$Release)
-    $parts = @((Get-WslcAgentReleasePart $Release) -split '\.' | ForEach-Object { [int]$_ })
-    return $parts[0] * 100000000 + $parts[1] * 1000000 + $parts[2] * 1000
+    param([Parameter(Mandatory = $true)][string]$Version)
+    $parts = @((Get-WslcAgentReleasePart $Version) -split '\.' | ForEach-Object { [int]$_ })
+    return $parts[0] * 100000000 + $parts[1] * 1000000 + $parts[2] * 1000 + (Get-WslcAgentBuildPart $Version)
 }
 
 function Get-WslcAgentTrackedValue {
@@ -122,30 +137,31 @@ function Write-WslcAgentLocalVersions {
     [System.IO.File]::WriteAllText($file, ($lines -join "`r`n"), (New-Object System.Text.UTF8Encoding $false))
 }
 
-function Get-WslcAgentLocalBuildNumber {
+function Get-WslcAgentLastBuildPart {
     <#
-    How many local builds this checkout has made of the release it is at: the
-    fourth part of its local version when that counts from this release; 0
-    when there is none, or it counts from an earlier release (a release
-    starts the count again).
+    The highest fourth part reached on the release's first three: the
+    release's own (a patch, 1.6.1.4), or this checkout's last local build
+    when that counts from the same three and is above it.
     #>
     param([string]$Release, [string]$Local)
-    if (-not $Local) { return 0 }
-    $parts = @($Local.Trim() -split '\.')
-    if ($parts.Count -ne 4 -or (Get-WslcAgentReleasePart $Local) -ne (Get-WslcAgentReleasePart $Release)) { return 0 }
-    return [int]$parts[3]
+    $reached = Get-WslcAgentBuildPart $Release
+    if ($Local -and (Get-WslcAgentReleasePart $Local) -eq (Get-WslcAgentReleasePart $Release)) {
+        $reached = [Math]::Max($reached, (Get-WslcAgentBuildPart $Local))
+    }
+    return $reached
 }
 
 function Get-WslcAgentLocalVersion {
     <#
-    A build's version: the release's, with the local build's number as a
-    fourth part (1.0.27.3), so a build never takes a release's number and
-    the next release, 1.0.28, is above every build of 1.0.27. -NoBump keeps
-    the number of the last build; otherwise it is the next one.
+    A build's version: the release's three parts with the next fourth part
+    after the release and every local build (1.6.1.5 after the patch 1.6.1.4).
+    Local builds and patches share that counter, so neither ever takes the
+    other's number, and a patch released after local builds is above them
+    all. -NoBump keeps the last fourth part; otherwise it is the next one.
     #>
     param([string]$Release, [string]$Local, [switch]$NoBump)
-    $built = Get-WslcAgentLocalBuildNumber $Release $Local
-    $number = if ($NoBump) { $built } else { $built + 1 }
+    $last = Get-WslcAgentLastBuildPart $Release $Local
+    $number = if ($NoBump) { $last } else { $last + 1 }
     $base = Get-WslcAgentReleasePart $Release
     $version = if ($number -gt 0) { "$base.$number" } else { $base }
     return [pscustomobject]@{ Version = $version; Number = $number }
@@ -153,9 +169,9 @@ function Get-WslcAgentLocalVersion {
 
 function Update-WslcAgentVersion {
     <#
-    Agent version: the release's <Version> in Directory.Build.props with this
-    checkout's build number as a fourth part, written to private\version.props
-    only. A release, and only a release, raises the version itself.
+    Agent version: the release's <Version> in Directory.Build.props with the
+    next fourth part, written to private\version.props only. A release, and
+    only a release, raises the version itself.
     #>
     param([switch]$NoBump)
     $tracked = Get-WslcAgentTrackedValue (Join-Path (Get-WslcAgentRepoRoot) "Directory.Build.props") "Version"
@@ -164,16 +180,16 @@ function Update-WslcAgentVersion {
     if ($NoBump) { return $build.Version }
     $local["WslcLocalAgentVersion"] = $build.Version
     Write-WslcAgentLocalVersions $local
-    Write-Host "Agent build $($build.Version): local build $($build.Number) of release $tracked (private\version.props)" -ForegroundColor Cyan
+    Write-Host "Agent build $($build.Version), after release $tracked (private\version.props)" -ForegroundColor Cyan
     return $build.Version
 }
 
 function Update-WslcAgentClientVersion {
     <#
     Client version: the release's ApplicationDisplayVersion in the MAUI
-    csproj with this checkout's build number as a fourth part, and the
-    Android versionCode the release's code plus that number (1.0.17's third
-    build is 100017003), written to private\version.props only.
+    csproj with the next fourth part, and the Android versionCode that
+    version as one number (1.0.17.3 is 100017003), written to
+    private\version.props only.
     #>
     param(
         [Parameter(Mandatory = $true)][string]$Csproj,
@@ -183,7 +199,7 @@ function Update-WslcAgentClientVersion {
     $local = Read-WslcAgentLocalVersions
     $build = Get-WslcAgentLocalVersion $tracked $local["WslcLocalClientVersion"] -NoBump:$NoBump
     $code = if ($build.Number -gt 0) {
-        (Get-WslcAgentVersionCode $tracked) + $build.Number
+        Get-WslcAgentVersionCode $build.Version
     } else {
         [int](Get-WslcAgentTrackedValue $Csproj "ApplicationVersion")
     }
@@ -191,7 +207,7 @@ function Update-WslcAgentClientVersion {
         $local["WslcLocalClientVersion"] = $build.Version
         $local["WslcLocalClientBuild"] = "$code"
         Write-WslcAgentLocalVersions $local
-        Write-Host "Client build $($build.Version) (versionCode $code): local build $($build.Number) of release $tracked (private\version.props)" -ForegroundColor Cyan
+        Write-Host "Client build $($build.Version) (versionCode $code), after release $tracked (private\version.props)" -ForegroundColor Cyan
     }
     return [pscustomobject]@{ Display = $build.Version; Build = $code }
 }

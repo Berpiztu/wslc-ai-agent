@@ -28,8 +28,8 @@
          only when one is published: Display is the Windows EXE ProductVersion
          and the Android versionName; ApplicationVersion is the Android
          versionCode, the version as one number (1.0.18 is 100018000). A
-         local build carries the release's with its own number as a fourth
-         part (1.0.17.3, versionCode 100017003): the packaging scripts write
+         patch and a local build carry a fourth part, one counter for both
+         (1.0.17.3, versionCode 100017003): the packaging scripts write
          this checkout's in
          private\version.props (Directory.Build.props imports it), taken
          below when above these. -->

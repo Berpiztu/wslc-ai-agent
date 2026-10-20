@@ -4,8 +4,10 @@ name: Release
 # here instead of from a home connection: the agent installer, the Windows
 # client installer and the APK, at exactly the versions the tag's commit
 # carries, and the two defaults files beside them. A tag marked "built
-# locally" (deploy-release.ps1 -Local) is left alone. Run by hand on a tag to
-# build it again after a failure.
+# locally" (deploy-release.ps1 -Local) is left alone; one marked "Preview"
+# (released from develop) is published as a pre-release, which GitHub keeps
+# out of releases/latest. Run by hand on a tag to build it again after a
+# failure.
 on:
   push:
     tags: ['v*']
@@ -27,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Built locally?
+      - name: Built locally? A preview?
         id: tag
         run: |
           $tag = "${{ github.ref_name }}"
@@ -35,6 +37,7 @@ jobs:
           git fetch --force origin "refs/tags/${tag}:refs/tags/${tag}"
           $message = git tag -l --format='%(contents)' $tag
           "local=$(if ($message -match 'built locally') { 'true' } else { 'false' })" >> $env:GITHUB_OUTPUT
+          "preview=$(if ($message -match '^Preview ') { 'true' } else { 'false' })" >> $env:GITHUB_OUTPUT
 
       - uses: actions/setup-dotnet@v4
         if: steps.tag.outputs.local != 'true'
@@ -92,10 +95,11 @@ jobs:
           # What the version brings, written beside the code (docs/release-notes/1.5.0.md),
           # goes first on the release's page, above the list GitHub writes itself.
           $notes = @(Get-WslcAgentReleaseNotes $tag)
+          $preview = @(if ("${{ steps.tag.outputs.preview }}" -eq "true") { "--prerelease" })
           gh release view $tag 2>$null | Out-Null
           if ($LASTEXITCODE -eq 0) {
             gh release upload $tag @files --clobber
           } else {
-            gh release create $tag @files --title "WSLC AI Agent $($tag.TrimStart('v'))" --generate-notes @notes
+            gh release create $tag @files --title "WSLC AI Agent $($tag.TrimStart('v'))" --generate-notes @notes @preview
           }
           if ($LASTEXITCODE -ne 0) { throw "Publishing $tag failed with exit code $LASTEXITCODE" }

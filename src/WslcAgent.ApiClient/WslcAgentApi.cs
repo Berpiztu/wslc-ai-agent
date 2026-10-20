@@ -255,7 +255,7 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<LatestRelease> GetLatestAgentReleaseAsync(CancellationToken cancellationToken = default) =>
         GetAsync<LatestRelease>("api/v1/agent/update/latest", cancellationToken);
 
-    /// <summary>Install from GitHub: the agent runs <see cref="LatestRelease.InstallLine"/> on its machine.</summary>
+    /// <summary>Install from GitHub: the agent runs the newest release's <see cref="LatestRelease.InstallCommand"/> on its machine.</summary>
     public Task InstallAgentFromGitHubAsync(CancellationToken cancellationToken = default) =>
         SendAsync(HttpMethod.Post, "api/v1/agent/update/from-github", cancellationToken);
 

@@ -26,6 +26,11 @@ MudBlazor, .NET MAUI Blazor Hybrid, the official MCP C# SDK.
 - **English** for code, comments, docs and commit messages.
 - **WSLC, never Docker.** The agent runs `wslc`. Never call `docker`, never
   name anything after Docker.
+- **Branches.** Work happens on `develop`, which follows the newest WSL,
+  previews included; `main` is what works with the official WSL, and takes
+  `develop` when it does. What a WSL preview brings is used when the agent's
+  `wslc` has it, and the official one keeps working as before. Releases:
+  [docs/developer/releasing.md](docs/developer/releasing.md).
 - **One UI.** The Razor components in `src/WslcAgent.UI` are the only user
   interface; the web app, the clients and the tray host them. Native code
   only for what a WebView cannot do.
@@ -63,4 +68,5 @@ MudBlazor, .NET MAUI Blazor Hybrid, the official MCP C# SDK.
 ## Before you finish
 
 Build and test with `.\build.ps1`, update the docs the change touches, and
-keep the change to one concern.
+keep the change to one concern. A release carries its notes,
+`docs/release-notes/<version>.md`, with everything its minor version brings.
