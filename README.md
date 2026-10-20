@@ -275,7 +275,10 @@ its own previews, the first of them 1.6.4, for WSL 3.0.4.
   marked, never stopped: whether it runs is yours to decide. A marked image
   is red or yellow on the Images page, and its containers say CVE in the
   same colour. *Zaindari: check vulnerabilities*, in every container's,
-  project's and image's menu, checks it again there and then. Settings → Security sets whether it
+  project's and image's menu, checks it again there and then. When a system
+  package has a fix its official image does not carry yet, *Patch* builds
+  the image again with it upgraded, as a Windows update patches Windows, and
+  moves its containers to it. Settings → Security sets whether it
   stops, only warns, or is off ([how it works](docs/features/zaindari.md)).
 - **An MCP agent for WSLC, skill included for Claude, Hermes, OpenClaw,
   etc.**: 55 tools, the destructive ones off by default and asking your
