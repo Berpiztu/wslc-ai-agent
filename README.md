@@ -1,11 +1,11 @@
 # WSLC AI Agent
 
-A **local agent and MCP server for WSLC** (Windows Subsystem for Linux
-Containers), with its skill included, so Claude, Hermes, OpenClaw and other
+A **local agent, desktop, Compose and MCP server for WSLC** (Windows Subsystem
+for Linux Containers), with its skill included, so Claude, Hermes, OpenClaw and other
 AI agents can operate your WSLC infrastructure: containers, images, volumes,
 networks and sessions. Built for the age of AI agents, it also brings a web
 dashboard and Windows and Android clients, to manage it all yourself from
-anywhere. And **Compose, today**: `wslc` cannot run a Compose file yet, and
+anywhere. **Compose, today**: `wslc` cannot run a Compose file yet, and
 `wslc-compose up -d` runs yours, from the command line, the web and the apps.
 Destructive actions are off by default; switched on, each one still asks
 your approval.
