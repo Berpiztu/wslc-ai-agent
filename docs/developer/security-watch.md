@@ -32,7 +32,12 @@ The build asks first: `status/wslc-ai-agent.json`, for the branch it is on
   after.
 
 `deploy-release.ps1` asks too, for the branch it releases (`main` or
-`develop`), before it commits anything.
+`develop`), before it commits anything, and more: what it is about to
+release must be the list security-watch checked. The list this checkout
+builds is compared with the one security-watch holds; one the build sent
+and security-watch has not answered yet is waited for (three minutes at
+most), and no list at all stops the release: **build first, then
+release**.
 
 ## After a build
 
@@ -46,8 +51,10 @@ list security-watch already has (`inventories/wslc-ai-agent/<ref>.json`),
 and only for `main`, `develop` and release tags, as an **issue** in
 security-watch titled `inventory: wslc-ai-agent@<ref>`, the list in a
 ```json block. security-watch takes it in, checks it, answers the issue
-with the result and closes it, within minutes, so the next build already
-knows.
+with the result and closes it, in under a minute. The build waits for that
+answer (three minutes at most) and says it before it ends: nothing that
+stops a build, or each library moderate or worse with the version that
+fixes it, and the build fails.
 
 ## Who sends
 
