@@ -63,8 +63,10 @@ MudBlazor, .NET MAUI Blazor Hybrid, the official MCP C# SDK.
 - **Clean code.** Small units, names that say what they do, comments that
   explain why, no dead or commented-out code, no temporary hacks.
 - **A vulnerable dependency is patched at once.** A package with a known
-  high or critical vulnerability stops every restore (NU1903, NU1904), and
-  the Audit workflow checks main and develop every morning. The fix is a
+  high or critical vulnerability stops every restore (NU1903, NU1904), the
+  Audit workflow checks main and develop every morning, and every build asks
+  [security-watch](docs/developer/security-watch.md) first and sends it its
+  list of libraries after. The fix is a
   patch on `main` straight away, the .NET SDK raised too when the runtime it
   bundles is the vulnerable part, then taken into `develop`
   ([releasing.md](docs/developer/releasing.md#a-security-patch)).

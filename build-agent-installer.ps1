@@ -39,6 +39,11 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $RepoRoot
 . (Join-Path $RepoRoot "packaging\Packaging.ps1")
+
+# security-watch first: a library this build would use with a known
+# vulnerability, moderate or worse, stops it before anything is built.
+Test-SecurityWatch
+
 Import-WslcAgentPrivateSettings
 
 $Project = Join-Path $RepoRoot "src\WslcAgent.Server\WslcAgent.Server.csproj"
@@ -127,5 +132,7 @@ Copy-Item -LiteralPath $built -Destination $MsiDest -Force
 Set-WslcAgentMsiExplorerVersion -Path $MsiDest -Name "WSLC AI Agent" -Version $msiVersion
 
 Write-Host ""
+# Built: security-watch gets this checkout's list of libraries when it changed.
+Send-SecurityWatchInventory
 Write-Host "WSLC AI Agent MSI ready: $MsiDest (version $msiVersion)" -ForegroundColor Green
 Write-Host "Install (per-user): msiexec /i `"$MsiDest`" [WSLC_BINDHOST=127.0.0.1] [WSLC_AGENTPORT=8069] [WSLC_PACKAGESFOLDER=`"$PackagesFolder`"]"

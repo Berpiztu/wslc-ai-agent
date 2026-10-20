@@ -41,6 +41,8 @@ jobs:
       - name: Check private files
         run: .\check-private.ps1
 
+      # build.ps1 asks security-watch first; the lists are sent by the builds
+      # made on a machine.
       - name: Build and test
         run: .\build.ps1 -Configuration Release -NoClient
 

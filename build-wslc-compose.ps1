@@ -29,6 +29,11 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $RepoRoot
 . (Join-Path $RepoRoot "packaging\Packaging.ps1")
+
+# security-watch first: a library this build would use with a known
+# vulnerability, moderate or worse, stops it before anything is built.
+Test-SecurityWatch
+
 Import-WslcAgentPrivateSettings
 
 $Project = Join-Path $RepoRoot "src\Berpiztu.Wslc.Compose\Berpiztu.Wslc.Compose.csproj"
@@ -57,6 +62,8 @@ Remove-Item -Recurse -Force -LiteralPath $Stage
 
 $size = [math]::Round((Get-Item -LiteralPath $ExeDest).Length / 1MB, 1)
 Write-Host ""
+# Built: security-watch gets this checkout's list of libraries when it changed.
+Send-SecurityWatchInventory
 Write-Host "wslc-compose ready: $ExeDest (version $version, $size MB)" -ForegroundColor Green
 Write-Host "Try it against this machine's agent: `"$ExeDest`" ls"
 Write-Host "Against another one: `"$ExeDest`" --agent http://host:8069 --token TOKEN ls"
