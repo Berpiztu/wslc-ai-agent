@@ -196,7 +196,7 @@ public sealed class WslcRunner(IOptionsMonitor<WslcOptions> options, ISelectedSe
             TryKill(process);
             stopwatch.Stop();
             activity.Finish(trace, stopwatch.Elapsed, null, "timeout", "", $"Timed out after {limit.TotalSeconds:0}s");
-            throw new TimeoutException($"wslc {string.Join(' ', effectiveArgs)} timed out after {limit.TotalSeconds:0}s");
+            throw new TimeoutException($"wslc {ShownValues.Line(effectiveArgs)} timed out after {limit.TotalSeconds:0}s");
         }
         catch (OperationCanceledException)
         {
@@ -320,7 +320,7 @@ public sealed class WslcRunner(IOptionsMonitor<WslcOptions> options, ISelectedSe
         EnsureNotStopped(args, command.Args, session.Name);
         if (SupportsTerminal)
         {
-            logger.LogInformation("wslc {Args} (terminal)", string.Join(' ', command.Args));
+            logger.LogInformation("wslc {Args} (terminal)", ShownValues.Line(command.Args));
             return new TerminalSession(PseudoConsole.Start(CommandLine(command), columns, rows), command.Args);
         }
 
@@ -340,7 +340,7 @@ public sealed class WslcRunner(IOptionsMonitor<WslcOptions> options, ISelectedSe
             startInfo.ArgumentList.Add(arg);
         }
 
-        logger.LogInformation("wslc {Args} (interactive)", string.Join(' ', command.Args));
+        logger.LogInformation("wslc {Args} (interactive)", ShownValues.Line(command.Args));
         var process = new Process { StartInfo = startInfo };
         try
         {

@@ -1,0 +1,56 @@
+@* Zaindari's patch offer, in Update image and View & edit, beside the field
+   that names the image's version (Tag, Version), as a field's own buttons
+   stand: no line of its own, the form keeps its rows. While Zaindari checks
+   the image, a turning wheel where the button goes, and the window's verb
+   waits; then Patch…, which opens the patch editor Zaindari's window opens
+   (OnPatch), the same everywhere, in the warning colour when a patch can
+   mend something. The arrow, as the Compose window's, opens the whole note
+   over the form: what a patch would mend, and what is left. *@
+<div class="d-flex align-center gap-1 flex-shrink-0">
+    @if (Checking)
+    {
+        <MudProgressCircular Indeterminate="true" Size="Size.Small" title="@($"Checking {ImageSecurityFlow.Label} for {Image}…")" />
+    }
+    else if (Report is { Found: true } report)
+    {
+        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="@(Mends(report) ? Color.Warning : Color.Primary)" OnClick="OnPatch">Patch…</MudButton>
+    }
+    <MudIconButton Icon="@(_open ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" Size="Size.Small"
+                   Disabled="@(Checking || Note.Length == 0)" title="@(_open ? "Close Zaindari's note" : "Read Zaindari's note")" OnClick="@(() => _open = !_open)" />
+    <MudPopover Open="@(_open && Note.Length > 0)" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Class="pa-2">
+        <MudText Typo="Typo.caption" Class="wslc-patch-note-text">@Note</MudText>
+    </MudPopover>
+</div>
+
+@code {
+    /// <summary>The image the window would use, as it names it now.</summary>
+    [Parameter, EditorRequired] public string Image { get; set; } = "";
+
+    /// <summary>Zaindari is checking <see cref="Image"/>: the wheel turns.</summary>
+    [Parameter] public bool Checking { get; set; }
+
+    /// <summary>What Zaindari found on <see cref="Image"/>; null when it could not be asked.</summary>
+    [Parameter] public ImageVulnerabilities? Report { get; set; }
+
+    /// <summary>Patch… pressed: the window opens the patch editor for its container.</summary>
+    [Parameter] public EventCallback OnPatch { get; set; }
+
+    private bool _open;
+
+    /// <summary>Something in the image has a fix a patch can install.</summary>
+    private static bool Mends(ImageVulnerabilities report) => report.Vulnerabilities.Any(v => v.FixedIn.Length > 0);
+
+    /// <summary>
+    /// The whole note the arrow opens: what the system's patch would mend, then
+    /// what is left (a fix still published, or nothing left to mend), or that
+    /// nothing is known against the image, or that it is not on the machine yet.
+    /// </summary>
+    private string Note => Report switch
+    {
+        { Found: true } report => string.Join(" ", new[] { ImageSecurityFlow.PatchNote(report), ImageRemedies.WhatIsLeft(report.Vulnerabilities) }.Where(said => said.Length > 0)) is { Length: > 0 } said
+            ? said
+            : $"{ImageSecurityFlow.Name}: nothing is known against {report.Image}.",
+        { } => $"{ImageSecurityFlow.Name}: {Image} is not on this machine yet; it is checked when a container is made from it.",
+        null => "",
+    };
+}

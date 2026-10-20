@@ -157,7 +157,8 @@ public sealed record RestartPolicyInfo(string Policy, string Desired, bool Enrol
 /// <summary>Body of <c>POST /api/v1/containers/{id}/update-image</c>.</summary>
 /// <param name="Image">The new image with its version: <c>ghcr.io/owner/app:1.5</c>.</param>
 /// <param name="Patch">Once pulled, the image is patched (<c>/image-security/patch</c>) and the container moved to the patch instead; an image with nothing to patch is used as pulled.</param>
-public sealed record UpdateContainerImageRequest(string Image, bool Patch = false);
+/// <param name="Form">View &amp; edit's settings, when its Save names an image not on the machine: once pulled, the container is recreated with them, not with what it has now.</param>
+public sealed record UpdateContainerImageRequest(string Image, bool Patch = false, ContainerLaunchRequest? Form = null);
 
 /// <summary>Body of <c>PUT /api/v1/containers/{id}/restart-policy</c>.</summary>
 public sealed record SetRestartPolicyRequest(string Policy);

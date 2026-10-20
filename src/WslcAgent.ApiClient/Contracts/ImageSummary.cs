@@ -12,6 +12,8 @@ namespace WslcAgent.ApiClient.Contracts;
 /// <param name="InUse">Some container (any state) uses the image.</param>
 /// <param name="Digest">The manifest digest (<c>sha256:…</c>), empty when the CLI reports none. Needs <c>wslc</c> 2.9.13, which filled a field that was <c>&lt;none&gt;</c> before it.</param>
 /// <param name="Uid">The agent's own number for this image, by its <c>repository:tag</c> (the resource registry): what a resource card on the dashboard points at; 0 for a dangling image.</param>
+/// <param name="PatchingTo">The patch being built from this image (<c>/image-security/patch</c>), while it is; null otherwise.</param>
+/// <param name="PatchJob">That patch's build job (<c>/images/build/{job}</c>), its console and its cancel; null otherwise.</param>
 /// <param name="ImageWorst">The worst severity of its vulnerabilities moderate or worse, as Zaindari last found them in this image (by its id, so two tags of two images are two marks): <c>moderate</c>, <c>high</c> or <c>critical</c>; empty for none, or not checked.</param>
 /// <param name="ImageRefused">The agent makes no new container from it: built here, a vulnerability moderate or worse, Settings → Security set to Block.</param>
 /// <param name="ImageCheckedAt">When Zaindari last checked it (<c>yyyy-MM-dd HH:mm</c>, the agent's time); empty with no mark.</param>
@@ -29,7 +31,9 @@ public sealed record ImageSummary(
     int Uid = 0,
     string ImageWorst = "",
     bool ImageRefused = false,
-    string ImageCheckedAt = "")
+    string ImageCheckedAt = "",
+    string? PatchingTo = null,
+    string? PatchJob = null)
 {
     /// <summary>
     /// No name that is this image alone: no repository, or a repository whose

@@ -77,17 +77,15 @@
                       Variant="Variant.Filled" HelperText="Repository. Type a name that is not local; Run and Save pull it." Error="@Has(LaunchFields.Image)" ErrorText="@Error(LaunchFields.Image)" OnBlur="OnImageBlurAsync" />
         <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick a local image" OnClick="PickImageAsync" />
     </div>
-    <MudTextField Margin="Margin.Dense" T="string" @bind-Value="Form.ImageTag" Label="Tag" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled"
-                  HelperText="Example: latest. Leave empty if the image has no tag." Error="@Has(LaunchFields.Image)" ErrorText="@Error(LaunchFields.Image)" OnBlur="OnImageBlurAsync" />
-    @* View & edit: the image named carries a system package with a fix published that it does not
-       have, so recreating on it does not mend it; Patch it, unticked, saves on its patch instead. *@
-    @if (Mode == LaunchMode.Edit && _patchReport is { } patchReport && ImageSecurityFlow.PatchNote(patchReport) is { Length: > 0 } patchNote)
-    {
-        <div class="wslc-span2">
-            <MudText Typo="Typo.caption" Class="mud-warning-text">@patchNote</MudText>
-            <SquareCheckBox @bind-Value="_patch" Label="@ImageSecurityFlow.PatchLabel(patchReport)" />
-        </div>
-    }
+    @* View & edit: Zaindari's Patch… and its note beside the Tag, in the Tag's own cell; no row of its own. *@
+    <div class="wslc-field-beside">
+        <MudTextField Margin="Margin.Dense" T="string" @bind-Value="Form.ImageTag" Label="Tag" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled"
+                      HelperText="Example: latest. Leave empty if the image has no tag." Error="@Has(LaunchFields.Image)" ErrorText="@Error(LaunchFields.Image)" OnBlur="OnImageBlurAsync" />
+        @if (Mode == LaunchMode.Edit)
+        {
+            <PatchOffer Image="@Form.Image" Checking="_patchChecking" Report="_patchReport" OnPatch="PatchAsync" />
+        }
+    </div>
     @* Name is the filled field as MudBlazor gives it, with nothing added. *@
     <MudTextField Margin="Margin.Dense" T="string" @bind-Value="Form.Name" Label="Name" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" HelperText="Example: my-app"
                   Error="@Has(LaunchFields.Name)" ErrorText="@Error(LaunchFields.Name)" />
@@ -248,9 +246,9 @@
     @* Save creates (or recreates) and leaves the container stopped; Run creates and starts it.
        In View & edit both remove the container first, so both wear the destroying colour. *@
     <MudIconButton Color="@(Mode == LaunchMode.Edit ? Color.Error : Color.Primary)" Icon="@Icons.Material.Filled.Save" Size="Size.Small" Variant="Variant.Filled"
-                   title="@SaveTitle" Disabled="_busy" OnClick="@(() => SubmitAsync(start: false))" />
+                   title="@SaveTitle" Disabled="@(_busy || _patchChecking)" OnClick="@(() => SubmitAsync(start: false))" />
     <MudIconButton Color="@(Mode == LaunchMode.Edit ? Color.Error : Color.Success)" Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" Variant="Variant.Filled"
-                   title="@RunTitle" Disabled="_busy" OnClick="@(() => SubmitAsync(start: true))" />
+                   title="@RunTitle" Disabled="@(_busy || _patchChecking)" OnClick="@(() => SubmitAsync(start: true))" />
     <MudIconButton Color="Color.Warning" Icon="@Icons.Material.Filled.Close" Size="Size.Small" Variant="Variant.Filled"
                    title="Cancel the changes made in this form" Disabled="_busy" OnClick="CancelAsync" />
 </div>
@@ -370,28 +368,67 @@
         await CheckPatchAsync();
     }
 
-    /// <summary>View &amp; edit: what Zaindari found on the image named, for the Patch it box; null when there is nothing to offer.</summary>
+    /// <summary>View &amp; edit: what Zaindari found on the image named, for its line and the patch editor; null when it could not be asked.</summary>
     private ImageVulnerabilities? _patchReport;
 
-    /// <summary>Patch it: unticked unless the user ticks it.</summary>
-    private bool _patch;
-
-    /// <summary>View &amp; edit asks Zaindari about the image named, when the form opens and once its fields are left; another image unticks the box.</summary>
-    private async Task CheckPatchAsync()
+    /// <summary>
+    /// The patch editor, this container ticked, as Zaindari's window opens it.
+    /// The patch moves the container with the settings it has now, so changes
+    /// not saved are asked about first; once the patch has started, the form
+    /// closes and the patch's line follows it.
+    /// </summary>
+    private async Task PatchAsync()
     {
-        if (Mode != LaunchMode.Edit || _patchReport?.Image == Form.Image)
+        if (_patchReport is not { Found: true } report)
         {
             return;
         }
 
-        _patch = false;
-        try
+        if (Changed && !await DialogFlow.ConfirmAsync(Dialogs, "Patch",
+                $"What was changed here is not saved. The patch moves {Named} with the settings it has now.\n\nPatch it anyway?", "Patch"))
         {
-            _patchReport = await Api.GetImageVulnerabilitiesAsync(Form.Image);
+            return;
         }
-        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+
+        if (await ImageSecurityFlow.ShowPatchAsync(Dialogs, report, [SourceId]))
         {
-            _patchReport = null;
+            await OnDone.InvokeAsync("");
+        }
+    }
+
+    /// <summary>Zaindari is being asked about the image named: the wheel turns, and Save and Run wait.</summary>
+    private bool _patchChecking;
+
+    /// <summary>The question to Zaindari under way, which a Save pressed meanwhile waits for.</summary>
+    private Task _patchCheck = Task.CompletedTask;
+
+    /// <summary>View &amp; edit asks Zaindari about the image named, when the form opens and once its fields are left; another image unticks the box.</summary>
+    private Task CheckPatchAsync()
+    {
+        if (Mode != LaunchMode.Edit || _patchReport?.Image == Form.Image || !_patchCheck.IsCompleted)
+        {
+            return _patchCheck;
+        }
+
+        return _patchCheck = AskAsync();
+
+        async Task AskAsync()
+        {
+            _patchChecking = true;
+            StateHasChanged();
+            try
+            {
+                _patchReport = await Api.GetImageVulnerabilitiesAsync(Form.Image);
+            }
+            catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+            {
+                _patchReport = null;
+            }
+            finally
+            {
+                _patchChecking = false;
+                StateHasChanged();
+            }
         }
     }
 
@@ -892,6 +929,21 @@
         // further, whatever was done about it.
         ClearMessages();
 
+        // An image named a moment ago (its field left by this very press) is still being asked
+        // of Zaindari: Save waits under the veil, and when a patch is offered that was not on
+        // the screen when it was pressed, the form stays for it to be seen and chosen.
+        if (Mode == LaunchMode.Edit && !_patchCheck.IsCompleted)
+        {
+            var shown = _patchReport;
+            Busy($"Checking {ImageSecurityFlow.Label}…");
+            await _patchCheck;
+            Idle();
+            if (!ReferenceEquals(shown, _patchReport) && _patchReport is { SystemUpgrade.Length: > 0 })
+            {
+                return;
+            }
+        }
+
         // The veil at the press, painted before anything is asked of the agent:
         // on a slower machine the checks take seconds, and a button that shows
         // nothing for that long looks as if it did nothing.
@@ -922,7 +974,28 @@
             // The form closes at once, as Run's does: the image check and the rehearsal take their
             // time, the agent finishes the recreate whatever happens to this window, and how it
             // ends is said on the activity line, or in a window of its own when it did not happen.
-            Recreates.Start(SourceId, Named, request, _patch && _patchReport is { } patched && patched.Image == Form.Image ? patched.Patch : "");
+            if (_patchReport is { Found: false } missing && missing.Image == Form.Image)
+            {
+                // Not on this machine: pulled first, as Update image pulls (the Images page and the
+                // container's row show it), and the container recreated with these settings after.
+                // A create left to pull a large image by itself failed at its minute.
+                try
+                {
+                    var pull = await Api.UpdateContainerImageAsync(SourceId, Form.Image, form: request);
+                    Idle();
+                    Activity.Say($"{Named}: pulling {pull.Image}; it is recreated with its new settings once the pull ends.");
+                    await OnDone.InvokeAsync("");
+                }
+                catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+                {
+                    Idle();
+                    _general.Add((Severity.Error, ex.Message));
+                }
+
+                return;
+            }
+
+            Recreates.Start(SourceId, Named, request);
             await OnDone.InvokeAsync("");
             return;
         }

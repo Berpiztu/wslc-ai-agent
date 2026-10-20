@@ -2,7 +2,11 @@
    live output of the build the agent runs. Build and Close sit on the title
    line in every state; once a build runs Close becomes Cancel, which asks and
    then stops it. It cannot be left by Escape or a click outside while a build
-   is under way. *@
+   is under way. A Dockerfile can come instead of a folder: pasted in its field,
+   or loaded into it from this device, as the launch form's Fill and Load JSON
+   do; the agent writes it in a folder of its own and builds it (FROM and RUN,
+   no COPY), which needs nothing on the agent's machine: an emergency's patch
+   from a phone. *@
 @implements IDisposable
 @inject WslcAgentApi Api
 @inject IDialogService Dialogs
@@ -24,9 +28,24 @@
             <MudForm @ref="_form">
                 <div class="wslc-field-pick has-note">
                     <MudTextField T="string" @bind-Value="_path" Label="Build context" Placeholder="folder containing the Dockerfile" Immediate="true"
-                                  Required="true" RequiredError="A build context is required" Variant="Variant.Filled" Margin="Margin.Dense" />
-                    <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick context folder" OnClick="PickContextAsync" />
+                                  Required="@(!FromText)" RequiredError="A build context is required, or a Dockerfile below" Disabled="FromText"
+                                  Variant="Variant.Filled" Margin="Margin.Dense" />
+                    <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick context folder" OnClick="PickContextAsync" Disabled="FromText" />
                 </div>
+                @* Or the Dockerfile itself: pasted here, or loaded into the field from this device. *@
+                <div class="wslc-field-pick has-note mt-2">
+                    <MudTextField T="string" @bind-Value="_dockerfileText" Label="Or a Dockerfile, pasted or loaded" Lines="6" Immediate="true"
+                                  Placeholder="@DockerfileExample" HelperText="Built without a folder: FROM and RUN, no COPY. Paste it here, or load it from this device with the button."
+                                  HelperTextOnFocus="true" Variant="Variant.Filled" Margin="Margin.Dense"
+                                  autocapitalize="none" autocorrect="off" spellcheck="false" />
+                    @* The field's own button, as every picker's: a direct child, so the field holds it. It opens the file picker kept hidden below. *@
+                    <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.UploadFile" Size="Size.Small" title="Load a Dockerfile from this device"
+                            OnClick="@(() => _upload?.OpenFilePickerAsync() ?? Task.CompletedTask)" />
+                </div>
+                <MudFileUpload @ref="_upload" T="IBrowserFile" FilesChanged="LoadDockerfileAsync" Class="d-none">
+                    <CustomContent></CustomContent>
+                    <SelectedTemplate></SelectedTemplate>
+                </MudFileUpload>
                 <MudTextField T="string" @bind-Value="_tag" Label="Tag" Placeholder="myapp:latest" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
                 <MudTextField T="string" @bind-Value="_dockerfile" Label="Dockerfile" Placeholder="Dockerfile" HelperText="Relative to the context, or an absolute path"
                               HelperTextOnFocus="true" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
@@ -60,7 +79,17 @@
     private static readonly TimeSpan PollEvery = TimeSpan.FromMilliseconds(700);
 
     private MudForm? _form;
+
+    /// <summary>The file picker the Dockerfile field's button opens; drawn nowhere.</summary>
+    private MudFileUpload<IBrowserFile>? _upload;
     private string _path = "";
+
+    /// <summary>A Dockerfile pasted or loaded from this device; when it has text, it is what is built and the folder is not asked for.</summary>
+    private string _dockerfileText = "";
+
+    private bool FromText => _dockerfileText.Trim().Length > 0;
+
+    private const string DockerfileExample = "FROM ia-analys-analys\nUSER root\nRUN uv pip install --system --no-cache -U \"aiohttp>=3.13.6\"";
     private string _tag = "";
     private string _dockerfile = "";
     private string _target = "";
@@ -89,6 +118,26 @@
         }
     }
 
+    /// <summary>A Dockerfile from this device into its field, as Load JSON fills the launch form: seen, and changeable, before it is built.</summary>
+    private async Task LoadDockerfileAsync(IBrowserFile? file)
+    {
+        if (file is null)
+        {
+            return;
+        }
+
+        try
+        {
+            using var reader = new StreamReader(file.OpenReadStream(maxAllowedSize: 1024 * 1024));
+            _dockerfileText = await reader.ReadToEndAsync();
+            Snackbar.Add($"Loaded {file.Name}", Severity.Success);
+        }
+        catch (IOException ex)
+        {
+            Snackbar.Add($"{file.Name} could not be read: {ex.Message}", Severity.Error);
+        }
+    }
+
     private async Task BuildAsync()
     {
         if (_form is null)
@@ -106,7 +155,9 @@
         _status = "Starting…";
         try
         {
-            var job = await Api.StartImageBuildAsync(new BuildImageRequest(_path, _tag, _dockerfile, _target, _buildArgs, _labels, _noCache, _pull));
+            var job = await Api.StartImageBuildAsync(FromText
+                ? new BuildImageRequest("", _tag, "", _target, _buildArgs, _labels, _noCache, _pull, _dockerfileText)
+                : new BuildImageRequest(_path, _tag, _dockerfile, _target, _buildArgs, _labels, _noCache, _pull));
             _job = job.Job;
             Repaint();
             _ = PollAsync(job.Job, _stop.Token);

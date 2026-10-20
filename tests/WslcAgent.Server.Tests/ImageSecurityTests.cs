@@ -100,19 +100,92 @@ public sealed class ImageSecurityTests
     }
 
     [Fact]
-    public void A_system_package_with_a_fix_is_patched_by_a_patched_tag_that_upgrades_it()
+    public void What_is_left_says_whether_a_patch_can_mend_more()
+    {
+        ImageAdvisory[] unfixed =
+        [
+            new("curl", "8.14.1-2+deb13u7", "DEBIAN-CVE-1", "", "critical", "", "", "Debian:13"),
+            new("curl", "8.14.1-2+deb13u7", "DEBIAN-CVE-2", "", "high", "", "", "Debian:13"),
+            new("ecdsa", "0.19.2", "GHSA-1", "", "high", "", ""),
+        ];
+
+        var left = ImageRemedies.WhatIsLeft(unfixed);
+        Assert.StartsWith("Nothing left has a fix published", left);
+        Assert.Contains("2 vulnerabilities in system packages, which Debian has not fixed yet", left);
+        Assert.Contains("ecdsa", left);
+
+        Assert.StartsWith("Still with a fix published: 0 system packages and 1 Python library",
+            ImageRemedies.WhatIsLeft([.. unfixed, new ImageAdvisory("pillow", "12.3.0", "GHSA-2", "", "high", "13.0.0", "")]));
+        Assert.Equal("", ImageRemedies.WhatIsLeft([]));
+    }
+
+    [Fact]
+    public void The_image_s_requirements_are_told_what_to_say_instead()
+    {
+        Installed[] files = [new(Installed.RequirementsFile, "/backend/requirements.txt", "pillow==12.2.0\r\npython-jose[cryptography]==3.5.0  # auth\n-r base.txt\nfastapi\n")];
+        ImageVulnerability[] found =
+        [
+            new("Pillow", "12.2.0", "GHSA-1", "", "high", "12.3.0", ""), new("pillow", "12.2.0", "GHSA-2", "", "moderate", "13.0.0", ""),
+            new("python-jose", "3.5.0", "GHSA-3", "", "critical", "", ""),
+        ];
+
+        var said = ImageSecurity.Requirements(files, found);
+
+        // Every library line, the vulnerable ones with what to say instead; an option (-r) names none.
+        Assert.Equal(["pillow", "python-jose[cryptography]", "fastapi"], said.Select(line => line.Library));
+        Assert.Equal(("pillow==12.2.0", "pillow>=13.0.0", true), (said[0].Line, said[0].Suggested, said[0].Vulnerable));
+        Assert.Equal(("python-jose[cryptography]==3.5.0", "", true), (said[1].Line, said[1].Suggested, said[1].Vulnerable));
+        Assert.Contains("take it out", said[1].Note);
+        Assert.False(said[2].Vulnerable);
+        Assert.Equal("python3 -m pip uninstall -y", ImagePatches.Uninstaller([new("PyPI", "pip", "24.0")]));
+        Assert.Equal("uv pip install --system --no-cache -U", ImagePatches.Installer([new("PyPI", "uv", "0.9.0")]));
+    }
+
+    [Fact]
+    public void A_patch_upgrades_the_system_and_runs_the_user_s_commands_under_a_patched_tag()
     {
         Installed[] alpine = [new("Alpine:v3.24", "apk-tools", "3.0.8-r0"), new("Alpine:v3.24", "zlib", "1.3.2-r0")];
         ImageVulnerability[] zlib = [new("zlib", "1.3.2-r0", "ALPINE-CVE-2026-85091", "CVE-2026-85091", "high", "1.3.2-r1", "", "Alpine:v3.24")];
-        Assert.Equal("alpine:latest-patched", ImagePatches.PatchOf("alpine:latest", alpine, zlib));
-        Assert.Equal("alpine:latest-patched", ImagePatches.PatchOf("alpine:latest-patched", alpine, zlib));
-        // No package manager (distroless), no fix published, or only a Python library: nothing to patch.
-        Assert.Equal("", ImagePatches.PatchOf("alpine:latest", [alpine[1]], zlib));
-        Assert.Equal("", ImagePatches.PatchOf("alpine:latest", alpine, [zlib[0] with { FixedIn = "" }]));
-        Assert.Equal("", ImagePatches.PatchOf("app:1", alpine, [new("black", "23.1", "PYSEC-1", "", "high", "24.3", "")]));
+        ImageVulnerability[] black = [new("black", "23.1", "PYSEC-1", "", "high", "24.3", ""), new("black", "23.1", "GHSA-2", "", "moderate", "24.10", "")];
+        Assert.Equal("alpine:latest-patched", ImagePatches.Named("alpine:latest"));
+        Assert.Equal("alpine:latest-patched", ImagePatches.Named("alpine:latest-patched"));
+        Assert.Equal("apk upgrade --no-cache", ImagePatches.SystemUpgrade(alpine, zlib));
+        // No manager (distroless) or no fix published: no system upgrade; the user's commands are left.
+        Assert.Equal("", ImagePatches.SystemUpgrade([alpine[1]], zlib));
+        Assert.Equal("", ImagePatches.SystemUpgrade(alpine, [zlib[0] with { FixedIn = "" }]));
 
-        Assert.Equal("FROM alpine:latest\nUSER root\nRUN apk upgrade --no-cache\n", ImagePatches.Dockerfile("alpine:latest", "Alpine:v3.24", ""));
-        Assert.EndsWith("apt-get upgrade -y && rm -rf /var/lib/apt/lists/*\nUSER app\n", ImagePatches.Dockerfile("web:1", "Debian:12", "app"));
+        // The highest fix of each library, and the installer the image carries.
+        var fixes = ImageSecurity.PythonFixes(black);
+        Assert.Equal(["black>=24.10"], fixes);
+        Assert.Equal("python3 -m pip install --no-cache-dir -U \"black>=24.10\"", ImagePatches.PythonInstall([new("PyPI", "pip", "24.0")], fixes));
+        // An image with both: uv, quicker, and it says what it changed.
+        Assert.Equal("uv pip install --system --no-cache -U \"black>=24.10\"", ImagePatches.PythonInstall([new("PyPI", "pip", "24.0"), new("PyPI", "uv", "0.9.0")], fixes));
+        Assert.Equal("uv pip install --system --no-cache -U \"black>=24.10\"", ImagePatches.PythonInstall([new("PyPI", "uv", "0.9.0")], fixes));
+
+        Assert.Equal("FROM alpine:latest\nUSER root\nRUN apk upgrade --no-cache\n", ImagePatches.Dockerfile("alpine:latest", "apk upgrade --no-cache", [], ""));
+        Assert.Equal("FROM web:1\nUSER root\nRUN pip install -U black\nRUN echo done\nUSER app\n",
+            ImagePatches.Dockerfile("web:1", "", ImagePatches.Commands("pip install -U black\n\n  RUN echo done  \n"), "app"));
+    }
+
+    [Fact]
+    public void The_kernel_is_not_a_container_s_to_check()
+    {
+        List<Installed> packages = [new("Debian:13", "linux", "6.12.111-1"), new("Ubuntu:24.04", "linux", "6.8.0-1"), new("Debian:13", "openssl", "3.5.4-1"), new("Alpine:v3.24", "linux-headers", "6.16.12-r0")];
+        Assert.Equal(["openssl", "linux-headers"], ImageSecurity.WithoutKernel(packages)!.Select(p => p.Name));
+        Assert.Null(ImageSecurity.WithoutKernel(null));
+    }
+
+    [Fact]
+    public void What_debian_calls_unimportant_is_left_out_as_debian_leaves_it()
+    {
+        var advisory = System.Text.Json.Nodes.JsonNode.Parse("""
+            {"id": "DEBIAN-CVE-2017-13716", "affected": [
+              {"package": {"name": "binutils", "ecosystem": "Debian:12"}, "ecosystem_specific": {"urgency": "unimportant"}},
+              {"package": {"name": "binutils", "ecosystem": "Debian:13"}, "ecosystem_specific": {"urgency": "low"}}]}
+            """);
+        Assert.True(ImageSecurity.Unimportant(advisory, new Installed("Debian:12", "binutils", "2.40-2")));
+        Assert.False(ImageSecurity.Unimportant(advisory, new Installed("Debian:13", "binutils", "2.44-3")));
+        Assert.False(ImageSecurity.Unimportant(advisory, new Installed("Ubuntu:24.04", "binutils", "2.42-4")));
     }
 
     [Fact]

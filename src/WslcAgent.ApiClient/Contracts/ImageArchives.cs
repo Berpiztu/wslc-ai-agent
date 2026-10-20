@@ -8,6 +8,7 @@ namespace WslcAgent.ApiClient.Contracts;
 /// <param name="BuildArgs"><c>KEY=VALUE</c>, one per line.</param>
 /// <param name="Labels"><c>key=value</c>, one per line.</param>
 /// <param name="Pull">Pull newer base images.</param>
+/// <param name="DockerfileText">A Dockerfile's own text, sent from the user's device: the agent writes it in a folder of its own and builds it there, so <paramref name="Path"/> is not needed. With no files beside it, it can <c>FROM</c> and <c>RUN</c>, not <c>COPY</c>.</param>
 public sealed record BuildImageRequest(
     string Path,
     string Tag = "",
@@ -16,7 +17,8 @@ public sealed record BuildImageRequest(
     string BuildArgs = "",
     string Labels = "",
     bool NoCache = false,
-    bool Pull = false);
+    bool Pull = false,
+    string DockerfileText = "");
 
 /// <summary>A build the agent runs and the page follows.</summary>
 /// <param name="Job">Opaque id to follow or cancel it with.</param>

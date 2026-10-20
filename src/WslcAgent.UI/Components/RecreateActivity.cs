@@ -12,14 +12,12 @@ namespace WslcAgent.UI.Components;
 /// whatever happens to this window. What it ends with is said here: done,
 /// with what the recreate or the image check had to say; or, refused or
 /// failed, in a window of its own, since the save the user asked for did not
-/// happen. The agent's log has it either way. With Patch it ticked, the
-/// container once recreated is moved to the image's patch by the patch's own
-/// build job (<c>/image-security/patch</c>), whose end is a notification.
+/// happen. The agent's log has it either way.
 /// </summary>
 public sealed class RecreateActivity(WslcAgentApi api, ActivityLine line, IDialogService dialogs)
 {
-    /// <summary>Starts the recreate of <paramref name="container"/> with the form's settings, and follows it to its end; <paramref name="patch"/>, the image's patch to move it to then, empty for none.</summary>
-    public void Start(string container, string name, ContainerLaunchRequest request, string patch = "")
+    /// <summary>Starts the recreate of <paramref name="container"/> with the form's settings, and follows it to its end.</summary>
+    public void Start(string container, string name, ContainerLaunchRequest request)
     {
         var work = line.Begin($"Recreating {name}: the image is checked and the new settings rehearsed, then the container is replaced");
         _ = RunAsync();
@@ -36,21 +34,6 @@ public sealed class RecreateActivity(WslcAgentApi api, ActivityLine line, IDialo
                 work.Fail($"{name} was not recreated: {ex.Message}");
                 await DialogFlow.ExplainAsync(dialogs, "Recreate container", $"{name} was not recreated.\n\n{ex.Message}",
                     "It is written in the agent's log too (Logs). View & edit opens the settings again to change them.");
-                return;
-            }
-
-            if (patch.Length > 0)
-            {
-                try
-                {
-                    await api.PatchImageAsync(new PatchImageRequest(request.Image, [created.Id]));
-                    work.Done($"Recreated {name}; {patch} is being built and {name} moved to it: a notification says when it is done");
-                }
-                catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
-                {
-                    work.Fail($"Recreated {name}, but {patch} was not started: {ex.Message}");
-                }
-
                 return;
             }
 

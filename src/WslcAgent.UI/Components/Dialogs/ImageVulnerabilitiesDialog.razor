@@ -44,7 +44,7 @@
     private string? _text;
 
     /// <summary>The image and its patch, when the check found one to build and the window offers it.</summary>
-    private (string Image, string Patch)? _patch;
+    private ImageVulnerabilities? _patch;
 
     private async Task<string> ReadAsync()
     {
@@ -67,8 +67,10 @@
                 lines.AddRange(Lines(report));
                 if (Patchable && report.Patch.Length > 0)
                 {
-                    _patch = (report.Image, report.Patch);
-                    lines.Add(Line("INFO", $"Patch builds {report.Patch}: {report.Image} with its system packages upgraded, as a Windows update patches Windows, and moves its containers to it."));
+                    _patch = report;
+                    lines.Add(Line("INFO", report.SystemUpgrade.Length > 0 || report.PythonFixes is { Count: > 0 }
+                        ? $"Patch builds {report.Patch} from {report.Image}: its system packages upgraded, as a Windows update patches Windows, and the commands you add (a Python library raised), then moves its containers to it."
+                        : $"Patch builds {report.Patch} with what you change in it (a library taken out, another put in), then moves its containers to it."));
                     // The title line is drawn by the dialog's own container: it is told too, or Patch never shows.
                     StateHasChanged();
                     Dialog.StateHasChanged();
@@ -84,10 +86,9 @@
     }
 
     /// <summary>The patch's window; once it has started, the agent builds it and this window closes.</summary>
-    private async Task PatchAsync((string Image, string Patch) patch)
+    private async Task PatchAsync(ImageVulnerabilities patch)
     {
-        if (await DialogFlow.ShowAsync<PatchImageDialog>(Dialogs, $"Patch {patch.Image}",
-                new DialogParameters<PatchImageDialog> { { d => d.Image, patch.Image }, { d => d.Patch, patch.Patch } }))
+        if (await ImageSecurityFlow.ShowPatchAsync(Dialogs, patch, []))
         {
             Dialog.Close();
         }
@@ -134,6 +135,11 @@
         yield return Line(worst,
             $"{report.Image}, {(report.Built ? "built on this machine" : "from a registry")}: {Counted(report.Packages)}, "
             + (report.Vulnerabilities.Count == 0 ? "no known vulnerability." : $"{report.Vulnerabilities.Count} known vulnerabilities ({counted})."));
+        if (ImageRemedies.WhatIsLeft(report.Vulnerabilities) is { Length: > 0 } left)
+        {
+            yield return Line("INFO", left);
+        }
+
         if (report.Refused)
         {
             yield return Line("ERROR", "The agent makes no container from it: built on this machine, with a vulnerability moderate or worse, and Settings → Security → Image security check set to Block.");

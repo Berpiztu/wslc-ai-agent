@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
+using WslcAgent.ApiClient;
 using WslcAgent.ApiClient.Contracts;
 using WslcAgent.Server.Host;
 using WslcAgent.Server.Wslc;
@@ -39,6 +40,9 @@ public sealed record ImageVulnerability(string Package, string Version, string A
 internal readonly record struct Installed(string Ecosystem, string Name, string Version)
 {
     public const string PyPI = "PyPI";
+
+    /// <summary>Not a package: a <c>requirements*.txt</c> file of the image, its path as <see cref="Name"/> and its text as <see cref="Version"/>, read and kept with the packages so a patch can be told what it pins.</summary>
+    public const string RequirementsFile = "requirements";
 }
 
 /// <summary>
@@ -62,7 +66,7 @@ internal readonly record struct Installed(string Ecosystem, string Name, string 
 /// is kept for a day, so Zaindari's window opens at once after a restart too.
 /// None, and they are kept only while it runs.
 /// </summary>
-public sealed class ImageSecurity(
+public sealed partial class ImageSecurity(
     IWslcRunner wslc,
     HttpClient http,
     ImageSecuritySettingsStore settings,
@@ -104,7 +108,8 @@ public sealed class ImageSecurity(
     /// <paramref name="note"/> (a level and a text, as a job's log lines go).
     /// Under <see cref="ImageSecurityPolicy.Block"/>, an image with a
     /// vulnerability moderate or worse throws <see cref="InvalidOperationException"/>,
-    /// naming each one: the job fails before any container is made from it.
+    /// naming each one: the job fails before any container is made from it. A
+    /// patch Zaindari built (<c>…-patched</c>) is never refused: it is said.
     /// </summary>
     public async Task GuardAsync(IReadOnlyList<string> images, Action<string, string> note, CancellationToken cancellationToken)
     {
@@ -120,14 +125,24 @@ public sealed class ImageSecurity(
         {
             note("INFO", $"Checking {image}'s Python libraries and system packages for known vulnerabilities");
             // By its id, so the containers made from it next find its libraries already read.
-            var (id, built) = await OriginAsync(image, cancellationToken);
+            var (id, built, _) = await OriginAsync(image, cancellationToken);
             var found = await CheckAsync(image, id, built, note, cancellationToken);
             foreach (var vulnerability in found)
             {
                 note("WARNING", $"{image}: {vulnerability}");
             }
 
-            stopping.AddRange(found.Where(v => v.Blocks).Select(v => (image, v)));
+            if (!ImageReference.IsPatched(image))
+            {
+                stopping.AddRange(found.Where(v => v.Blocks).Select(v => (image, v)));
+            }
+            else if (found.Any(v => v.Blocks))
+            {
+                // A patch mends what has a fix published; what is left is its original's, and refusing
+                // the patch would leave the containers on the original, which carries all of it.
+                note("WARNING", $"{image} is a patch, so it is not refused: what is left is its original's to mend. "
+                    + ImageRemedies.WhatIsLeft([.. found.Select(v => new ImageAdvisory(v.Package, v.Version, v.Advisory, v.Cve, v.Severity, v.FixedIn, v.Url, v.Ecosystem))]));
+            }
         }
 
         if (stopping.Count == 0)
@@ -222,7 +237,7 @@ public sealed class ImageSecurity(
     /// </summary>
     private async Task<(bool Built, List<string> Remedies)> RemediesAsync(string image, string when, CancellationToken cancellationToken)
     {
-        var (id, built) = await OriginAsync(image, cancellationToken);
+        var (id, built, _) = await OriginAsync(image, cancellationToken);
         if (id is null)
         {
             return (false, []);
@@ -247,9 +262,13 @@ public sealed class ImageSecurity(
     /// <summary>
     /// The image's id, and whether it was built on this machine: an image
     /// pulled from a registry carries the digest it was pulled by, and one
-    /// built here has none. A null id is an image not on the machine.
+    /// built here has none. A patch Zaindari built (<c>…-patched</c>) is built
+    /// here but never counted as built: it was made to mend what could be
+    /// mended, and what is left in it, a fix nobody has published, is its
+    /// original's to mend; refusing it would leave the original, which is
+    /// worse. A null id is an image not on the machine.
     /// </summary>
-    private async Task<(string? Id, bool Built)> OriginAsync(string image, CancellationToken cancellationToken)
+    private async Task<(string? Id, bool Built, string User)> OriginAsync(string image, CancellationToken cancellationToken)
     {
         try
         {
@@ -260,13 +279,74 @@ public sealed class ImageSecurity(
                 var single => single,
             };
             var id = (string?)inspected?["Id"];
-            return string.IsNullOrWhiteSpace(id) ? (null, false) : (id, (inspected?["RepoDigests"]?.AsArray() ?? []).Count == 0);
+            return string.IsNullOrWhiteSpace(id)
+                ? (null, false, "")
+                : (id, (inspected?["RepoDigests"]?.AsArray() ?? []).Count == 0 && !ImageReference.IsPatched(image), ((string?)inspected?["Config"]?["User"] ?? "").Trim());
         }
         catch (Exception ex) when (ex is WslcException or WslcNotFoundException or TimeoutException or JsonException)
         {
-            return (null, false);
+            return (null, false, "");
         }
     }
+
+    /// <summary>
+    /// Each Python library with a fix published, at the version that fixes all
+    /// of its vulnerabilities (the highest of their fixes): <c>aiohttp&gt;=3.13.6</c>.
+    /// A library one of whose vulnerabilities has no fix yet is still raised as
+    /// far as the others go.
+    /// </summary>
+    internal static List<string> PythonFixes(IEnumerable<ImageVulnerability> found) =>
+        [.. found.Where(v => v.Ecosystem == Installed.PyPI && v.FixedIn.Length > 0)
+            .GroupBy(v => v.Package, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(library => library.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(library => $"{library.Key}>={library.Select(v => v.FixedIn).Order(VersionOrder.Instance).Last()}")];
+
+    /// <summary>
+    /// Every library line of the image's requirements files, as it is; a
+    /// vulnerable one with the line Zaindari suggests (the library at the
+    /// version that fixes all of its own), or, when no version fixes one of
+    /// them, that it is to be replaced or taken out.
+    /// </summary>
+    internal static List<ImageRequirement> Requirements(IEnumerable<Installed> files, IReadOnlyList<ImageVulnerability> found)
+    {
+        var vulnerable = found.Where(v => v.Ecosystem == Installed.PyPI)
+            .GroupBy(v => Normalized(v.Package))
+            .ToDictionary(library => library.Key, library => library.ToList());
+        var said = new List<ImageRequirement>();
+        foreach (var file in files)
+        {
+            foreach (var raw in file.Version.Split('\n'))
+            {
+                var line = raw.Split('#')[0].Trim();
+                if (RequirementName().Match(line) is not { Success: true } named)
+                {
+                    continue;
+                }
+
+                var name = named.Groups["name"].Value + named.Groups["extras"].Value;
+                if (!vulnerable.TryGetValue(Normalized(named.Groups["name"].Value), out var library))
+                {
+                    said.Add(new ImageRequirement(file.Name, line, "", "", name));
+                    continue;
+                }
+
+                var fixes = library.Where(v => v.FixedIn.Length > 0).Select(v => v.FixedIn).ToList();
+                var unfixed = library.Count(v => v.FixedIn.Length == 0);
+                var fixedAll = fixes.Count > 0 ? fixes.Order(VersionOrder.Instance).Last() : "";
+                said.Add(new ImageRequirement(file.Name, line,
+                    fixedAll.Length > 0 ? $"{named.Groups["name"].Value}{named.Groups["extras"].Value}>={fixedAll}" : "",
+                    unfixed == 0 ? $"{fixedAll} fixes {(library.Count == 1 ? "it" : $"all {library.Count}")}"
+                    : fixedAll.Length > 0 ? $"{fixedAll} fixes {fixes.Count}; no version fixes {unfixed} yet: replace it, or take it out"
+                    : "no version fixes it yet: replace it, or take it out", name, Vulnerable: true));
+            }
+        }
+
+        return said;
+    }
+
+    /// <summary>The library a requirements line names, and its extras (<c>uvicorn[standard]</c>); an option (<c>-r</c>, <c>--index-url</c>) or a URL names none.</summary>
+    [GeneratedRegex(@"^(?<name>[A-Za-z0-9][A-Za-z0-9._-]*)(?<extras>\[[^\]]*\])?")]
+    private static partial Regex RequirementName();
 
     /// <summary>
     /// One library's line: how many of its vulnerabilities stop the build, the
@@ -323,16 +403,17 @@ public sealed class ImageSecurity(
     public async Task<ImageVulnerabilities> ReportAsync(string image, CancellationToken cancellationToken = default)
     {
         image = image.Trim();
-        var (id, built) = await OriginAsync(image, cancellationToken);
+        var (id, built, user) = await OriginAsync(image, cancellationToken);
         if (id is null)
         {
             return new ImageVulnerabilities(image, false, false, false, false, false, [], [], [], $"{image} is not on this machine.");
         }
 
         List<Installed>? packages;
+        List<Installed> files;
         try
         {
-            packages = await PackagesAsync(image, id, cancellationToken);
+            (packages, files) = Split(await PackagesAsync(image, id, cancellationToken));
         }
         catch (Exception ex) when (ex is TimeoutException or WslcNotFoundException or WslcException or IOException or InvalidDataException)
         {
@@ -358,22 +439,28 @@ public sealed class ImageSecurity(
 
         Mark(id, image, built, found);
         var remedies = found.Where(v => v.Blocks).GroupBy(v => (v.Ecosystem, v.Package, v.Version)).Select(library => Remedy(image, [.. library])).ToList();
+        var fixes = PythonFixes(found);
+        var requirements = Requirements(files, found);
         var advisories = found
             .OrderByDescending(v => Array.IndexOf(SeverityOrder, v.Severity))
             .ThenBy(v => v.Package, StringComparer.OrdinalIgnoreCase)
             .Select(v => new ImageAdvisory(v.Package, v.Version, v.Advisory, v.Cve, v.Severity, v.FixedIn, v.Url, v.Ecosystem))
             .ToList();
         return new ImageVulnerabilities(image, true, built, true, true, built && remedies.Count > 0 && settings.Get().Policy == ImageSecurityPolicy.Block,
-            listed, advisories, remedies, Patch: ImagePatches.PatchOf(image, packages, found));
+            listed, advisories, remedies, Patch: ImagePatches.Named(image),
+            SystemUpgrade: ImagePatches.SystemUpgrade(packages, found), PythonFixes: fixes, PythonInstall: ImagePatches.PythonInstall(packages, fixes),
+            Requirements: requirements, PythonInstaller: ImagePatches.Installer(packages), PythonUninstaller: ImagePatches.Uninstaller(packages),
+            PatchDockerfile: ImagePatches.Dockerfile(image, ImagePatches.SystemUpgrade(packages, found), [], user),
+            RequirementFiles: [.. files.Select(file => new ImageTextFile(file.Name, file.Version))]);
     }
 
-    /// <summary>The image's packages, from what was read under its id already, or read now and kept; null for an image with none to read.</summary>
+    /// <summary>The image's packages, from what was read under its id already, or read now and kept; null for an image with none to read. The kernel is left out (<see cref="WithoutKernel"/>).</summary>
     private async Task<List<Installed>?> PackagesAsync(string image, string? id, CancellationToken cancellationToken)
     {
         if (id is not null && (_packages.TryGetValue(id, out var kept) || Kept(id, out kept)))
         {
             _packages[id] = kept;
-            return kept;
+            return WithoutKernel(kept);
         }
 
         var packages = await InstalledPackagesAsync(image, cancellationToken);
@@ -383,8 +470,19 @@ public sealed class ImageSecurity(
             Keep(id, packages);
         }
 
-        return packages;
+        return WithoutKernel(packages);
     }
+
+    /// <summary>
+    /// The packages without Debian's and Ubuntu's kernel (source package
+    /// <c>linux</c>: its headers, <c>linux-libc-dev</c>, are what an image
+    /// carries of it). A container runs on the kernel of WSL's virtual machine,
+    /// never on its own image's, so the kernel's vulnerabilities, hundreds of
+    /// them, are not the container's.
+    /// </summary>
+    internal static List<Installed>? WithoutKernel(List<Installed>? packages) =>
+        packages?.Where(package => !(package.Name == "linux"
+            && (package.Ecosystem.StartsWith("Debian:", StringComparison.Ordinal) || package.Ecosystem.StartsWith("Ubuntu:", StringComparison.Ordinal)))).ToList();
 
     /// <summary>What an image's file in <c>keptIn</c> says: its libraries, null for none; false when it has no file, or one that cannot be read.</summary>
     private bool Kept(string id, out List<Installed>? packages)
@@ -437,8 +535,29 @@ public sealed class ImageSecurity(
     /// file, of libraries alone, is not read, and the image is read once more);
     /// null when nothing is kept on disk.
     /// </summary>
+    // Named again when what is kept grew (the requirements files): an image read before is read once more.
     private string? KeptPath(string id) =>
-        keptIn is null ? null : Path.Combine(keptIn, $"{id.Replace(':', '-')}.packages.json");
+        keptIn is null ? null : Path.Combine(keptIn, $"{id.Replace(':', '-')}.packages-requirements.json");
+
+    /// <summary>A <c>requirements*.txt</c> of the image's own, not one a library ships in its site-packages or a node module.</summary>
+    private static bool IsRequirementsFile(string path)
+    {
+        var name = path[(path.LastIndexOf('/') + 1)..];
+        return name.StartsWith("requirements", StringComparison.OrdinalIgnoreCase) && name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
+            && !path.Contains("site-packages/", StringComparison.Ordinal) && !path.Contains("dist-packages/", StringComparison.Ordinal)
+            && !path.Contains("node_modules/", StringComparison.Ordinal);
+    }
+
+    /// <summary>A requirements file larger than this is not one a person wrote.</summary>
+    private const long MaxRequirementsFile = 256 * 1024;
+
+    /// <summary>The packages apart from the requirements files kept with them; the packages null when there is none.</summary>
+    private static (List<Installed>? Packages, List<Installed> Files) Split(List<Installed>? read)
+    {
+        var files = (read ?? []).Where(entry => entry.Ecosystem == Installed.RequirementsFile).ToList();
+        var packages = (read ?? []).Where(entry => entry.Ecosystem != Installed.RequirementsFile).ToList();
+        return (read is null || packages.Count == 0 ? null : packages, files);
+    }
 
     private static readonly JsonSerializerOptions KeptJson = new(JsonSerializerDefaults.Web);
 
@@ -468,7 +587,7 @@ public sealed class ImageSecurity(
         List<Installed>? packages;
         try
         {
-            packages = await PackagesAsync(image, id, cancellationToken);
+            (packages, _) = Split(await PackagesAsync(image, id, cancellationToken));
         }
         catch (Exception ex) when (ex is TimeoutException or WslcNotFoundException or WslcException or IOException or InvalidDataException)
         {
@@ -598,6 +717,13 @@ public sealed class ImageSecurity(
                     system.AddRange(await DpkgAsync(content, cancellationToken));
                     continue;
                 }
+            }
+
+            if (IsRequirementsFile(path) && entry.DataStream is { } requirements && entry.EntryType != TarEntryType.HardLink && entry.Length < MaxRequirementsFile)
+            {
+                using var text = new StreamReader(requirements);
+                found.Add(new Installed(Installed.RequirementsFile, "/" + path, await text.ReadToEndAsync(cancellationToken)));
+                continue;
             }
 
             if (!IsMetadataFile(entry.Name))
@@ -814,7 +940,7 @@ public sealed class ImageSecurity(
             for (var i = 0; i < idsOf.Count; i++)
             {
                 var ids = idsOf[i];
-                var advisories = ids.Select(id => (Id: id, Advisory: read[id])).ToList();
+                var advisories = ids.Select(id => (Id: id, Advisory: read[id])).Where(a => !Unimportant(a.Advisory, batch[i])).ToList();
 
                 // One vulnerability is often both a PYSEC and a GHSA advisory, each naming the other: the GHSA one is kept, it carries the severity.
                 foreach (var (id, advisory) in advisories.Where(a => a.Id.StartsWith("GHSA-", StringComparison.Ordinal)
@@ -827,6 +953,19 @@ public sealed class ImageSecurity(
 
         return found;
     }
+
+    /// <summary>
+    /// An advisory Debian's own tracker says is not a security problem for this
+    /// package (<c>urgency: unimportant</c>): Debian will not fix it, nobody
+    /// downstream can, and counting it would leave every Debian image red for
+    /// good. It is left out, as Debian leaves it.
+    /// </summary>
+    internal static bool Unimportant(JsonNode? advisory, Installed package) =>
+        package.Ecosystem.StartsWith("Debian:", StringComparison.Ordinal)
+        && (advisory?["affected"]?.AsArray() ?? []).Any(affected =>
+            (string?)affected?["package"]?["name"] == package.Name
+            && (string?)affected?["package"]?["ecosystem"] == package.Ecosystem
+            && (string?)affected?["ecosystem_specific"]?["urgency"] == "unimportant");
 
     private async Task<JsonNode?> AdvisoryAsync(string id, CancellationToken cancellationToken)
     {

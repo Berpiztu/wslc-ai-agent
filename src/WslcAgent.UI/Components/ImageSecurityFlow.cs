@@ -32,20 +32,30 @@ public static class ImageSecurityFlow
             new DialogParameters<ImageVulnerabilitiesDialog> { { d => d.Images, images }, { d => d.About, about }, { d => d.Patchable, patchable } }, large: true);
 
     /// <summary>
-    /// What Update image and View &amp; edit say above their Patch it box: the
+    /// The patch editor (<see cref="PatchImageDialog"/>), the same from Zaindari's
+    /// window, Update image and View &amp; edit: <paramref name="only"/> ticks those
+    /// containers alone (by id or name), none ticks every one of the image's.
+    /// True once the patch has started.
+    /// </summary>
+    public static Task<bool> ShowPatchAsync(IDialogService dialogs, ImageVulnerabilities report, IReadOnlyList<string> only) =>
+        DialogFlow.ShowAsync<PatchImageDialog>(dialogs, $"Patch {report.Image}",
+            new DialogParameters<PatchImageDialog> { { d => d.Report, report }, { d => d.Only, only } }, large: true);
+
+    /// <summary>
+    /// What Update image and View &amp; edit say beside their Patch… button: the
     /// image carries a system package with a fix published that it does not
     /// have, so pulling it or recreating on it again does not mend it. Empty
     /// when there is nothing to patch.
     /// </summary>
     public static string PatchNote(ImageVulnerabilities report)
     {
-        if (report.Patch.Length == 0 || report.Vulnerabilities.FirstOrDefault(v => v.Ecosystem != "PyPI" && v.FixedIn.Length > 0) is not { } first)
+        if (report.SystemUpgrade.Length == 0 || report.Vulnerabilities.FirstOrDefault(v => v.Ecosystem != "PyPI" && v.FixedIn.Length > 0) is not { } first)
         {
             return "";
         }
 
         return $"{report.Image} carries a system package with a fix published that it does not have yet ({first.Package} {first.Version}, {first.Severity}, fixed in {first.FixedIn}): "
-            + $"pulling it or recreating on it again does not mend it. Patch it builds {report.Patch}, its system packages upgraded, and uses that.";
+            + $"pulling it or recreating on it again does not mend it. Patch… opens the patch editor: {report.Patch} is built with them upgraded, and anything you add, and the container moved to it.";
     }
 
     /// <summary>The container runs a patch Zaindari built: its chip says patched.</summary>
@@ -54,8 +64,13 @@ public static class ImageSecurityFlow
     /// <summary>Any of a project's containers runs a patch.</summary>
     public static bool IsPatched(IEnumerable<ContainerSummary> containers) => containers.Any(IsPatched);
 
-    /// <summary>The box that asks for the patch, unticked unless the user ticks it.</summary>
-    public static string PatchLabel(ImageVulnerabilities report) => $"Patch it ({report.Patch})";
+    /// <summary>What a patch would mend, in the one line the offer has: how many system packages have a fix the image does not carry.</summary>
+    public static string PatchSummary(ImageVulnerabilities report)
+    {
+        var mended = report.Vulnerabilities.Where(v => v.Ecosystem != "PyPI" && v.FixedIn.Length > 0)
+            .Select(v => v.Package).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        return $"{Name}: a patch can mend {mended} system package{(mended == 1 ? "" : "s")} of {report.Image} that pulling it again would not.";
+    }
 
     /// <summary>
     /// The colour an image is shown in, on the Images page and in its menu: red

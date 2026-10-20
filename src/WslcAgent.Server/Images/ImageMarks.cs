@@ -27,6 +27,27 @@ public sealed class ImageMarks(IOptions<WslcOptions> options, ILogger<ImageMarks
     private readonly Lock _gate = new();
     private ConcurrentDictionary<string, ImageMark>? _marks;
 
+    /// <summary>The patches being built, by the image patched: the patch's name, the containers it is to move, and its build job once it has one.</summary>
+    private readonly ConcurrentDictionary<string, (string Patch, string[] Containers, string? Job)> _patching = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// A patch of <paramref name="image"/> is being built, and will move
+    /// <paramref name="containers"/>: the image's row and theirs say so until
+    /// <see cref="PatchEnds"/>, so a build of half a minute shows on the cards.
+    /// </summary>
+    public void PatchBegins(string image, string patch, IReadOnlyList<string> containers) => _patching[image.Trim()] = (patch, [.. containers], null);
+
+    /// <summary>The patch's build job, for its console and its cancel; a patch over already is left over.</summary>
+    public void PatchJob(string image, string job)
+    {
+        if (_patching.TryGetValue(image.Trim(), out var patching))
+        {
+            _patching.TryUpdate(image.Trim(), patching with { Job = job }, patching);
+        }
+    }
+
+    public void PatchEnds(string image) => _patching.TryRemove(image.Trim(), out _);
+
     /// <summary>
     /// What a check of the image just found, under its id and the name it was
     /// checked by: a mark with its worst severity, or none when
@@ -73,24 +94,41 @@ public sealed class ImageMarks(IOptions<WslcOptions> options, ILogger<ImageMarks
     public ImageMark? Of(string reference) =>
         reference.Trim().Length == 0 ? null : Marks().Values.FirstOrDefault(mark => mark.References.Any(name => SameReference(name, reference)));
 
-    /// <summary>The images list's rows with what was found in each, matched by id (a short id and a full one alike).</summary>
+    /// <summary>The images list's rows with what was found in each, matched by id (a short id and a full one alike), and the patch being built from it.</summary>
     public IReadOnlyList<ImageSummary> Annotate(IReadOnlyList<ImageSummary> images)
     {
         var marks = Marks();
-        return marks.IsEmpty
+        var marked = marks.IsEmpty
             ? images
             : [.. images.Select(image => marks.FirstOrDefault(kept => SameId(kept.Key, image.Id)) is { Value: { } mark }
                 ? image with { ImageWorst = mark.Worst, ImageRefused = mark.Refused, ImageCheckedAt = Stamp(mark) }
                 : image)];
+        return _patching.IsEmpty
+            ? marked
+            : [.. marked.Select(image => _patching.FirstOrDefault(patching => SameReference(patching.Key, image.Reference)) is { Value: { Patch: { } patch } under }
+                ? image with { PatchingTo = patch, PatchJob = under.Job }
+                : image)];
     }
 
-    /// <summary>The containers list's rows with their image's mark, read by the name of their image.</summary>
-    public IReadOnlyList<ContainerSummary> AnnotateContainers(IReadOnlyList<ContainerSummary> containers) =>
-        Marks().IsEmpty
+    /// <summary>The containers list's rows with their image's mark, read by the name of their image, and the patch each is to be moved to.</summary>
+    public IReadOnlyList<ContainerSummary> AnnotateContainers(IReadOnlyList<ContainerSummary> containers)
+    {
+        var marked = Marks().IsEmpty
             ? containers
             : [.. containers.Select(row => Of(row.Image) is { } mark
                 ? row with { ImageWorst = mark.Worst, ImageRefused = mark.Refused, ImageCheckedAt = Stamp(mark) }
                 : row)];
+        return _patching.IsEmpty
+            ? marked
+            : [.. marked.Select(row => _patching.Values.FirstOrDefault(patching => patching.Containers.Any(named => Names(named, row))) is { Patch: { } patch } under
+                ? row with { PatchingTo = patch, PatchJob = under.Job }
+                : row)];
+    }
+
+    /// <summary>A container a patch names by id (short or full) or by name.</summary>
+    private static bool Names(string named, ContainerSummary row) =>
+        named.Length > 0 && (string.Equals(named, row.Name, StringComparison.Ordinal)
+            || (row.Id.Length > 0 && (named.StartsWith(row.Id, StringComparison.Ordinal) || row.Id.StartsWith(named, StringComparison.Ordinal))));
 
     /// <summary>The same image, as a list row names it and as a menu or a build asks for it: a reference with no tag is its <c>latest</c>.</summary>
     public static bool SameReference(string a, string b)

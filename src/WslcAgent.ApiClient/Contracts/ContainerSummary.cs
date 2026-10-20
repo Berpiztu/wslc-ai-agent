@@ -25,6 +25,8 @@ namespace WslcAgent.ApiClient.Contracts;
 /// <param name="NetIoBytes">Network I/O received and sent together, in bytes: the card's Network dial and its share of every container's.</param>
 /// <param name="Uid">The agent's own number for this container (the resource registry, <c>resources.json</c>): no rename and no recreate changes it, so the dashboard points at it; 0 for a row the registry does not hold, such as a Files helper.</param>
 /// <param name="UpdatingTo">The image this container's image update is pulling, while the pull lasts (<c>/images/pulls</c> has its progress); null otherwise.</param>
+/// <param name="PatchingTo">The patch this container is to be moved to, while Zaindari's patch is built and moves it (<c>/image-security/patch</c>); null otherwise.</param>
+/// <param name="PatchJob">That patch's build job (<c>/images/build/{job}</c>), its console and its cancel; null otherwise.</param>
 /// <param name="Project">The project it belongs to, when it was made from a Compose file (its <c>ai.berpiztu.wslc.project</c> label); empty for a container on its own.</param>
 /// <param name="Service">Its service in that project's Compose file; empty for a container on its own.</param>
 /// <param name="StartError">Why it did not start, the last time it was asked to, as <c>wslc</c> said it; empty once it has started, and for one never asked. Its logs end with the same.</param>
@@ -65,7 +67,9 @@ public sealed record ContainerSummary(
     string HoldsNameOf = "",
     bool ImageRefused = false,
     string ImageWorst = "",
-    string ImageCheckedAt = "")
+    string ImageCheckedAt = "",
+    string? PatchingTo = null,
+    string? PatchJob = null)
 {
     /// <summary>The agent's own state while a change to the container is being applied (a recreate).</summary>
     public const string Recreating = "recreating";

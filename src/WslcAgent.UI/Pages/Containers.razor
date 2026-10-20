@@ -106,6 +106,13 @@
                                 @* View & edit's Save, done by the agent with the form closed: the bar moves until the new container takes its place. *@
                                 <ProgressCell Lead="@Mark(context.Item.Value)" Name="@context.Item.Value.Name" Indeterminate="true" Status="Being recreated…" />
                             }
+                            else if (context.Item.Value.PatchingTo is { } patching)
+                            {
+                                @* Zaindari's patch, built by the agent with its window closed: the bar moves until the container is moved to it. *@
+                                <ProgressCell Lead="@Mark(context.Item.Value)" Name="@context.Item.Value.Name" Indeterminate="true" Status="@($"Patching: building {patching}…")"
+                                              LogTitle="View the patch's output" CancelTitle="Cancel the patch"
+                                              OnLog="@(() => PatchLogAsync(context.Item.Value.PatchJob, patching))" OnCancel="@(() => CancelPatchAsync(context.Item.Value.PatchJob))" />
+                            }
                             else if (Working.IsBusy(context.Item.Value.Id))
                             {
                                 @* A verb on the container itself, its own or its project's going through
@@ -670,6 +677,12 @@
                                 @* View & edit's Save, done by the agent with the form closed: the ring turns until the new container takes its place. *@
                                 <TurningRing Color="Color.Info" Title="Being recreated" />
                             }
+                            else if (c.PatchingTo is { } patching)
+                            {
+                                @* Zaindari's patch, built by the agent with its window closed: the ring turns until the container is moved to it. *@
+                                <ProgressRing Pct="0" Status="@($"Patching: building {patching}")" LogTitle="View the patch's output" CancelTitle="Cancel the patch"
+                                              OnLog="@(() => PatchLogAsync(c.PatchJob, patching))" OnCancel="@(() => CancelPatchAsync(c.PatchJob))" />
+                            }
                             else
                             {
                                 <MudAvatar Color="@StateColors.For(c.State)" Variant="Variant.Filled">@(c.Name is { Length: > 0 } name ? name[..1].ToUpperInvariant() : "?")</MudAvatar>
@@ -730,6 +743,18 @@
     /// next, and the project is not through before its last one shows it.
     /// </summary>
     private Task ReadForVerbsAsync() => RefreshAndDrawAsync();
+
+    /// <summary>The console of the patch a container is waiting for; nothing until the patch has its job.</summary>
+    private Task PatchLogAsync(string? job, string patch) =>
+        job is { Length: > 0 } ? PullFlow.ShowBuildLogAsync(Dialogs, job, patch) : Task.CompletedTask;
+
+    private async Task CancelPatchAsync(string? job)
+    {
+        if (job is { Length: > 0 } && await PullFlow.CancelBuildAsync(Dialogs, Api, Snackbar, job))
+        {
+            await RefreshAsync();
+        }
+    }
 
     /// <summary>The pull this container's image update waits for, while it does; one not listed yet is about to start.</summary>
     private ImagePullState? UpdateOf(ContainerSummary row) =>

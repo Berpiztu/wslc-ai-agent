@@ -71,6 +71,7 @@ public static class UiServiceCollectionExtensions
         services.AddScoped<PullActivity>();
         services.AddScoped<ProjectActivity>();
         services.AddScoped<RecreateActivity>();
+        services.AddScoped<PatchActivity>();
         services.AddScoped<ProjectGroups>();
         services.AddScoped<ProjectVerbs>();
         services.AddScoped<OpenPopups>();

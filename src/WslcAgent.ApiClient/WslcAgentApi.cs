@@ -519,8 +519,8 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
         PostJsonAsync<ContainerLaunchRequest, ContainerCreated>($"api/v1/containers/{Escape(container)}/recreate", request, cancellationToken);
 
     /// <summary>Starts moving the container to another image: the pull started (its console follows it), then a recreate the agent runs on its own.</summary>
-    public Task<ImagePullState> UpdateContainerImageAsync(string container, string image, bool patch = false, CancellationToken cancellationToken = default) =>
-        PostJsonAsync<UpdateContainerImageRequest, ImagePullState>($"api/v1/containers/{Escape(container)}/update-image", new UpdateContainerImageRequest(image, patch), cancellationToken);
+    public Task<ImagePullState> UpdateContainerImageAsync(string container, string image, bool patch = false, ContainerLaunchRequest? form = null, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<UpdateContainerImageRequest, ImagePullState>($"api/v1/containers/{Escape(container)}/update-image", new UpdateContainerImageRequest(image, patch, form), cancellationToken);
 
     public Task KillContainerAsync(string container, CancellationToken cancellationToken = default) =>
         PostAsync($"api/v1/containers/{Escape(container)}/kill", cancellationToken);

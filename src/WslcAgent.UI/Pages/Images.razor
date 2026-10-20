@@ -52,6 +52,13 @@
                                               OnLog="@(() => PullFlow.ShowLogAsync(Dialogs, pull.Image, finished: pull.State != "running"))" OnCancel="@(() => CancelPullAsync(pull.Image))"
                                               OnDismiss="@(() => DismissPullAsync(pull.Image))" />
                             }
+                            else if (context.Item.Value.PatchingTo is { } patching)
+                            {
+                                @* Zaindari's patch being built from this image: the bar moves until it is. *@
+                                <ProgressCell Name="@context.Item.Value.Repository" Indeterminate="true" Status="@($"Patching: building {patching}…")"
+                                              LogTitle="View the patch's output" CancelTitle="Cancel the patch"
+                                              OnLog="@(() => PatchLogAsync(context.Item.Value.PatchJob, patching))" OnCancel="@(() => CancelPatchAsync(context.Item.Value.PatchJob))" />
+                            }
                             else
                             {
                                 @(context.Item.Value.IsDangling ? "<none>" : context.Item.Value.Repository)
@@ -101,6 +108,11 @@
                                 <ProgressRing Pct="pull.Pct" Status="@pull.Status" Failed="@(pull.State != "running")"
                                               OnLog="@(() => PullFlow.ShowLogAsync(Dialogs, pull.Image, finished: pull.State != "running"))" OnCancel="@(() => CancelPullAsync(pull.Image))"
                                               OnDismiss="@(() => DismissPullAsync(pull.Image))" />
+                            }
+                            else if (i.PatchingTo is { } patching)
+                            {
+                                <ProgressRing Pct="0" Status="@($"Patching: building {patching}")" LogTitle="View the patch's output" CancelTitle="Cancel the patch"
+                                              OnLog="@(() => PatchLogAsync(i.PatchJob, patching))" OnCancel="@(() => CancelPatchAsync(i.PatchJob))" />
                             }
                             else
                             {
@@ -229,6 +241,18 @@
                     Activity.Fail($"Pull of {pull.Image} failed: {pull.Error}");
                 }
             }
+        }
+    }
+
+    /// <summary>The console of the patch being built from an image; nothing until the patch has its job.</summary>
+    private Task PatchLogAsync(string? job, string patch) =>
+        job is { Length: > 0 } ? PullFlow.ShowBuildLogAsync(Dialogs, job, patch) : Task.CompletedTask;
+
+    private async Task CancelPatchAsync(string? job)
+    {
+        if (job is { Length: > 0 } && await PullFlow.CancelBuildAsync(Dialogs, Api, Snackbar, job))
+        {
+            await RefreshAsync();
         }
     }
 

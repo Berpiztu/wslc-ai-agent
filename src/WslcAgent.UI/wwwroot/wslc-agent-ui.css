@@ -6630,3 +6630,83 @@ html[data-wslc-rows~="outlined"] .wslc-files-table {
     height: auto;
     min-height: 0;
 }
+
+/* A field with buttons of its own beside it, in the field's own cell (the
+   Tag and Zaindari's Patch… and arrow, PatchOffer): the field takes the width
+   left, the buttons stand at its right, and no row is added to the form.
+   Zaindari's note opens over the form, no wider than a reading line. */
+.wslc-field-beside {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.wslc-field-beside > .mud-input-control {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* A field with a helper line is taller than its box: the buttons, centred on
+   the whole field, sat 10.5px low, measured. They give that line back, as
+   .wslc-field-pick.has-note does: MudBlazor's helper container, 3px above
+   (.mud-input-control-helper-container) and a line of the overline size at
+   1.66 (.mud-input-helper-text). */
+.wslc-field-beside:has(.mud-input-control-helper-container) > :not(.mud-input-control) {
+    margin-bottom: calc(3px + var(--mud-typography-overline-size) * 1.66);
+}
+
+/* The popover's own width cannot be held: MudBlazor writes max-width: none on
+   it, inline. Its text sets it instead, no wider than a reading line; a block,
+   since a caption is drawn as an inline span, which no width holds. 30rem: it
+   opens from the arrow at the right of its field and runs leftwards, and so
+   stays inside Update image, the narrowest window it opens in (600px). */
+.wslc-patch-note-text {
+    display: block;
+    max-width: min(30rem, 90vw);
+}
+
+/* The patch window's containers (PatchImageDialog): a box of one height, so
+   the window is the size it opened with whatever it lists. Four rows of the
+   small dense checkbox, MudBlazor 9's: its glyph 1.25rem (.mud-icon-size-small)
+   and 4px of padding each side (.mud-checkbox-dense). More scroll. */
+.wslc-patch-containers {
+    height: calc(4 * (1.25rem + 2 * 4px));
+    overflow-y: auto;
+}
+
+/* The patch window (PatchImageDialog): two columns, the Dockerfile and its
+   containers, and the requirements editor; one under the other where the
+   window is narrower than two of them. The editor is as tall as the first
+   column, its lines scrolling in it (its list grows from nothing, so it never
+   makes the row taller); alone, under the first, it keeps the height of the
+   containers' box. Its lines are a grid of two columns: the component, which
+   takes what is left, and what to do with it, all of one width, so the
+   choices stand one under the other. */
+.wslc-patch-columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+    gap: 12px;
+}
+
+.wslc-patch-requirements-column {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.wslc-patch-requirements {
+    flex: 1 1 0;
+    min-height: calc(4 * (1.25rem + 2 * 4px));
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 10rem;
+    align-content: start;
+    align-items: center;
+    column-gap: 8px;
+}
+
+.wslc-patch-requirement-name {
+    white-space: nowrap;
+    overflow-x: auto;
+}

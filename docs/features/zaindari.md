@@ -19,6 +19,13 @@ An advisory that names no severity of its own is given the one its CVSS
 vector scores, a 3.x vector or a 4.0 one (Alpine's give only 4.0), scored
 as NVD scores it.
 
+Debian's and Ubuntu's kernel (`linux`, whose headers an image carries) is
+left out: a container runs on the kernel of WSL's virtual machine, never on
+its image's, so the kernel's vulnerabilities, hundreds of them, are not the
+container's. So is what Debian's own tracker calls `unimportant`: not a
+security problem for Debian, which will not fix it, and which nobody else
+can.
+
 An image with neither, or of a distribution OSV.dev has no tracker for (Kali,
 `scratch`, distroless with no package list), is said to be unchecked, never
 clean.
@@ -77,46 +84,92 @@ nothing.
   that fixes it, a line per library, and, for your image, a red line saying
   the agent refuses it. What it finds marks the image again, worse, better
   or clean.
-- **Once for an image with no mark yet**, while the agent runs, when a
-  container made around the agent (`wslc` by hand, a script) shows up.
+- **When a container runs**: the image of a running container with no mark
+  yet is checked once while the agent runs, whoever started it (the agent,
+  `wslc` by hand, a script). A stopped container is not: one stopped for a
+  month is checked when it is started again, not while it sits there.
 
 A container's logs, and its project's, are its own: Zaindari's findings are
 not written in them, since a log with no line about it would read as an
 image with nothing wrong. Every finding is written in the agent's own log.
 
-## Patch: a system package mended without waiting
+## Patch: an image mended without waiting
 
 A fix published by Alpine, Debian or Ubuntu reaches an official image only
-when that image is built again, which can take weeks. When an image carries
-a system package with a fix published, Zaindari's window, opened for a
+when that image is built again, which can take weeks, and a Python library's
+only when whoever made the image raises it. Zaindari's window, opened for a
 container or an image, offers **Patch**, as a Windows update patches
-Windows:
+Windows, a fix published or not: what has none is mended only by taking it
+out or replacing it. Its window shows the **Dockerfile** of the patch, whole,
+as it will be built into `<image>-patched` (`alpine:latest-patched`; a patch
+patched again builds on it and keeps its name):
 
-- It builds `<image>-patched` (`alpine:latest-patched`; a patch patched again
-  keeps its name): the image itself, its packages upgraded as root
-  (`apk upgrade`, or `apt-get update` and `apt-get upgrade`) and its own user
-  given back. It is built on this machine, so it is yours, and checked as any
-  build: under Block, a patch still vulnerable moves nothing.
-- Then it moves the containers ticked, every one of the image's to begin
-  with, to the patch, each recreated with its ports, mounts, environment and
-  name, and started if it was running.
-- A project's containers are left as they are: its compose file names its
-  image, so the image there is changed by hand.
-- Python libraries are not patched: raising one is a change to the program,
-  made in its requirements.
+```dockerfile
+FROM ghcr.io/iosub/ia-pdf-excel-backend:latest
+USER root
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+COPY requirements.txt /backend/requirements.txt
+RUN uv pip install --system --no-cache -U -r /backend/requirements.txt
+RUN uv pip uninstall --system python-jose
+USER app
+```
 
-The window closes when the patch starts; the agent builds it and says when
-it is done. A patch is published nowhere, so **Pull** on it pulls the image
-it was made from. A container that runs a patch says **patched** after its
-state, and so does its project's chip; its **Update image** goes to the
-original as published, and says so, with **Patch it** to stay on a patch
-while the original still carries what it mended. An image without a package manager (distroless) is not offered
-one.
+- The agent writes it first: `FROM` the image, as root its system packages
+  upgraded when one has a fix the image can install (`apk upgrade`, or
+  `apt-get update` and `apt-get upgrade`), and its own user given back last.
+  It is changed as you will: what you leave is what is built.
+- **requirements.txt**: every `requirements*.txt` the image carries of its
+  own (not a library's) is read with its packages, and listed a line a row;
+  so is each vulnerable Python library they do not name (a dependency, as
+  Pillow under pdfplumber). Each row says what to do with it: **Keep**,
+  **Raise** to the version Zaindari names (`pillow==12.2.0` → `pillow>=13.0.0`),
+  **Latest**, or **Take out**, shown red and struck through. **All to
+  latest** chooses the latest for every row. The file is rewritten by the
+  choices, comments and options kept, a dependency added with the version
+  that fixes it, and shown whole under the rows, with a button to copy it to
+  your sources. **Write requirements.txt** puts into the Dockerfile the
+  lines that copy it in over the old one and install from it, with the
+  installer the image carries (`uv` when it has it, else pip), and take out
+  what was taken out; the file goes beside the Dockerfile. A library raised
+  can break the program, which is why it is never done alone. An image with
+  no requirements file was installed from files left outside it: its
+  vulnerable dependencies can still be chosen, into a file of their own.
+- **The containers** of the image, every one ticked to begin with, are moved
+  to the patch once it is built, each recreated with its ports, mounts,
+  environment and name, and started if it was running. A project's are left
+  as they are: its compose file names its image, so the image there is
+  changed by hand.
 
-A container's **Update image** and **View & edit** offer it too: when the
-image named is on the machine and has a patch, a note says that pulling it or
-recreating on it again does not mend it, and **Patch it**, unticked, has the
-agent patch the image and move the container to the patch.
+The patch is checked as any build, and never refused: what is left in it, a
+fix nobody has published yet, is its original's to mend, and refusing it
+would leave the containers on the original, which carries all of it. If it
+does not work, **View & edit** puts a container back on the image it had.
+
+The window closes when the patch starts, and the title bar's activity line
+follows it to its end, step by step (`[2/3] RUN apt-get …`), then says it
+was built and how many containers moved; a patch that fails says why in a
+window of its own. While it is built, the image's row and card and those of
+the containers it moves say *Patching: building …*. A patch of a patch
+builds on it: a library taken out, tried, then the next, one patch at a
+time. A patch is published nowhere, so **Pull** on it pulls the image it was
+made from. A container that runs a patch says **patched** after its state,
+and so does its project's chip; its **Update image** goes to the original as
+published, and says so, with **Patch…** to patch it again while the
+original still carries what it mended.
+
+A container's **Update image** and **View & edit** offer the same patch, in
+one line that does not change size: a turning wheel while Zaindari is asked,
+and Update, Save and Run wait for it; then what a patch would mend, or that
+there is no system package to patch, with **Patch…** beside it, which opens
+the same patch window, that container alone ticked. The patch moves it, and
+the window it was opened from closes; View & edit asks first when what was
+changed in it is not saved, since the patch moves the container with the
+settings it has. Its arrow, as the Compose window's, opens the whole note
+over the form.
+
+For anything else, **Build image** takes a Dockerfile from your device,
+pasted in its field or loaded into it, and builds it with no folder on the
+agent's machine.
 
 ## Settings
 

@@ -57,7 +57,7 @@ public sealed partial class ContainerService(
         var uids = registry.Reconcile(Resources.ResourceRegistry.Container, [.. owned.Select(c => (c.Id, c.Name))], complete: all);
         var containers = recreations.Overlay([.. (helpers ? rows : owned).Select(c => c with { Uid = uids.GetValueOrDefault(c.Id) })], complete: all);
         var annotated = await gaps.AnnotateAsync(imageMarks.AnnotateContainers(failures.Annotate(updates.Annotate(publications.Annotate(policies.Annotate(containers))))), complete: all, cancellationToken);
-        // What wslc was asked around the agent shows here first: every container the agent did not make has its image checked once.
+        // What wslc was asked around the agent shows here first: every running container whose image has no mark has it checked once.
         if (all)
         {
             audit.Schedule([.. annotated.Where(c => !IsHelper(c.Name))]);

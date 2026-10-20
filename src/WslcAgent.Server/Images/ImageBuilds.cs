@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using Microsoft.Extensions.Options;
 using WslcAgent.ApiClient.Contracts;
 using WslcAgent.Server.Notifications;
 using WslcAgent.Server.Wslc;
@@ -14,19 +15,31 @@ namespace WslcAgent.Server.Images;
 /// tagged image built is then checked (<see cref="ImageSecurity"/>): under
 /// Block, a vulnerability moderate or worse fails the job. What a build is
 /// for once it is done (a patch's containers moved to it) runs in the same
-/// job, after the check: its lines in its console, its failure the job's.
+/// job, after the check: its lines in its console, its failure the job's. A
+/// Dockerfile sent from the user's device (<see cref="BuildImageRequest.DockerfileText"/>)
+/// is written in a folder of its own under the agent's data, <c>image-builds</c>,
+/// and built from there.
 /// </summary>
-public sealed class ImageBuilds(IWslcRunner wslc, Notifier notifier, ImageSecurity security, ILogger<ImageBuilds> logger)
+public sealed class ImageBuilds(IWslcRunner wslc, Notifier notifier, ImageSecurity security, IOptions<WslcOptions> options, ILogger<ImageBuilds> logger)
 {
     private const int MaxLines = 2000;
     private readonly ConcurrentDictionary<string, Job> _jobs = new();
 
-    public BuildJob Start(BuildImageRequest request, Func<Action<string>, CancellationToken, Task>? then = null)
+    /// <summary>Starts a build; <paramref name="then"/> runs in the job once it is built and checked, <paramref name="ended"/> once the job is over, however it ended.</summary>
+    public BuildJob Start(BuildImageRequest request, Func<Action<string>, CancellationToken, Task>? then = null, Action? ended = null)
     {
+        if (request.DockerfileText.Trim().Length > 0)
+        {
+            var folder = Path.Combine(options.Value.DataDirectory, "image-builds", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(folder);
+            File.WriteAllText(Path.Combine(folder, "Dockerfile"), request.DockerfileText.ReplaceLineEndings("\n"));
+            request = request with { Path = folder, Dockerfile = "", DockerfileText = "" };
+        }
+
         var args = Args(request);
         var job = new Job(Guid.NewGuid().ToString("N"), request.Tag.Trim());
         _jobs[job.Id] = job;
-        job.Run = RunAsync(job, args, then);
+        job.Run = RunAsync(job, args, then, ended);
         return job.Snapshot();
     }
 
@@ -74,9 +87,21 @@ public sealed class ImageBuilds(IWslcRunner wslc, Notifier notifier, ImageSecuri
     private static IEnumerable<string> Lines(string text) =>
         text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-    private async Task RunAsync(Job job, List<string> args, Func<Action<string>, CancellationToken, Task>? then)
+    private async Task RunAsync(Job job, List<string> args, Func<Action<string>, CancellationToken, Task>? then, Action? ended)
     {
         var took = Stopwatch.StartNew();
+        try
+        {
+            await BuildAsync(job, args, then, took);
+        }
+        finally
+        {
+            ended?.Invoke();
+        }
+    }
+
+    private async Task BuildAsync(Job job, List<string> args, Func<Action<string>, CancellationToken, Task>? then, Stopwatch took)
+    {
         try
         {
             await wslc.StreamAsync(args, job.Add, job.Cancellation.Token);
