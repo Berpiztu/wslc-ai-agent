@@ -312,17 +312,20 @@ public abstract class ListPageBase<TItem> : ComponentBase, IDisposable
     /// The clock follows the stream: five seconds while nothing is telling us
     /// what changes, a minute while something is. It is never switched off —
     /// what died with a session the stream was listening to is never announced.
-    /// A kind <c>wslc</c> reports nothing about keeps its five seconds, because
-    /// for that list the stream being up changes nothing at all. So does a
-    /// list whose rows carry readings (<see cref="Measured"/>).
+    /// A kind the agent's <c>wslc</c> reports nothing about (volumes before
+    /// 3.0.4) keeps its five seconds, because for that list the stream being
+    /// up changes nothing at all. So does a list whose rows carry readings
+    /// (<see cref="Measured"/>): Containers, Volumes and Networks.
     /// </summary>
     private TimeSpan Interval =>
-        Changes.Live && ChangeNotice.IsReported(Kind) && !Measured ? SafetyNet : RefreshEvery;
+        Changes.Live && Changes.Reports(Kind) && !Measured ? SafetyNet : RefreshEvery;
 
     /// <summary>
     /// The rows carry readings that change with no event behind them, a
-    /// container's CPU and memory: an event says a container started, never
-    /// that it has calmed down since. Read on the events alone, the reading
+    /// container's CPU and memory, a volume's bytes read and written, a
+    /// network's traffic: an event says a container started, never that it
+    /// has calmed down since, and nothing at all of what it reads, writes or
+    /// sends. Read on the events alone, the reading
     /// taken at a start, when a container is at its busiest, stood on its
     /// dial for a minute. The agent keeps one answer for all who ask within
     /// the same seconds (Home asks at this pace too), so the clock is not a

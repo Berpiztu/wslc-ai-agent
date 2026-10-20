@@ -482,7 +482,8 @@ The Home page is a dashboard designed by each user, not a fixed screen.
   Live updates (whether the agent hears `wslc`'s events, or the screens read
   on their own clock); Recent events (what `wslc` reported lately, newest
   first: containers started, stopped or ended with their exit code, networks
-  connected or disconnected, health changes); the agent's log; file transfers;
+  connected or disconnected, health changes, and volumes created, mounted,
+  unmounted, destroyed or pruned from wslc 3.0.4); the agent's log; file transfers;
   free text.
 - **Ready-made cards**: container, Compose project, image, volume, network, system, charts.
   A project's card is born with a place for its containers, an empty group

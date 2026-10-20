@@ -289,9 +289,10 @@ die.
   exit code and its stderr: that is the evidence behind any failure.
 - `recent_events` answers `{ summary, count, events }`, newest first, each
   event `{ time, type, action, id, name, exitCode }`: `type` is `container`,
-  `image` or `network` (volumes report no events); `action` is wslc's own —
-  `start`, `stop`, `kill`, `die`, `connect`, `disconnect`,
-  `health_status: unhealthy`… A `die` with a non-zero `exitCode` is a container
+  `image`, `network` or, from wslc 3.0.4, `volume` (older wslc reports no
+  volume events); `action` is wslc's own — `start`, `stop`, `kill`, `die`,
+  `connect`, `disconnect`, `health_status: unhealthy`, a volume's `create`,
+  `mount`, `unmount`, `destroy`, `prune`… A `die` with a non-zero `exitCode` is a container
   that ended on its own, not one the user stopped. `name` is null when the
   event carries none: name the object by its short id then. The agent keeps
   the last 100, and the list starts empty when the agent starts or listens to

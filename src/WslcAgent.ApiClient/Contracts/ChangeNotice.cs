@@ -8,7 +8,7 @@ namespace WslcAgent.ApiClient.Contracts;
 /// </summary>
 /// <param name="Kinds">
 /// The kinds, as <c>wslc</c> names them: <c>container</c>, <c>network</c>,
-/// <c>image</c>, <c>volume</c> — and <c>session</c>, the agent's own: a
+/// <c>image</c>, <c>volume</c> (wslc 3.0.4 on) — and <c>session</c>, the agent's own: a
 /// session was started, stopped or chosen, from any client, or its event
 /// stream died with it — and <c>agent-update</c>:
 /// the agent's own update changed state (announced, cancelled, installing),
@@ -22,7 +22,13 @@ namespace WslcAgent.ApiClient.Contracts;
 /// silence. A stopped session takes its containers down without one word of
 /// warning on the way out, so a lost stream is never a quiet moment.
 /// </param>
-public sealed record ChangeNotice(IReadOnlyList<string> Kinds, bool Complete = false)
+/// <param name="Reported">
+/// On a complete notice, the kinds the agent's <c>wslc</c> reports at all, so
+/// a list of one it does not report keeps reading on its own clock; null on
+/// every other notice, and on any from an agent too old to say, which leaves
+/// a client with <see cref="AlwaysReported"/>.
+/// </param>
+public sealed record ChangeNotice(IReadOnlyList<string> Kinds, bool Complete = false, IReadOnlyList<string>? Reported = null)
 {
     /// <summary>Every kind at once: what a listener is told when it cannot trust what it has.</summary>
     public static readonly ChangeNotice Everything = new([Container, Network, Image, Volume, Session], Complete: true);
@@ -42,10 +48,9 @@ public sealed record ChangeNotice(IReadOnlyList<string> Kinds, bool Complete = f
     public bool Touches(string kind) => Complete || Kinds.Contains(kind);
 
     /// <summary>
-    /// Whether <c>wslc</c> reports this kind at all. Its event store knows
-    /// containers, images and networks and nothing else, so a list of volumes
-    /// can never be told and keeps reading on its own clock. Read from
-    /// <c>EventStore.cpp</c> at tag 2.9.13, not from what has been seen happen.
+    /// The kinds every <c>wslc</c> with events reports: its event store knew
+    /// containers, images and networks and nothing else up to 3.0.3 (read from
+    /// <c>EventStore.cpp</c> at tag 2.9.13); volumes join them from 3.0.4.
     /// </summary>
-    public static bool IsReported(string kind) => kind is Container or Network or Image;
+    public static readonly IReadOnlyList<string> AlwaysReported = [Container, Network, Image];
 }

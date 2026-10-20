@@ -83,6 +83,9 @@
 </PageShell>
 
 @code {
+    /// <summary>Each volume's Read and Written are on its card's dials, and a container writing in it sends no event.</summary>
+    protected override bool Measured => true;
+
     /// <summary>What every container has read and written: what a volume's dials are a share of.</summary>
     private long _read;
     private long _written;

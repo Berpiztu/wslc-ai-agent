@@ -68,7 +68,7 @@
     private void OnAgentChanged(ChangeNotice notice)
     {
         if (notice.Touches(ChangeNotice.Container) || notice.Touches(ChangeNotice.Image)
-            || notice.Touches(ChangeNotice.Network) || notice.Touches(ChangeNotice.Session))
+            || notice.Touches(ChangeNotice.Network) || notice.Touches(ChangeNotice.Volume) || notice.Touches(ChangeNotice.Session))
         {
             _ = Events.RefreshAsync();
         }

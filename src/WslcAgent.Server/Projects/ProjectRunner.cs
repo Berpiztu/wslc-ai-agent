@@ -409,10 +409,8 @@ public sealed class ProjectRunner(
             throw new InvalidOperationException($"The build context of {string.Join(", ", images)} is not on the agent: it was not sent, or was let go of since. Run the build again from the machine that has the folder.");
         }
 
-        var result = await wslc.RunAsync(["version", "--format", "json"], cancellationToken: stop);
-        var row = WslcJson.ParseRows(result.Stdout).FirstOrDefault();
-        var said = row.ValueKind == JsonValueKind.Object && row.TryGetProperty("Client", out var client) ? client.GetString("Version") : "";
-        if (Version.TryParse(said.Split('-', '+', ' ')[0], out var version) && version < ReadsContextFromInput)
+        var said = await WslcVersion.ReadAsync(wslc, stop);
+        if (WslcVersion.Parse(said) is { } version && version < ReadsContextFromInput)
         {
             throw new InvalidOperationException($"This machine's wslc is {said}, and building from a folder of another machine needs {ReadsContextFromInput} or later, which reads the context sent. Update WSL (wsl --update), or build from a folder of this machine.");
         }
