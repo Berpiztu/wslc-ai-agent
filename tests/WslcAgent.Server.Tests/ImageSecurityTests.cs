@@ -105,6 +105,17 @@ public sealed class ImageSecurityTests
     }
 
     [Fact]
+    public void A_library_whose_worst_is_high_or_critical_is_written_in_the_log_as_an_error()
+    {
+        ImageVulnerability Found(string severity) => new("pypdf", "4.0.2", "GHSA-x", "", severity, "6.19.0", "");
+
+        Assert.Equal("ERROR", ImageSecurity.LogLevelOf(ImageSecurity.Remedy("img", [Found("high")])));
+        Assert.Equal("ERROR", ImageSecurity.LogLevelOf(ImageSecurity.Remedy("img", [Found("critical")])));
+        Assert.Equal("WARNING", ImageSecurity.LogLevelOf(ImageSecurity.Remedy("img", [Found("moderate")])));
+        Assert.Equal("WARNING", ImageSecurity.LogLevelOf("img comes from a registry and has Python libraries with a vulnerability moderate or worse."));
+    }
+
+    [Fact]
     public async Task Warn_says_it_and_builds_on_and_off_checks_nothing()
     {
         var (warned, _) = Make(ImageSecurityPolicy.Warn);

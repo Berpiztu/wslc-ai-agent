@@ -335,7 +335,27 @@ public sealed class ImageSecurity(IWslcRunner wslc, HttpClient http, ImageSecuri
         var remedy = unfixed is not null
             ? $"no version fixes {unfixed.Advisory} yet: replace it"
             : $"{vulnerabilities.Select(v => v.FixedIn).Order(VersionOrder.Instance).Last()} fixes {(vulnerabilities.Count == 1 ? "it" : "them all")}";
-        return $"{image}: {first.Package} {first.Version}: {counted} moderate or worse, the worst {worst}; {remedy}.";
+        return $"{image}: {first.Package} {first.Version}: {counted} moderate or worse{WorstSaid}{worst}; {remedy}.";
+    }
+
+    /// <summary>How a <see cref="Remedy"/> line says its worst severity, written there and read back by <see cref="LogLevelOf"/>.</summary>
+    private const string WorstSaid = ", the worst ";
+
+    /// <summary>
+    /// The level a line of the image check is written in at the end of a
+    /// log: ERROR, in red, for a library whose worst vulnerability is high or
+    /// critical, as the state chip says it; WARNING for any other line.
+    /// </summary>
+    public static string LogLevelOf(string line)
+    {
+        var at = line.IndexOf(WorstSaid, StringComparison.Ordinal);
+        if (at < 0)
+        {
+            return "WARNING";
+        }
+
+        var severity = line[(at + WorstSaid.Length)..].Split(';', 2)[0];
+        return severity is "high" or "critical" ? "ERROR" : "WARNING";
     }
 
     /// <summary>Versions in the order PyPI releases them, closely enough for picking the highest fix: number by number, a part that is not one compared as text.</summary>

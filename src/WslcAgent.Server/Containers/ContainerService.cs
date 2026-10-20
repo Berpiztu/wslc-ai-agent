@@ -389,7 +389,7 @@ public sealed partial class ContainerService(
         // holds, which it took. The reading of the lines since a moment does not repeat them.
         if (since.Length == 0 && !timestamps && imageWarnings.Of(container) is { } warning)
         {
-            text = $"{text.TrimEnd()}\n{string.Join("\n", warning.Lines.Select(line => $"{warning.At:yyyy-MM-dd HH:mm:ss} | WARNING  | {line}"))}\n".TrimStart('\n');
+            text = $"{text.TrimEnd()}\n{string.Join("\n", warning.Lines.Select(line => $"{warning.At:yyyy-MM-dd HH:mm:ss} | {Images.ImageSecurity.LogLevelOf(line),-9}| {line}"))}\n".TrimStart('\n');
         }
 
         if (since.Length == 0 && !timestamps && gaps.HeldBy(container) is { } held)

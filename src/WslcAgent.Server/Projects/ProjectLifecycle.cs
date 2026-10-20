@@ -106,7 +106,7 @@ public sealed class ProjectLifecycle(
             if (imageWarnings.Of(member.Id) is { } warning)
             {
                 var made = warning.At.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffffff00Z", System.Globalization.CultureInfo.InvariantCulture);
-                lines.AddRange(warning.Lines.Select(found => new ProjectLogLine(member.Name, member.Service, made, $"WARNING {found}")));
+                lines.AddRange(warning.Lines.Select(found => new ProjectLogLine(member.Name, member.Service, made, $"{Images.ImageSecurity.LogLevelOf(found)} {found}")));
             }
 
             if (failures.Of(member.Id) is { } failure)
