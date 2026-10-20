@@ -6,7 +6,7 @@ name: Client
 # release. Every other push is covered by the quick build (ci.yml).
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths:
       - src/WslcAgent.App/**
       - global.json
@@ -17,7 +17,7 @@ on:
       - packaging/Packaging.ps1
       - .github/workflows/client.yml
   pull_request:
-    branches: [main]
+    branches: [main, develop]
     paths:
       - src/WslcAgent.App/**
       - global.json

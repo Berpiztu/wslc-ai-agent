@@ -362,8 +362,9 @@ The three installer scripts count every build as a fourth part of the last
 release's version (`1.0.27.1`, `1.0.27.2`…), in `private\version.props` (never
 tracked), so each installer is newer than the last and a build changes no
 tracked file; `-NoBump` builds the same version again. The version in the
-repository is the last release's, changed only when one is published, and
-always to the next (`1.0.28`).
+repository is the last release's, changed only when one is published: a
+patch takes the next fourth part after every build (`1.0.27.3`), and any
+other version is chosen ([releasing.md](docs/developer/releasing.md#version-numbers)).
 
 Without the scripts: `dotnet build`, `dotnet test`,
 `dotnet run --project src/WslcAgent.Server` from the repository root. A
