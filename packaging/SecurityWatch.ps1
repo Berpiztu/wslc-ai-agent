@@ -16,8 +16,9 @@
     Send-WslcAgentInventory, once a build succeeded: the list of every library
     this checkout uses, sent only when it differs from the one security-watch
     has, and only for main, develop and release tags, as an issue in
-    security-watch, opened with SECURITY_WATCH_TOKEN (private\env.psd1, or a
-    secret on GitHub): a token that can open issues there and nothing else.
+    security-watch opened by whoever gh is signed in as on this machine, as
+    they would open it by hand: no token of its own. GitHub Actions only
+    asks; deploy-release.ps1 sends each release's list from here.
 #>
 
 $WslcAgentSecurityProject = "wslc-ai-agent"
@@ -165,7 +166,11 @@ function Send-WslcAgentInventory {
         return
     }
 
-    Import-WslcAgentPrivateSettings
+    if ($env:GITHUB_ACTIONS -eq "true") {
+        Write-Host "security-watch: GitHub Actions only asks; the lists are sent by the builds and releases made on a machine." -ForegroundColor DarkGray
+        return
+    }
+
     $inventory = Get-WslcAgentInventory -Ref $Ref
 
     # The same libraries, whenever and from whichever commit they were sent, are the same list.
@@ -183,14 +188,16 @@ function Send-WslcAgentInventory {
         }
     }
 
-    if (-not $env:SECURITY_WATCH_TOKEN) {
-        Write-Warning "The list of $($Ref.Name) changed, and SECURITY_WATCH_TOKEN is not set (private\env.psd1): it was not sent to security-watch."
+    # Opened as the person signed in to gh here, as they would open it by
+    # hand: security-watch takes it from the accounts in its submitters.txt.
+    $login = if (Get-Command gh -ErrorAction SilentlyContinue) { gh auth token 2>$null }
+    if (-not $login) {
+        Write-Warning "The list of $($Ref.Name) changed, and gh is not signed in on this machine (gh auth login): it was not sent to security-watch."
         return
     }
 
-    # Sent as an issue: the token can open issues there and nothing else, so
-    # no project can write a file in security-watch. Its watcher takes the
-    # list in, answers the issue with the result and closes it.
+    # Sent as an issue: no project writes a file in security-watch. Its
+    # watcher takes the list in, answers the issue with the result and closes it.
     $issue = [ordered]@{
         title = "inventory: $WslcAgentSecurityProject@$($Ref.Name)"
         body = "Libraries of $WslcAgentSecurityProject at $($Ref.Name) ($($inventory.commit)), sent by its build.`n`n``````json`n$(ConvertTo-Json -Compress -Depth 5 $inventory)`n``````"
@@ -199,7 +206,7 @@ function Send-WslcAgentInventory {
         Write-Warning "security-watch: the list of $($Ref.Name) is longer than an issue holds ($($issue.body.Length) characters): it was not sent."
         return
     }
-    $headers = @{ Accept = "application/vnd.github+json"; "User-Agent" = "wslc-ai-agent"; Authorization = "Bearer $env:SECURITY_WATCH_TOKEN" }
+    $headers = @{ Accept = "application/vnd.github+json"; "User-Agent" = "wslc-ai-agent"; Authorization = "Bearer $login" }
     try {
         $opened = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$WslcAgentSecurityRepository/issues" -Headers $headers `
             -ContentType "application/json; charset=utf-8" -Body ([Text.Encoding]::UTF8.GetBytes((ConvertTo-Json $issue))) -TimeoutSec 30

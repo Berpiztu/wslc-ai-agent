@@ -164,7 +164,6 @@ use; an empty value sets nothing.
 | `WSLC_AGENT_KEY_PASS` | The keystore's password | The key's own password, when it differs |
 | `WSLC_AGENT_GOOGLE_SERVICES` | `private\google-services.json` | The client's Firebase configuration kept elsewhere |
 | `WSLC_AGENT_PUSH_KEY` | `private\firebase-service-account.json` | The service account key kept elsewhere |
-| `SECURITY_WATCH_TOKEN` | none: the list is not sent | The token a build sends its list of libraries to security-watch with ([security-watch.md](security-watch.md)) |
 
 The same names work as ordinary environment variables, and a variable already
 set in the environment wins over the file. The file is a PowerShell data

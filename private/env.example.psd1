@@ -19,10 +19,4 @@
     # The Firebase service account key the agent installer carries.
     # Default: private\firebase-service-account.json.
     WSLC_AGENT_PUSH_KEY         = ''
-
-    # The token a build sends this checkout's list of libraries to
-    # Berpiztu/security-watch with, as an issue: fine-grained, that
-    # repository alone, Issues read and write, nothing else. Without it
-    # nothing is sent.
-    SECURITY_WATCH_TOKEN        = ''
 }

@@ -46,21 +46,19 @@ security-watch titled `inventory: wslc-ai-agent@<ref>`, the list in a
 with the result and closes it, within minutes, so the next build already
 knows.
 
-## The token
+## Who sends
 
-Sending needs `SECURITY_WATCH_TOKEN`, a token that can **open issues** in
-security-watch and nothing else: no project can write a file there, so a
-token that leaks cannot change a result, the watcher or the history. GitHub
-→ Settings → Developer settings → Fine-grained tokens → Generate new token:
-resource owner **Berpiztu**, repository access **Only select repositories:
-security-watch**, repository permission **Issues: Read and write**, nothing
-else. Its owner's account has to be in security-watch's `submitters.txt`,
-and this project in its `projects.txt`: the repository is public, and an
-inventory issue from anyone else is refused.
+No token of its own: the issue is opened by whoever `gh` is signed in as on
+this machine (`gh auth login`), as they would open it by hand. security-watch
+takes it only from the accounts in its `submitters.txt`, for the projects in
+its `projects.txt`: the repository is public, and an inventory issue from
+anyone else is refused. Nobody writes a file in security-watch but its own
+watcher.
 
-- On a machine: in `private\env.psd1` ([private-files.md](private-files.md#settings-envpsd1)).
-- On GitHub: the repository secret `SECURITY_WATCH_TOKEN`, which `ci.yml`
-  and `release.yml` pass to the builds.
+- On a machine where `gh` is not signed in, the build says the list was not
+  sent, and goes on.
+- **GitHub Actions only asks.** The lists of `main` and `develop` come from
+  the builds made on a machine; `deploy-release.ps1` sends each release's
+  list when it tags it.
 
-Without it the build still asks, and says the list was not sent. Asking
-needs no token: the status is public.
+Asking needs no sign-in at all: the status is public.

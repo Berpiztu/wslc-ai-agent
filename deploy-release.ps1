@@ -274,8 +274,9 @@ if ($LASTEXITCODE -ne 0) { throw "git push failed with exit code $LASTEXITCODE" 
 git push origin $tag
 if ($LASTEXITCODE -ne 0) { throw "git push of $tag failed with exit code $LASTEXITCODE" }
 
-# A release built on GitHub sends its list of libraries from there; one built here sends it now.
-if ($Local) { Send-WslcAgentInventory -Ref ([pscustomobject]@{ Name = $tag; Type = "release" }) }
+# The release's list of libraries goes to security-watch from here: GitHub
+# Actions only asks.
+Send-WslcAgentInventory -Ref ([pscustomobject]@{ Name = $tag; Type = "release" })
 
 if (-not $Local) {
     $repository = (gh repo view --json nameWithOwner --jq .nameWithOwner 2>$null)
