@@ -140,7 +140,7 @@ public sealed class ProjectRunner(
         {
             throw new InvalidOperationException(
                 $"Project {plan.Name} was last saved from {former}, and this file would take its place. Nothing was done. "
-                + "Save it again saying it replaces that file: the Compose window and wslc-compose ask for it (wslc-compose up -y), from version 1.6.4.1 on.");
+                + "Save it again saying it replaces that file: the Compose window and wslc-compose ask for it (wslc-compose up -y), from version 1.6.4.3 on.");
         }
 
         return Begin(plan, (job, stop) => SaveAsync(job, plan, request, stop));
