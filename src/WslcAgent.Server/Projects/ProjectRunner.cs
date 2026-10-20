@@ -43,6 +43,7 @@ public sealed class ProjectRunner(
     Publishing.PublishingService publishing,
     ProjectContexts contexts,
     Images.ImageSecurity security,
+    ProjectGaps gaps,
     ILogger<ProjectRunner> logger)
 {
     /// <summary>What a project's row says in the Image column: it is no container's image.</summary>
@@ -223,6 +224,8 @@ public sealed class ProjectRunner(
     /// <summary>The job's work to its end, whichever it is: done, cancelled, or failed with why.</summary>
     private async Task RunAsync(Job job, string project, Func<Job, CancellationToken, Task> work)
     {
+        // Its containers are on their way while it runs: not a gap in the project (ProjectGaps).
+        gaps.Hold(project);
         try
         {
             await work(job, job.Cancellation.Token);
@@ -240,8 +243,38 @@ public sealed class ProjectRunner(
             job.Note("ERROR", ex.Message);
             job.Finish(ProjectJob.Failed, ex.Message);
         }
+        finally
+        {
+            gaps.Release(project);
+        }
+
+        try
+        {
+            store.KeepLastJob(job.Snapshot());
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            logger.LogWarning("project {Project}: the log of its last job could not be kept: {Message}", project, ex.Message);
+        }
 
         events.Publish(new ChangeNotice([ChangeNotice.Container]));
+    }
+
+    /// <summary>
+    /// The project's last save or build: the one under way, as it goes, or
+    /// else the last one kept, done, cancelled or failed. What the project's
+    /// Save log button opens, so a save that went well can still be read.
+    /// </summary>
+    public ProjectJob LastJob(string project)
+    {
+        var job = _jobs.Values.Where(job => job.Name == project && job.FinishedAt is null).Select(job => job.Snapshot()).FirstOrDefault()
+            ?? store.LastJob(project)
+            ?? throw new KeyNotFoundException($"Project {project} has no save or build kept yet.");
+
+        // What the project is now, after the save that made it: a service whose container is gone, and what cannot start for it.
+        return gaps.Of(project) is { } gap
+            ? job with { Log = [.. job.Log, $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} | {(gap.Blocked.Count > 0 ? "ERROR" : "WARNING"),-8} | Now: {gap.Text}"] }
+            : job;
     }
 
     private async Task SaveAsync(Job job, ComposePlan plan, ProjectUpRequest request, CancellationToken stop)
@@ -253,6 +286,11 @@ public sealed class ProjectRunner(
         var builds = services.Where(service => service.Build is not null).ToList();
         var orphans = request.RemoveOrphans ? Orphans(state, plan) : new List<Existing>();
         job.Expect(newNetworks.Count + newVolumes.Count + builds.Count + services.Count + orphans.Count);
+
+        // Kept before anything is made, not once all of it is: a save that fails half way leaves
+        // the project on the machine, in the list with its containers, and its file has to be
+        // there with it, the very one that was tried, to be opened, read and mended.
+        store.Keep(plan, request.File with { Services = Kept(plan, request, state) });
 
         foreach (var network in newNetworks)
         {
@@ -287,7 +325,6 @@ public sealed class ProjectRunner(
             job.Advance();
         }
 
-        store.Keep(plan, request.File with { Services = Kept(plan, request, state) });
         job.Say(request.Start ? "Started" : "Saved");
     }
 
@@ -686,6 +723,9 @@ public sealed class ProjectRunner(
     /// <summary>One save: the step it is at, how far it has got, and what it has printed.</summary>
     private sealed class Job(string id, string name)
     {
+        /// <summary>The project the job is for.</summary>
+        public string Name => name;
+
         private readonly Lock _gate = new();
         private readonly LinkedList<string> _log = new();
         private string _state = ProjectJob.Running;

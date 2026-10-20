@@ -124,9 +124,14 @@ component uses the controls below with these parameters and never adds
   `MudIconButton Size="Size.Small" Variant="Variant.Filled"` with a Material
   icon in its verb's colour (green starts, blue does or does again, light
   blue takes a copy out, amber takes back, red destroys or wipes). A toggle
-  says its state the way a switch does: on it is green (`Color.Success`, what
-  everything chosen wears) and drawn pressed into the rail (`wslc-rail-on`),
-  off it is neutral and stands proud of it like every other button there. The
+  says its state by its colour (`RailToggle`): blue (`Color.Primary`) while it
+  is on, green (`Color.Success`) while it is off. The log viewer's level keys
+  (Info, Warning, Error) are keys instead: each in the colour its lines wear,
+  read from the same variable (`--wslc-level-info`, `-warning`, `-error`, and
+  their `-ink`), held down and sunk into the rail while its lines are shown
+  (`wslc-key-down`, as the table/cards key in use), standing proud while they
+  are hidden (`wslc-key-up`). A colour, a size or a text that means something
+  is defined once, and whatever shows it reads it from there. The
   exec window's rail holds every verb it has — Connect, Reconnect, Copy,
   Clear — because its pane takes the rest: a command is typed in the shell
   itself, not in a Command field over it. The search bar (`.wslc-action-search`)

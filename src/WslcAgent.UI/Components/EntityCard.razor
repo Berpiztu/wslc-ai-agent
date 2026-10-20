@@ -9,8 +9,9 @@
 
 <MudCard Elevation="Style.Applied.CardElevation" Outlined="Style.Applied.CardOutlined" Square="Style.Applied.CardSquare" Class="wslc-card d-flex flex-column" Style="height: 100%">
     <EntityCardHeader Title="@Title" Subtitle="@Subtitle" AvatarText="@AvatarText" AvatarColor="AvatarColor" Avatar="Avatar" Key="@Key" HeaderActions="HeaderActions" Tone="Tone" />
-    @* A failure is said at the rows' own share, a kind of card at the soft one: an alarm has to be louder than a label. *@
-    <MudCardContent Class="flex-grow-1" Style="@CardTone.Style(BodyTone, BodyTone == Color.Error ? CardTone.Share : CardTone.Soft)" title="@BodyTitle">
+    @* A failure (red) or a warning (yellow) is an alarm, in MudBlazor's own colour with black ink (CardTone.Alarm);
+       a project's body (Primary stopped, Success running) is its bracket's colour with white ink (CardTone.Project); any other tone soft. *@
+    <MudCardContent Class="@($"flex-grow-1 {BodyClass}")" Style="@BodyStyle" title="@BodyTitle">
         @ChildContent
     </MudCardContent>
     @if (Actions is not null)
@@ -42,13 +43,17 @@
     /// <summary>The header's and the actions row's background, saying the row's state (<see cref="CardTone"/>); null for the card's own tone.</summary>
     [Parameter] public Color? Tone { get; set; }
 
-    /// <summary>The body's background, a soft tone of a palette colour that says what kind of card it is (a project's, among its containers'); null for the card's own.</summary>
+    /// <summary>The body's background: Error or Warning for an alarm (<see cref="CardTone.Alarm"/>), Primary or Success for a project's among its containers', stopped or running (<see cref="CardTone.Project"/>), any other a soft tone of it; null for the card's own.</summary>
     [Parameter] public Color? BodyTone { get; set; }
 
-    /// <summary>What the body's tone says, in words, for whoever rests the pointer on it: why a container did not start.</summary>
+    /// <summary>What the body's tone says, in words, for whoever rests the pointer on it: why a container did not start, or what its image is vulnerable to.</summary>
     [Parameter] public string BodyTitle { get; set; } = "";
 
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private string BodyClass => CardTone.Alarm(BodyTone) is not null ? CardTone.AlarmClass : CardTone.Project(BodyTone) is not null ? CardTone.ProjectClass : "";
+
+    private string? BodyStyle => CardTone.Alarm(BodyTone) ?? CardTone.Project(BodyTone) ?? CardTone.Style(BodyTone, CardTone.Soft);
 
     [Parameter] public RenderFragment? Actions { get; set; }
 

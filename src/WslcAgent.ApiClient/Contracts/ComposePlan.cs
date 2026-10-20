@@ -248,7 +248,7 @@ public sealed record ProjectJob(string Id, string Name, string State, string Ste
     public const string Cancelled = "cancelled";
 }
 
-/// <summary>Answer of <c>GET /api/v1/projects/{name}</c>: the Compose file kept with a project, as it was last brought up.</summary>
+/// <summary>Answer of <c>GET /api/v1/projects/{name}</c>: the Compose file kept with a project, as it was last saved, kept when the save began, so one that failed leaves its file too.</summary>
 /// <param name="File">The file it was read from, on the agent's machine; empty when it was pasted.</param>
 /// <param name="Folder">The context it was read with.</param>
 /// <param name="Yaml">Its text as it was then.</param>

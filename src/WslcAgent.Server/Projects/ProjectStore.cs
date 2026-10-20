@@ -16,6 +16,7 @@ public sealed partial class ProjectStore(IOptions<WslcOptions> options)
 {
     private const string FileName = "compose.yaml";
     private const string AboutName = "project.json";
+    private const string LastJobName = "last-job.json";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
 
     /// <summary>Keeps the file a project was brought up from, over the one kept before.</summary>
@@ -55,6 +56,25 @@ public sealed partial class ProjectStore(IOptions<WslcOptions> options)
 
         return new StoredProject(name, kept.File ?? "", kept.Folder ?? "", File.ReadAllText(file), kept.Variables ?? [], kept.Profiles ?? [], kept.SavedAt, kept.Services ?? [],
             kept.Contexts ?? new Dictionary<string, string>(), kept.ClientFile ?? "");
+    }
+
+    /// <summary>
+    /// Keeps the log of the project's last save or build, however it ended:
+    /// the job is forgotten seconds after it went well, and its log, with what
+    /// the image check found, would go with it.
+    /// </summary>
+    public void KeepLastJob(ProjectJob job)
+    {
+        var folder = Folder(job.Name);
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, LastJobName), JsonSerializer.Serialize(job, Json));
+    }
+
+    /// <summary>The project's last save or build as it ended; null when none was kept.</summary>
+    public ProjectJob? LastJob(string name)
+    {
+        var path = Path.Combine(Folder(name), LastJobName);
+        return File.Exists(path) ? JsonSerializer.Deserialize<ProjectJob>(File.ReadAllText(path), Json) : null;
     }
 
     /// <summary>Whether a file is kept for any project at all.</summary>

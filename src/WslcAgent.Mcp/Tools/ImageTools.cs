@@ -21,6 +21,14 @@ public static class ImageTools
         CancellationToken cancellationToken = default) =>
         images.InspectAsync(reference, cancellationToken);
 
+    [McpServerTool(Name = "image_vulnerabilities", ReadOnly = true)]
+    [Description("An image's Python libraries (pip list read in the image itself) and every known vulnerability of them from OSV.dev, the low ones too, the worst first, each with its advisory, CVE and the version that fixes it; with a line per library saying the version that fixes all of its own, and whether the agent refuses to make containers from the image (built here, Settings → Security set to Block).")]
+    public static Task<ImageVulnerabilities> ImageVulnerabilities(
+        IImageSecurity security,
+        [Description("Image reference or id.")] string reference,
+        CancellationToken cancellationToken = default) =>
+        security.ReportAsync(reference, cancellationToken);
+
     [McpServerTool(Name = "pull_image")]
     [Description("Pull an image from its registry (wslc image pull). Slow for large images; returns when the pull is complete.")]
     public static async Task<string> PullImage(

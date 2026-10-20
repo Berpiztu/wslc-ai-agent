@@ -71,6 +71,8 @@ The full set is in [docs/architecture.md](docs/architecture.md) and
 - **Reuse before you add.** One component per concept (one list-page shell,
   one details view, one picker per kind of resource), fed different data.
   When two places do the same thing, extract it before a third appears.
+  A colour, a size or a text that means something is defined once (a
+  `--wslc-…` variable, a constant), and whatever shows it reads it from there.
 - **Clean code.** Small units with one job, names that say what they do,
   comments that explain why rather than what, no dead or commented-out code.
 - **Type sizes and form fields** follow a fixed scale

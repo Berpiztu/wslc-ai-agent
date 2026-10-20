@@ -781,7 +781,15 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<ProjectJob> GetProjectJobAsync(string id, CancellationToken cancellationToken = default) =>
         GetAsync<ProjectJob>($"api/v1/projects/jobs/{Escape(id)}", cancellationToken);
 
-    /// <summary>The Compose file kept with a project, as it was last brought up; 404 when none is kept.</summary>
+    /// <summary>View image packages and CVEs: the image's Python libraries and every known vulnerability of them, read only.</summary>
+    public Task<ImageVulnerabilities> GetImageVulnerabilitiesAsync(string image, CancellationToken cancellationToken = default) =>
+        GetAsync<ImageVulnerabilities>($"api/v1/image-security/vulnerabilities?image={Uri.EscapeDataString(image)}", cancellationToken);
+
+    /// <summary>The project's last save or build: the one under way, or the last one kept however it ended (404 when none was).</summary>
+    public Task<ProjectJob> GetProjectLastJobAsync(string name, CancellationToken cancellationToken = default) =>
+        GetAsync<ProjectJob>($"api/v1/projects/{Escape(name)}/last-job", cancellationToken);
+
+    /// <summary>The Compose file kept with a project, as it was last saved, whether the save went well or not; 404 when none is kept.</summary>
     public Task<StoredProject> GetStoredProjectAsync(string name, CancellationToken cancellationToken = default) =>
         GetAsync<StoredProject>($"api/v1/projects/{Escape(name)}", cancellationToken);
 

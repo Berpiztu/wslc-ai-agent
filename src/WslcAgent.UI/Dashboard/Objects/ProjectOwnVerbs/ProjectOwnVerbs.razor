@@ -21,7 +21,7 @@
         <EntityCardPart>
             <MudCardActions Class="py-1" Style="@CardTone.Style(CardTone.Of(head))">
                 <VerbTaps>
-                    <ProjectActions Project="@head.Name" RowKey="@head.Id" Containers="MemberNames" Running="head.IsRunning"
+                    <ProjectActions Project="@head.Name" RowKey="@head.Id" Containers="MemberNames" Members="Members" Running="head.IsRunning"
                                     Changed="@(() => Containers.RefreshAsync())" />
                 </VerbTaps>
             </MudCardActions>

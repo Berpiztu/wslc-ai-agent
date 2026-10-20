@@ -225,7 +225,7 @@ die.
 - **Keep it running across reboots**: `set_restart_policy` with
   `unless-stopped` or `always`. This is agent-managed, not a runtime flag;
   `no` turns it off.
-- **Images**: `list_images`, `inspect_image`, `pull_image`, `tag_image`,
+- **Images**: `list_images`, `inspect_image`, `image_vulnerabilities`, `pull_image`, `tag_image`,
   `push_image` (needs a registry login done by the operator) and `save_image`
   (writes a tar on the **agent's** host, at a path on that machine).
 - **Volumes and networks**: `list_volumes`, `create_volume`, `inspect_volume`,

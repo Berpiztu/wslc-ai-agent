@@ -1,4 +1,5 @@
 using WslcAgent.ApiClient.Contracts;
+using WslcAgent.Mcp;
 using WslcAgent.Server.Images;
 
 namespace WslcAgent.Server.Endpoints;
@@ -17,6 +18,13 @@ public static class ImageSecurityEndpoints
                     : Results.Problem($"policy is {ImageSecurityPolicy.Off}, {ImageSecurityPolicy.Warn} or {ImageSecurityPolicy.Block}, not '{settings.Policy}'.",
                         statusCode: StatusCodes.Status400BadRequest, title: "Unknown policy"))
             .WithName("SetImageSecuritySettings");
+
+        // View image packages and CVEs: every library and every known vulnerability, read only.
+        api.MapGet("/image-security/vulnerabilities", (string image, IImageSecurity security, CancellationToken ct) =>
+                string.IsNullOrWhiteSpace(image)
+                    ? throw new ArgumentException("image is required", nameof(image))
+                    : security.ReportAsync(image, ct))
+            .WithName("GetImageVulnerabilities");
 
         return api;
     }

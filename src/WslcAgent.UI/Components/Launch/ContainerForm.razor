@@ -23,6 +23,7 @@
 @inject ActivityLine Activity
 @inject IClientFiles Files
 @inject PullActivity Pulls
+@inject RecreateActivity Recreates
 
 <div class="wslc-action-body">
 <div class="wslc-action-main @MainClass">
@@ -879,33 +880,22 @@
             }
         }
 
-        Busy(Mode == LaunchMode.Edit
-            ? $"Recreating {Named}: the new settings are rehearsed first, then the container is replaced. This can take a minute."
-            : start ? $"Starting {Named}…" : $"Creating {Named}…");
+        if (Mode == LaunchMode.Edit)
+        {
+            // The form closes at once, as Run's does: the image check and the rehearsal take their
+            // time, the agent finishes the recreate whatever happens to this window, and how it
+            // ends is said on the activity line, or in a window of its own when it did not happen.
+            Recreates.Start(SourceId, Named, request);
+            await OnDone.InvokeAsync("");
+            return;
+        }
+
+        Busy(start ? $"Starting {Named}…" : $"Creating {Named}…");
         try
         {
-            if (Mode == LaunchMode.Edit)
-            {
-                var created = await Api.RecreateContainerAsync(SourceId, request);
-                // Said on the title bar's activity line, which the form closing uncovers:
-                // with what the recreate had to adjust, in the info tone so it is read.
-                if (created.Notes.Count == 0)
-                {
-                    Activity.Done($"Recreated {Named}");
-                }
-                else
-                {
-                    Activity.Say($"Recreated {Named}. {string.Join(" ", created.Notes)}");
-                }
-
-                await OnDone.InvokeAsync(created.Id);
-            }
-            else
-            {
-                await Api.LaunchContainerAsync(request);
-                Activity.Say($"{(start ? "Run" : "Create")} started — watch the Containers table");
-                await OnDone.InvokeAsync("");
-            }
+            await Api.LaunchContainerAsync(request);
+            Activity.Say($"{(start ? "Run" : "Create")} started — watch the Containers table");
+            await OnDone.InvokeAsync("");
         }
         catch (AgentApiException ex)
         {

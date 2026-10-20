@@ -101,6 +101,11 @@
                                               OnLog="@(() => TransferFlow.ShowAsync(Dialogs, context.Item.Value.Id, context.Item.Value.Name))"
                                               OnCancel="@(() => CancelTransfersAsync(moving))" OnDismiss="@(() => DismissTransfersAsync(moving))" />
                             }
+                            else if (context.Item.Value.IsRecreating)
+                            {
+                                @* View & edit's Save, done by the agent with the form closed: the bar moves until the new container takes its place. *@
+                                <ProgressCell Lead="@Mark(context.Item.Value)" Name="@context.Item.Value.Name" Indeterminate="true" Status="Being recreated…" />
+                            }
                             else if (Working.IsBusy(context.Item.Value.Id))
                             {
                                 @* A verb on the container itself, its own or its project's going through
@@ -433,15 +438,29 @@
     /// <summary>A row's name, after its mark when it has one.</summary>
     private RenderFragment Named(ContainerSummary row)
     {
-        if (Mark(row) is not { } mark)
+        var mark = Mark(row);
+        // Made from an image with known vulnerabilities: a warning sign before the name, which
+        // takes the warning colour, its findings on hover; its logs end with them.
+        if (!row.IsWarned || IsGroup(row))
         {
-            return @<text>@Titled(row)</text>;
+            if (mark is null)
+            {
+                return @<text>@Titled(row)</text>;
+            }
+
+            return @<div class="wslc-progress-cell">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Wrap="Wrap.NoWrap">
+                    @mark
+                    <span class="wslc-progress-name">@Titled(row)</span>
+                </MudStack>
+            </div>;
         }
 
         return @<div class="wslc-progress-cell">
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Wrap="Wrap.NoWrap">
                 @mark
-                <span class="wslc-progress-name">@Titled(row)</span>
+                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Size="Size.Small" />
+                <span class="wslc-progress-name mud-warning-text">@Titled(row)</span>
             </MudStack>
         </div>;
     }
@@ -495,6 +514,15 @@
     /// <summary>Each of those with why, a line each: what the project's red says to whoever rests the pointer on it.</summary>
     private string FailuresOf(string project) => string.Join("\n", FailedOf(project).Select(member => $"{member.Name}: {member.Failure}"));
 
+    /// <summary>The project's containers made from an image with known vulnerabilities: the project's card is painted in the yellow theirs are.</summary>
+    private List<ContainerSummary> WarnedOf(string project) => MembersOf(project).Where(member => member.IsWarned).ToList();
+
+    /// <summary>The services of the project no container stands for, by the file the agent keeps with it: it is incomplete, whoever took the container away, and a save makes them again.</summary>
+    private IReadOnlyList<string> MissingOf(string project) => MembersOf(project).Select(member => member.MissingServices).FirstOrDefault(missing => missing is { Count: > 0 }) ?? [];
+
+    /// <summary>Something in the project to mend that stops nothing: an image with known vulnerabilities, or a service with no container. In the yellow.</summary>
+    private bool IsWarned(string project) => WarnedOf(project).Count > 0 || MissingOf(project).Count > 0;
+
     /// <summary>
     /// The cross of a project's failure: it was seen. What this screen kept
     /// of its own verb goes, and so does what the agent keeps of each
@@ -533,7 +561,7 @@
 
     /// <summary>A project's verbs: the row's in the table, and in its card (<paramref name="shortcuts"/>) with the Compose file as a button of its own at the left, as a container's card has its own.</summary>
     private RenderFragment GroupActions(ContainerSummary head, bool shortcuts = false) =>
-        @<ProjectActions Project="@head.Name" RowKey="@head.Id" Containers="@NamesOf(head.Name)" Running="head.IsRunning"
+        @<ProjectActions Project="@head.Name" RowKey="@head.Id" Containers="@NamesOf(head.Name)" Members="@MembersOf(head.Name)" Running="head.IsRunning"
                          Saving="@(SavingOf(head.Name) is { Active: true })" Changed="RefreshAsync" Shortcuts="shortcuts" />;
 
     /// <summary>
@@ -546,9 +574,10 @@
     /// </summary>
     private RenderFragment GroupCard(ContainerSummary head) =>
         @<EntityCard Title="@Titled(head)" Subtitle="@head.Image" AvatarColor="@StateColors.For(head.State)" Tone="@CardTone.Of(head)"
-                     BodyTone="@(FailedOf(head.Name).Count > 0 ? Color.Error : Color.Tertiary)" BodyTitle="@FailuresOf(head.Name)">
+                     BodyTone="@(FailedOf(head.Name).Count > 0 ? Color.Error : IsWarned(head.Name) ? Color.Warning : head.IsRunning ? Color.Success : Color.Primary)"
+                     BodyTitle="@FailuresOf(head.Name)">
                 <HeaderActions>
-                    <StateChip State="@head.State" />
+                    <StateChip State="@head.State" Warned="@IsWarned(head.Name)" Cve="@ImageSecurityFlow.Worst(MembersOf(head.Name))" />
                 </HeaderActions>
                 <Avatar>
                     @if (SavingOf(head.Name) is { } saving)
@@ -571,9 +600,7 @@
                            the other way when what is being done is a stop, as that container's own
                            ring does. The card is given no key, so the header's own ring leaves this
                            one its place. *@
-                        <div class="wslc-progress-ring wslc-progress-mixed" title="Working…">
-                            <MudProgressCircular Class="@($"wslc-progress-ring-dial{(MembersOf(head.Name).Any(member => Working.IsStopping(member.Id)) ? " wslc-ring-reversed" : "")}")" Color="Color.Info" Indeterminate="true" />
-                        </div>
+                        <TurningRing Color="Color.Info" Mixed="true" Reversed="@MembersOf(head.Name).Any(member => Working.IsStopping(member.Id))" />
                     }
                     else
                     {
@@ -611,9 +638,9 @@
     /// <summary>A container's card, the same on its own and after its project's card.</summary>
     private RenderFragment ContainerCard(ContainerSummary c) =>
         @<EntityCard Title="@c.Name" Subtitle="@c.Image" AvatarColor="@StateColors.For(c.State)" Key="@c.Id" Tone="@CardTone.Of(c)"
-                     BodyTone="@(c.HasFailed ? Color.Error : null)" BodyTitle="@c.Failure">
+                     BodyTone="@(c.HasFailed ? Color.Error : c.IsWarned ? Color.Warning : null)" BodyTitle="@c.Failure">
                         <HeaderActions>
-                            <StateChip State="@c.State" />
+                            <StateChip State="@c.State" Warned="c.IsWarned" Cve="@c.ImageWorst" />
                         </HeaderActions>
                         <Avatar>
                             @if (LaunchOf(c) is { } launch)
@@ -636,6 +663,11 @@
                                               LogTitle="View the transfers" CancelTitle="@CancelTitle(moving)" DismissTitle="Dismiss"
                                               OnLog="@(() => TransferFlow.ShowAsync(Dialogs, c.Id, c.Name))"
                                               OnCancel="@(() => CancelTransfersAsync(moving))" OnDismiss="@(() => DismissTransfersAsync(moving))" />
+                            }
+                            else if (c.IsRecreating)
+                            {
+                                @* View & edit's Save, done by the agent with the form closed: the ring turns until the new container takes its place. *@
+                                <TurningRing Color="Color.Info" Title="Being recreated" />
                             }
                             else
                             {

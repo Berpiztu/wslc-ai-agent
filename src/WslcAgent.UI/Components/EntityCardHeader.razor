@@ -24,9 +24,7 @@
                percentage to tell — wslc reports none — so it just turns: the
                way a clock does for what brings the row up, and the other way
                for what brings it down. *@
-            <div class="wslc-progress-ring" title="Working…">
-                <MudProgressCircular Class="@(Rows.IsStopping(Key) ? "wslc-progress-ring-dial wslc-ring-reversed" : "wslc-progress-ring-dial")" Color="Color.Primary" Indeterminate="true" />
-            </div>
+            <TurningRing Reversed="@Rows.IsStopping(Key)" />
         }
         else if (Avatar is not null)
         {

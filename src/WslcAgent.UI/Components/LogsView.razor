@@ -1,6 +1,7 @@
 @* Container logs: the last lines in a code block that owns
    the scroll, lines coloured by level, and the action rail at the right
-   (search / wrap / autorefresh / refresh / jump to end / copy / clear).
+   (search / info, warning, error / wrap / autorefresh / refresh / jump to end
+   / copy / clear).
    Autorefresh is the Logs page's ring: every 2 s the lines are read again and
    the box goes to its end — unless the reader holds the box, pointer over it
    or finger on it, when the lines stay as they are and the ring stands still,
@@ -25,13 +26,6 @@
                 <MudTextField T="string" @bind-Value="_query" Placeholder="Filter logs…" Immediate="true" DebounceInterval="150"
                               Variant="Variant.Filled" Margin="Margin.Dense" Class="wslc-search" Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Close"
                               OnAdornmentClick="CloseSearch" AutoFocus="true" />
-                <MudSelect T="string" @bind-Value="_level" Dense="true" Margin="Margin.Dense" Variant="Variant.Filled" Class="wslc-action-level">
-                    <MudSelectItem T="string" Value="@("")">All levels</MudSelectItem>
-                    <MudSelectItem T="string" Value="@("debug")">Debug</MudSelectItem>
-                    <MudSelectItem T="string" Value="@("info")">Info</MudSelectItem>
-                    <MudSelectItem T="string" Value="@("warning")">Warning</MudSelectItem>
-                    <MudSelectItem T="string" Value="@("error")">Error</MudSelectItem>
-                </MudSelect>
             </div>
         }
         @if (_error is not null)
@@ -42,14 +36,21 @@
         <div id="@_outputId" class="wslc-logs-output wslc-fill-scroll @(_wrap ? "wslc-logs-wrap" : "")" role="log"
              @onpointerenter="@(() => _pointerOn = true)" @onpointerleave="@(() => _pointerOn = false)"
              @ontouchstart="@(() => _fingerOn = true)" @ontouchend="@(() => _fingerOn = false)" @ontouchcancel="@(() => _fingerOn = false)">
-            @if (_lines.Count == 0)
+            @* Until the first reading is in, a bar that moves: a reading can take a while (an
+               image's files, a long history), and "No logs." on an empty box read as nothing there. *@
+            @if (!_readOnce)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                <div class="wslc-log-line wslc-log-empty">Reading…</div>
+            }
+            else if (_lines.Count == 0)
             {
                 <div class="wslc-log-line wslc-log-empty">@(_viewCleared ? "Logs cleared." : "No logs.")</div>
             }
             @* A line with a time or a level is drawn as the Logs page draws an entry — time,
                level, source and message each its colour (wslc-log-entry); any other keeps
                its level's colour whole. *@
-            @foreach (var line in _lines.Where(l => l.Matches(_query, _level)))
+            @foreach (var line in Shown())
             {
                 <div class="wslc-log-line @(line.Parts.Count > 0 ? "wslc-log-entry" : "") @(line.Level.Length > 0 ? "log-level-" + line.Level : "")">@if (line.Parts.Count == 0)
                     {
@@ -72,6 +73,16 @@
     <div class="wslc-action-rail" role="toolbar">
         <MudIconButton Icon="@Icons.Material.Filled.Search" Color="@RailToggle.Color(_searchOpen)" Class="@RailToggle.Class(_searchOpen)" Size="Size.Small" Variant="Variant.Filled"
                        title="@(_searchOpen ? "Search / filter on — click to close" : "Search / filter off — click to open")" OnClick="@(() => _searchOpen = !_searchOpen)" />
+        @* A key per level, in the colour its lines wear (wslc-level-key-*), all held down at first:
+           held down, sunk into the rail as the table/cards key in use is, that level's lines are
+           shown; let up, standing proud, they are hidden. *@
+        @foreach (var (level, label, icon) in Levels)
+        {
+            var shown = !_hiddenLevels.Contains(level);
+            <MudIconButton Icon="@icon" Class="@($"wslc-level-key-{level} {(shown ? "wslc-key-down" : "wslc-key-up")}")" Size="Size.Small" Variant="Variant.Filled"
+                           title="@($"{label} lines {(shown ? "shown — click to hide" : "hidden — click to show")}")" aria-pressed="@(shown ? "true" : "false")"
+                           OnClick="@(() => ToggleLevel(level))" />
+        }
         <MudIconButton Icon="@Icons.Material.Filled.WrapText" Color="@RailToggle.Color(_wrap)" Class="@RailToggle.Class(_wrap)" Size="Size.Small" Variant="Variant.Filled"
                        title="@(_wrap ? "Wrap on — click to turn off" : "Wrap off — click to turn on")" OnClick="@(() => _wrap = !_wrap)" />
         <FollowRing Follow="_follow" Held="Held" Title="@FollowRing.TitleFor("the log", _follow, Held)" FollowChanged="ToggleFollowAsync" />
@@ -94,13 +105,25 @@
     private readonly string _outputId = "logs-" + Guid.NewGuid().ToString("N");
     private List<LogLine> _lines = [];
     private string _query = "";
-    private string _level = "";
+
+    /// <summary>The levels the rail's toggles hide; none at first, so the whole log is shown.</summary>
+    private readonly HashSet<string> _hiddenLevels = new(StringComparer.Ordinal);
     private bool _searchOpen;
     private bool _wrap;
     private bool _follow = true;
     private bool _pointerOn;
     private bool _fingerOn;
     private bool _loading;
+
+    private static readonly (string Level, string Label, string Icon)[] Levels =
+    [
+        (LogLines.Info, "Info", Icons.Material.Filled.Info),
+        (LogLines.Warning, "Warning", Icons.Material.Filled.Warning),
+        (LogLines.Error, "Error", Icons.Material.Filled.Error),
+    ];
+
+    /// <summary>The first reading is in, whatever it said: the bar it was waited with goes, and never comes back on a refresh.</summary>
+    private bool _readOnce;
     private bool _viewCleared;
     private bool _scrollPending;
     /// <summary>After a view clear, the stamp of the last line cleared (the container's clock): only what came after is shown.</summary>
@@ -205,6 +228,7 @@
         finally
         {
             _loading = false;
+            _readOnce = true;
         }
     }
 
@@ -241,6 +265,32 @@
         }
     }
 
+    private void ToggleLevel(string level)
+    {
+        if (!_hiddenLevels.Remove(level))
+        {
+            _hiddenLevels.Add(level);
+        }
+    }
+
+    /// <summary>
+    /// The lines the search and the level toggles leave. A line with no level
+    /// of its own (a traceback's, a message's second line) goes on from the one
+    /// above it and is shown or hidden with it; one before any level is Info.
+    /// </summary>
+    private IEnumerable<LogLine> Shown()
+    {
+        var group = LogLines.Info;
+        foreach (var line in _lines)
+        {
+            group = LogLines.Group(line.Level) ?? group;
+            if (!_hiddenLevels.Contains(group) && line.Matches(_query))
+            {
+                yield return line;
+            }
+        }
+    }
+
     private void CloseSearch()
     {
         _query = "";
@@ -251,7 +301,7 @@
 
     private async Task CopyAsync()
     {
-        var text = string.Join('\n', _lines.Where(l => l.Matches(_query, _level)).Select(l => l.Text));
+        var text = string.Join('\n', Shown().Select(l => l.Text));
         if (text.Trim().Length == 0)
         {
             Snackbar.Add("No logs to copy", Severity.Info);

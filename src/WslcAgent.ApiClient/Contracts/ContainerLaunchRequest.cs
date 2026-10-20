@@ -133,7 +133,9 @@ public sealed record ContainerLaunchRequest
 }
 
 /// <summary>Answer of create, run and recreate: the new container's id.</summary>
-public sealed record ContainerCreated(string Id, IReadOnlyList<string> Notes);
+/// <param name="Notes">What the launch had to adjust, and what the image check found when it let the container be made.</param>
+/// <param name="ImageWarnings">Those of <paramref name="Notes"/> that are the image check's: the container was made from an image with known vulnerabilities, and is said in the warning colour. Null from an agent too old to say, and when there are none.</param>
+public sealed record ContainerCreated(string Id, IReadOnlyList<string> Notes, IReadOnlyList<string>? ImageWarnings = null);
 
 /// <summary>Agent-owned restart policy of one container.</summary>
 /// <param name="Policy"><c>no</c>, <c>unless-stopped</c> or <c>always</c>.</param>

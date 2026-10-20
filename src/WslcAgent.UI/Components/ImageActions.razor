@@ -32,6 +32,7 @@
             <MudMenuItem Icon="@Icons.Material.Filled.Folder" OnClick="FilesAsync">View files</MudMenuItem>
         }
         <MudMenuItem Icon="@Icons.Material.Filled.Inventory2" OnClick="UsageAsync">View container usage</MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Filled.Security" OnClick="@(() => ImageSecurityFlow.ShowAsync(Dialogs, Image.Reference, [Image.Reference]))">@ImageSecurityFlow.Title</MudMenuItem>
         @if (!Shortcuts)
         {
             <MudMenuItem Icon="@Icons.Material.Filled.Download" OnClick="PullAsync">Pull</MudMenuItem>

@@ -257,5 +257,6 @@
         // the address twice as long for nothing.
         Navigation.NavigateTo($"containers/{Id}?tab=files&path={Query(FilePath ?? "/")}&file={Query(file)}");
 
-    private void OnRecreated(string newId) => Navigation.NavigateTo($"containers/{newId}?tab=inspect");
+    /// <summary>The recreate goes on with the agent (RecreateActivity): the container shown here is being replaced, so the list is where its row says how it goes.</summary>
+    private void OnRecreated(string _) => Navigation.NavigateTo("containers");
 }

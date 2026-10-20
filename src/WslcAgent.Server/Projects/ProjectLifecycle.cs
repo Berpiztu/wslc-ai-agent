@@ -23,6 +23,9 @@ public sealed class ProjectLifecycle(
     IVolumeService volumes,
     ProjectStore store,
     Containers.StartFailures failures,
+    Images.ImageWarnings imageWarnings,
+    Images.ImageSecurity security,
+    ProjectGaps gaps,
     WslcEvents events)
 {
     /// <summary>What a line a container wrote begins with when <c>wslc</c> stamps it: <c>2026-10-10T14:26:54.726523128Z</c> and a space.</summary>
@@ -76,6 +79,7 @@ public sealed class ProjectLifecycle(
         var plan = await dependencies.PlanAsync(name, cancellationToken);
         var members = (await MembersAsync(name, plan, cancellationToken)).Where(member => services.Count == 0 || services.Contains(member.Service));
         var lines = new List<ProjectLogLine>();
+
         foreach (var member in members)
         {
             string written;
@@ -98,6 +102,13 @@ public sealed class ProjectLifecycle(
                 lines.Add(new ProjectLogLine(member.Name, member.Service, time, stamped ? line[StampLength..].TrimStart(' ') : line));
             }
 
+            // Made from an image with known vulnerabilities: what the check found, at the moment the container was made.
+            if (imageWarnings.Of(member.Id) is { } warning)
+            {
+                var made = warning.At.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffffff00Z", System.Globalization.CultureInfo.InvariantCulture);
+                lines.AddRange(warning.Lines.Select(found => new ProjectLogLine(member.Name, member.Service, made, $"WARNING {found}")));
+            }
+
             if (failures.Of(member.Id) is { } failure)
             {
                 lines.Add(new ProjectLogLine(member.Name, member.Service, failure.At.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffffff00Z", System.Globalization.CultureInfo.InvariantCulture),
@@ -107,9 +118,20 @@ public sealed class ProjectLifecycle(
 
         // Stamps of one form and one zone: in order as texts, they are in order in time. A stable
         // sort, so the lines of one container that share a stamp keep the order they were written in.
-        return new ProjectLogs([.. lines
+        var read = lines
             .Where(line => since.Length == 0 || string.CompareOrdinal(line.Time, since) > 0)
-            .OrderBy(line => line.Time, StringComparer.Ordinal)]);
+            .OrderBy(line => line.Time, StringComparer.Ordinal)
+            .ToList();
+
+        // Incomplete: what is missing and what holds its name, last on a whole reading, where the
+        // view stands when it opens, so it is read without looking for it; the reading of the
+        // lines since a moment does not repeat it.
+        if (since.Length == 0 && gaps.Of(name) is { } gap)
+        {
+            read.Add(new ProjectLogLine(name, "", read.LastOrDefault()?.Time ?? "", $"{(gap.Blocked.Count > 0 ? "ERROR" : "WARNING")} {gap.Text}"));
+        }
+
+        return new ProjectLogs(read);
     }
 
     public async Task<ProjectResult> VerbAsync(string name, string verb, CancellationToken cancellationToken = default)
@@ -151,6 +173,51 @@ public sealed class ProjectLifecycle(
         }
 
         return Result(name, verb, done, failed);
+    }
+
+    /// <summary>
+    /// The project changed around the agent (<see cref="ProjectGapResponse"/>):
+    /// what ran is stopped and started again, as an update of the project
+    /// would, its dependents first down and its dependencies first up. A
+    /// container whose dependency is missing from the project does not start
+    /// again, whatever another container is named (<see cref="ProjectDependencies"/>),
+    /// so it sends its work to nothing that is not its own; one left stopped
+    /// stays so. One whose image the agent would not start again (built here,
+    /// vulnerable, Block: <see cref="Images.ImageSecurity.GuardStartAsync"/>)
+    /// is not touched and runs on: the check never stops what runs. The
+    /// containers that did not start again, each with why.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> RenewAsync(string name, CancellationToken cancellationToken = default)
+    {
+        var plan = await dependencies.PlanAsync(name, cancellationToken);
+        var running = new List<ContainerSummary>();
+        var done = new List<string>();
+        var failed = new List<string>();
+        foreach (var member in (await MembersAsync(name, plan, cancellationToken)).Where(member => member.IsRunning))
+        {
+            try
+            {
+                await security.GuardStartAsync(member.Id, cancellationToken, restart: true);
+                running.Add(member);
+            }
+            catch (Images.ImageRefusedException ex)
+            {
+                failed.Add($"{member.Name}: left running, not started again: {ex.Said[0]}");
+            }
+        }
+
+        foreach (var member in Enumerable.Reverse(running))
+        {
+            await TryAsync(member.Name, done, failed, () => containers.StopAsync(member.Id, cancellationToken));
+        }
+
+        foreach (var member in running)
+        {
+            await TryAsync(member.Name, done, failed, () => containers.StartAsync(member.Id, cancellationToken));
+        }
+
+        events.Publish(new ChangeNotice([ChangeNotice.Container]));
+        return failed;
     }
 
     /// <summary>

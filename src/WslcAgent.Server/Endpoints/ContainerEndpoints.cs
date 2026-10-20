@@ -76,8 +76,10 @@ public static class ContainerEndpoints
             })
             .WithName("DismissContainerLaunch");
 
-        group.MapPost("/{container}/recreate", (string container, ContainerLaunchRequest request, IContainerService containers, CancellationToken ct) =>
-                containers.RecreateAsync(container, request, ct))
+        // Not cut short with the request: the client closes its form at once and may leave, and a
+        // recreate stopped halfway could leave neither the old container nor the new one.
+        group.MapPost("/{container}/recreate", (string container, ContainerLaunchRequest request, IContainerService containers) =>
+                containers.RecreateAsync(container, request, CancellationToken.None))
             .WithName("RecreateContainer");
 
         group.MapPost("/{container}/update-image", (string container, UpdateContainerImageRequest request, ContainerImageUpdates updates, CancellationToken ct) =>

@@ -167,7 +167,7 @@ another agent on the same session, still sees it.
 The Compose file is kept with the project, because the project is that
 file: the group on the screen is the file brought up. A label cannot hold
 it, so the agent keeps it in its data folder, one folder per project
-(`projects/<name>/`): the Compose file as it was last brought up, the
+(`projects/<name>/`): the Compose file as it was last saved, the
 `.env` and the variables given with it, the profiles asked for, and the
 path it came from when it came from one. The copy is what **View** shows
 and what the `config` labels were worked out from, so what the screen
@@ -324,7 +324,7 @@ ends of each, in the same colours.
 a container, the group's is to the project, from its row or its card's
 header:
 
-- **View** opens the Compose file as it was last brought up, with the
+- **View** opens the Compose file as it was last saved, with the
   plan read from it beside it: the services, what is not supported, what
   is not needed. When the file came from a path and the one on disk is no
   longer the same, it says so and shows what changed.

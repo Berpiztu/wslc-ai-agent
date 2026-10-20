@@ -1,0 +1,123 @@
+@* View image packages and CVEs, in the window logs open in and drawn by the
+   same view (LogsView: search, levels, wrap, copy): for each image, what it
+   carries, then every vulnerability a line, from the low to the critical,
+   coloured by its severity (critical and high as errors, moderate as
+   warnings, low as information), each with its advisory, its CVE and the
+   version that fixes it; then a line per library with the version that
+   fixes all of its own; and last what the image is, how many of its
+   vulnerabilities there are and whether the agent refuses it: the view
+   stands at the end, where the worst is read first. What Docker shows for an image, read in the image
+   itself whatever it is built from. *@
+@inject WslcAgentApi Api
+
+<MudDialog ContentClass="wslc-dialog-action">
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <LogsView Read="ReadAsync" />
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    /// <summary>The images to show, one after the other: a container's own, or every one of a project's.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<string> Images { get; set; } = [];
+
+    /// <summary>The report as read the first time: an image does not change under the window, and each read runs pip in it.</summary>
+    private string? _text;
+
+    private async Task<string> ReadAsync()
+    {
+        if (_text is not null)
+        {
+            return _text;
+        }
+
+        var lines = new List<string>();
+        foreach (var image in Images.Where(image => image.Trim().Length > 0).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (lines.Count > 0)
+            {
+                lines.Add("");
+            }
+
+            try
+            {
+                lines.AddRange(Lines(await Api.GetImageVulnerabilitiesAsync(image)));
+            }
+            catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+            {
+                lines.Add(Line("ERROR", $"{image}: {ex.Message}"));
+            }
+        }
+
+        return _text = string.Join('\n', lines);
+    }
+
+    /// <summary>
+    /// One image's lines, the least first: the view stands at the end, as a
+    /// log's does, so what is read without scrolling is the worst. Its
+    /// libraries, then its vulnerabilities from the low to the critical, then
+    /// what fixes each library, and last the image in a line and, when the
+    /// agent makes no container from it, that it does not.
+    /// </summary>
+    private static IEnumerable<string> Lines(ImageVulnerabilities report)
+    {
+        if (!report.Found || !report.HasPython)
+        {
+            yield return Line("INFO", report.Note);
+            yield break;
+        }
+
+        yield return Line("INFO", $"{report.Image}: its {report.Packages.Count} Python libraries:");
+        foreach (var package in report.Packages)
+        {
+            yield return Line("INFO", $"{package.Name} {package.Version}");
+        }
+
+        foreach (var v in report.Vulnerabilities.Reverse())
+        {
+            yield return Line(LevelOf(v.Severity),
+                $"{v.Package} {v.Version}, {v.Severity}: {v.Advisory}{(v.Cve.Length > 0 ? $" ({v.Cve})" : "")}, "
+                + $"{(v.FixedIn.Length > 0 ? $"fixed in {v.FixedIn}" : "no version fixes it yet")}  {v.Url}");
+        }
+
+        foreach (var remedy in report.Remedies)
+        {
+            yield return Line(report.Refused ? "ERROR" : "WARNING", remedy);
+        }
+
+        if (report.Note.Length > 0)
+        {
+            yield return Line("WARNING", report.Note);
+        }
+
+        var counted = string.Join(", ", new[] { "critical", "high", "moderate", "low", "unknown" }
+            .Select(severity => (severity, count: report.Vulnerabilities.Count(v => v.Severity == severity)))
+            .Where(pair => pair.count > 0)
+            .Select(pair => $"{pair.count} {pair.severity}"));
+        var worst = report.Vulnerabilities.Count == 0 ? "INFO" : LevelOf(report.Vulnerabilities[0].Severity);
+        yield return Line(worst,
+            $"{report.Image}, {(report.Built ? "built on this machine" : "from a registry")}: {report.Packages.Count} Python libraries, "
+            + (report.Vulnerabilities.Count == 0 ? "no known vulnerability." : $"{report.Vulnerabilities.Count} known vulnerabilities ({counted})."));
+        if (report.Refused)
+        {
+            yield return Line("ERROR", "The agent makes no container from it: built on this machine, with a vulnerability moderate or worse, and Settings → Security → Image security check set to Block.");
+        }
+    }
+
+    /// <summary>Critical and high as errors, moderate as a warning, the rest as information: the colours the logs view gives each level.</summary>
+    private static string LevelOf(string severity) => severity switch
+    {
+        "critical" or "high" => "ERROR",
+        "moderate" => "WARNING",
+        _ => "INFO",
+    };
+
+    /// <summary>A line as the agent's log writes one, which the logs view colours by its level.</summary>
+    private static string Line(string level, string text) => $"{level,-8} | {text}";
+}

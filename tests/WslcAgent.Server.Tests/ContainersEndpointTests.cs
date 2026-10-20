@@ -65,7 +65,8 @@ public sealed class ContainersEndpointTests(WebApplicationFactory<Program> facto
         var response = await client.PostAsync($"/api/v1/containers/agent-zero/{verb}", content: null);
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        Assert.Equal(["container", verb, "agent-zero"], runner.Calls.Single());
+        // Besides the image check's reading of the container before a start or a restart.
+        Assert.Equal(["container", verb, "agent-zero"], runner.Calls.Single(call => call is not ["container", "inspect", ..]));
     }
 
     [Fact]
@@ -120,7 +121,8 @@ public sealed class ContainersEndpointTests(WebApplicationFactory<Program> facto
 
         Assert.Equal(HttpStatusCode.OK, created.StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
-        Assert.Equal(["container", "create", "alpine", "sleep", "infinity"], runner.Calls.Single());
+        // Besides the image's own check (image inspect), which finds no such image here and stops.
+        Assert.Equal(["container", "create", "alpine", "sleep", "infinity"], runner.Calls.Single(call => call is ["container", ..]));
     }
 
     /// <summary>
@@ -144,15 +146,17 @@ public sealed class ContainersEndpointTests(WebApplicationFactory<Program> facto
         var response = await client.PostAsJsonAsync("/api/v1/containers/web/recreate", new ContainerLaunchRequest { Image = "nginx", Name = "web", Env = ["A=1"] });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(["container", "inspect", "web", "--format", "json"], runner.Calls[0]);
+        // The new image's check (image inspect) comes before the container is touched, and is left out here.
+        var calls = runner.Calls.Where(call => call is not ["image", "inspect", ..]).ToList();
+        Assert.Equal(["container", "inspect", "web", "--format", "json"], calls[0]);
         // Inspect does not show --gpus: the snapshot reads it from the list row.
-        Assert.Equal(["container", "list", "--all", "--format", "json"], runner.Calls[1]);
-        Assert.Equal(["container", "stop", "web"], runner.Calls[2]);
-        Assert.Equal(["container", "rm", "--force", rehearsal], runner.Calls[3]);
-        Assert.Equal(["container", "run", "--detach", "--name", rehearsal, "--env", "A=1", "nginx"], runner.Calls[4]);
-        Assert.Equal(["container", "rm", "--force", rehearsal], runner.Calls[5]);
-        Assert.Equal(["container", "rm", "--force", "web"], runner.Calls[6]);
-        Assert.Equal(["container", "run", "--detach", "--name", "web", "--env", "A=1", "nginx"], runner.Calls[7]);
+        Assert.Equal(["container", "list", "--all", "--format", "json"], calls[1]);
+        Assert.Equal(["container", "stop", "web"], calls[2]);
+        Assert.Equal(["container", "rm", "--force", rehearsal], calls[3]);
+        Assert.Equal(["container", "run", "--detach", "--name", rehearsal, "--env", "A=1", "nginx"], calls[4]);
+        Assert.Equal(["container", "rm", "--force", rehearsal], calls[5]);
+        Assert.Equal(["container", "rm", "--force", "web"], calls[6]);
+        Assert.Equal(["container", "run", "--detach", "--name", "web", "--env", "A=1", "nginx"], calls[7]);
         Assert.Equal("cafecafecafe", (await response.Content.ReadFromJsonAsync<ContainerCreated>())!.Id);
     }
 

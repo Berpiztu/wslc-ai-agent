@@ -25,7 +25,7 @@
                 <HeaderActions>
                     @if (c.State.Length > 0)
                     {
-                        <StateChip State="@c.State" />
+                        <StateChip State="@c.State" Warned="c.IsWarned" Cve="@c.ImageWorst" />
                     }
                 </HeaderActions>
             </EntityCardHeader>
@@ -43,9 +43,16 @@
         Hear(h => Queue.QueueChanged += h, h => Queue.QueueChanged -= h);
     }
 
-    /// <summary>The transfers' ring in the avatar's place; nothing when nothing of the container's is moving or waiting.</summary>
-    private RenderFragment? Ring(ContainerSummary c) =>
-        TransferFlow.Showing(TransferFlow.For(Transfers.Value ?? [], c.Id, c.Name)) is { Count: > 0 } moving
+    /// <summary>The ring in the avatar's place: turning while the container is being recreated, or its transfers'; nothing when nothing of the container's is under way.</summary>
+    private RenderFragment? Ring(ContainerSummary c)
+    {
+        if (c.IsRecreating)
+        {
+            return @<TurningRing Color="Color.Info" Title="Being recreated" />;
+        }
+
+        return TransferFlow.Showing(TransferFlow.For(Transfers.Value ?? [], c.Id, c.Name)) is { Count: > 0 } moving
             ? @<ContainerTransferRing Moving="moving" Id="@c.Id" Name="@c.Name" />
             : null;
+    }
 }
