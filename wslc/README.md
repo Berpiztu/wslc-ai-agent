@@ -6,7 +6,7 @@ hand (Actions, Run workflow), on their own clock and not the agent's releases.
 
 | Folder | Image | Built by | Its container |
 | --- | --- | --- | --- |
-| [plugins/wslc-published](plugins/wslc-published/README.md) | `ghcr.io/berpiztu/wslc-published` | Actions, *Published proxy image*: a version (`1.5`), and latest | the publishing proxy, made by the agent's publishing Set up; brought to a new image by its **Update image** |
+| [plugins/wslc-published](plugins/wslc-published/README.md) | `ghcr.io/berpiztu/wslc-published` | Actions, *Published proxy image*: the version, the next one by itself when left empty, and latest | the publishing proxy, made by the agent's publishing Set up; brought to a new image by its **Update image** |
 | [plugins/transcribe-cuda](plugins/transcribe-cuda/README.md) | `ghcr.io/berpiztu/transcribe-cuda:<version>-sm<GPU>` | Actions, *transcribe.cpp CUDA image* | none: images of speech to text copy its libraries |
 
 A new image reaches a container by **Update image** on it, in the agent, set to

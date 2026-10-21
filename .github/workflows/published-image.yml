@@ -1,7 +1,8 @@
 # The publishing proxy's image (wslc/plugins/wslc-published: nginx and the login in
 # front of the published names), built and pushed to ghcr.io/berpiztu/wslc-published
-# by hand only (Actions -> "Published proxy image" -> Run workflow, with its
-# version): the image changes seldom and on its own clock, not the agent's releases.
+# by hand only (Actions -> "Published proxy image" -> Run workflow; the version is
+# the next one by itself when left empty): the image changes seldom and on its own
+# clock, not the agent's releases.
 # The agent's Set up runs it, and Update image on the proxy brings a newer one: what
 # it keeps (access.json, its session secret) is a folder of the host, not the image.
 name: Published proxy image
@@ -10,8 +11,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to publish (e.g. 1.0)"
-        required: true
+        description: "Version to publish (empty: the highest published + 1, e.g. 1.4 -> 1.5)"
+        required: false
       latest:
         description: "Publish it as latest too"
         type: boolean
@@ -38,13 +39,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The version written, or the one after the highest already in ghcr.io.
+      - id: version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          v="${{ inputs.version }}"
+          [ -n "$v" ] || v=$(bash .github/scripts/next-version.sh "${IMAGE#ghcr.io/}")
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Version published: $v" >> "$GITHUB_STEP_SUMMARY"
+
       - uses: docker/build-push-action@v6
         with:
           context: wslc/plugins/wslc-published
           push: true
           provenance: false
           tags: |
-            ${{ env.IMAGE }}:${{ inputs.version }}
+            ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
             ${{ inputs.latest && format('{0}:latest', env.IMAGE) || '' }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
