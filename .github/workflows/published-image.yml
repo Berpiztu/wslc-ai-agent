@@ -1,4 +1,4 @@
-# The publishing proxy's image (plugins/wslc-published: nginx and the login in
+# The publishing proxy's image (wslc/plugins/wslc-published: nginx and the login in
 # front of the published names), built and pushed to ghcr.io/berpiztu/wslc-published
 # by hand only (Actions -> "Published proxy image" -> Run workflow, with its
 # version): the image changes seldom and on its own clock, not the agent's releases.
@@ -40,7 +40,7 @@ jobs:
 
       - uses: docker/build-push-action@v6
         with:
-          context: plugins/wslc-published
+          context: wslc/plugins/wslc-published
           push: true
           provenance: false
           tags: |

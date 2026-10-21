@@ -6,7 +6,7 @@ using WslcAgent.ApiClient.Contracts;
 namespace WslcAgent.Server.Publishing;
 
 /// <summary>
-/// The wslc-published plugin (plugins/wslc-published), as the agent talks to it: its
+/// The wslc-published plugin (wslc/plugins/wslc-published), as the agent talks to it: its
 /// root API on the PC's loopback, with the admin token it made in its data folder.
 /// The plugin keeps the sites, writes and reloads nginx, checks whether each
 /// application asks for a login of its own and keeps each name's users; the agent

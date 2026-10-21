@@ -1,4 +1,4 @@
-# transcribe.cpp's libraries built with CUDA (plugins/transcribe-cuda), pushed to
+# transcribe.cpp's libraries built with CUDA (wslc/plugins/transcribe-cuda), pushed to
 # ghcr.io/berpiztu/transcribe-cuda:<version>-sm<architecture> by hand only
 # (Actions -> "transcribe.cpp CUDA image" -> Run workflow): it is built once per
 # transcribe.cpp release and graphics card, and images of speech to text copy it.
@@ -55,7 +55,7 @@ jobs:
 
       - uses: docker/build-push-action@v6
         with:
-          context: plugins/transcribe-cuda
+          context: wslc/plugins/transcribe-cuda
           push: true
           provenance: false
           build-args: |

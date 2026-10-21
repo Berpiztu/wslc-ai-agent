@@ -72,7 +72,7 @@ light and dark; the agent's own Material icons in `app/static/icons.js`).
 ## Build and run by hand
 
 ```powershell
-wslc build -t ghcr.io/berpiztu/wslc-published:latest plugins/wslc-published
+wslc build -t ghcr.io/berpiztu/wslc-published:latest wslc/plugins/wslc-published
 wslc run -d --name wslc-published --network published `
   -p 127.0.0.1:8081:80 -p 127.0.0.1:8082:8082 `
   -v C:/wslc/published:/data ghcr.io/berpiztu/wslc-published:latest

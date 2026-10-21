@@ -19,7 +19,7 @@ public sealed class PublishingSetup(
     ILogger<PublishingSetup> logger) : IPublishingSetup
 {
     /// <summary>
-    /// The wslc-published plugin (plugins/wslc-published, built by
+    /// The wslc-published plugin (wslc/plugins/wslc-published, built by
     /// .github/workflows/published-image.yml): nginx, the login in front of the
     /// published names and its root API. Latest, so Update image on the proxy brings
     /// the newest.

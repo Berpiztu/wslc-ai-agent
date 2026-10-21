@@ -13,7 +13,11 @@
 # glibc resolves it.
 FROM nginx:stable
 
+# Upgraded first: nginx:stable carries Debian's packages as they were when it was
+# published, and every build of this image is to carry the fixes Debian has made
+# since (Zaindari reads them in it).
 RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
     && apt-get install -y --no-install-recommends python3 python3-flask python3-waitress python3-cryptography \
     && rm -rf /var/lib/apt/lists/*
 

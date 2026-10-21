@@ -30,6 +30,9 @@ tests/
 packaging/
   agent-install/, client-install/   WiX 5 projects for the two per-user MSIs.
   Packaging.ps1                     Helpers used by the root build-*.ps1 scripts.
+wslc/
+  plugins/wslc-published/   The publishing proxy's image (nginx and the login), built by GitHub Actions.
+  plugins/transcribe-cuda/  transcribe.cpp built with CUDA, for images of speech to text to copy.
 ```
 
 Dependency direction: `Server -> Web, Mcp, ApiClient`; `Web -> UI`;

@@ -508,7 +508,7 @@ secrets.json
 dist/
 packaging/**/GeneratedFiles.wxs
 
-# The publishing plugin run on this machine (plugins/wslc-published/dev.ps1)
-plugins/wslc-published/.venv/
-plugins/wslc-published/.dev-data/
+# The publishing plugin run on this machine (wslc/plugins/wslc-published/dev.ps1)
+wslc/plugins/wslc-published/.venv/
+wslc/plugins/wslc-published/.dev-data/
 .vscode/settings.json
