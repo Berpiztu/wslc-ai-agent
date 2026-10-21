@@ -152,7 +152,7 @@ across the internet, for you and for your AI agents.
 ### Publishing
 
 A container's port on a public HTTPS name, from its own form. The agent
-hands it to its proxy, [wslc-published](plugins/wslc-published/README.md),
+hands it to its proxy, [wslc-published](wslc/plugins/wslc-published/README.md),
 nginx and a login in one container, which serves it at once. The installer
 offered to set it up from the first release (2026-09-29); on 2026-10-03
 the proxy became a plugin of its own, with users per name.
@@ -275,7 +275,7 @@ its own previews, the first of them 1.6.4, for WSL 3.0.4.
   host or in any container, open a container's web page even when it is not
   published, and publish it on a public HTTPS name through the agent's own
   proxy, with a login of its own in front of any application that has none
-  ([wslc-published](plugins/wslc-published/README.md), image
+  ([wslc-published](wslc/plugins/wslc-published/README.md), image
   `ghcr.io/berpiztu/wslc-published`).
 - **Files** inside containers, images and volumes, with transfers that keep
   running when you leave.

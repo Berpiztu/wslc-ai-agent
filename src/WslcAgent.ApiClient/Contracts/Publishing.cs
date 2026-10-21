@@ -2,7 +2,7 @@ namespace WslcAgent.ApiClient.Contracts;
 
 /// <summary>
 /// Settings → Publishing: how this agent's machine publishes a container port on a
-/// public name. The proxy is the wslc-published plugin (plugins/wslc-published):
+/// public name. The proxy is the wslc-published plugin (wslc/plugins/wslc-published):
 /// nginx and its own login in one container, on the network where container names
 /// resolve; the VPS sends every name under the domain down the tunnel to it.
 /// </summary>

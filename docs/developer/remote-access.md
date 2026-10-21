@@ -340,7 +340,7 @@ left as it is, and the answer lists which was which:
 1. Creates the network (`published`).
 2. Makes the data folder.
 3. Runs the proxy container: the wslc-published plugin
-   (`ghcr.io/berpiztu/wslc-published:latest`, built from `plugins/wslc-published`),
+   (`ghcr.io/berpiztu/wslc-published:latest`, built from `wslc/plugins/wslc-published`),
    named as the setting says, port `127.0.0.1:8081:80` for the published names
    (loopback only; it is where the `published` forward arrives) and
    `127.0.0.1:8082:8082` for the plugin's own API and page, the data folder
@@ -364,7 +364,7 @@ Use `curl.exe`, not `curl`: in Windows PowerShell, `curl` is an alias of
 
 ### The proxy plugin
 
-The proxy is a plugin of its own, in `plugins/wslc-published` (its README says
+The proxy is a plugin of its own, in `wslc/plugins/wslc-published` (its README says
 it whole): nginx and a Python program in one container. The agent keeps the
 list of published names (`publications.json`) and tells the plugin each
 change through the plugin's API on `127.0.0.1:8082`, with the admin token the
@@ -612,7 +612,7 @@ phone off your network.
   tunnel from one typed at the PC. Never point a proxy at the agent that
   strips them.
 - **Every published name has a login.** The proxy is the wslc-published
-  plugin (`plugins/wslc-published`, `ghcr.io/berpiztu/wslc-published`): nginx
+  plugin (`wslc/plugins/wslc-published`, `ghcr.io/berpiztu/wslc-published`): nginx
   and its own program in one container, which asks its login before every
   request. When a name is published it asks the application, from inside the
   proxy, what it answers a visitor with no session: a `401`/`403`, a redirect
