@@ -160,12 +160,12 @@
             .Where(pair => pair.count > 0)
             .Select(pair => $"{pair.count} {pair.severity}"));
         var raised = report.Vulnerabilities.Where(v => v.Accepted is null).ToList();
-        var accepted = report.Vulnerabilities.Count - raised.Count;
+        var acceptedCount = report.Vulnerabilities.Count - raised.Count;
         var worst = raised.Count == 0 ? "INFO" : ImageRemedies.LevelOf(raised[0].Severity);
         yield return Line(worst,
             $"{report.Image}, {(report.Built ? "built on this machine" : "from a registry")}: {Counted(report.Packages)}, "
             + (report.Vulnerabilities.Count == 0 ? "no known vulnerability." : $"{report.Vulnerabilities.Count} known vulnerabilities ({counted})")
-            + (accepted > 0 ? $", {accepted} of them accepted." : report.Vulnerabilities.Count == 0 ? "" : "."));
+            + (acceptedCount > 0 ? $", {acceptedCount} of them accepted." : report.Vulnerabilities.Count == 0 ? "" : "."));
         if (ImageRemedies.WhatIsLeft(raised) is { Length: > 0 } left)
         {
             yield return Line("INFO", left);

@@ -52,7 +52,7 @@ public sealed record ImageAdvisory(string Package, string Version, string Adviso
 /// <param name="Reason">Why it is accepted, as the person wrote it; never empty.</param>
 /// <param name="By">Who accepted it: the user signed in, <c>local</c> at the agent's machine, or <c>token</c>.</param>
 /// <param name="At">When.</param>
-public sealed record ImageAcceptance(string Repository, string Ecosystem, string Package, string Advisory, string Reason, string By = "", DateTimeOffset At = default);
+public sealed record ImageAcceptance(string Repository, string Ecosystem, string Package, string Advisory, string Reason, string By, DateTimeOffset At);
 
 /// <summary>Answer of <c>GET /api/v1/image-security/acceptances</c>, and the agent's <c>image-acceptances.json</c>: every acceptance, of every image.</summary>
 public sealed record ImageAcceptances(IReadOnlyList<ImageAcceptance>? Acceptances = null)
