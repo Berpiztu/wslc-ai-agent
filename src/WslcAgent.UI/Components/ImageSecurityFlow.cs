@@ -42,6 +42,22 @@ public static class ImageSecurityFlow
             new DialogParameters<PatchImageDialog> { { d => d.Report, report }, { d => d.Only, only } }, large: true);
 
     /// <summary>
+    /// What can be accepted in the image, as <see cref="AcceptVulnerabilitiesDialog"/> lists it:
+    /// each Python library's vulnerability moderate or worse that no version fixes
+    /// (<see cref="ImageRemedies.Acceptable"/>), the ones that colour the image and nobody
+    /// can mend, and every one accepted already, to withdraw. A system package with no
+    /// fix colours nothing, so it is not offered.
+    /// </summary>
+    public static IReadOnlyList<ImageAdvisory> Acceptable(ImageVulnerabilities report) =>
+        [.. report.Vulnerabilities.Where(v => v.Accepted is not null
+            || (v.Ecosystem == "PyPI" && v.Severity is "moderate" or "high" or "critical" && ImageRemedies.Acceptable(v.FixedIn, v.UbuntuProFixedIn)))];
+
+    /// <summary>The accepting window (<see cref="AcceptVulnerabilitiesDialog"/>); true once something was accepted or withdrawn.</summary>
+    public static Task<bool> ShowAcceptAsync(IDialogService dialogs, ImageVulnerabilities report) =>
+        DialogFlow.ShowAsync<AcceptVulnerabilitiesDialog>(dialogs, $"Accept vulnerabilities of {ImageReference.RepositoryOf(report.Image)}",
+            new DialogParameters<AcceptVulnerabilitiesDialog> { { d => d.Report, report } });
+
+    /// <summary>
     /// What Update image and View &amp; edit say beside their Patch… button: the
     /// image carries a system package with a fix published that it does not
     /// have, so pulling it or recreating on it again does not mend it. Empty

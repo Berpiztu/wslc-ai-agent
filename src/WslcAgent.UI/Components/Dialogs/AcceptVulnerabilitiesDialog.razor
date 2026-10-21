@@ -1,0 +1,79 @@
+@* Accepting what nobody can mend: an image's Python library with a vulnerability no
+   version fixes, in a part the image does not use (chromadb's HTTP server in an image
+   that only uses its client), colours the image and its containers for good, and a
+   colour nobody can answer only wears people out. Each one is a row, ticked when it is
+   accepted; the reason is written once, for the rows ticked now, and kept with each,
+   with who and when. Accepted, it is shown in grey in Zaindari's window and colours
+   nothing; the day a version fixes it, it alarms again, and any other vulnerability
+   alarms as ever. An acceptance is the image's repository's: the next version built
+   keeps it. The rows scroll in a box of their own, so the window keeps its size. *@
+@using WslcAgent.ApiClient
+@inject WslcAgentApi Api
+
+<FormDialog SubmitText="Save" BusyText="Saving…" OnSubmit="SaveAsync">
+    <MudText Typo="Typo.body2">
+        No version fixes these. Ticked, one is accepted for every version of <b>@ImageReference.RepositoryOf(Report.Image)</b>:
+        shown in grey with its reason, it no longer colours the image nor refuses it. The day a version fixes it, it alarms again.
+    </MudText>
+
+    <div class="wslc-picker-list mt-2" role="list">
+        @foreach (var row in _rows)
+        {
+            <div role="listitem">
+                <MudCheckBox T="bool" @bind-Value="row.Ticked" Dense="true" Color="Color.Primary" Label="@row.Label" />
+                @if (row.Advisory.Accepted is { } accepted)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary ml-8 d-block">
+                        Accepted by @(accepted.By.Length > 0 ? accepted.By : "someone") on @accepted.At.ToLocalTime().ToString("yyyy-MM-dd"): @accepted.Reason
+                    </MudText>
+                }
+            </div>
+        }
+    </div>
+
+    <MudTextField T="string" @bind-Value="_reason" Label="Reason, for the ones ticked now" Immediate="true" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2"
+                  Validation="@(new Func<string, string?>(ReasonError))"
+                  HelperText="Why the image can live with it: the part it is in is not used here. Kept with each one, with who and when." />
+</FormDialog>
+
+@code {
+    [Parameter, EditorRequired] public ImageVulnerabilities Report { get; set; } = default!;
+
+    private sealed class Row(ImageAdvisory advisory)
+    {
+        public ImageAdvisory Advisory { get; } = advisory;
+
+        public bool Ticked { get; set; } = advisory.Accepted is not null;
+
+        public string Label => $"{Advisory.Package} {Advisory.Version}, {Advisory.Severity}: {Advisory.Advisory}{(Advisory.Cve.Length > 0 ? $" ({Advisory.Cve})" : "")}";
+    }
+
+    private List<Row> _rows = [];
+
+    private string _reason = "";
+
+    protected override void OnParametersSet() =>
+        _rows = [.. ImageSecurityFlow.Acceptable(Report).Select(advisory => new Row(advisory))];
+
+    /// <summary>A row ticked now carries the reason: it cannot be empty then.</summary>
+    private string? ReasonError(string reason) =>
+        _rows.Any(row => row.Ticked && row.Advisory.Accepted is null) && string.IsNullOrWhiteSpace(reason)
+            ? "Say why: an acceptance keeps its reason."
+            : null;
+
+    private async Task SaveAsync()
+    {
+        foreach (var row in _rows)
+        {
+            var advisory = row.Advisory;
+            if (row.Ticked && advisory.Accepted is null)
+            {
+                await Api.AcceptImageVulnerabilityAsync(new AcceptImageVulnerability(Report.Image, advisory.Ecosystem, advisory.Package, advisory.Advisory, _reason.Trim()));
+            }
+            else if (!row.Ticked && advisory.Accepted is not null)
+            {
+                await Api.WithdrawImageAcceptanceAsync(Report.Image, advisory.Ecosystem, advisory.Package, advisory.Advisory);
+            }
+        }
+    }
+}

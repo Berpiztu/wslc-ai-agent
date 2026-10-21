@@ -200,6 +200,32 @@ For anything else, **Build image** takes a Dockerfile from your device,
 pasted in its field or loaded into it, and builds it with no folder on the
 agent's machine.
 
+## Accept: what nobody can mend, in a part you do not use
+
+A Python library is always raised, fix or no fix, since it can be raised,
+replaced or taken out. Sometimes none of the three is sensible: no version
+fixes the vulnerability yet, and it is in a part of the library the image
+does not use (a library's own server, in an image that only uses its client).
+Left as it is, the image and its containers stay coloured until somebody
+upstream publishes a fix.
+
+**Accept…**, beside Patch in Zaindari's window, lists the image's Python
+libraries with a vulnerability moderate or worse that no version fixes, a row
+each, and the ones accepted already. Tick a row, say why once, and save. An
+accepted vulnerability:
+
+- is shown in grey in the window, with who accepted it, when and why;
+- gives the image and its containers no colour, and refuses nothing;
+- belongs to the image's repository, not its tag: the next version you build
+  keeps it;
+- stops counting the day a version fixes it, and alarms again, for the patch
+  to take it. Any other vulnerability alarms as ever.
+
+Untick a row to withdraw it. A vulnerability with a fix is never offered: it
+is mended, not accepted. Acceptances are kept in `image-acceptances.json`; an
+AI agent over MCP sees them in `image_vulnerabilities`, and accepting stays a
+person's decision.
+
 ## Settings
 
 **Settings → Security → Image security check** sets what a vulnerability of

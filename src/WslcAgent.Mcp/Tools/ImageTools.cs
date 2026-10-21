@@ -22,7 +22,7 @@ public static class ImageTools
         images.InspectAsync(reference, cancellationToken);
 
     [McpServerTool(Name = "image_vulnerabilities", ReadOnly = true)]
-    [Description("An image's Python libraries (pip list read in the image itself) and every known vulnerability of them from OSV.dev, the low ones too, the worst first, each with its advisory, CVE and the version that fixes it; with a line per library saying the version that fixes all of its own, and whether the agent refuses to make containers from the image (built here, Settings → Security set to Block).")]
+    [Description("An image's Python libraries (pip list read in the image itself) and every known vulnerability of them from OSV.dev, the low ones too, the worst first, each with its advisory, CVE and the version that fixes it; with a line per library saying the version that fixes all of its own, and whether the agent refuses to make containers from the image (built here, Settings → Security set to Block). A vulnerability a person accepted (no version fixes it, in a part the image does not use) carries its acceptance, with who, when and why, and counts in no colour nor refusal; accepting one is a person's decision, made in Zaindari's window, not through this server.")]
     public static Task<ImageVulnerabilities> ImageVulnerabilities(
         IImageSecurity security,
         [Description("Image reference or id.")] string reference,

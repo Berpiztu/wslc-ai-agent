@@ -110,6 +110,7 @@ builder.Services.AddSingleton(services => new ApprovalGate(
     () => services.GetRequiredService<IMcpSwitches>().AllowDestructiveTools));
 builder.Services.AddSingleton<IImageService, ImageService>();
 builder.Services.AddSingleton<ImageSecuritySettingsStore>();
+builder.Services.AddSingleton<ImageAcceptanceStore>();
 builder.Services.AddSingleton<ImageMarks>();
 builder.Services.AddSingleton<ContainerAudit>();
 builder.Services.AddSingleton<IImageSecurity>(services => services.GetRequiredService<ImageSecurity>());
@@ -118,7 +119,8 @@ builder.Services.AddSingleton(services => new ImageSecurity(
     services.GetRequiredService<ImageSecuritySettingsStore>(), services.GetRequiredService<ILogger<ImageSecurity>>(),
     Path.Combine(services.GetRequiredService<Microsoft.Extensions.Options.IOptions<WslcOptions>>().Value.DataDirectory, "image-packages"),
     Path.Combine(services.GetRequiredService<Microsoft.Extensions.Options.IOptions<WslcOptions>>().Value.DataDirectory, "osv-advisories"),
-    services.GetRequiredService<ImageMarks>()));
+    services.GetRequiredService<ImageMarks>(),
+    services.GetRequiredService<ImageAcceptanceStore>()));
 builder.Services.AddSingleton<ImageBuilds>();
 builder.Services.AddSingleton<ImagePatches>();
 builder.Services.AddSingleton<ImagePulls>();

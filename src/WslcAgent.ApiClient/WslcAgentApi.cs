@@ -789,6 +789,20 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<BuildJob> PatchImageAsync(PatchImageRequest request, CancellationToken cancellationToken = default) =>
         PostJsonAsync<PatchImageRequest, BuildJob>("api/v1/image-security/patch", request, cancellationToken);
 
+    /// <summary>Every vulnerability a person accepted, of every image.</summary>
+    public Task<ImageAcceptances> GetImageAcceptancesAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<ImageAcceptances>("api/v1/image-security/acceptances", cancellationToken);
+
+    /// <summary>Accepts one vulnerability of an image, with its reason: shown, no longer raised, while no version fixes it.</summary>
+    public Task<ImageAcceptance> AcceptImageVulnerabilityAsync(AcceptImageVulnerability request, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<AcceptImageVulnerability, ImageAcceptance>("api/v1/image-security/acceptances", request, cancellationToken);
+
+    /// <summary>Withdraws an acceptance: the vulnerability alarms again.</summary>
+    public Task WithdrawImageAcceptanceAsync(string image, string ecosystem, string package, string advisory, CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Delete,
+            $"api/v1/image-security/acceptances?image={Escape(image)}&ecosystem={Escape(ecosystem)}&package={Escape(package)}&advisory={Escape(advisory)}",
+            cancellationToken);
+
     /// <summary>The project's last save or build: the one under way, or the last one kept however it ended (404 when none was).</summary>
     public Task<ProjectJob> GetProjectLastJobAsync(string name, CancellationToken cancellationToken = default) =>
         GetAsync<ProjectJob>($"api/v1/projects/{Escape(name)}/last-job", cancellationToken);

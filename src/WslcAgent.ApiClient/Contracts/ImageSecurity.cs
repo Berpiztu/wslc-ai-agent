@@ -34,7 +34,38 @@ public sealed record ImagePackage(string Name, string Version, string Ecosystem 
 /// <param name="FixedIn">The first version that fixes it; empty when none does yet.</param>
 /// <param name="Url">The advisory on osv.dev.</param>
 /// <param name="UbuntuProFixedIn">When <paramref name="FixedIn"/> is empty, the version only Ubuntu Pro, Canonical's subscription, fixes it in: an upgrade cannot reach it, so no patch installs it. Empty otherwise.</param>
-public sealed record ImageAdvisory(string Package, string Version, string Advisory, string Cve, string Severity, string FixedIn, string Url, string Ecosystem = "PyPI", string UbuntuProFixedIn = "");
+/// <param name="Accepted">A person accepted it for this image (<see cref="ImageAcceptance"/>): said, not counted in the image's colour nor in a refusal. Null otherwise.</param>
+public sealed record ImageAdvisory(string Package, string Version, string Advisory, string Cve, string Severity, string FixedIn, string Url, string Ecosystem = "PyPI", string UbuntuProFixedIn = "", ImageAcceptance? Accepted = null);
+
+/// <summary>
+/// A known vulnerability a person accepted for an image: one nobody can mend
+/// today (no version fixes it) in a part the image does not use, said with its
+/// reason. While it has no fix it is shown, not raised: it gives the image no
+/// colour and refuses nothing. The day a version fixes it, the acceptance stops
+/// counting and it alarms again, for the image to be patched; any other
+/// vulnerability alarms as ever. Kept by the agent in <c>image-acceptances.json</c>.
+/// </summary>
+/// <param name="Repository">The image without its tag, lower case (<c>ghcr.io/owner/app</c>): every version of it, the next one built too.</param>
+/// <param name="Ecosystem">The package's kind, as <see cref="ImageAdvisory.Ecosystem"/>.</param>
+/// <param name="Package">The package, as <see cref="ImageAdvisory.Package"/>.</param>
+/// <param name="Advisory">The advisory, as <see cref="ImageAdvisory.Advisory"/> (<c>GHSA-f4j7-r4q5-qw2c</c>).</param>
+/// <param name="Reason">Why it is accepted, as the person wrote it; never empty.</param>
+/// <param name="By">Who accepted it: the user signed in, <c>local</c> at the agent's machine, or <c>token</c>.</param>
+/// <param name="At">When.</param>
+public sealed record ImageAcceptance(string Repository, string Ecosystem, string Package, string Advisory, string Reason, string By = "", DateTimeOffset At = default);
+
+/// <summary>Answer of <c>GET /api/v1/image-security/acceptances</c>, and the agent's <c>image-acceptances.json</c>: every acceptance, of every image.</summary>
+public sealed record ImageAcceptances(IReadOnlyList<ImageAcceptance>? Acceptances = null)
+{
+    /// <summary>The acceptances, none when the file has none; not written, being <see cref="Acceptances"/> again.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<ImageAcceptance> All => Acceptances ?? [];
+}
+
+/// <summary>Body of <c>POST /api/v1/image-security/acceptances</c>: accept one vulnerability of an image, with its reason.</summary>
+/// <param name="Image">The image, as <see cref="ImageVulnerabilities.Image"/>; its tag does not matter, the acceptance is its repository's.</param>
+/// <param name="Reason">Why; required.</param>
+public sealed record AcceptImageVulnerability(string Image, string Ecosystem, string Package, string Advisory, string Reason);
 
 /// <summary>
 /// Answer of <c>GET /api/v1/image-security/vulnerabilities?image=</c> and of the
@@ -116,6 +147,14 @@ public sealed record PatchImageRequest(string Image, IReadOnlyList<string> Conta
 /// </summary>
 public static class ImageRemedies
 {
+    /// <summary>
+    /// Whether a vulnerability can be accepted: only while no version fixes it,
+    /// in the free archive or in Ubuntu Pro. One with a fix is mended, by a
+    /// patch, never accepted; an acceptance whose vulnerability gets a fix stops
+    /// counting by the same rule.
+    /// </summary>
+    public static bool Acceptable(string fixedIn, string ubuntuProFixedIn) => fixedIn.Length == 0 && ubuntuProFixedIn.Length == 0;
+
     /// <summary>How a library's line says its worst severity, before the severity itself.</summary>
     public const string WorstSaid = ", the worst ";
 

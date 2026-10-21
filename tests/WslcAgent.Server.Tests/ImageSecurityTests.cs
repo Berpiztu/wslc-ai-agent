@@ -79,12 +79,49 @@ public sealed class ImageSecurityTests
         Assert.False((await Launching(repoDigests: """["ghcr.io/x/app@sha256:abc"]""").ReportAsync("app:1")).Refused);
     }
 
+    [Fact]
+    public async Task An_accepted_vulnerability_no_version_fixes_is_said_and_neither_marks_nor_refuses()
+    {
+        var marks = new ImageMarks(Options.Create(new WslcOptions { DataDirectory = TestHost.TempDataDirectory() }), NullLogger<ImageMarks>.Instance);
+        var security = Launching(repoDigests: "[]", marks, Accepting(), fixPublished: false);
+
+        var report = await security.ReportAsync("app:1");
+
+        var accepted = Assert.Single(report.Vulnerabilities);
+        Assert.Equal("only its client is used", accepted.Accepted?.Reason);
+        Assert.False(report.Refused);
+        Assert.Empty(report.Remedies);
+        Assert.Equal("", marks.Of("app:1")?.Worst ?? "");
+        Assert.Empty(await security.GuardLaunchAsync("app:1", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task An_acceptance_stops_counting_once_a_version_fixes_it()
+    {
+        var security = Launching(repoDigests: "[]", acceptances: Accepting(), fixPublished: true);
+
+        var report = await security.ReportAsync("app:1");
+
+        Assert.Null(Assert.Single(report.Vulnerabilities).Accepted);
+        Assert.True(report.Refused);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => security.GuardLaunchAsync("app:1", CancellationToken.None));
+    }
+
+    /// <summary>flask's GHSA-test-0001 accepted for every version of app.</summary>
+    private static ImageAcceptanceStore Accepting()
+    {
+        var store = new ImageAcceptanceStore(Options.Create(new WslcOptions { DataDirectory = TestHost.TempDataDirectory() }));
+        store.Accept(new AcceptImageVulnerability("app:7", "PyPI", "Flask", "GHSA-test-0001", "only its client is used"), "test");
+        return store;
+    }
+
     /// <summary>The check before a container: app:1 on the machine, built here when it has no digest.</summary>
-    private static ImageSecurity Launching(string repoDigests, ImageMarks? marks = null)
+    private static ImageSecurity Launching(string repoDigests, ImageMarks? marks = null, ImageAcceptanceStore? acceptances = null, bool fixPublished = true)
     {
         var runner = Exporting(Libraries)
             .Answer("image inspect app:1", $$"""[{"Id": "sha256:{{repoDigests.Length}}", "RepoDigests": {{repoDigests}}}]""");
-        return new ImageSecurity(runner, new HttpClient(new Osv()), Store(ImageSecurityPolicy.Block), NullLogger<ImageSecurity>.Instance, marks: marks);
+        return new ImageSecurity(runner, new HttpClient(new Osv(fixPublished)), Store(ImageSecurityPolicy.Block), NullLogger<ImageSecurity>.Instance,
+            marks: marks, acceptances: acceptances);
     }
 
     [Fact]
@@ -458,7 +495,8 @@ public sealed class ImageSecurityTests
     }
 
     /// <summary>OSV.dev as it answers: flask 3.0.2 has one moderate advisory, fixed in 3.0.3; requests has none.</summary>
-    private sealed class Osv : HttpMessageHandler
+    /// <summary>OSV.dev for flask 3.0.2: GHSA-test-0001, moderate, fixed in 3.0.3 unless <paramref name="fixPublished"/> is false.</summary>
+    private sealed class Osv(bool fixPublished = true) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -468,8 +506,8 @@ public sealed class ImageSecurityTests
                 "/v1/vulns/GHSA-test-0001" => """
                     {"id": "GHSA-test-0001", "aliases": ["CVE-2026-0001"], "database_specific": {"severity": "MODERATE"},
                      "affected": [{"package": {"name": "Flask", "ecosystem": "PyPI"},
-                                   "ranges": [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}, {"fixed": "3.0.3"}]}]}]}
-                    """,
+                                   "ranges": [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}FIXED]}]}]}
+                    """.Replace("FIXED", fixPublished ? """, {"fixed": "3.0.3"}""" : "", StringComparison.Ordinal),
                 _ => null,
             };
             return Task.FromResult(body is null

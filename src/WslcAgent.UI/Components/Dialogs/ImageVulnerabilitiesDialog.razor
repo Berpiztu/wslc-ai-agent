@@ -9,13 +9,20 @@
    and last what the image is, how many vulnerabilities there are and whether the
    agent refuses it: the view stands at the end, where the worst is read first.
    Opened for one container or one image whose system packages have a fix
-   published, Patch on the title line builds the image's patch (ImagePatches). *@
+   published, Patch on the title line builds the image's patch (ImagePatches).
+   Accept… beside it opens the vulnerabilities no version fixes, to accept the
+   ones in a part the image does not use: shown here in grey with their reason,
+   they colour nothing (AcceptVulnerabilitiesDialog). *@
 @inject WslcAgentApi Api
 @inject IDialogService Dialogs
 
 <MudDialog ContentClass="wslc-dialog-action">
     <TitleContent>
         <DialogTitle Title="@Dialog.Title">
+            @if (_accept is { } accept)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => AcceptAsync(accept))">Accept…</MudButton>
+            }
             @if (_patch is { } patch)
             {
                 <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => PatchAsync(patch))">Patch</MudButton>
@@ -46,6 +53,9 @@
     /// <summary>The image and its patch, when the check found one to build and the window offers it.</summary>
     private ImageVulnerabilities? _patch;
 
+    /// <summary>The image, when it has vulnerabilities to accept (or accepted) and the window is one image's.</summary>
+    private ImageVulnerabilities? _accept;
+
     private async Task<string> ReadAsync()
     {
         if (_text is not null)
@@ -65,6 +75,12 @@
             {
                 var report = await Api.GetImageVulnerabilitiesAsync(image);
                 lines.AddRange(Lines(report));
+                if (Patchable && ImageSecurityFlow.Acceptable(report).Count > 0)
+                {
+                    _accept = report;
+                    StateHasChanged();
+                    Dialog.StateHasChanged();
+                }
                 if (Patchable && report.Patch.Length > 0)
                 {
                     _patch = report;
@@ -83,6 +99,15 @@
         }
 
         return _text = string.Join('\n', lines);
+    }
+
+    /// <summary>The accepting window; saved, the image is checked again, so its colour and these lines follow at the view's next read.</summary>
+    private async Task AcceptAsync(ImageVulnerabilities report)
+    {
+        if (await ImageSecurityFlow.ShowAcceptAsync(Dialogs, report))
+        {
+            _text = null;
+        }
     }
 
     /// <summary>The patch's window; once it has started, the agent builds it and this window closes.</summary>
@@ -112,9 +137,12 @@
 
         foreach (var v in report.Vulnerabilities.Reverse())
         {
-            yield return Line(ImageRemedies.LevelOf(v.Severity),
+            // Accepted, in grey: said with who, when and why, and counted nowhere.
+            yield return Line(v.Accepted is null ? ImageRemedies.LevelOf(v.Severity) : "INFO",
                 $"{Named(v.Package, v.Ecosystem)} {v.Version}, {v.Severity}: {v.Advisory}{(v.Cve.Length > 0 ? $" ({v.Cve})" : "")}, "
-                + $"{ImageRemedies.FixSaid(v.FixedIn, v.UbuntuProFixedIn)}  {v.Url}");
+                + $"{ImageRemedies.FixSaid(v.FixedIn, v.UbuntuProFixedIn)}"
+                + (v.Accepted is { } accepted ? $"; accepted by {accepted.By} on {accepted.At.ToLocalTime():yyyy-MM-dd}: {accepted.Reason}" : "")
+                + $"  {v.Url}");
         }
 
         foreach (var remedy in report.Remedies)
@@ -131,11 +159,14 @@
             .Select(severity => (severity, count: report.Vulnerabilities.Count(v => v.Severity == severity)))
             .Where(pair => pair.count > 0)
             .Select(pair => $"{pair.count} {pair.severity}"));
-        var worst = report.Vulnerabilities.Count == 0 ? "INFO" : ImageRemedies.LevelOf(report.Vulnerabilities[0].Severity);
+        var raised = report.Vulnerabilities.Where(v => v.Accepted is null).ToList();
+        var accepted = report.Vulnerabilities.Count - raised.Count;
+        var worst = raised.Count == 0 ? "INFO" : ImageRemedies.LevelOf(raised[0].Severity);
         yield return Line(worst,
             $"{report.Image}, {(report.Built ? "built on this machine" : "from a registry")}: {Counted(report.Packages)}, "
-            + (report.Vulnerabilities.Count == 0 ? "no known vulnerability." : $"{report.Vulnerabilities.Count} known vulnerabilities ({counted})."));
-        if (ImageRemedies.WhatIsLeft(report.Vulnerabilities) is { Length: > 0 } left)
+            + (report.Vulnerabilities.Count == 0 ? "no known vulnerability." : $"{report.Vulnerabilities.Count} known vulnerabilities ({counted})")
+            + (accepted > 0 ? $", {accepted} of them accepted." : report.Vulnerabilities.Count == 0 ? "" : "."));
+        if (ImageRemedies.WhatIsLeft(raised) is { Length: > 0 } left)
         {
             yield return Line("INFO", left);
         }

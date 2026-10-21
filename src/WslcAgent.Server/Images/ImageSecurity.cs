@@ -19,7 +19,8 @@ public sealed class ImageSecuritySettingsStore(IOptions<WslcOptions> options)
 /// <param name="Severity"><c>low</c>, <c>moderate</c>, <c>high</c>, <c>critical</c>, or <c>unknown</c> when neither the advisory, its GHSA alias nor its CVSS vector gives one.</param>
 /// <param name="FixedIn">The first version that fixes it; empty when none does yet.</param>
 /// <param name="UbuntuProFixedIn">The version only Ubuntu Pro fixes it in, when <paramref name="FixedIn"/> is empty: said, never installed.</param>
-public sealed record ImageVulnerability(string Package, string Version, string Advisory, string Cve, string Severity, string FixedIn, string Url, string Ecosystem = "PyPI", string UbuntuProFixedIn = "")
+/// <param name="Acceptance">A person accepted it for the image (<see cref="ImageAcceptanceStore"/>): said, not raised.</param>
+public sealed record ImageVulnerability(string Package, string Version, string Advisory, string Cve, string Severity, string FixedIn, string Url, string Ecosystem = "PyPI", string UbuntuProFixedIn = "", ImageAcceptance? Acceptance = null)
 {
     /// <summary>The package as a line names it: a Python library by its name, a system package with its distribution (<c>openssl (Debian:12)</c>).</summary>
     public string Named => Ecosystem == Installed.PyPI ? Package : $"{Package} ({Ecosystem})";
@@ -27,11 +28,15 @@ public sealed record ImageVulnerability(string Package, string Version, string A
     /// <summary>Moderate or worse: what stops a build under <see cref="ImageSecurityPolicy.Block"/>.</summary>
     public bool Blocks => Severity is "moderate" or "high" or "critical";
 
+    /// <summary>Moderate or worse and not accepted: what is raised, a remedy each, and what refuses an image under <see cref="ImageSecurityPolicy.Block"/>.</summary>
+    public bool Alarms => Blocks && Acceptance is null;
+
     public override string ToString() =>
-        $"{Named} {Version}, {Severity}: {Advisory}{(Cve.Length > 0 ? $" ({Cve})" : "")}, {ImageRemedies.FixSaid(FixedIn, UbuntuProFixedIn)}";
+        $"{Named} {Version}, {Severity}: {Advisory}{(Cve.Length > 0 ? $" ({Cve})" : "")}, {ImageRemedies.FixSaid(FixedIn, UbuntuProFixedIn)}"
+        + (Acceptance is { } accepted ? $"; accepted by {accepted.By}: {accepted.Reason}" : "");
 
     /// <summary>The advisory as the API gives it.</summary>
-    public ImageAdvisory ToAdvisory() => new(Package, Version, Advisory, Cve, Severity, FixedIn, Url, Ecosystem, UbuntuProFixedIn);
+    public ImageAdvisory ToAdvisory() => new(Package, Version, Advisory, Cve, Severity, FixedIn, Url, Ecosystem, UbuntuProFixedIn, Acceptance);
 }
 
 /// <summary>
@@ -92,7 +97,8 @@ public sealed partial class ImageSecurity(
     ILogger<ImageSecurity> logger,
     string? keptIn = null,
     string? advisoriesIn = null,
-    ImageMarks? marks = null)
+    ImageMarks? marks = null,
+    ImageAcceptanceStore? acceptances = null)
     : WslcAgent.Mcp.IImageSecurity
 {
     /// <summary>A large image's container made and its files exported, a gigabyte and more.</summary>
@@ -148,14 +154,14 @@ public sealed partial class ImageSecurity(
             var found = await CheckAsync(image, id, built, note, cancellationToken);
             foreach (var vulnerability in found)
             {
-                note("WARNING", $"{image}: {vulnerability}");
+                note(vulnerability.Acceptance is null ? "WARNING" : "INFO", $"{image}: {vulnerability}");
             }
 
             if (!ImageReference.IsPatched(image))
             {
-                stopping.AddRange(found.Where(v => v.Blocks).Select(v => (image, v)));
+                stopping.AddRange(found.Where(v => v.Alarms).Select(v => (image, v)));
             }
-            else if (found.Any(v => v.Blocks))
+            else if (found.Any(v => v.Alarms))
             {
                 // A patch mends what has a fix published; what is left is its original's, and refusing
                 // the patch would leave the containers on the original, which carries all of it.
@@ -269,7 +275,7 @@ public sealed partial class ImageSecurity(
                 logger.LogWarning("image security check {When} of {Image}: {Text}", when, image, text);
             }
         }, cancellationToken);
-        var remedies = found.Where(v => v.Blocks).GroupBy(v => (v.Ecosystem, v.Package, v.Version)).Select(library => Remedy(image, [.. library])).ToList();
+        var remedies = found.Where(v => v.Alarms).GroupBy(v => (v.Ecosystem, v.Package, v.Version)).Select(library => Remedy(image, [.. library])).ToList();
         foreach (var remedy in remedies)
         {
             logger.LogWarning("image security check {When} of {Image}: {Remedy}", when, image, remedy);
@@ -450,7 +456,7 @@ public sealed partial class ImageSecurity(
         List<ImageVulnerability> found;
         try
         {
-            found = Reachable(await OsvAsync(packages, cancellationToken), ubuntuPro);
+            found = WithAcceptances(image, Reachable(await OsvAsync(packages, cancellationToken), ubuntuPro));
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
         {
@@ -458,7 +464,7 @@ public sealed partial class ImageSecurity(
         }
 
         Mark(id, image, built, found);
-        var remedies = found.Where(v => v.Blocks).GroupBy(v => (v.Ecosystem, v.Package, v.Version)).Select(library => Remedy(image, [.. library])).ToList();
+        var remedies = found.Where(v => v.Alarms).GroupBy(v => (v.Ecosystem, v.Package, v.Version)).Select(library => Remedy(image, [.. library])).ToList();
         var fixes = PythonFixes(found);
         var requirements = Requirements(files, found);
         var advisories = found
@@ -610,6 +616,14 @@ public sealed partial class ImageSecurity(
     /// </summary>
     internal static bool Mendable(ImageVulnerability v) => v.FixedIn.Length > 0 || v.Ecosystem == Installed.PyPI;
 
+    /// <summary>
+    /// The vulnerabilities as found, each one a person accepted for this image
+    /// and still without a fix carrying its acceptance (<see cref="ImageAcceptanceStore"/>):
+    /// said as nobody downstream can mend it, never raised.
+    /// </summary>
+    private List<ImageVulnerability> WithAcceptances(string image, List<ImageVulnerability> found) =>
+        acceptances is null ? found : [.. found.Select(v => acceptances.Of(image, v) is { } accepted ? v with { Acceptance = accepted } : v)];
+
     private static readonly JsonSerializerOptions KeptJson = new(JsonSerializerDefaults.Web);
 
     /// <summary>An image's packages as kept on disk; null for an image with none to read.</summary>
@@ -620,9 +634,9 @@ public sealed partial class ImageSecurity(
     /// <summary>
     /// What the check found, kept on the image (<see cref="ImageMarks"/>) by its
     /// id and the name it was checked by: the worst of its vulnerabilities
-    /// moderate or worse that something can be done about (<see cref="Mendable"/>),
-    /// the worst of those nobody downstream can mend, and whether the agent
-    /// refuses it; none when it is clean.
+    /// moderate or worse that something can be done about (<see cref="Mendable"/>)
+    /// and nobody accepted, the worst of those nobody downstream can mend or a
+    /// person accepted, and whether the agent refuses it; none when it is clean.
     /// </summary>
     private void Mark(string? id, string image, bool built, IReadOnlyList<ImageVulnerability> found)
     {
@@ -633,8 +647,8 @@ public sealed partial class ImageSecurity(
 
         string Worst(Func<ImageVulnerability, bool> which) =>
             found.Where(v => v.Blocks && which(v)).Select(v => v.Severity).MaxBy(severity => Array.IndexOf(SeverityOrder, severity)) ?? "";
-        marks.Record(id, image, Worst(Mendable), Worst(v => !Mendable(v)),
-            built && found.Any(v => v.Blocks) && settings.Get().Policy == ImageSecurityPolicy.Block);
+        marks.Record(id, image, Worst(v => Mendable(v) && v.Acceptance is null), Worst(v => !Mendable(v) || v.Acceptance is not null),
+            built && found.Any(v => v.Alarms) && settings.Get().Policy == ImageSecurityPolicy.Block);
     }
 
     private async Task<List<ImageVulnerability>> CheckAsync(string image, string? id, bool built, Action<string, string> note, CancellationToken cancellationToken)
@@ -660,7 +674,7 @@ public sealed partial class ImageSecurity(
 
         try
         {
-            var found = Reachable(await OsvAsync(packages, cancellationToken), ubuntuPro);
+            var found = WithAcceptances(image, Reachable(await OsvAsync(packages, cancellationToken), ubuntuPro));
             if (found.Count == 0)
             {
                 note("INFO", $"{image}: {packages.Count} packages, no known vulnerability.");
