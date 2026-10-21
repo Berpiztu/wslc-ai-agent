@@ -216,7 +216,7 @@ public sealed class WslcRunner(IOptionsMonitor<WslcOptions> options, ISelectedSe
 
         if (process.ExitCode != 0)
         {
-            var message = FirstMeaningfulLine(stderr) ?? FirstMeaningfulLine(stdout) ?? $"exit code {process.ExitCode}";
+            var message = FailureLine(stderr) ?? FailureLine(stdout) ?? $"exit code {process.ExitCode}";
             // The verb, not the whole line. A run carries every --env the image
             // has, a kilobyte of flags, and this message ends up in a toast: it
             // covered half the screen and buried the one thing worth reading.
@@ -515,6 +515,23 @@ public sealed class WslcRunner(IOptionsMonitor<WslcOptions> options, ISelectedSe
         }
     }
 
-    private static string? FirstMeaningfulLine(string text) =>
-        text.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0);
+    /// <summary>
+    /// The line that says why a command failed. A build's output begins with
+    /// its first step (<c>[1/4] FROM …</c>), which says nothing: what does is
+    /// the last line the failed step wrote (<c>| /usr/bin/python3: No module
+    /// named pip</c>), just before the build's <c>process "…" did not complete
+    /// successfully</c>, or else its <c>ERROR:</c> line. Any other command's
+    /// first line.
+    /// </summary>
+    internal static string? FailureLine(string text)
+    {
+        var lines = text.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
+        var failed = lines.FindIndex(l => l.StartsWith("process \"", StringComparison.Ordinal) && l.Contains("did not complete successfully", StringComparison.Ordinal));
+        if (failed > 0 && lines[failed - 1].StartsWith('|') && lines[failed - 1].TrimStart('|').Trim() is { Length: > 0 } said)
+        {
+            return said;
+        }
+
+        return lines.FirstOrDefault(l => l.StartsWith("ERROR:", StringComparison.Ordinal))?["ERROR:".Length..].Trim() ?? lines.FirstOrDefault();
+    }
 }

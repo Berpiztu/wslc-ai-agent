@@ -33,7 +33,8 @@ public sealed record ImagePackage(string Name, string Version, string Ecosystem 
 /// <param name="Severity"><c>low</c>, <c>moderate</c>, <c>high</c>, <c>critical</c>, or <c>unknown</c> when neither the advisory, its GHSA alias nor its CVSS vector gives one.</param>
 /// <param name="FixedIn">The first version that fixes it; empty when none does yet.</param>
 /// <param name="Url">The advisory on osv.dev.</param>
-public sealed record ImageAdvisory(string Package, string Version, string Advisory, string Cve, string Severity, string FixedIn, string Url, string Ecosystem = "PyPI");
+/// <param name="UbuntuProFixedIn">When <paramref name="FixedIn"/> is empty, the version only Ubuntu Pro, Canonical's subscription, fixes it in: an upgrade cannot reach it, so no patch installs it. Empty otherwise.</param>
+public sealed record ImageAdvisory(string Package, string Version, string Advisory, string Cve, string Severity, string FixedIn, string Url, string Ecosystem = "PyPI", string UbuntuProFixedIn = "");
 
 /// <summary>
 /// Answer of <c>GET /api/v1/image-security/vulnerabilities?image=</c> and of the
@@ -152,10 +153,21 @@ public static class ImageRemedies
         var system = advisories.Where(a => a.Ecosystem != "PyPI").ToList();
         var python = advisories.Where(a => a.Ecosystem == "PyPI").Select(a => a.Package).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var distribution = system.Select(a => a.Ecosystem.Split(':')[0]).FirstOrDefault() ?? "";
+        var paid = system.Where(a => a.UbuntuProFixedIn.Length > 0).ToList();
         return "Nothing left has a fix published, so no patch can mend more today."
             + (system.Count > 0 ? $" {Counted(system.Count, "vulnerability", "vulnerabilities")} in system packages, which {distribution} has not fixed yet." : "")
+            + (paid.Count > 0 ? $" {paid.Count} of them, in {Counted(Packages(paid), "package", "packages")}, {(paid.Count == 1 ? "is" : "are")} fixed only in {UbuntuPro}, Canonical's subscription." : "")
             + (python.Count > 0 ? $" Python, with no version that fixes it: {string.Join(", ", python)}; replace it, or take it out." : " No Python library is left to mend.");
     }
+
+    /// <summary>The subscription that fixes some of Ubuntu's packages the free archive does not.</summary>
+    public const string UbuntuPro = "Ubuntu Pro";
+
+    /// <summary>What fixes one vulnerability, as each of its lines says it: the version, or the one only Ubuntu Pro has, or that none does yet.</summary>
+    public static string FixSaid(string fixedIn, string ubuntuProFixedIn) =>
+        fixedIn.Length > 0 ? $"fixed in {fixedIn}"
+        : ubuntuProFixedIn.Length > 0 ? $"fixed only in {UbuntuPro} ({ubuntuProFixedIn}), not in the free archive"
+        : "no version fixes it yet";
 
     /// <summary>The level a library's line is shown at: its worst severity's, a warning at least.</summary>
     public static string LevelOfLine(string line)

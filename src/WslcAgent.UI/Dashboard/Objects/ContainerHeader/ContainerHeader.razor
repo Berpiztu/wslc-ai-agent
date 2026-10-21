@@ -25,7 +25,7 @@
                 <HeaderActions>
                     @if (c.State.Length > 0)
                     {
-                        <StateChip State="@c.State" Warned="c.IsWarned" Cve="@c.ImageWorst" Tone="@ImageSecurityFlow.Tone(c)" Patched="@ImageSecurityFlow.IsPatched(c)" />
+                        <StateChip State="@c.State" Warned="c.IsWarned" Cve="@c.ImageKnown" Tone="@ImageSecurityFlow.Tone(c)" Patched="@ImageSecurityFlow.IsPatched(c)" />
                     }
                 </HeaderActions>
             </EntityCardHeader>

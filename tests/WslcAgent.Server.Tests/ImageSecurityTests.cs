@@ -189,6 +189,39 @@ public sealed class ImageSecurityTests
     }
 
     [Fact]
+    public void The_distribution_s_own_rating_rules_over_nvd_s_score()
+    {
+        // cjson's CVE-2025-57052: 9.8 at NVD, medium for Ubuntu, fixed only in Ubuntu Pro on 24.04.
+        var cjson = System.Text.Json.Nodes.JsonNode.Parse("""
+            {"id": "UBUNTU-CVE-2025-57052",
+             "severity": [{"type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}, {"type": "Ubuntu", "score": "medium"}],
+             "affected": [
+              {"package": {"name": "cjson", "ecosystem": "Ubuntu:22.04:LTS"}, "ranges": [{"events": [{"introduced": "0"}, {"fixed": "1.7.15-1ubuntu0.1"}]}]},
+              {"package": {"name": "cjson", "ecosystem": "Ubuntu:Pro:24.04:LTS"}, "ranges": [{"events": [{"introduced": "0"}, {"fixed": "1.7.17-1ubuntu0.1~esm3"}]}]}]}
+            """);
+        var noble = new Installed("Ubuntu:24.04", "cjson", "1.7.17-1");
+        Assert.Equal("moderate", ImageSecurity.DistributionSeverity(cjson, noble));
+        Assert.Equal("1.7.17-1ubuntu0.1~esm3", ImageSecurity.UbuntuProFix(cjson, noble));
+        Assert.Equal("", ImageSecurity.UbuntuProFix(cjson, new Installed("Ubuntu:22.04", "cjson", "1.7.15-1")));
+
+        var negligible = System.Text.Json.Nodes.JsonNode.Parse("""{"id": "UBUNTU-CVE-2016-20013", "severity": [{"type": "Ubuntu", "score": "negligible"}]}""");
+        Assert.True(ImageSecurity.Unimportant(negligible, new Installed("Ubuntu:24.04", "glibc", "2.39-0ubuntu8.9")));
+
+        // Debian rates on its own release; "not yet assigned" is no rating, and Alpine gives none: NVD's score is used.
+        var debian = System.Text.Json.Nodes.JsonNode.Parse("""
+            {"id": "DEBIAN-CVE-1", "affected": [
+              {"package": {"name": "curl", "ecosystem": "Debian:12"}, "ecosystem_specific": {"urgency": "low"}},
+              {"package": {"name": "curl", "ecosystem": "Debian:13"}, "ecosystem_specific": {"urgency": "not yet assigned"}}]}
+            """);
+        Assert.Equal("low", ImageSecurity.DistributionSeverity(debian, new Installed("Debian:12", "curl", "7.88.1-10")));
+        Assert.Equal("unknown", ImageSecurity.DistributionSeverity(debian, new Installed("Debian:13", "curl", "8.14.1-2")));
+        Assert.Equal("unknown", ImageSecurity.DistributionSeverity(debian, new Installed("Alpine:v3.22", "curl", "8.14.1-r0")));
+
+        var left = ImageRemedies.WhatIsLeft([new("cjson", "1.7.17-1", "UBUNTU-CVE-2025-57052", "", "moderate", "", "", "Ubuntu:24.04", "1.7.17-1ubuntu0.1~esm3")]);
+        Assert.Contains("1 of them, in 1 package, is fixed only in Ubuntu Pro", left);
+    }
+
+    [Fact]
     public void A_cvss_4_vector_scores_as_nvd_scores_it()
     {
         // Alpine's zlib advisory, which gives only this vector: 8.3 at NVD.
@@ -299,6 +332,42 @@ public sealed class ImageSecurityTests
 
         // By source, at the source's version when it gives one; a package removed but for its configuration is not installed.
         Assert.Equal(["Debian:12 openssl 3.0.9-1", "Debian:12 zlib 1:1.2.13.dfsg-1"], installed!.Select(p => $"{p.Ecosystem} {p.Name} {p.Version}"));
+    }
+
+    [Fact]
+    public async Task A_python_library_debian_installed_is_its_package_s_not_pypi_s()
+    {
+        var archive = Path.Combine(TestHost.TempDataDirectory(), "debian-python.tar");
+        WriteFiles(archive,
+            ("usr/lib/python3/dist-packages/flask-3.1.1.dist-info/METADATA", "Metadata-Version: 2.1\nName: Flask\nVersion: 3.1.1\n"),
+            ("usr/local/lib/python3.13/dist-packages/rich-13.7.1.dist-info/METADATA", "Metadata-Version: 2.1\nName: rich\nVersion: 13.7.1\n"));
+
+        // python3-flask is Debian's, checked by its tracker as its package; what pip put in /usr/local is PyPI's.
+        Assert.Equal([("rich", "13.7.1")], Named(await ImageSecurity.InstalledAsync(archive, CancellationToken.None)));
+    }
+
+    [Fact]
+    public async Task A_fix_only_ubuntu_pro_carries_is_one_only_for_an_image_attached_to_it()
+    {
+        (string, string)[] noble = [("etc/os-release", "ID=ubuntu\nVERSION_ID=\"24.04\"\n"), ("var/lib/dpkg/status", "Package: libcjson1\nStatus: install ok installed\nSource: cjson\nVersion: 1.7.17-1\n\n")];
+        async Task<string> ProOf(params (string, string)[] files)
+        {
+            var archive = Path.Combine(TestHost.TempDataDirectory(), "ubuntu.tar");
+            WriteFiles(archive, [.. noble, .. files]);
+            return Assert.Single((await ImageSecurity.InstalledAsync(archive, CancellationToken.None))!, p => p.Ecosystem == Installed.UbuntuPro).Name;
+        }
+
+        Assert.Equal(Installed.Free, await ProOf());
+        // Detached as Canonical's Dockerfile does it, the sources are gone; left attached, they and their credentials stay.
+        Assert.Equal(Installed.Free, await ProOf(("etc/apt/sources.list.d/ubuntu-esm-apps.sources", "Types: deb\n")));
+        Assert.Equal(Installed.Attached, await ProOf(("etc/apt/sources.list.d/ubuntu-esm-apps.sources", "Types: deb\n"), ("etc/apt/auth.conf.d/90ubuntu-advantage", "machine esm.ubuntu.com\n")));
+
+        ImageVulnerability[] cjson = [new("cjson", "1.7.17-1", "UBUNTU-CVE-1", "", "moderate", "", "", "Ubuntu:24.04", "1.7.17-1ubuntu0.1~esm3")];
+        Assert.False(ImageSecurity.Mendable(ImageSecurity.Reachable([.. cjson], ubuntuPro: false)[0]));
+        Assert.Equal("1.7.17-1ubuntu0.1~esm3", ImageSecurity.Reachable([.. cjson], ubuntuPro: true)[0].FixedIn);
+        Assert.True(ImageSecurity.Mendable(ImageSecurity.Reachable([.. cjson], ubuntuPro: true)[0]));
+        // A Python library with no fix can still be replaced or taken out.
+        Assert.True(ImageSecurity.Mendable(new ImageVulnerability("ecdsa", "0.19.2", "GHSA-1", "", "high", "", "")));
     }
 
     [Fact]

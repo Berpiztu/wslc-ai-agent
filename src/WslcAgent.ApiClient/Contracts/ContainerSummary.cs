@@ -33,7 +33,8 @@ namespace WslcAgent.ApiClient.Contracts;
 /// <param name="MissingServices">The services of its project that no container stands for, by the file kept with the project: the project is incomplete (a container was removed around the agent, or a save stopped half way), and a save makes them again. Null when it is complete, or the container is of no project.</param>
 /// <param name="HoldsNameOf">The service of another project whose container is gone and whose name this one holds (<c>service backend of project shop</c>): a container made around the agent under it, so that project cannot make its own again while this one has the name. Empty otherwise.</param>
 /// <param name="ImageRefused">Its image is one the agent makes no new container from (built here, a vulnerability moderate or worse, Settings → Security set to Block): the image's own mark, read by its name (<see cref="ImageSummary.ImageRefused"/>).</param>
-/// <param name="ImageWorst">The worst severity of its image's vulnerabilities moderate or worse, as Zaindari last found it in the image: <c>moderate</c>, <c>high</c> or <c>critical</c>; empty for an image with none, or not checked.</param>
+/// <param name="ImageWorst">The worst severity of its image's vulnerabilities moderate or worse that something can be done about (a fix the image's upgrade reaches, or a Python library), as Zaindari last found it in the image: <c>moderate</c>, <c>high</c> or <c>critical</c>; empty for an image with none, or not checked. What raises the alarm.</param>
+/// <param name="ImageUnfixed">The worst severity of its image's vulnerabilities moderate or worse that nobody downstream can mend: a system package its distribution has not fixed for the image (no fix, or one only Ubuntu Pro carries in an image not attached to it). Said, never an alarm; empty for none.</param>
 /// <param name="ImageCheckedAt">When Zaindari last checked its image (<c>yyyy-MM-dd HH:mm</c>, the agent's time); empty with no mark.</param>
 public sealed record ContainerSummary(
     string Id,
@@ -69,7 +70,8 @@ public sealed record ContainerSummary(
     string ImageWorst = "",
     string ImageCheckedAt = "",
     string? PatchingTo = null,
-    string? PatchJob = null)
+    string? PatchJob = null,
+    string ImageUnfixed = "")
 {
     /// <summary>The agent's own state while a change to the container is being applied (a recreate).</summary>
     public const string Recreating = "recreating";
@@ -109,6 +111,9 @@ public sealed record ContainerSummary(
 
     /// <summary>Its image has known vulnerabilities moderate or worse (<see cref="ImageWorst"/>).</summary>
     public bool HasImageWarning => ImageWorst.Length > 0;
+
+    /// <summary>The worst severity known against its image, whether it can be mended or not (<see cref="ImageWorst"/>, else <see cref="ImageUnfixed"/>): what its chip's CVE stands for; empty for none.</summary>
+    public string ImageKnown => ImageWorst.Length > 0 ? ImageWorst : ImageUnfixed;
 
     /// <summary>Something about it to mend that stops nothing: an image with known vulnerabilities, or another project's container's name it holds (<see cref="HoldsNameOf"/>). Drawn in the yellow, for whoever sees it to look why.</summary>
     public bool IsWarned => HasImageWarning || HoldsNameOf.Length > 0;

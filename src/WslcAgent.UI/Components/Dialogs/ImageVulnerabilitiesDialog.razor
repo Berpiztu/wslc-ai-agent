@@ -114,7 +114,7 @@
         {
             yield return Line(ImageRemedies.LevelOf(v.Severity),
                 $"{Named(v.Package, v.Ecosystem)} {v.Version}, {v.Severity}: {v.Advisory}{(v.Cve.Length > 0 ? $" ({v.Cve})" : "")}, "
-                + $"{(v.FixedIn.Length > 0 ? $"fixed in {v.FixedIn}" : "no version fixes it yet")}  {v.Url}");
+                + $"{ImageRemedies.FixSaid(v.FixedIn, v.UbuntuProFixedIn)}  {v.Url}");
         }
 
         foreach (var remedy in report.Remedies)

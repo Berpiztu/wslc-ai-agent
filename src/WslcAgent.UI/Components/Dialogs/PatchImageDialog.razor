@@ -8,9 +8,11 @@
    a row of its own: what to do with each is chosen there, and the file is
    rewritten by it (raised, taken to its latest, taken out; a dependency added
    with the version that fixes it), seen whole under the rows and copied to
-   the sources with its button. Write requirements.txt puts into the
-   Dockerfile the lines that COPY the new file over the old and install from
-   it, and take out what was taken out; the file goes beside the Dockerfile.
+   the sources with its button. As each choice is made, the Dockerfile is
+   written by it: the lines that COPY the new file over the old and install
+   from it, and take out what was taken out, put in and taken away again with
+   the choices, so what it shows is always what is built; the file goes beside
+   the Dockerfile.
    Then the containers ticked are moved to it. Every container of the image
    is listed and ticked (or the one it was opened from alone); a project's are
    not, since its compose file names its image. A patch is never refused; if
@@ -48,7 +50,7 @@
             </MudText>
             <MudTextField T="string" @bind-Value="_dockerfile" Label="Dockerfile of the patch, as it will be built" Lines="9" Immediate="true"
                           HelperTextOnFocus="true" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-1"
-                          HelperText="Change it as you will. Write requirements.txt adds the lines that copy the new file in and install from it, before its last USER."
+                          HelperText="Change it as you will. What the rows choose is written in it as you choose: the lines that copy the new requirements.txt in and install from it, before its last USER."
                           autocapitalize="none" autocorrect="off" spellcheck="false" />
 
             @* The file as the choices leave it, whole, to read and to copy to the sources. *@
@@ -89,17 +91,17 @@
            they do not name, with what to do with it. A vulnerable one in the colour of what it needs;
            one taken out red and struck through. All to latest chooses the latest for every row. *@
         <div class="wslc-patch-requirements-column">
+            @* The file the rows write: the image's own, or, when it has none, a new one the patch copies in
+               (NoFile); no title when there is no row, since there is then no file at all. *@
             <div class="d-flex align-center gap-1">
-                <MudText Typo="Typo.caption" Class="flex-grow-1"><b>@TargetPath</b></MudText>
+                <MudText Typo="Typo.caption" Class="flex-grow-1"><b>@(_rows.Count == 0 ? "" : Files.Count > 0 ? TargetPath : "A new requirements.txt, for these dependencies")</b></MudText>
                 <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" Disabled="@(_rows.Count == 0)"
                            OnClick="AllToLatest">All to latest</MudButton>
-                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PlaylistAdd"
-                           Disabled="@(Rewritten().Count == 0 && TakenOut().Count == 0)" OnClick="WriteRequirements">Write requirements.txt</MudButton>
             </div>
             <div class="wslc-patch-requirements">
                 @if (_rows.Count == 0)
                 {
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">No requirements*.txt in the image, and no vulnerable Python library: the libraries were installed from files left outside it, which is where they are mended.</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">No requirements*.txt in the image, and no vulnerable Python library installed by pip or uv: nothing for the patch to raise here.</MudText>
                 }
                 else
                 {
@@ -118,7 +120,7 @@
                                 @Shown(row)
                             }
                         </MudText>
-                        <MudSelect T="string" Value="@Choice(at)" ValueChanged="@(choice => _choices[at] = choice)" Dense="true" Margin="Margin.Dense" Variant="Variant.Text">
+                        <MudSelect T="string" Value="@Choice(at)" ValueChanged="@(choice => Choose(at, choice))" Dense="true" Margin="Margin.Dense" Variant="Variant.Text">
                             <MudSelectItem Value="@Keep">@(row.Dependency ? "Leave" : "Keep")</MudSelectItem>
                             @if (row.Line.Suggested.Length > 0)
                             {
@@ -162,6 +164,9 @@
     /// <summary>What is to be done with each row, by its place in <see cref="_rows"/>; kept unless chosen.</summary>
     private readonly Dictionary<int, string> _choices = [];
 
+    /// <summary>The lines the choices last wrote into the Dockerfile, taken away again before the next ones are written.</summary>
+    private List<string> _written = [];
+
     private IReadOnlyList<ImageTextFile> Files => Report.RequirementFiles ?? [];
 
     /// <summary>The file the rows are written into first: the image's first requirements file, or <see cref="NoFile"/>.</summary>
@@ -196,6 +201,12 @@
 
     private string Choice(int at) => _choices.GetValueOrDefault(at, Keep);
 
+    private void Choose(int at, string choice)
+    {
+        _choices[at] = choice;
+        WriteRequirements();
+    }
+
     /// <summary>The line that raises a library to the version that fixes it (<see cref="ImageVulnerabilities.PythonFixes"/>); empty when none does, and it can only be left or taken out.</summary>
     private string FixOf(string library) =>
         (Report.PythonFixes ?? []).FirstOrDefault(fix => Normalized(fix.Split(">=")[0]) == Normalized(library)) ?? "";
@@ -209,20 +220,22 @@
 
     /// <summary>A row in the colour of what it needs or is chosen: red when it is taken out, or a vulnerable one no version fixes; yellow when a fix is there to raise to.</summary>
     private static string LineClass(Row row, string choice) =>
-        choice == TakeOut || (row.Line.Vulnerable && row.Line.Suggested.Length == 0) ? "mud-error-text"
-        : row.Line.Vulnerable ? "mud-warning-text"
-        : "";
+        ImageSecurityFlow.TextClass(choice == TakeOut || (row.Line.Vulnerable && row.Line.Suggested.Length == 0) ? Color.Error
+            : row.Line.Vulnerable ? Color.Warning
+            : Color.Default);
 
     /// <summary>PyPI's names compare as PEP 503 says: case and <c>_</c>, <c>-</c>, <c>.</c> alike.</summary>
     private static string Normalized(string name) => name.Trim().ToLowerInvariant().Replace('_', '-').Replace('.', '-');
 
-    /// <summary>Every row to its latest version: the file it makes is seen under the rows before it is written.</summary>
+    /// <summary>Every row to its latest version, written into the Dockerfile at once, as one choice is.</summary>
     private void AllToLatest()
     {
         for (var at = 0; at < _rows.Count; at++)
         {
             _choices[at] = Latest;
         }
+
+        WriteRequirements();
     }
 
     /// <summary>
@@ -318,23 +331,32 @@
     }
 
     /// <summary>
-    /// The Dockerfile told what the rows chose: each new file copied over the
-    /// old one and installed from, then what was taken out uninstalled, since
-    /// installing from a file never takes anything out. Its lines go before the
-    /// last USER, so they run as root.
+    /// The Dockerfile told what the rows chose, each time one is chosen: the
+    /// lines the last choices wrote taken away, then each new file copied over
+    /// the old one and installed from, and what was taken out uninstalled, since
+    /// installing from a file never takes anything out; none when every row is
+    /// kept. Its lines go before the last USER, so they run as root; what the
+    /// user wrote in it stays as they wrote it.
     /// </summary>
     private void WriteRequirements()
     {
+        var gone = _written.ToHashSet(StringComparer.Ordinal);
+        _dockerfile = string.Join('\n', _dockerfile.ReplaceLineEndings("\n").Split('\n').Where(line => !gone.Contains(line.Trim())));
+
+        var lines = new List<string>();
         foreach (var file in Rewritten())
         {
-            Insert($"COPY {file.Name} {file.Path}");
-            Insert($"RUN {Report.PythonInstaller} -r {file.Path}");
+            lines.Add($"COPY {file.Name} {file.Path}");
+            lines.Add($"RUN {Report.PythonInstaller} -r {file.Path}");
         }
 
         if (TakenOut() is { Count: > 0 } takenOut)
         {
-            Insert($"RUN {Report.PythonUninstaller} {string.Join(' ', takenOut)}");
+            lines.Add($"RUN {Report.PythonUninstaller} {string.Join(' ', takenOut)}");
         }
+
+        lines.ForEach(Insert);
+        _written = lines;
     }
 
     /// <summary>A line added once to the Dockerfile, before its last USER (the image's own user given back), so it runs as root.</summary>

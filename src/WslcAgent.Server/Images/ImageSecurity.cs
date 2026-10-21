@@ -18,7 +18,8 @@ public sealed class ImageSecuritySettingsStore(IOptions<WslcOptions> options)
 /// <summary>A known vulnerability of one package in an image: a Python library, or a system package of its distribution (<see cref="Ecosystem"/>).</summary>
 /// <param name="Severity"><c>low</c>, <c>moderate</c>, <c>high</c>, <c>critical</c>, or <c>unknown</c> when neither the advisory, its GHSA alias nor its CVSS vector gives one.</param>
 /// <param name="FixedIn">The first version that fixes it; empty when none does yet.</param>
-public sealed record ImageVulnerability(string Package, string Version, string Advisory, string Cve, string Severity, string FixedIn, string Url, string Ecosystem = "PyPI")
+/// <param name="UbuntuProFixedIn">The version only Ubuntu Pro fixes it in, when <paramref name="FixedIn"/> is empty: said, never installed.</param>
+public sealed record ImageVulnerability(string Package, string Version, string Advisory, string Cve, string Severity, string FixedIn, string Url, string Ecosystem = "PyPI", string UbuntuProFixedIn = "")
 {
     /// <summary>The package as a line names it: a Python library by its name, a system package with its distribution (<c>openssl (Debian:12)</c>).</summary>
     public string Named => Ecosystem == Installed.PyPI ? Package : $"{Package} ({Ecosystem})";
@@ -27,7 +28,10 @@ public sealed record ImageVulnerability(string Package, string Version, string A
     public bool Blocks => Severity is "moderate" or "high" or "critical";
 
     public override string ToString() =>
-        $"{Named} {Version}, {Severity}: {Advisory}{(Cve.Length > 0 ? $" ({Cve})" : "")}, {(FixedIn.Length > 0 ? $"fixed in {FixedIn}" : "no version fixes it yet")}";
+        $"{Named} {Version}, {Severity}: {Advisory}{(Cve.Length > 0 ? $" ({Cve})" : "")}, {ImageRemedies.FixSaid(FixedIn, UbuntuProFixedIn)}";
+
+    /// <summary>The advisory as the API gives it.</summary>
+    public ImageAdvisory ToAdvisory() => new(Package, Version, Advisory, Cve, Severity, FixedIn, Url, Ecosystem, UbuntuProFixedIn);
 }
 
 /// <summary>
@@ -43,6 +47,21 @@ internal readonly record struct Installed(string Ecosystem, string Name, string 
 
     /// <summary>Not a package: a <c>requirements*.txt</c> file of the image, its path as <see cref="Name"/> and its text as <see cref="Version"/>, read and kept with the packages so a patch can be told what it pins.</summary>
     public const string RequirementsFile = "requirements";
+
+    /// <summary>
+    /// Not a package: whether an Ubuntu image is attached to Ubuntu Pro, its
+    /// <see cref="Name"/> <see cref="Attached"/> or <see cref="Free"/>, read and
+    /// kept with the packages, so a fix only Pro carries is known to be one its
+    /// upgrade reaches, or not.
+    /// </summary>
+    public const string UbuntuPro = "ubuntu-pro";
+
+    public const string Attached = "attached";
+
+    public const string Free = "free";
+
+    /// <summary>Not a package: the rule the packages were read by (<see cref="ImageSecurity.ReadRule"/>), kept with them, so packages kept by an earlier one are read again.</summary>
+    public const string ReadBy = "read-by";
 }
 
 /// <summary>
@@ -141,7 +160,7 @@ public sealed partial class ImageSecurity(
                 // A patch mends what has a fix published; what is left is its original's, and refusing
                 // the patch would leave the containers on the original, which carries all of it.
                 note("WARNING", $"{image} is a patch, so it is not refused: what is left is its original's to mend. "
-                    + ImageRemedies.WhatIsLeft([.. found.Select(v => new ImageAdvisory(v.Package, v.Version, v.Advisory, v.Cve, v.Severity, v.FixedIn, v.Url, v.Ecosystem))]));
+                    + ImageRemedies.WhatIsLeft([.. found.Select(v => v.ToAdvisory())]));
             }
         }
 
@@ -411,9 +430,10 @@ public sealed partial class ImageSecurity(
 
         List<Installed>? packages;
         List<Installed> files;
+        bool ubuntuPro;
         try
         {
-            (packages, files) = Split(await PackagesAsync(image, id, cancellationToken));
+            (packages, files, ubuntuPro) = Split(await PackagesAsync(image, id, cancellationToken));
         }
         catch (Exception ex) when (ex is TimeoutException or WslcNotFoundException or WslcException or IOException or InvalidDataException)
         {
@@ -430,7 +450,7 @@ public sealed partial class ImageSecurity(
         List<ImageVulnerability> found;
         try
         {
-            found = await OsvAsync(packages, cancellationToken);
+            found = Reachable(await OsvAsync(packages, cancellationToken), ubuntuPro);
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
         {
@@ -444,7 +464,7 @@ public sealed partial class ImageSecurity(
         var advisories = found
             .OrderByDescending(v => Array.IndexOf(SeverityOrder, v.Severity))
             .ThenBy(v => v.Package, StringComparer.OrdinalIgnoreCase)
-            .Select(v => new ImageAdvisory(v.Package, v.Version, v.Advisory, v.Cve, v.Severity, v.FixedIn, v.Url, v.Ecosystem))
+            .Select(v => v.ToAdvisory())
             .ToList();
         return new ImageVulnerabilities(image, true, built, true, true, built && remedies.Count > 0 && settings.Get().Policy == ImageSecurityPolicy.Block,
             listed, advisories, remedies, Patch: ImagePatches.Named(image),
@@ -457,13 +477,13 @@ public sealed partial class ImageSecurity(
     /// <summary>The image's packages, from what was read under its id already, or read now and kept; null for an image with none to read. The kernel is left out (<see cref="WithoutKernel"/>).</summary>
     private async Task<List<Installed>?> PackagesAsync(string image, string? id, CancellationToken cancellationToken)
     {
-        if (id is not null && (_packages.TryGetValue(id, out var kept) || Kept(id, out kept)))
+        if (id is not null && (_packages.TryGetValue(id, out var kept) || Kept(id, out kept)) && !ReadByEarlierRule(kept))
         {
             _packages[id] = kept;
             return WithoutKernel(kept);
         }
 
-        var packages = await InstalledPackagesAsync(image, cancellationToken);
+        List<Installed>? packages = await InstalledPackagesAsync(image, cancellationToken) is { } read ? [.. read, new Installed(Installed.ReadBy, ReadRule, "")] : null;
         if (id is not null)
         {
             _packages[id] = packages;
@@ -472,6 +492,17 @@ public sealed partial class ImageSecurity(
 
         return WithoutKernel(packages);
     }
+
+    /// <summary>
+    /// The rule an image's packages are read by now: 1 when whether an Ubuntu
+    /// image is attached to Ubuntu Pro came to be read, and a Python library
+    /// Debian or Ubuntu installed to be left to its package.
+    /// </summary>
+    internal const string ReadRule = "1";
+
+    /// <summary>Packages kept by an earlier rule than <see cref="ReadRule"/>: read again, once.</summary>
+    private static bool ReadByEarlierRule(List<Installed>? kept) =>
+        kept is not null && !kept.Any(package => package.Ecosystem == Installed.ReadBy && package.Name == ReadRule);
 
     /// <summary>
     /// The packages without Debian's and Ubuntu's kernel (source package
@@ -551,13 +582,33 @@ public sealed partial class ImageSecurity(
     /// <summary>A requirements file larger than this is not one a person wrote.</summary>
     private const long MaxRequirementsFile = 256 * 1024;
 
-    /// <summary>The packages apart from the requirements files kept with them; the packages null when there is none.</summary>
-    private static (List<Installed>? Packages, List<Installed> Files) Split(List<Installed>? read)
+    /// <summary>The packages apart from the requirements files kept with them, and whether the image is attached to Ubuntu Pro; the packages null when there is none.</summary>
+    private static (List<Installed>? Packages, List<Installed> Files, bool UbuntuPro) Split(List<Installed>? read)
     {
         var files = (read ?? []).Where(entry => entry.Ecosystem == Installed.RequirementsFile).ToList();
-        var packages = (read ?? []).Where(entry => entry.Ecosystem != Installed.RequirementsFile).ToList();
-        return (read is null || packages.Count == 0 ? null : packages, files);
+        var packages = (read ?? []).Where(entry => entry.Ecosystem is not Installed.RequirementsFile and not Installed.UbuntuPro and not Installed.ReadBy).ToList();
+        var ubuntuPro = (read ?? []).Any(entry => entry.Ecosystem == Installed.UbuntuPro && entry.Name == Installed.Attached);
+        return (read is null || packages.Count == 0 ? null : packages, files, ubuntuPro);
     }
+
+    /// <summary>
+    /// The fixes an image's own upgrade reaches: in an image attached to Ubuntu
+    /// Pro (its ESM sources and their credentials left in it), a fix only Pro
+    /// carries is one like any other, which a patch's upgrade installs; in any
+    /// other, it stays said and nothing more.
+    /// </summary>
+    internal static List<ImageVulnerability> Reachable(List<ImageVulnerability> found, bool ubuntuPro) =>
+        !ubuntuPro ? found
+        : [.. found.Select(v => v.UbuntuProFixedIn.Length > 0 ? v with { FixedIn = v.UbuntuProFixedIn, UbuntuProFixedIn = "" } : v)];
+
+    /// <summary>
+    /// A vulnerability something can be done about: a fix the image's upgrade
+    /// reaches, or a Python library, which can be raised, replaced or taken
+    /// out. A system package with no fix its distribution gives the image is
+    /// its distribution's to mend: it is said, not raised as an alarm, since
+    /// nobody downstream can mend it.
+    /// </summary>
+    internal static bool Mendable(ImageVulnerability v) => v.FixedIn.Length > 0 || v.Ecosystem == Installed.PyPI;
 
     private static readonly JsonSerializerOptions KeptJson = new(JsonSerializerDefaults.Web);
 
@@ -569,7 +620,9 @@ public sealed partial class ImageSecurity(
     /// <summary>
     /// What the check found, kept on the image (<see cref="ImageMarks"/>) by its
     /// id and the name it was checked by: the worst of its vulnerabilities
-    /// moderate or worse, and whether the agent refuses it; none when it is clean.
+    /// moderate or worse that something can be done about (<see cref="Mendable"/>),
+    /// the worst of those nobody downstream can mend, and whether the agent
+    /// refuses it; none when it is clean.
     /// </summary>
     private void Mark(string? id, string image, bool built, IReadOnlyList<ImageVulnerability> found)
     {
@@ -578,16 +631,19 @@ public sealed partial class ImageSecurity(
             return;
         }
 
-        var worst = found.Where(v => v.Blocks).Select(v => v.Severity).MaxBy(severity => Array.IndexOf(SeverityOrder, severity)) ?? "";
-        marks.Record(id, image, worst, built && worst.Length > 0 && settings.Get().Policy == ImageSecurityPolicy.Block);
+        string Worst(Func<ImageVulnerability, bool> which) =>
+            found.Where(v => v.Blocks && which(v)).Select(v => v.Severity).MaxBy(severity => Array.IndexOf(SeverityOrder, severity)) ?? "";
+        marks.Record(id, image, Worst(Mendable), Worst(v => !Mendable(v)),
+            built && found.Any(v => v.Blocks) && settings.Get().Policy == ImageSecurityPolicy.Block);
     }
 
     private async Task<List<ImageVulnerability>> CheckAsync(string image, string? id, bool built, Action<string, string> note, CancellationToken cancellationToken)
     {
         List<Installed>? packages;
+        bool ubuntuPro;
         try
         {
-            (packages, _) = Split(await PackagesAsync(image, id, cancellationToken));
+            (packages, _, ubuntuPro) = Split(await PackagesAsync(image, id, cancellationToken));
         }
         catch (Exception ex) when (ex is TimeoutException or WslcNotFoundException or WslcException or IOException or InvalidDataException)
         {
@@ -604,7 +660,7 @@ public sealed partial class ImageSecurity(
 
         try
         {
-            var found = await OsvAsync(packages, cancellationToken);
+            var found = Reachable(await OsvAsync(packages, cancellationToken), ubuntuPro);
             if (found.Count == 0)
             {
                 note("INFO", $"{image}: {packages.Count} packages, no known vulnerability.");
@@ -689,11 +745,14 @@ public sealed partial class ImageSecurity(
         var seen = new Dictionary<string, Installed?>(StringComparer.Ordinal);
         var system = new List<(string Name, string Version)>();
         var release = new Dictionary<string, string>(StringComparer.Ordinal);
+        var (proSources, proCredentials) = (false, false);
         await using var file = File.OpenRead(archive);
         await using var reader = new TarReader(file);
         while (await reader.GetNextEntryAsync(copyData: false, cancellationToken) is { } entry)
         {
             var path = Normalized(entry.Name);
+            proSources |= IsUbuntuProSource(path);
+            proCredentials |= path == UbuntuProCredentials;
             if (entry.DataStream is { } content && entry.EntryType != TarEntryType.HardLink)
             {
                 if (path is "etc/os-release" or "usr/lib/os-release")
@@ -735,7 +794,7 @@ public sealed partial class ImageSecurity(
                 ? seen.GetValueOrDefault(Normalized(entry.LinkName))
                 : entry.DataStream is { } data ? await HeadersAsync(data, cancellationToken) : null;
             seen[path] = library;
-            if (library is { } installed && IsInstalled(entry.Name))
+            if (library is { } installed && IsInstalled(path))
             {
                 found.Add(installed);
             }
@@ -744,6 +803,10 @@ public sealed partial class ImageSecurity(
         if (Ecosystem(release) is { } ecosystem)
         {
             found.UnionWith(system.Select(package => new Installed(ecosystem, package.Name, package.Version)));
+            if (ecosystem.StartsWith("Ubuntu:", StringComparison.Ordinal))
+            {
+                found.Add(new Installed(Installed.UbuntuPro, proSources && proCredentials ? Installed.Attached : Installed.Free, ""));
+            }
         }
 
         return found.Count == 0 ? null : [.. found.OrderBy(package => package.Ecosystem, StringComparer.Ordinal).ThenBy(package => package.Name, StringComparer.OrdinalIgnoreCase)];
@@ -751,6 +814,19 @@ public sealed partial class ImageSecurity(
         // An archive names a link's target as it names its entries, with or without a leading ./ or /.
         static string Normalized(string path) => path.TrimStart('.').TrimStart('/');
     }
+
+    /// <summary>
+    /// An Ubuntu Pro ESM source, as its client writes it on attaching
+    /// (<c>ubuntu-esm-infra</c>, <c>ubuntu-esm-apps</c>; <c>.sources</c> from
+    /// 24.04, <c>.list</c> before), and takes away again on detaching, which is
+    /// what Canonical's Dockerfile does at the end of its build.
+    /// </summary>
+    private static bool IsUbuntuProSource(string path) =>
+        path.StartsWith("etc/apt/sources.list.d/ubuntu-esm-", StringComparison.Ordinal)
+        && (path.EndsWith(".sources", StringComparison.Ordinal) || path.EndsWith(".list", StringComparison.Ordinal));
+
+    /// <summary>The credentials the ESM sources are read with, without which an upgrade cannot reach them.</summary>
+    private const string UbuntuProCredentials = "etc/apt/auth.conf.d/90ubuntu-advantage";
 
     /// <summary>
     /// The distribution's ecosystem in OSV.dev's names, from its <c>os-release</c>:
@@ -911,8 +987,19 @@ public sealed partial class ImageSecurity(
         || path.EndsWith(".egg-info/PKG-INFO", StringComparison.Ordinal)
         || path.EndsWith(".egg-info", StringComparison.Ordinal);
 
-    /// <summary>Installed where Python imports from: a site-packages or dist-packages folder, not an installer's cache.</summary>
-    private static bool IsInstalled(string path) => path.Contains("-packages/", StringComparison.Ordinal);
+    /// <summary>
+    /// Installed where Python imports from, by pip or uv: a site-packages or
+    /// dist-packages folder, not an installer's cache. Not Debian's and
+    /// Ubuntu's own <c>usr/lib/python3/dist-packages</c>, where their packages
+    /// (<c>python3-flask</c>) put a library: it is the distribution's, checked
+    /// as its package is, by its tracker, since it mends it without changing
+    /// the version PyPI would read, and no pip installs over it.
+    /// </summary>
+    private static bool IsInstalled(string path) =>
+        path.Contains("-packages/", StringComparison.Ordinal) && !path.StartsWith(DistributionPython, StringComparison.Ordinal);
+
+    /// <summary>Where Debian's and Ubuntu's packages put their Python libraries.</summary>
+    private const string DistributionPython = "usr/lib/python3/dist-packages/";
 
     /// <summary>OSV.dev's known vulnerabilities of these packages, each in its own ecosystem, one batch question, each advisory read once.</summary>
     private async Task<List<ImageVulnerability>> OsvAsync(List<Installed> packages, CancellationToken cancellationToken)
@@ -955,17 +1042,16 @@ public sealed partial class ImageSecurity(
     }
 
     /// <summary>
-    /// An advisory Debian's own tracker says is not a security problem for this
-    /// package (<c>urgency: unimportant</c>): Debian will not fix it, nobody
-    /// downstream can, and counting it would leave every Debian image red for
-    /// good. It is left out, as Debian leaves it.
+    /// An advisory the package's own distribution says is not a security
+    /// problem for it: Debian's <c>urgency: unimportant</c> on its release,
+    /// Ubuntu's priority <c>negligible</c>. The distribution will not fix it,
+    /// nobody downstream can, and counting it would leave its images red for
+    /// good. It is left out, as the distribution leaves it.
     /// </summary>
     internal static bool Unimportant(JsonNode? advisory, Installed package) =>
         package.Ecosystem.StartsWith("Debian:", StringComparison.Ordinal)
-        && (advisory?["affected"]?.AsArray() ?? []).Any(affected =>
-            (string?)affected?["package"]?["name"] == package.Name
-            && (string?)affected?["package"]?["ecosystem"] == package.Ecosystem
-            && (string?)affected?["ecosystem_specific"]?["urgency"] == "unimportant");
+            ? OwnRelease(advisory, package).Any(affected => (string?)affected?["ecosystem_specific"]?["urgency"] == "unimportant")
+            : package.Ecosystem.StartsWith("Ubuntu:", StringComparison.Ordinal) && UbuntuPriority(advisory) == "negligible";
 
     private async Task<JsonNode?> AdvisoryAsync(string id, CancellationToken cancellationToken)
     {
@@ -1074,18 +1160,68 @@ public sealed partial class ImageSecurity(
             .SelectMany(r => r?["events"]?.AsArray() ?? [])
             .Select(e => (string?)e?["fixed"]).OfType<string>()
             .FirstOrDefault() ?? "";
+        var severity = DistributionSeverity(advisory, package) is var rated && rated != Unknown ? rated : Severity(advisory);
         return new ImageVulnerability(package.Name, package.Version, id, aliases.FirstOrDefault(a => a.StartsWith("CVE-", StringComparison.Ordinal)) ?? "",
-            Severity(advisory), fixedIn, $"https://osv.dev/vulnerability/{id}", package.Ecosystem);
+            severity, fixedIn, $"https://osv.dev/vulnerability/{id}", package.Ecosystem, fixedIn.Length == 0 ? UbuntuProFix(advisory, package) : "");
     }
 
     /// <summary>The severity the advisory's database gives it (GitHub's: low, moderate or medium, high, critical).</summary>
-    private static string Severity(JsonNode? advisory) =>
-        ((string?)advisory?["database_specific"]?["severity"] ?? "").Trim().ToLowerInvariant() switch
+    private static string Severity(JsonNode? advisory) => Rated((string?)advisory?["database_specific"]?["severity"]);
+
+    /// <summary>A rating in Zaindari's words: <c>medium</c> is <c>moderate</c>; anything else that is not one of the four is unknown.</summary>
+    private static string Rated(string? rating) => (rating ?? "").Trim().ToLowerInvariant() switch
+    {
+        "medium" => "moderate",
+        var known when known is "low" or "moderate" or "high" or "critical" => known,
+        _ => Unknown,
+    };
+
+    /// <summary>
+    /// The severity the package's own distribution gives the advisory, which
+    /// rules over NVD's CVSS score: it is the distribution that decides whether
+    /// and when a fix comes, and a CVSS critical it rates medium would leave
+    /// its images red with nothing anyone can do. Ubuntu's priority
+    /// (<c>severity</c> of type <c>Ubuntu</c>), Debian's urgency on its own
+    /// release (<c>ecosystem_specific.urgency</c>, mostly "not yet assigned",
+    /// which is no rating); Alpine gives none. Unknown when it gives none.
+    /// </summary>
+    internal static string DistributionSeverity(JsonNode? advisory, Installed package)
+    {
+        if (package.Ecosystem.StartsWith("Ubuntu:", StringComparison.Ordinal))
         {
-            "medium" => "moderate",
-            var known when known is "low" or "moderate" or "high" or "critical" => known,
-            _ => Unknown,
-        };
+            return Rated(UbuntuPriority(advisory));
+        }
+
+        return package.Ecosystem.StartsWith("Debian:", StringComparison.Ordinal)
+            ? Rated(OwnRelease(advisory, package).Select(affected => (string?)affected?["ecosystem_specific"]?["urgency"]).FirstOrDefault(urgency => urgency is not null))
+            : Unknown;
+    }
+
+    /// <summary>Ubuntu's priority of an advisory: <c>negligible</c>, <c>low</c>, <c>medium</c>, <c>high</c> or <c>critical</c>; null when it gives none.</summary>
+    private static string? UbuntuPriority(JsonNode? advisory) =>
+        (advisory?["severity"]?.AsArray() ?? []).Where(s => (string?)s?["type"] == "Ubuntu").Select(s => (string?)s?["score"]).FirstOrDefault();
+
+    /// <summary>The advisory's entries for this very package on this very release of its distribution.</summary>
+    private static IEnumerable<JsonNode?> OwnRelease(JsonNode? advisory, Installed package) =>
+        (advisory?["affected"]?.AsArray() ?? []).Where(affected =>
+            (string?)affected?["package"]?["name"] == package.Name
+            && (string?)affected?["package"]?["ecosystem"] == package.Ecosystem);
+
+    /// <summary>
+    /// The version Ubuntu Pro, Canonical's subscription, fixes the package in
+    /// on this release, when the free archive does not (<c>Ubuntu:Pro:24.04:LTS</c>
+    /// beside <c>Ubuntu:24.04:LTS</c>): an upgrade cannot reach it, so it is
+    /// not a fix a patch installs, only said. Empty when it has none.
+    /// </summary>
+    internal static string UbuntuProFix(JsonNode? advisory, Installed package) =>
+        !package.Ecosystem.StartsWith("Ubuntu:", StringComparison.Ordinal) ? ""
+        : (advisory?["affected"]?.AsArray() ?? [])
+            .Where(a => (string?)a?["package"]?["name"] == package.Name
+                && ((string?)a?["package"]?["ecosystem"] ?? "").StartsWith("Ubuntu:Pro:" + package.Ecosystem["Ubuntu:".Length..], StringComparison.Ordinal))
+            .SelectMany(a => a?["ranges"]?.AsArray() ?? [])
+            .SelectMany(r => r?["events"]?.AsArray() ?? [])
+            .Select(e => (string?)e?["fixed"]).OfType<string>()
+            .FirstOrDefault() ?? "";
 
     /// <summary>
     /// The severity a CVSS vector scores, by its base score as the

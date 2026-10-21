@@ -4,12 +4,14 @@
    critical one, or for an image the agent refuses (ours, to be built again,
    which will not start), the yellow for any other (CardTone.Alarm), whatever
    its state, so whoever sees it opens Zaindari, which checks it again and says
-   what they are. One that runs a patch Zaindari built (…-patched) says patched
+   what they are; grey when nobody downstream can mend what is known (its
+   distribution has not fixed it for the image), since an alarm nobody can
+   answer only wears people out. One that runs a patch Zaindari built (…-patched) says patched
    after its state, so it is seen that its image is ours and not the one
    published. No tooltip: what matters is seen, on a phone too. A recreate
    says only that, until it is over. Any other warning (a name it
    holds, a project with a service missing) wears the yellow without the word. *@
-<MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@(Paint is null ? StateColors.For(State) : Color.Default)"
+<MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@(Paint is null && !HasCve ? StateColors.For(State) : Color.Default)"
          Style="@Paint">@Text</MudChip>
 
 @code {
@@ -18,7 +20,7 @@
     /// <summary>Something to mend that stops nothing (<see cref="ContainerSummary.IsWarned"/>).</summary>
     [Parameter] public bool Warned { get; set; }
 
-    /// <summary>The worst severity its image's vulnerabilities reach (<see cref="ContainerSummary.ImageWorst"/>); empty for none.</summary>
+    /// <summary>The worst severity known against its image, mendable or not (<see cref="ContainerSummary.ImageKnown"/>); empty for none.</summary>
     [Parameter] public string Cve { get; set; } = "";
 
     /// <summary>The colour its image is offered in (<see cref="ImageSecurityFlow.Tone(ContainerSummary)"/>, or of a project's containers).</summary>
@@ -33,8 +35,9 @@
 
     private string Text => State + (ShowsPatched ? " · patched" : "") + (HasCve ? " · CVE" : "");
 
+    /// <summary>The alarm's colour: the image's tone when something can be done about it, the yellow for any other warning; none for what nobody can mend, which is grey.</summary>
     private string? Paint =>
-        HasCve ? CardTone.Alarm(Tone == Color.Default ? Color.Warning : Tone)
+        HasCve && Tone != Color.Default ? CardTone.Alarm(Tone)
         : Warned ? CardTone.Alarm(Color.Warning)
         : null;
 }

@@ -648,7 +648,7 @@
         @<EntityCard Title="@c.Name" Subtitle="@c.Image" AvatarColor="@StateColors.For(c.State)" Key="@c.Id" Tone="@CardTone.Of(c)"
                      BodyTone="@(c.HasFailed ? Color.Error : c.IsWarned ? Color.Warning : null)" BodyTitle="@c.Failure">
                         <HeaderActions>
-                            <StateChip State="@c.State" Warned="c.IsWarned" Cve="@c.ImageWorst" Tone="@ImageSecurityFlow.Tone(c)" Patched="@ImageSecurityFlow.IsPatched(c)" />
+                            <StateChip State="@c.State" Warned="c.IsWarned" Cve="@c.ImageKnown" Tone="@ImageSecurityFlow.Tone(c)" Patched="@ImageSecurityFlow.IsPatched(c)" />
                         </HeaderActions>
                         <Avatar>
                             @if (LaunchOf(c) is { } launch)

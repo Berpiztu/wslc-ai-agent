@@ -74,9 +74,10 @@ public static class ImageSecurityFlow
 
     /// <summary>
     /// The colour an image is shown in, on the Images page and in its menu: red
-    /// for a vulnerability high or critical, or an image the agent refuses
-    /// (built here, to be built again); the yellow for any other; none when
-    /// nothing is known against it.
+    /// for a vulnerability high or critical that something can be done about
+    /// (<see cref="ImageSummary.ImageWorst"/>), or an image the agent refuses
+    /// (built here, to be built again); the yellow for any other such; none
+    /// when nothing is known against it, or nothing anyone downstream can mend.
     /// </summary>
     public static Color Tone(ImageSummary image) => Tone(image.ImageWorst, image.ImageRefused);
 
@@ -88,9 +89,9 @@ public static class ImageSecurityFlow
 
     private static readonly string[] SeverityOrder = ["", "low", "moderate", "high", "critical"];
 
-    /// <summary>The worst severity among the containers' images (<see cref="ContainerSummary.ImageWorst"/>): what a project's chip says; empty for none.</summary>
+    /// <summary>The worst severity known among the containers' images, mendable or not (<see cref="ContainerSummary.ImageKnown"/>): what a project's chip says; empty for none.</summary>
     public static string Worst(IEnumerable<ContainerSummary> containers) =>
-        containers.Select(container => container.ImageWorst).MaxBy(severity => Array.IndexOf(SeverityOrder, severity)) ?? "";
+        containers.Select(container => container.ImageKnown).MaxBy(severity => Array.IndexOf(SeverityOrder, severity)) ?? "";
 
     /// <summary>The worst of the containers' colours: a project's.</summary>
     public static Color Tone(IEnumerable<ContainerSummary> containers)
@@ -99,11 +100,11 @@ public static class ImageSecurityFlow
         return tones.Contains(Color.Error) ? Color.Error : tones.Contains(Color.Warning) ? Color.Warning : Color.Default;
     }
 
-    /// <summary>The menu item's text in its colour: MudBlazor's text classes for red and the warning tone, none otherwise.</summary>
+    /// <summary>A text in its colour on the page's ground (a menu item, a patch's row): MudBlazor's red, the warning tone the log viewer's warnings wear (the theme's amber did not read on the white), none otherwise.</summary>
     public static string TextClass(Color tone) => tone switch
     {
         Color.Error => "mud-error-text",
-        Color.Warning => "mud-warning-text",
+        Color.Warning => "wslc-warning-text",
         _ => "",
     };
 }

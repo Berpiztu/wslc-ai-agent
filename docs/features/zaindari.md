@@ -7,7 +7,11 @@ and asks the public vulnerability database, [OSV.dev](https://osv.dev), what
 is known against each one:
 
 - **Its Python libraries**, in every site-packages, a virtual environment's
-  too, checked against the GitHub Advisory Database and PyPI's own.
+  too, checked against the GitHub Advisory Database and PyPI's own. Not a
+  library Debian or Ubuntu installed (`python3-flask`, in
+  `/usr/lib/python3/dist-packages`): it is the distribution's, which mends it
+  without changing the version PyPI would read, so it is checked as its
+  package, and a patch offers no pip for it.
 - **Its system packages**, by its distribution's database: Alpine's `apk`
   (`/lib/apk/db/installed`), Debian's and Ubuntu's `dpkg`
   (`/var/lib/dpkg/status`, and a distroless image's `status.d`), checked
@@ -15,16 +19,30 @@ is known against each one:
   named as they name it: Alpine's by its origin, Debian's and Ubuntu's by
   their source package (`libssl3` is `openssl`).
 
-An advisory that names no severity of its own is given the one its CVSS
-vector scores, a 3.x vector or a 4.0 one (Alpine's give only 4.0), scored
-as NVD scores it.
+A system package's severity is the one **its own distribution** gives it,
+since the distribution decides whether and when a fix comes: Ubuntu's
+priority (`medium` is moderate), Debian's urgency on its release. A CVSS
+critical that Ubuntu rates medium is moderate, yellow, not red. Only when
+the distribution gives none (Alpine never does, Debian's "not yet assigned"
+is none) is an advisory given the one its CVSS vector scores, a 3.x vector
+or a 4.0 one, scored as NVD scores it; a Python library's is GitHub's.
 
 Debian's and Ubuntu's kernel (`linux`, whose headers an image carries) is
 left out: a container runs on the kernel of WSL's virtual machine, never on
 its image's, so the kernel's vulnerabilities, hundreds of them, are not the
-container's. So is what Debian's own tracker calls `unimportant`: not a
-security problem for Debian, which will not fix it, and which nobody else
-can.
+container's. So is what the distribution says is not a security problem for
+it, Debian's `unimportant` and Ubuntu's `negligible`: it will not fix it, and
+nobody else can.
+
+A fix only **Ubuntu Pro** carries (Canonical's subscription, `esm` versions)
+depends on the image. One left attached to Pro, its ESM sources
+(`/etc/apt/sources.list.d/ubuntu-esm-*`) and their credentials
+(`/etc/apt/auth.conf.d/90ubuntu-advantage`) in it, reaches it with its own
+upgrade: it is a fix like any other, which a patch installs. In any other,
+an image of the free archive or one built with Pro and detached at the end
+as Canonical's Dockerfile does, it is said beside the vulnerability, "fixed
+only in Ubuntu Pro", and counted in what is left; an image built with Pro
+takes it by being built again with Pro.
 
 An image with neither, or of a distribution OSV.dev has no tracker for (Kali,
 `scratch`, distroless with no package list), is said to be unchecked, never
@@ -60,9 +78,19 @@ its image carries. What Zaindari guards is what is made **new**.
 
 ## Colours
 
-- **Red**: a vulnerability of high or critical severity, or your image,
+A colour is an alarm, and an alarm is raised only for what something can be
+done about: a fix the image can reach (a patch, a pull, a newer base), or a
+Python library, which can be raised, replaced or taken out.
+
+- **Red**: such a vulnerability of high or critical severity, or your image,
   refused: no new container is made from it until it is built again.
-- **Yellow**: a vulnerability of moderate severity, in any other image.
+- **Yellow**: such a vulnerability of moderate severity, in any other image.
+- **No colour**: what is left is a system package its distribution has not
+  fixed for the image (no fix, or one only Ubuntu Pro carries in an image
+  not attached to it). Nobody downstream can mend it, and an alarm nobody can
+  answer only wears people out; a container says **CVE** in grey, and
+  Zaindari lists it all. When the distribution publishes a fix, the next
+  check raises the alarm, for the patch to take it.
 
 On the **Images** page a marked image is red or yellow from one side to the
 other: its whole row in the table, its whole card. On the **Containers**
@@ -127,10 +155,11 @@ USER app
   latest** chooses the latest for every row. The file is rewritten by the
   choices, comments and options kept, a dependency added with the version
   that fixes it, and shown whole under the rows, with a button to copy it to
-  your sources. **Write requirements.txt** puts into the Dockerfile the
-  lines that copy it in over the old one and install from it, with the
+  your sources. As each choice is made, the Dockerfile is written by it: the
+  lines that copy the file in over the old one and install from it, with the
   installer the image carries (`uv` when it has it, else pip), and take out
-  what was taken out; the file goes beside the Dockerfile. A library raised
+  what was taken out, put in and taken away again with the choices, so the
+  Dockerfile shown is always what is built; the file goes beside it. A library raised
   can break the program, which is why it is never done alone. An image with
   no requirements file was installed from files left outside it: its
   vulnerable dependencies can still be chosen, into a file of their own.

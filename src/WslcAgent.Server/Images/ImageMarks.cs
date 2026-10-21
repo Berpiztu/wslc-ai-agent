@@ -8,7 +8,9 @@ namespace WslcAgent.Server.Images;
 
 /// <summary>
 /// What Zaindari last found in each image, kept on the image, by its id: the
-/// worst severity of its vulnerabilities moderate or worse, whether the agent
+/// worst severity of its vulnerabilities moderate or worse that something can
+/// be done about, the worst of those nobody downstream can mend (a system
+/// package its distribution has not fixed for the image), whether the agent
 /// refuses it (built here, Block), when it was checked, and the names it was
 /// checked by. Zaindari checks images, so what it finds belongs to the image:
 /// the Images page paints the image by it, and a container reads its image's
@@ -50,10 +52,10 @@ public sealed class ImageMarks(IOptions<WslcOptions> options, ILogger<ImageMarks
 
     /// <summary>
     /// What a check of the image just found, under its id and the name it was
-    /// checked by: a mark with its worst severity, or none when
-    /// <paramref name="worst"/> is empty.
+    /// checked by: a mark with its worst severities, or none when
+    /// <paramref name="worst"/> and <paramref name="unfixed"/> are both empty.
     /// </summary>
-    public void Record(string id, string reference, string worst, bool refused)
+    public void Record(string id, string reference, string worst, string unfixed, bool refused)
     {
         id = Bare(id);
         if (id.Length == 0)
@@ -76,7 +78,7 @@ public sealed class ImageMarks(IOptions<WslcOptions> options, ILogger<ImageMarks
             }
         }
 
-        if (worst.Length == 0)
+        if (worst.Length == 0 && unfixed.Length == 0)
         {
             marks.TryRemove(id, out _);
         }
@@ -84,7 +86,7 @@ public sealed class ImageMarks(IOptions<WslcOptions> options, ILogger<ImageMarks
         {
             var names = marks.TryGetValue(id, out var kept) ? kept.References : [];
             marks[id] = new ImageMark(worst, refused, DateTimeOffset.Now,
-                names.Any(name => SameReference(name, reference)) ? names : [.. names, reference.Trim()]);
+                names.Any(name => SameReference(name, reference)) ? names : [.. names, reference.Trim()], unfixed, ImageMark.CurrentRule);
         }
 
         Save();
@@ -101,7 +103,7 @@ public sealed class ImageMarks(IOptions<WslcOptions> options, ILogger<ImageMarks
         var marked = marks.IsEmpty
             ? images
             : [.. images.Select(image => marks.FirstOrDefault(kept => SameId(kept.Key, image.Id)) is { Value: { } mark }
-                ? image with { ImageWorst = mark.Worst, ImageRefused = mark.Refused, ImageCheckedAt = Stamp(mark) }
+                ? image with { ImageWorst = mark.Worst, ImageUnfixed = mark.Unfixed, ImageRefused = mark.Refused, ImageCheckedAt = Stamp(mark) }
                 : image)];
         return _patching.IsEmpty
             ? marked
@@ -116,7 +118,7 @@ public sealed class ImageMarks(IOptions<WslcOptions> options, ILogger<ImageMarks
         var marked = Marks().IsEmpty
             ? containers
             : [.. containers.Select(row => Of(row.Image) is { } mark
-                ? row with { ImageWorst = mark.Worst, ImageRefused = mark.Refused, ImageCheckedAt = Stamp(mark) }
+                ? row with { ImageWorst = mark.Worst, ImageUnfixed = mark.Unfixed, ImageRefused = mark.Refused, ImageCheckedAt = Stamp(mark) }
                 : row)];
         return _patching.IsEmpty
             ? marked
@@ -158,8 +160,10 @@ public sealed class ImageMarks(IOptions<WslcOptions> options, ILogger<ImageMarks
             {
                 try
                 {
+                    // A mark made by an earlier rule is let go: the image is checked again, by today's.
                     _marks = File.Exists(_path)
-                        ? new ConcurrentDictionary<string, ImageMark>(JsonSerializer.Deserialize<Dictionary<string, ImageMark>>(File.ReadAllText(_path), Json) ?? [])
+                        ? new ConcurrentDictionary<string, ImageMark>((JsonSerializer.Deserialize<Dictionary<string, ImageMark>>(File.ReadAllText(_path), Json) ?? [])
+                            .Where(kept => kept.Value.Rule == ImageMark.CurrentRule))
                         : new ConcurrentDictionary<string, ImageMark>();
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
@@ -191,5 +195,14 @@ public sealed class ImageMarks(IOptions<WslcOptions> options, ILogger<ImageMarks
     }
 }
 
-/// <summary>What Zaindari last found in one image: its worst severity, whether it is refused, when, and the names it was checked by.</summary>
-public sealed record ImageMark(string Worst, bool Refused, DateTimeOffset At, IReadOnlyList<string> References);
+/// <summary>What Zaindari last found in one image: its worst severity that something can be done about, whether it is refused, when, the names it was checked by, the worst nobody downstream can mend, and the rule it was made by.</summary>
+public sealed record ImageMark(string Worst, bool Refused, DateTimeOffset At, IReadOnlyList<string> References, string Unfixed = "", int Rule = 0)
+{
+    /// <summary>
+    /// The rule marks are made by now: 1 when a system package's alarm came to
+    /// be raised only for a fix its image can reach, and its severity to be
+    /// its distribution's. A mark of an earlier one is let go when the marks
+    /// are read, and the image checked again.
+    /// </summary>
+    public const int CurrentRule = 1;
+}
