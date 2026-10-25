@@ -287,6 +287,14 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<TestingSettings> SetTestingSettingsAsync(TestingSettings settings, CancellationToken cancellationToken = default) =>
         PostJsonAsync<TestingSettings, TestingSettings>("api/v1/testing", settings, cancellationToken, HttpMethod.Put);
 
+    // Image security check (Settings → Security)
+
+    public Task<ImageSecuritySettings> GetImageSecuritySettingsAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<ImageSecuritySettings>("api/v1/image-security", cancellationToken);
+
+    public Task<ImageSecuritySettings> SetImageSecuritySettingsAsync(ImageSecuritySettings settings, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<ImageSecuritySettings, ImageSecuritySettings>("api/v1/image-security", settings, cancellationToken, HttpMethod.Put);
+
     // Publishing (Settings → Publishing, and Publish on a container)
 
     public Task<PublishingSettings> GetPublishingSettingsAsync(CancellationToken cancellationToken = default) =>
@@ -511,8 +519,8 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
         PostJsonAsync<ContainerLaunchRequest, ContainerCreated>($"api/v1/containers/{Escape(container)}/recreate", request, cancellationToken);
 
     /// <summary>Starts moving the container to another image: the pull started (its console follows it), then a recreate the agent runs on its own.</summary>
-    public Task<ImagePullState> UpdateContainerImageAsync(string container, string image, CancellationToken cancellationToken = default) =>
-        PostJsonAsync<UpdateContainerImageRequest, ImagePullState>($"api/v1/containers/{Escape(container)}/update-image", new UpdateContainerImageRequest(image), cancellationToken);
+    public Task<ImagePullState> UpdateContainerImageAsync(string container, string image, bool patch = false, ContainerLaunchRequest? form = null, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<UpdateContainerImageRequest, ImagePullState>($"api/v1/containers/{Escape(container)}/update-image", new UpdateContainerImageRequest(image, patch, form), cancellationToken);
 
     public Task KillContainerAsync(string container, CancellationToken cancellationToken = default) =>
         PostAsync($"api/v1/containers/{Escape(container)}/kill", cancellationToken);
@@ -773,7 +781,33 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<ProjectJob> GetProjectJobAsync(string id, CancellationToken cancellationToken = default) =>
         GetAsync<ProjectJob>($"api/v1/projects/jobs/{Escape(id)}", cancellationToken);
 
-    /// <summary>The Compose file kept with a project, as it was last brought up; 404 when none is kept.</summary>
+    /// <summary>View image packages and CVEs: the image's Python libraries and every known vulnerability of them, read only.</summary>
+    public Task<ImageVulnerabilities> GetImageVulnerabilitiesAsync(string image, CancellationToken cancellationToken = default) =>
+        GetAsync<ImageVulnerabilities>($"api/v1/image-security/vulnerabilities?image={Uri.EscapeDataString(image)}", cancellationToken);
+
+    /// <summary>Zaindari's patch: the image built again with its system packages upgraded, then the containers named moved to it; a build job to follow.</summary>
+    public Task<BuildJob> PatchImageAsync(PatchImageRequest request, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<PatchImageRequest, BuildJob>("api/v1/image-security/patch", request, cancellationToken);
+
+    /// <summary>Every vulnerability a person accepted, of every image.</summary>
+    public Task<ImageAcceptances> GetImageAcceptancesAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<ImageAcceptances>("api/v1/image-security/acceptances", cancellationToken);
+
+    /// <summary>Accepts one vulnerability of an image, with its reason: shown, no longer raised, while no version fixes it.</summary>
+    public Task<ImageAcceptance> AcceptImageVulnerabilityAsync(AcceptImageVulnerability request, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<AcceptImageVulnerability, ImageAcceptance>("api/v1/image-security/acceptances", request, cancellationToken);
+
+    /// <summary>Withdraws an acceptance: the vulnerability alarms again.</summary>
+    public Task WithdrawImageAcceptanceAsync(string image, string ecosystem, string package, string advisory, CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Delete,
+            $"api/v1/image-security/acceptances?image={Escape(image)}&ecosystem={Escape(ecosystem)}&package={Escape(package)}&advisory={Escape(advisory)}",
+            cancellationToken);
+
+    /// <summary>The project's last save or build: the one under way, or the last one kept however it ended (404 when none was).</summary>
+    public Task<ProjectJob> GetProjectLastJobAsync(string name, CancellationToken cancellationToken = default) =>
+        GetAsync<ProjectJob>($"api/v1/projects/{Escape(name)}/last-job", cancellationToken);
+
+    /// <summary>The Compose file kept with a project, as it was last saved, whether the save went well or not; 404 when none is kept.</summary>
     public Task<StoredProject> GetStoredProjectAsync(string name, CancellationToken cancellationToken = default) =>
         GetAsync<StoredProject>($"api/v1/projects/{Escape(name)}", cancellationToken);
 

@@ -13,10 +13,16 @@ namespace WslcAgent.Server.Containers;
 /// Images page pulls (its console, its cancel), then the container recreated with
 /// everything else it has — ports, mounts, environment, name, policy — and started
 /// if it was running. The recreate is the View &amp; edit one, so a version that does
-/// not start leaves the previous container in place. Started here and returned at
-/// once: the agent owns the rest, and its end is a notification.
+/// not start leaves the previous container in place. Asked to patch, the image
+/// pulled is patched (<see cref="ImagePatches"/>) and the container moved to the
+/// patch by the patch's own build job; an image with nothing to patch is used as
+/// pulled. View &amp; edit's Save of an image not on the machine comes here too,
+/// with its settings: pulled first as any update, where the Images page shows it,
+/// then recreated with them; a create left to pull a large image by itself
+/// failed at its minute. Started here and returned at once: the agent owns the
+/// rest, and its end is a notification.
 /// </summary>
-public sealed class ContainerImageUpdates(IContainerService containers, ImagePulls pulls, ImageUpdatesUnderWay underWay, Notifier notifier, ILogger<ContainerImageUpdates> logger)
+public sealed class ContainerImageUpdates(IContainerService containers, ImagePulls pulls, ImagePatches patches, ImageUpdatesUnderWay underWay, Notifier notifier, ILogger<ContainerImageUpdates> logger)
 {
     private static readonly TimeSpan PullTimeout = TimeSpan.FromHours(1);
     private static readonly TimeSpan PollEvery = TimeSpan.FromMilliseconds(500);
@@ -30,11 +36,11 @@ public sealed class ContainerImageUpdates(IContainerService containers, ImagePul
         // The container's row shows the pull from the moment it starts.
         underWay.Begin(details.Id, image);
         var pull = pulls.Start(image);
-        _ = Task.Run(() => FinishAsync(details.Id, details.Name, image));
+        _ = Task.Run(() => FinishAsync(details.Id, details.Name, image, request.Patch, request.Form));
         return pull;
     }
 
-    private async Task FinishAsync(string id, string name, string image)
+    private async Task FinishAsync(string id, string name, string image, bool patch, ContainerLaunchRequest? form)
     {
         var elapsed = Stopwatch.StartNew();
         string? error;
@@ -48,6 +54,23 @@ public sealed class ContainerImageUpdates(IContainerService containers, ImagePul
             underWay.End(id);
         }
 
+        if (error is null && patch && form is null)
+        {
+            try
+            {
+                // The patch's build job moves the container, and says how it ended.
+                if (await patches.StartIfAnyAsync(new PatchImageRequest(image, [id])) is { } job)
+                {
+                    logger.LogInformation("image update of {Container} to {Image}: patched as {Patch}", name, image, job.Tag);
+                    return;
+                }
+            }
+            catch (Exception ex) when (ex is WslcException or WslcNotFoundException or TimeoutException or ArgumentException or InvalidOperationException or IOException)
+            {
+                error = ex.Message;
+            }
+        }
+
         if (error is null)
         {
             try
@@ -55,7 +78,14 @@ public sealed class ContainerImageUpdates(IContainerService containers, ImagePul
                 // Read again after the pull, which may have taken minutes: the recreate
                 // keeps what the container is now, not what it was when asked.
                 var details = await containers.DetailsAsync(id);
-                await containers.RecreateAsync(id, details.Form with { Image = image, Start = details.IsRunning });
+                var created = await containers.RecreateAsync(id, form is null ? details.Form with { Image = image, Start = details.IsRunning } : form with { Image = image });
+
+                // View & edit's settings in place, the patch asked for moves the container to it next.
+                if (patch && form is not null && await patches.StartIfAnyAsync(new PatchImageRequest(image, [created.Id])) is { } job)
+                {
+                    logger.LogInformation("image update of {Container} to {Image}: patched as {Patch}", name, image, job.Tag);
+                    return;
+                }
             }
             catch (Exception ex) when (ex is WslcException or WslcNotFoundException or TimeoutException or ArgumentException or InvalidOperationException)
             {

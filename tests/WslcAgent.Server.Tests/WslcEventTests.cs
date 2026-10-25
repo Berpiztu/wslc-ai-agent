@@ -73,6 +73,27 @@ public sealed class WslcEventTests
     }
 
     [Fact]
+    public void A_volume_is_named_by_its_id_and_a_prune_names_nothing()
+    {
+        // wslc 3.0.4: a volume's events carry no name attribute, its id is its name.
+        var created = WslcEventParsing.Parse("2026-10-19T20:30:05.000000000-05:00 volume create pgdata (driver=local)");
+
+        Assert.NotNull(created);
+        Assert.Equal("volume", created.Type);
+        Assert.Equal("create", created.Action);
+        Assert.Equal("pgdata", created.Id);
+        Assert.Equal("pgdata", created.Name);
+
+        // The aggregate prune's empty id is printed as a second space.
+        var pruned = WslcEventParsing.Parse("2026-10-19T20:31:40.000000000-05:00 volume prune  (reclaimed=4096)");
+
+        Assert.NotNull(pruned);
+        Assert.Equal("prune", pruned.Action);
+        Assert.Equal("", pruned.Id);
+        Assert.Null(pruned.Name);
+    }
+
+    [Fact]
     public void What_is_not_an_event_is_not_read_as_one()
     {
         // The CLI's own abort arrives on the same stream when the session goes.
@@ -90,10 +111,10 @@ public sealed class WslcEventTests
         Assert.False(containers.Touches(ChangeNotice.Image));
         Assert.True(ChangeNotice.Everything.Touches(ChangeNotice.Volume));
 
-        // wslc reports no volume events at all, so that list keeps its clock.
-        Assert.True(ChangeNotice.IsReported(ChangeNotice.Container));
-        Assert.True(ChangeNotice.IsReported(ChangeNotice.Image));
-        Assert.True(ChangeNotice.IsReported(ChangeNotice.Network));
-        Assert.False(ChangeNotice.IsReported(ChangeNotice.Volume));
+        // Up to wslc 3.0.3 there are no volume events, so that list keeps its clock.
+        Assert.Contains(ChangeNotice.Container, ChangeNotice.AlwaysReported);
+        Assert.Contains(ChangeNotice.Image, ChangeNotice.AlwaysReported);
+        Assert.Contains(ChangeNotice.Network, ChangeNotice.AlwaysReported);
+        Assert.DoesNotContain(ChangeNotice.Volume, ChangeNotice.AlwaysReported);
     }
 }

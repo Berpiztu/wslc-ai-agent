@@ -24,6 +24,44 @@ public static class CardTone
     /// </summary>
     public const int Soft = 12;
 
+    /// <summary>
+    /// A body that raises an alarm, in MudBlazor's own colour, unmixed and the
+    /// same in both themes, with black ink: red (<c>Colors.Red.Default</c>)
+    /// for a container that failed, or a project with one; yellow
+    /// (<c>Colors.Yellow.Default</c>) for one whose image has known
+    /// vulnerabilities, a yellow meant to bother until they are mended. Black
+    /// is the ink that reads on both: on the red, 5.7 to 1 against white's 3.7
+    /// (WCAG's 4.5 for text); on the yellow, 16.6. Null for any other tone,
+    /// which is mixed (<see cref="Style"/>). With <see cref="AlarmClass"/>,
+    /// whose rules give what sits on it that ink too.
+    /// </summary>
+    public static string? Alarm(Color? tone) => tone switch
+    {
+        Color.Error => $"background-color: {Colors.Red.Default}; color: {Colors.Shades.Black}",
+        Color.Warning => $"background-color: {Colors.Yellow.Default}; color: {Colors.Shades.Black}",
+        _ => null,
+    };
+
+    /// <summary>The class that goes with <see cref="Alarm"/>: the links, the secondary and error texts and the dials' track in its black.</summary>
+    public const string AlarmClass = "wslc-card-alarm";
+
+    /// <summary>
+    /// A project's body when none of its containers raises an alarm: the
+    /// colour of the bracket that joins it to its containers in the list,
+    /// unmixed and the same in both themes, with white ink (black is the
+    /// alarms'): the theme's Primary, indigo, while it is stopped
+    /// (<paramref name="tone"/> Primary), its Success, green, while it runs
+    /// (Success). Null for any other tone. With <see cref="ProjectClass"/>,
+    /// whose rules give its list, its +/− and its dials that white too. The
+    /// mixed pink it had read as a faded red on the dark theme.
+    /// </summary>
+    public static string? Project(Color? tone) => tone is Color.Primary or Color.Success
+        ? $"background-color: var(--mud-palette-{tone.Value.ToString().ToLowerInvariant()}); color: #ffffff"
+        : null;
+
+    /// <summary>The class that goes with <see cref="Project"/>.</summary>
+    public const string ProjectClass = "wslc-card-project";
+
     /// <summary>The style that paints a row in the tone, or with <paramref name="share"/> a body in a lighter one; null for none, the row keeping its own.</summary>
     public static string? Style(Color? tone, int share = Share) => tone is { } color
         ? $"background-color: color-mix(in srgb, var(--mud-palette-{color.ToString().ToLowerInvariant()}) {share}%, var(--mud-palette-surface))"

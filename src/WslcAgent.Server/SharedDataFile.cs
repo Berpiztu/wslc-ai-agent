@@ -48,6 +48,12 @@ public sealed class SharedDataFile(string path, ILogger logger)
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var written = path + ".tmp";
         File.WriteAllText(written, text);
+        // The file system stamps a write with a clock that moves in steps of
+        // up to 16 ms: two writes inside one step look like one to a reader,
+        // so each write is stamped past the one it replaces.
+        var replaced = Written();
+        var stamp = DateTime.UtcNow;
+        File.SetLastWriteTimeUtc(written, stamp > replaced ? stamp : replaced.AddTicks(1));
         var deadline = DateTime.UtcNow + LockWait;
         while (true)
         {

@@ -1707,6 +1707,82 @@
     transform: translateY(1px);
 }
 
+/* The rail's buttons as keys, their depth defined once. Every filled button
+   stands proud of the rail and casts a shadow, a key you can press; a key held
+   down (the log viewer's level keys while their lines are shown) is sunk into
+   it, deeper than the table/cards key in use, so the two read apart at a
+   glance: the key and its glyph lower, a dark shadow inside it. A key keeps its
+   colour either way. A dark shadow does not show on black, and Info is black
+   on the light theme (the theme's text colour, which on a whole key reads as
+   a dark grey, so the key is pure black there: --wslc-level-info-key): held
+   down, it stays a black key with a grey square at its centre (--wslc-level-info-held, MudBlazor's
+   Colors.Gray.Darken1, inside a black frame --wslc-level-info-frame wide), no
+   shadow and nothing moving: the grey alone says it is held.
+   MudBlazor's own elevation, and its hover, are set aside. */
+:root {
+    --wslc-key-raised: 0 3px 5px rgba(var(--mud-palette-dark-rgb), 0.55);
+    --wslc-key-raised-lift: translateY(-1px);
+    --wslc-key-sunk: inset 0 3px 7px rgba(var(--mud-palette-dark-rgb), 0.85);
+    --wslc-key-sunk-drop: translateY(1px);
+    --wslc-level-info-held: #757575;
+    --wslc-level-info-frame: 6px;
+    --wslc-level-info-key: #000000;
+}
+
+:root:has(.wslc-dark) {
+    --wslc-level-info-key: var(--wslc-level-info);
+}
+
+.wslc-action-rail .mud-button-filled,
+.wslc-action-rail .mud-button-filled:hover,
+.wslc-action-rail .wslc-key-up,
+.wslc-action-rail .wslc-key-up:hover {
+    box-shadow: var(--wslc-key-raised);
+    transform: var(--wslc-key-raised-lift);
+}
+
+.wslc-action-rail .mud-button-root.wslc-key-down,
+.wslc-action-rail .mud-button-root.wslc-key-down:hover {
+    box-shadow: var(--wslc-key-sunk);
+    transform: var(--wslc-key-sunk-drop);
+}
+
+:root:not(:has(.wslc-dark)) .wslc-action-rail .mud-button-root.wslc-level-key-info.wslc-key-down,
+:root:not(:has(.wslc-dark)) .wslc-action-rail .mud-button-root.wslc-level-key-info.wslc-key-down:hover {
+    background-color: var(--wslc-level-info-held) !important;
+    box-shadow: inset 0 0 0 var(--wslc-level-info-frame) var(--wslc-level-info-key);
+    transform: none;
+}
+
+.wslc-action-rail .wslc-key-down .mud-icon-root {
+    transform: var(--wslc-key-sunk-drop);
+}
+
+/* The grey square alone says the black key is held down: nothing moves. */
+:root:not(:has(.wslc-dark)) .wslc-action-rail .wslc-level-key-info.wslc-key-down .mud-icon-root {
+    transform: none;
+}
+
+/* The log viewer's level keys in the colour of their lines (--wslc-level-*): a
+   colour of ours, so MudBlazor's fill and its hover are set aside. */
+.wslc-action-rail .wslc-level-key-info,
+.wslc-action-rail .wslc-level-key-info:hover {
+    background-color: var(--wslc-level-info-key) !important;
+    color: var(--wslc-level-info-ink) !important;
+}
+
+.wslc-action-rail .wslc-level-key-warning,
+.wslc-action-rail .wslc-level-key-warning:hover {
+    background-color: var(--wslc-level-warning) !important;
+    color: var(--wslc-level-warning-ink) !important;
+}
+
+.wslc-action-rail .wslc-level-key-error,
+.wslc-action-rail .wslc-level-key-error:hover {
+    background-color: var(--wslc-level-error) !important;
+    color: var(--wslc-level-error-ink) !important;
+}
+
 /* Buttons read at the theme's size whatever size they are asked for. MudBlazor
    takes the theme's variable on .mud-button and then overrides it with a number
    of its own on every sized variant — 0.8125rem small, 0.9375rem large — which
@@ -2125,6 +2201,70 @@
     color: var(--mud-palette-success-lighten);
 }
 
+/* A body or a row in an alarm's colour (CardTone.Alarm: MudBlazor's red for a failure,
+   its yellow for known vulnerabilities) is read in black: the ports' green link, the
+   secondary and the error texts and the dials' grey track all but vanished on it. */
+.wslc-card-alarm .wslc-ports-link,
+.wslc-card-alarm .mud-text-secondary,
+.wslc-card-alarm .mud-error-text {
+    color: inherit;
+}
+
+/* A project's body in its bracket's colour (CardTone.Project: indigo when stopped, green
+   when it runs) is read in white: its list of containers, its +/− and its dials. */
+.wslc-card-project .mud-text-secondary,
+.wslc-card-project .mud-icon-button,
+.wslc-card-project .wslc-dial-label {
+    color: inherit;
+}
+
+/* On any coloured body (an alarm's, a project's) a dial is drawn whole in the body's ink,
+   its reading and its arc too: in the colour of its level it vanished when that colour was
+   the body's (a running project's green), or all but did. Its track is that ink, faint,
+   for the arc to show over it. Important, as MudBlazor's level classes are
+   (mud-success-text and the rest), or theirs wins. */
+.wslc-card-alarm .wslc-dial .wslc-dial-ring,
+.wslc-card-alarm .wslc-dial .wslc-dial-ring *,
+.wslc-card-project .wslc-dial .wslc-dial-ring,
+.wslc-card-project .wslc-dial .wslc-dial-ring * {
+    color: inherit !important;
+}
+
+.wslc-card-alarm .wslc-dial .wslc-dial-ring.mud-progress-circular {
+    box-shadow: inset 0 0 0 3px rgba(0, 0, 0, 0.35);
+}
+
+.wslc-card-project .wslc-dial .wslc-dial-ring.mud-progress-circular {
+    box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.45);
+}
+
+/* The project's +/− on it, in the same black: its grey all but vanished on the red. */
+.wslc-card-alarm .mud-icon-button {
+    color: inherit;
+}
+
+/* A project's list of containers on an alarm's colour is a white box, the same in both
+   themes, where each name keeps the colour that says how it is: one that failed in red,
+   one with known vulnerabilities in amber, one not running fainter, the rest in black. */
+.wslc-card-alarm .wslc-card-members {
+    background-color: #ffffff;
+    color: #000000;
+    border-radius: var(--mud-default-borderradius);
+    padding: 0 0.25rem;
+}
+
+.wslc-card-alarm .wslc-card-members .mud-error-text {
+    color: var(--mud-palette-error);
+}
+
+.wslc-card-alarm .wslc-card-members .mud-warning-text {
+    color: var(--mud-palette-warning-darken);
+}
+
+.wslc-card-alarm .wslc-card-members .mud-text-secondary {
+    color: rgba(0, 0, 0, 0.54);
+}
+
 /* The link and the published mark in one cell: the link is the part that gives
    way (its ellipsis above), the mark keeps its width at the end, whatever the
    column's. The glyph is the 0.9rem step of the bars, one under the icon
@@ -2290,11 +2430,11 @@
     background-color: var(--mud-palette-surface);
 }
 
-/* Every button in a rail stands proud of it, and a neutral one keeps the
-   rail's own surface instead of MudBlazor's barely tinted square, which reads
-   as a hole rather than a button. */
+/* Every button in a rail stands proud of it (--wslc-key-raised, the depth of
+   the rail's keys), and a neutral one keeps the rail's own surface instead of
+   MudBlazor's barely tinted square, which reads as a hole rather than a button. */
 .wslc-action-rail .mud-button-root {
-    box-shadow: var(--mud-elevation-4);
+    box-shadow: var(--wslc-key-raised);
 }
 
 .wslc-action-rail .mud-button-filled-default {
@@ -2346,10 +2486,12 @@
    of the rail's icons: the ring goes round while the list follows its end
    and stands still while the reader holds the list. */
 .wslc-action-rail .wslc-rail-ring.mud-button-root {
-    /* Twice the square buttons' elevation (theirs is 4): a round shadow, since
-       the icon button is round, that lifts the ring off the rail now that it
-       has no box. */
+    /* A round shadow of its own, since the icon button is round, that lifts the
+       ring off the rail now that it has no box; and lifted as high as the
+       rail's square keys stand (--wslc-key-raised-lift), or beside them it
+       reads as held down. */
     box-shadow: var(--mud-elevation-8);
+    transform: var(--wslc-key-raised-lift);
     background: transparent;
     /* No box, so no room kept for one: the ring is the whole 30px the square
        buttons take. Every size
@@ -2789,21 +2931,71 @@
     color: var(--mud-palette-text-secondary);
 }
 
+/* A grid row that raises an alarm (an image Zaindari found vulnerable): the row
+   carries CardTone.Alarm's ground and ink, and every cell takes them, the sticky
+   ones too, which keep a ground of their own otherwise. */
+.mud-table-row.wslc-row-alarm > td {
+    background-color: inherit !important;
+    color: inherit !important;
+}
+
+/* A long reading says what it is doing beside a turning wheel (Zaindari's check). */
+.wslc-log-line.wslc-log-waiting {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-top: 8px;
+}
+
 .wslc-log-line.log-level-debug {
     color: #60a5fa;
 }
 
-.wslc-log-line.log-level-info {
-    color: #a5b4fc;
+/* Each level's colour, once: the log lines wear it, and so do the log viewer's
+   level keys (.wslc-level-key-*), so a key is the colour of the lines it shows.
+   INFO is the theme's own text colour, black on the light theme and white on the
+   dark: the light blue it had was barely read on either background. A warning is a
+   yellow rather than the theme's amber, which read as one more line: what it says
+   is to be mended before it grows. On the dark theme the yellow the cards' alarms
+   wear (CardTone.Alarm, MudBlazor's Colors.Yellow.Default); on the light one, where
+   that yellow does not read on the white, MudBlazor's Colors.Orange.Darken4, 3.8 to 1
+   on it (its Yellow.Darken4 stood at 2.6 and was barely read). The
+   theme is read from wherever wslc-dark is, a dialog's lines too (MainLayout,
+   BareLayout). Each colour has the ink a key's glyph takes on it. */
+:root {
+    --wslc-level-info: var(--mud-palette-text-primary);
+    --wslc-level-info-ink: var(--mud-palette-surface);
+    --wslc-level-warning: #e65100;
+    --wslc-level-warning-ink: #ffffff;
+    --wslc-level-error: var(--mud-palette-error);
+    --wslc-level-error-ink: var(--mud-palette-error-text);
 }
 
-.wslc-log-line.log-level-warning {
-    color: var(--mud-palette-warning);
+:root:has(.wslc-dark) {
+    --wslc-level-warning: #ffeb3b;
+    --wslc-level-warning-ink: #000000;
+}
+
+/* A text in the warning tone on the page's own ground (Zaindari's menu item, a
+   patch's vulnerable rows), as a log's warning lines: the theme's amber stood
+   2.1 to 1 on the white. */
+.wslc-warning-text {
+    color: var(--wslc-level-warning);
+}
+
+.wslc-log-line.log-level-info {
+    color: var(--wslc-level-info);
+}
+
+.wslc-log-line.log-level-warning,
+.wslc-log-entry.log-level-warning .wslc-log-level,
+.wslc-log-entry.log-level-warning .wslc-log-message {
+    color: var(--wslc-level-warning);
 }
 
 .wslc-log-line.log-level-error,
 .wslc-log-line.log-level-critical {
-    color: var(--mud-palette-error);
+    color: var(--wslc-level-error);
 }
 
 .wslc-log-line.log-level-critical {
@@ -2870,18 +3062,15 @@
     word-break: break-word;
 }
 
-/* Level and source in the light blue the log viewers give an INFO line
-   (#a5b4fc), rather than the darker primary; a debug message keeps its own
-   blue, warnings and errors their tones. */
+/* An INFO entry's level in the theme's text colour, as its line; a debug one
+   in light blue, and its message in its own blue; warnings and errors their tones. */
 .wslc-log-entry.log-level-debug .wslc-log-message { color: #60a5fa; }
-.wslc-log-entry.log-level-debug .wslc-log-level,
-.wslc-log-entry.log-level-info .wslc-log-level { color: #a5b4fc; }
-.wslc-log-entry.log-level-warning .wslc-log-level,
-.wslc-log-entry.log-level-warning .wslc-log-message { color: var(--mud-palette-warning); }
+.wslc-log-entry.log-level-debug .wslc-log-level { color: #a5b4fc; }
+.wslc-log-entry.log-level-info .wslc-log-level { color: var(--wslc-level-info); }
 .wslc-log-entry.log-level-error .wslc-log-level,
 .wslc-log-entry.log-level-error .wslc-log-message,
 .wslc-log-entry.log-level-critical .wslc-log-level,
-.wslc-log-entry.log-level-critical .wslc-log-message { color: var(--mud-palette-error); }
+.wslc-log-entry.log-level-critical .wslc-log-message { color: var(--wslc-level-error); }
 /* A command still running is listed under RUNNING, a state and not a level,
    in the warning tone its status chip wears until it ends — in the grid's row
    and in the strip's line alike. */
@@ -6448,4 +6637,84 @@ html[data-wslc-rows~="outlined"] .wslc-files-table {
     flex: 1 1 auto;
     height: auto;
     min-height: 0;
+}
+
+/* A field with buttons of its own beside it, in the field's own cell (the
+   Tag and Zaindari's Patch… and arrow, PatchOffer): the field takes the width
+   left, the buttons stand at its right, and no row is added to the form.
+   Zaindari's note opens over the form, no wider than a reading line. */
+.wslc-field-beside {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.wslc-field-beside > .mud-input-control {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* A field with a helper line is taller than its box: the buttons, centred on
+   the whole field, sat 10.5px low, measured. They give that line back, as
+   .wslc-field-pick.has-note does: MudBlazor's helper container, 3px above
+   (.mud-input-control-helper-container) and a line of the overline size at
+   1.66 (.mud-input-helper-text). */
+.wslc-field-beside:has(.mud-input-control-helper-container) > :not(.mud-input-control) {
+    margin-bottom: calc(3px + var(--mud-typography-overline-size) * 1.66);
+}
+
+/* The popover's own width cannot be held: MudBlazor writes max-width: none on
+   it, inline. Its text sets it instead, no wider than a reading line; a block,
+   since a caption is drawn as an inline span, which no width holds. 30rem: it
+   opens from the arrow at the right of its field and runs leftwards, and so
+   stays inside Update image, the narrowest window it opens in (600px). */
+.wslc-patch-note-text {
+    display: block;
+    max-width: min(30rem, 90vw);
+}
+
+/* The patch window's containers (PatchImageDialog): a box of one height, so
+   the window is the size it opened with whatever it lists. Four rows of the
+   small dense checkbox, MudBlazor 9's: its glyph 1.25rem (.mud-icon-size-small)
+   and 4px of padding each side (.mud-checkbox-dense). More scroll. */
+.wslc-patch-containers {
+    height: calc(4 * (1.25rem + 2 * 4px));
+    overflow-y: auto;
+}
+
+/* The patch window (PatchImageDialog): two columns, the Dockerfile and its
+   containers, and the requirements editor; one under the other where the
+   window is narrower than two of them. The editor is as tall as the first
+   column, its lines scrolling in it (its list grows from nothing, so it never
+   makes the row taller); alone, under the first, it keeps the height of the
+   containers' box. Its lines are a grid of two columns: the component, which
+   takes what is left, and what to do with it, all of one width, so the
+   choices stand one under the other. */
+.wslc-patch-columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+    gap: 12px;
+}
+
+.wslc-patch-requirements-column {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.wslc-patch-requirements {
+    flex: 1 1 0;
+    min-height: calc(4 * (1.25rem + 2 * 4px));
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 10rem;
+    align-content: start;
+    align-items: center;
+    column-gap: 8px;
+}
+
+.wslc-patch-requirement-name {
+    white-space: nowrap;
+    overflow-x: auto;
 }

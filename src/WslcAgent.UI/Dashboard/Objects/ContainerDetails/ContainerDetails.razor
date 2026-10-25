@@ -12,9 +12,16 @@
 {
     <div class="@SectionClass("wslc-card-part-details")">
         <EntityCardPart>
-            <MudCardContent>
+            @* Painted as its card's body is: red when it failed, yellow when its image has known vulnerabilities (CardTone.Alarm). *@
+            <MudCardContent Class="@(CardTone.Alarm(AlarmOf(c)) is null ? null : CardTone.AlarmClass)" Style="@CardTone.Alarm(AlarmOf(c))">
                 <ContainerCardTexts Container="c" />
             </MudCardContent>
         </EntityCardPart>
     </div>
+}
+
+@code {
+    /// <summary>Red when it failed, yellow when its image has known vulnerabilities; none otherwise.</summary>
+    private static Color? AlarmOf(ContainerSummary container) =>
+        container.HasFailed ? Color.Error : container.IsWarned ? Color.Warning : null;
 }

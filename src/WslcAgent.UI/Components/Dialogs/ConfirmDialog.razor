@@ -6,13 +6,18 @@
    One question that is going to be asked again for the next file, and the
    next, carries a box that says to answer the rest the same way (ForAll).
    Whichever button is then pressed is the answer to all of them: yes to every
-   one, or no to every one. Left unticked, each is asked for itself. *@
+   one, or no to every one. Left unticked, each is asked for itself.
+
+   What cannot be undone and is easily done by mistake (Danger) is said in a
+   filled red alert above the message, and its verb waits until the name of
+   what is lost is typed (TypeToConfirm): a habit's click cannot answer it. *@
 
 <MudDialog>
     <TitleContent>
         <DialogTitle Title="@Dialog.Title">
             <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Answer(false))">Cancel</MudButton>
-            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="@(Destructive ? Color.Error : Color.Primary)" OnClick="@(() => Answer(true))">@YesText</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="@(Destructive ? Color.Error : Color.Primary)" OnClick="@(() => Answer(true))"
+                       Disabled="@(TypeToConfirm.Length > 0 && _typed.Trim() != TypeToConfirm)">@YesText</MudButton>
             @if (OtherText.Length > 0)
             {
                 <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="AnswerOther">@OtherText</MudButton>
@@ -20,7 +25,19 @@
         </DialogTitle>
     </TitleContent>
     <DialogContent>
+        @if (Danger.Length > 0)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mb-2"><span class="wslc-confirm-message">@Danger</span></MudAlert>
+        }
         <MudText Class="wslc-confirm-message">@Message</MudText>
+        @if (TypeToConfirm.Length > 0)
+        {
+            @* Said in the text, in its size, and not as the field's label: the name is selected
+               there with the mouse, copied and pasted, as most people do. *@
+            <MudText Class="mt-3">Type <strong>@TypeToConfirm</strong> to confirm:</MudText>
+            <MudTextField Margin="Margin.Dense" T="string" Value="_typed" ValueChanged="Typed" Immediate="true" Variant="Variant.Filled"
+                          spellcheck="false" autocomplete="off" />
+        }
         @if (ForAll.Length > 0)
         {
             <MudCheckBox T="bool" @bind-Value="_forAll" Label="@ForAll" Dense="true" Color="Color.Primary" Class="mt-2" />
@@ -52,7 +69,14 @@
     /// </summary>
     [Parameter] public string OtherText { get; set; } = "";
 
+    /// <summary>What cannot be undone, said in a filled red alert above the message; empty for most questions.</summary>
+    [Parameter] public string Danger { get; set; } = "";
+
+    /// <summary>The name to type before the verb can be pressed; empty, the verb is pressed at once.</summary>
+    [Parameter] public string TypeToConfirm { get; set; } = "";
+
     private bool _forAll;
+    private string _typed = "";
 
     /// <summary>
     /// Both buttons answer: Cancel is a no, not a dismissal, since a no here
@@ -60,6 +84,13 @@
     /// "no to this one and to the rest" is one press.
     /// </summary>
     private void Answer(bool yes) => Dialog.Close(DialogResult.Ok(new Confirmed(yes, _forAll)));
+
+    /// <summary>The verb is in the title row, which the dialog draws apart: it is told to draw it again, or the verb stays as it was.</summary>
+    private void Typed(string value)
+    {
+        _typed = value;
+        Dialog.StateHasChanged();
+    }
 
     private void AnswerOther() => Dialog.Close(DialogResult.Ok(new Confirmed(false, _forAll, Other: true)));
 }

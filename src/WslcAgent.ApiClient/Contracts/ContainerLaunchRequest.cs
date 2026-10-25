@@ -133,7 +133,9 @@ public sealed record ContainerLaunchRequest
 }
 
 /// <summary>Answer of create, run and recreate: the new container's id.</summary>
-public sealed record ContainerCreated(string Id, IReadOnlyList<string> Notes);
+/// <param name="Notes">What the launch had to adjust, and what the image check found when it let the container be made.</param>
+/// <param name="ImageWarnings">Those of <paramref name="Notes"/> that are the image check's: the container was made from an image with known vulnerabilities, and is said in the warning colour. Null from an agent too old to say, and when there are none.</param>
+public sealed record ContainerCreated(string Id, IReadOnlyList<string> Notes, IReadOnlyList<string>? ImageWarnings = null);
 
 /// <summary>Agent-owned restart policy of one container.</summary>
 /// <param name="Policy"><c>no</c>, <c>unless-stopped</c> or <c>always</c>.</param>
@@ -154,7 +156,9 @@ public sealed record RestartPolicyInfo(string Policy, string Desired, bool Enrol
 
 /// <summary>Body of <c>POST /api/v1/containers/{id}/update-image</c>.</summary>
 /// <param name="Image">The new image with its version: <c>ghcr.io/owner/app:1.5</c>.</param>
-public sealed record UpdateContainerImageRequest(string Image);
+/// <param name="Patch">Once pulled, the image is patched (<c>/image-security/patch</c>) and the container moved to the patch instead; an image with nothing to patch is used as pulled.</param>
+/// <param name="Form">View &amp; edit's settings, when its Save names an image not on the machine: once pulled, the container is recreated with them, not with what it has now.</param>
+public sealed record UpdateContainerImageRequest(string Image, bool Patch = false, ContainerLaunchRequest? Form = null);
 
 /// <summary>Body of <c>PUT /api/v1/containers/{id}/restart-policy</c>.</summary>
 public sealed record SetRestartPolicyRequest(string Policy);

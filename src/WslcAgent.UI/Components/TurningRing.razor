@@ -1,0 +1,20 @@
+@* Work under way with no percentage to tell, where a card's avatar is: a ring
+   that just turns, the way a clock does for what brings the row up and the
+   other way for what brings it down (Reversed). A project's is in its two
+   colours (Mixed). A verb on the row (EntityCardHeader), anything done to a
+   project's containers, a container being recreated. *@
+<div class="@(Mixed ? "wslc-progress-ring wslc-progress-mixed" : "wslc-progress-ring")" title="@Title">
+    <MudProgressCircular Class="@(Reversed ? "wslc-progress-ring-dial wslc-ring-reversed" : "wslc-progress-ring-dial")" Color="Color" Indeterminate="true" />
+</div>
+
+@code {
+    [Parameter] public Color Color { get; set; } = Color.Primary;
+
+    /// <summary>What brings the row down: the ring turns the other way.</summary>
+    [Parameter] public bool Reversed { get; set; }
+
+    /// <summary>A project's: in its two colours.</summary>
+    [Parameter] public bool Mixed { get; set; }
+
+    [Parameter] public string Title { get; set; } = "Working…";
+}

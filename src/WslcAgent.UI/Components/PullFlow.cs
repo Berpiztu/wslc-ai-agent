@@ -16,6 +16,30 @@ public static class PullFlow
     public static Task<bool> ShowPushLogAsync(IDialogService dialogs, string image) =>
         DialogFlow.ShowAsync<PullLogDialog>(dialogs, "Push progress", new DialogParameters<PullLogDialog> { { d => d.Image, image }, { d => d.Push, true } }, large: true);
 
+    /// <summary>The log of a patch's build job, in the view logs are read in (<see cref="BuildLogDialog"/>).</summary>
+    public static Task<bool> ShowBuildLogAsync(IDialogService dialogs, string job, string image) =>
+        DialogFlow.ShowAsync<BuildLogDialog>(dialogs, $"Patch log — {image}", new DialogParameters<BuildLogDialog> { { d => d.Job, job } }, large: true);
+
+    /// <summary>Asks, then stops a patch's build; true when it was stopped. A container it was to move runs on as it was.</summary>
+    public static async Task<bool> CancelBuildAsync(IDialogService dialogs, WslcAgentApi api, ISnackbar snackbar, string job)
+    {
+        if (!await DialogFlow.ConfirmAsync(dialogs, "Cancel patch", "Are you sure you want to cancel this patch? Its containers run on as they were.", "Cancel patch", destructive: true))
+        {
+            return false;
+        }
+
+        try
+        {
+            await api.CancelImageBuildAsync(job);
+            return true;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            snackbar.Add($"The patch was not cancelled: {ex.Message}", Severity.Error);
+            return false;
+        }
+    }
+
     /// <summary>Asks, then stops the pull (or the push); true when it was running and is stopping.</summary>
     public static async Task<bool> CancelAsync(IDialogService dialogs, WslcAgentApi api, ISnackbar snackbar, string image, bool push = false)
     {

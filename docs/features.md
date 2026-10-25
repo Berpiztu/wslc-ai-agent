@@ -321,6 +321,12 @@ publishing and cleaning up need them on.
   **save** to an archive, **import** and **load** archives.
 - **Build** from a context folder: Dockerfile, tag, build arguments, labels,
   target stage, no cache, pull newer bases; live output and cancel.
+- **Image security check**: every image the agent builds, from Build or from a
+  Compose project, has its Python libraries read in the image itself and
+  checked against the known vulnerabilities (OSV.dev) before any container is
+  made from it; each one found is in the build's log, with the version that
+  fixes it. Settings → Security sets what one moderate or worse does: stop the
+  build (the default), only say it, or no check at all.
 - **Files of an image**, browsed through a temporary container.
 - Which containers use an image; run or create a container from it.
 - **Prune** dangling images; Docker Hub one click away to find images.
@@ -482,7 +488,8 @@ The Home page is a dashboard designed by each user, not a fixed screen.
   Live updates (whether the agent hears `wslc`'s events, or the screens read
   on their own clock); Recent events (what `wslc` reported lately, newest
   first: containers started, stopped or ended with their exit code, networks
-  connected or disconnected, health changes); the agent's log; file transfers;
+  connected or disconnected, health changes, and volumes created, mounted,
+  unmounted, destroyed or pruned from wslc 3.0.4); the agent's log; file transfers;
   free text.
 - **Ready-made cards**: container, Compose project, image, volume, network, system, charts.
   A project's card is born with a place for its containers, an empty group

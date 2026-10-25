@@ -1,0 +1,394 @@
+@* Zaindari's patch: the image built again on itself, tagged …-patched, by
+   the Dockerfile shown here, whole, as it will be built: FROM the image, as
+   root its system packages upgraded when a fix is published that it does not
+   carry (as a Windows update patches Windows), and its own user given back.
+   The user changes it as they will.
+   Beside it, the image's own requirements.txt, a line a row, and each
+   vulnerable library it does not name (a dependency, Pillow under pdfplumber)
+   a row of its own: what to do with each is chosen there, and the file is
+   rewritten by it (raised, taken to its latest, taken out; a dependency added
+   with the version that fixes it), seen whole under the rows and copied to
+   the sources with its button. As each choice is made, the Dockerfile is
+   written by it: the lines that COPY the new file over the old and install
+   from it, and take out what was taken out, put in and taken away again with
+   the choices, so what it shows is always what is built; the file goes beside
+   the Dockerfile.
+   Then the containers ticked are moved to it. Every container of the image
+   is listed and ticked (or the one it was opened from alone); a project's are
+   not, since its compose file names its image. A patch is never refused; if
+   it does not work, View & edit puts a container back on the image it had.
+   The agent does the rest: the dialog closes, and the title bar's activity
+   line follows it, step by step, to its end (PatchActivity). Its size is the
+   same whatever it lists: the rows and the containers scroll in boxes of
+   their own. *@
+@using WslcAgent.ApiClient
+@inject WslcAgentApi Api
+@inject PatchActivity Patches
+@inject IJSRuntime Js
+@inject ISnackbar Snackbar
+
+<FormDialog SubmitText="Patch" BusyText="Starting…" OnSubmit="PatchAsync">
+    <MudText Typo="Typo.body2">
+        Builds <b>@Report.Patch</b> from @Report.Image, then moves the containers ticked to it with their ports, mounts, environment and name.
+        A patch is never refused; if it does not work, View &amp; edit puts a container back on its old image.
+    </MudText>
+    @* What is left, as Zaindari's window and the patch's log end with it: whether a patch can still mend
+       anything, or nothing is left with a fix published; read before anything is chosen. *@
+    @if (ImageRemedies.WhatIsLeft(Report.Vulnerabilities) is { Length: > 0 } left)
+    {
+        <MudAlert Severity="@(Report.Vulnerabilities.Any(v => v.FixedIn.Length > 0) ? Severity.Warning : Severity.Info)" Dense="true" Class="mt-2">@left</MudAlert>
+    }
+
+    @* Two columns, one under the other on a narrow screen: the Dockerfile, the requirements.txt
+       the choices make, and the containers it moves; and the rows, a grid of two columns, the
+       component and what to do with it, the whole height of the first column, the list being
+       the long one. *@
+    <div class="wslc-patch-columns mt-2">
+        <div>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                @(Report.SystemUpgrade.Length > 0 ? "System packages with a fix published: its RUN line upgrades them; take it out to leave them." : "No system package with a fix published, or no package manager in the image to install one.")
+            </MudText>
+            <MudTextField T="string" @bind-Value="_dockerfile" Label="Dockerfile of the patch, as it will be built" Lines="9" Immediate="true"
+                          HelperTextOnFocus="true" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-1"
+                          HelperText="Change it as you will. What the rows choose is written in it as you choose: the lines that copy the new requirements.txt in and install from it, before its last USER."
+                          autocapitalize="none" autocorrect="off" spellcheck="false" />
+
+            @* The file as the choices leave it, whole, to read and to copy to the sources. *@
+            <div class="wslc-field-pick mt-1">
+                <MudTextField T="string" Value="@Preview()" Label="requirements.txt as it will be" Lines="7" ReadOnly="true" Variant="Variant.Filled" Margin="Margin.Dense" />
+                <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.ContentCopy" Size="Size.Small" title="Copy the new requirements.txt, for the sources"
+                        Disabled="@(Rewritten().Count == 0)" OnClick="CopyAsync" />
+            </div>
+
+            <div class="wslc-patch-containers mt-2">
+                @if (_containers is null)
+                {
+                    <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                }
+                else
+                {
+                    foreach (var container in _containers)
+                    {
+                        <SquareCheckBox Value="@_ticked.Contains(container.Id)" ValueChanged="@((bool on) => Tick(container.Id, on))" Label="@container.Name" />
+                    }
+
+                    if (_containers.Count == 0)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">No container outside a project runs this image: the patch is only built.</MudText>
+                    }
+
+                    if (_inProjects.Count > 0)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            Left as they are, since their project's compose file names the image: @string.Join(", ", _inProjects).
+                        </MudText>
+                    }
+                }
+            </div>
+        </div>
+
+        @* The rows: each library line of the image's requirements files, and each vulnerable library
+           they do not name, with what to do with it. A vulnerable one in the colour of what it needs;
+           one taken out red and struck through. All to latest chooses the latest for every row. *@
+        <div class="wslc-patch-requirements-column">
+            @* The file the rows write: the image's own, or, when it has none, a new one the patch copies in
+               (NoFile); no title when there is no row, since there is then no file at all. *@
+            <div class="d-flex align-center gap-1">
+                <MudText Typo="Typo.caption" Class="flex-grow-1"><b>@(_rows.Count == 0 ? "" : Files.Count > 0 ? TargetPath : "A new requirements.txt, for these dependencies")</b></MudText>
+                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" Disabled="@(_rows.Count == 0)"
+                           OnClick="AllToLatest">All to latest</MudButton>
+            </div>
+            <div class="wslc-patch-requirements">
+                @if (_rows.Count == 0)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">No requirements*.txt in the image, and no vulnerable Python library installed by pip or uv: nothing for the patch to raise here.</MudText>
+                }
+                else
+                {
+                    @for (var index = 0; index < _rows.Count; index++)
+                    {
+                        var at = index;
+                        var row = _rows[at];
+                        @* Taken out: red and struck through, so what goes is seen at a glance. *@
+                        <MudText Typo="Typo.caption" Class="@($"wslc-patch-requirement-name {LineClass(row, Choice(at))}")">
+                            @if (Choice(at) == TakeOut)
+                            {
+                                <del>@Shown(row)</del>
+                            }
+                            else
+                            {
+                                @Shown(row)
+                            }
+                        </MudText>
+                        <MudSelect T="string" Value="@Choice(at)" ValueChanged="@(choice => Choose(at, choice))" Dense="true" Margin="Margin.Dense" Variant="Variant.Text">
+                            <MudSelectItem Value="@Keep">@(row.Dependency ? "Leave" : "Keep")</MudSelectItem>
+                            @if (row.Line.Suggested.Length > 0)
+                            {
+                                <MudSelectItem Value="@Raise">@($"Raise ≥ {RaisedTo(row.Line)}")</MudSelectItem>
+                            }
+                            <MudSelectItem Value="@Latest">Latest</MudSelectItem>
+                            <MudSelectItem Value="@TakeOut">Take out</MudSelectItem>
+                        </MudSelect>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+</FormDialog>
+
+@code {
+    /// <summary>What Zaindari found on the image, its patch, its system upgrade, its requirements files and its Python fixes among it.</summary>
+    [Parameter, EditorRequired] public ImageVulnerabilities Report { get; set; } = default!;
+
+    /// <summary>Opened from one container (Update image, View &amp; edit): that one alone ticked, by id or name; empty, every one of the image's.</summary>
+    [Parameter] public IReadOnlyList<string> Only { get; set; } = [];
+
+    /// <summary>A row: a library line of a requirements file, or a vulnerable library none names (<see cref="Dependency"/>), added to the first file when chosen.</summary>
+    private sealed record Row(ImageRequirement Line, bool Dependency);
+
+    /// <summary>Where a requirements file goes when the image has none: the new file is still copied in and installed from.</summary>
+    private const string NoFile = "/tmp/zaindari-requirements.txt";
+
+    private const string Keep = "keep";
+    private const string Raise = "raise";
+    private const string Latest = "latest";
+    private const string TakeOut = "take out";
+
+    /// <summary>The Dockerfile the patch builds, as the agent wrote it first and the user leaves it.</summary>
+    private string _dockerfile = "";
+    private List<Row> _rows = [];
+    private List<ContainerSummary>? _containers;
+    private List<string> _inProjects = [];
+    private readonly HashSet<string> _ticked = new(StringComparer.Ordinal);
+
+    /// <summary>What is to be done with each row, by its place in <see cref="_rows"/>; kept unless chosen.</summary>
+    private readonly Dictionary<int, string> _choices = [];
+
+    /// <summary>The lines the choices last wrote into the Dockerfile, taken away again before the next ones are written.</summary>
+    private List<string> _written = [];
+
+    private IReadOnlyList<ImageTextFile> Files => Report.RequirementFiles ?? [];
+
+    /// <summary>The file the rows are written into first: the image's first requirements file, or <see cref="NoFile"/>.</summary>
+    private string TargetPath => Files.Count > 0 ? Files[0].Path : NoFile;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _dockerfile = Report.PatchDockerfile;
+        var inFiles = (Report.Requirements ?? []).Select(line => Normalized(line.Library.Split('[')[0])).ToHashSet(StringComparer.Ordinal);
+        _rows =
+        [
+            .. (Report.Requirements ?? []).Select(line => new Row(line, false)),
+            .. Report.Vulnerabilities
+                .Where(v => v.Ecosystem == "PyPI" && !inFiles.Contains(Normalized(v.Package)))
+                .Select(v => v.Package)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .Select(name => new Row(new ImageRequirement("", name, FixOf(name), "a dependency the requirements do not name", name, Vulnerable: true), true)),
+        ];
+
+        var image = ImageReference.Split(ImageReference.Normalize(Report.Image));
+        var users = (await Api.GetContainersAsync(all: true)).Containers
+            .Where(container => ImageReference.Split(ImageReference.Normalize(container.Image)) == image)
+            .OrderBy(container => container.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        _inProjects = [.. users.Where(container => container.Project.Length > 0).Select(container => container.Name)];
+        _containers = [.. users.Where(container => container.Project.Length == 0)];
+        _ticked.UnionWith(_containers
+            .Where(container => Only.Count == 0 || Only.Any(named => named == container.Name || named.StartsWith(container.Id, StringComparison.Ordinal) || container.Id.StartsWith(named, StringComparison.Ordinal)))
+            .Select(container => container.Id));
+    }
+
+    private string Choice(int at) => _choices.GetValueOrDefault(at, Keep);
+
+    private void Choose(int at, string choice)
+    {
+        _choices[at] = choice;
+        WriteRequirements();
+    }
+
+    /// <summary>The line that raises a library to the version that fixes it (<see cref="ImageVulnerabilities.PythonFixes"/>); empty when none does, and it can only be left or taken out.</summary>
+    private string FixOf(string library) =>
+        (Report.PythonFixes ?? []).FirstOrDefault(fix => Normalized(fix.Split(">=")[0]) == Normalized(library)) ?? "";
+
+    /// <summary>A row as it is listed: the line as the file has it, a dependency with what it is.</summary>
+    private static string Shown(Row row) => row.Dependency ? $"{row.Line.Library} (dependency)" : row.Line.Line;
+
+    /// <summary>The version a Raise goes to, as its option says it: <c>pillow&gt;=13.0.0</c> → <c>13.0.0</c>.</summary>
+    private static string RaisedTo(ImageRequirement line) =>
+        line.Suggested.IndexOf(">=", StringComparison.Ordinal) is var at and >= 0 ? line.Suggested[(at + 2)..] : line.Suggested;
+
+    /// <summary>A row in the colour of what it needs or is chosen: red when it is taken out, or a vulnerable one no version fixes; yellow when a fix is there to raise to.</summary>
+    private static string LineClass(Row row, string choice) =>
+        ImageSecurityFlow.TextClass(choice == TakeOut || (row.Line.Vulnerable && row.Line.Suggested.Length == 0) ? Color.Error
+            : row.Line.Vulnerable ? Color.Warning
+            : Color.Default);
+
+    /// <summary>PyPI's names compare as PEP 503 says: case and <c>_</c>, <c>-</c>, <c>.</c> alike.</summary>
+    private static string Normalized(string name) => name.Trim().ToLowerInvariant().Replace('_', '-').Replace('.', '-');
+
+    /// <summary>Every row to its latest version, written into the Dockerfile at once, as one choice is.</summary>
+    private void AllToLatest()
+    {
+        for (var at = 0; at < _rows.Count; at++)
+        {
+            _choices[at] = Latest;
+        }
+
+        WriteRequirements();
+    }
+
+    /// <summary>
+    /// The requirements files the choices change, rewritten: a line raised to
+    /// the version that fixes it, taken to its latest (its pin taken off), or
+    /// taken out; a dependency raised or taken to its latest added to the first
+    /// file. Comments, options and the rest of each file as they were. Each with
+    /// the plain name it goes beside the Dockerfile by.
+    /// </summary>
+    private List<(string Path, string Name, string Text)> Rewritten()
+    {
+        var written = new List<(string Path, string Name, string Text)>();
+        var added = _rows.Select((row, at) => (Row: row, Choice: Choice(at)))
+            .Where(chosen => chosen.Row.Dependency && chosen.Choice is Raise or Latest)
+            .Select(chosen => $"{(chosen.Choice == Raise ? chosen.Row.Line.Suggested : chosen.Row.Line.Library)}  # added by {ImageSecurityFlow.Name}: a dependency with a fix")
+            .ToList();
+        IReadOnlyList<ImageTextFile> files = Files.Count > 0 ? Files : [new ImageTextFile(NoFile, "")];
+        for (var index = 0; index < files.Count; index++)
+        {
+            var file = files[index];
+            var used = new HashSet<int>();
+            var lines = new List<string>();
+            foreach (var raw in file.Text.ReplaceLineEndings("\n").TrimEnd('\n').Split('\n'))
+            {
+                var said = raw.Split('#')[0].Trim();
+                var at = _rows.FindIndex(row => !row.Dependency && row.Line.File == file.Path && row.Line.Line == said);
+                while (at >= 0 && used.Contains(at))
+                {
+                    at = _rows.FindIndex(at + 1, row => !row.Dependency && row.Line.File == file.Path && row.Line.Line == said);
+                }
+
+                if (at < 0 || said.Length == 0)
+                {
+                    lines.Add(raw);
+                    continue;
+                }
+
+                used.Add(at);
+                switch (Choice(at))
+                {
+                    case Raise when _rows[at].Line.Suggested.Length > 0:
+                        lines.Add(_rows[at].Line.Suggested);
+                        break;
+                    case Latest:
+                        lines.Add(_rows[at].Line.Library);
+                        break;
+                    case TakeOut:
+                        break;
+                    default:
+                        lines.Add(raw);
+                        break;
+                }
+            }
+
+            if (index == 0)
+            {
+                lines.AddRange(added);
+            }
+
+            var text = string.Join('\n', lines).Trim('\n') + "\n";
+            if (text.Trim() != file.Text.ReplaceLineEndings("\n").Trim())
+            {
+                written.Add((file.Path, index == 0 ? "requirements.txt" : $"requirements-{index + 1}.txt", text));
+            }
+        }
+
+        return written;
+    }
+
+    /// <summary>The libraries taken out, by name: what installing from the new file would leave in, uninstalled.</summary>
+    private List<string> TakenOut() =>
+        [.. _rows.Select((row, at) => (Row: row, Choice: Choice(at)))
+            .Where(chosen => chosen.Choice == TakeOut)
+            .Select(chosen => chosen.Row.Line.Library.Split('[')[0])
+            .Distinct(StringComparer.OrdinalIgnoreCase)];
+
+    /// <summary>The new file, as it will be, to read: each with its path when there are several; the old one when nothing changes yet.</summary>
+    private string Preview()
+    {
+        var rewritten = Rewritten();
+        return rewritten.Count switch
+        {
+            0 => Files.Count > 0 ? Files[0].Text : "",
+            1 => rewritten[0].Text,
+            _ => string.Join("\n", rewritten.Select(file => $"# {file.Path}\n{file.Text}")),
+        };
+    }
+
+    private async Task CopyAsync()
+    {
+        await Js.InvokeVoidAsync("navigator.clipboard.writeText", Preview());
+        Snackbar.Add("The new requirements.txt is on the clipboard", Severity.Success);
+    }
+
+    /// <summary>
+    /// The Dockerfile told what the rows chose, each time one is chosen: the
+    /// lines the last choices wrote taken away, then each new file copied over
+    /// the old one and installed from, and what was taken out uninstalled, since
+    /// installing from a file never takes anything out; none when every row is
+    /// kept. Its lines go before the last USER, so they run as root; what the
+    /// user wrote in it stays as they wrote it.
+    /// </summary>
+    private void WriteRequirements()
+    {
+        var gone = _written.ToHashSet(StringComparer.Ordinal);
+        _dockerfile = string.Join('\n', _dockerfile.ReplaceLineEndings("\n").Split('\n').Where(line => !gone.Contains(line.Trim())));
+
+        var lines = new List<string>();
+        foreach (var file in Rewritten())
+        {
+            lines.Add($"COPY {file.Name} {file.Path}");
+            lines.Add($"RUN {Report.PythonInstaller} -r {file.Path}");
+        }
+
+        if (TakenOut() is { Count: > 0 } takenOut)
+        {
+            lines.Add($"RUN {Report.PythonUninstaller} {string.Join(' ', takenOut)}");
+        }
+
+        lines.ForEach(Insert);
+        _written = lines;
+    }
+
+    /// <summary>A line added once to the Dockerfile, before its last USER (the image's own user given back), so it runs as root.</summary>
+    private void Insert(string line)
+    {
+        if (line.Trim().Length == 0 || _dockerfile.Contains(line, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var lines = _dockerfile.ReplaceLineEndings("\n").TrimEnd().Split('\n').ToList();
+        var last = lines.FindLastIndex(each => each.Trim().Length > 0);
+        var at = last >= 0 && lines[last].TrimStart().StartsWith("USER ", StringComparison.OrdinalIgnoreCase)
+            && !lines[last].Trim().Equals("USER root", StringComparison.OrdinalIgnoreCase) ? last : lines.Count;
+        lines.Insert(at, line);
+        _dockerfile = string.Join('\n', lines);
+    }
+
+    private void Tick(string id, bool on)
+    {
+        if (on)
+        {
+            _ticked.Add(id);
+        }
+        else
+        {
+            _ticked.Remove(id);
+        }
+    }
+
+    /// <summary>Started, the window closes and the title bar's activity line follows the build to its end; the new requirements files go beside the Dockerfile.</summary>
+    private Task PatchAsync() =>
+        Patches.StartAsync(new PatchImageRequest(Report.Image, [.. _ticked], Dockerfile: _dockerfile,
+            Files: [.. Rewritten().Select(file => new PatchFile(file.Name, file.Text))]));
+}

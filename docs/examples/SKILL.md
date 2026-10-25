@@ -225,7 +225,7 @@ die.
 - **Keep it running across reboots**: `set_restart_policy` with
   `unless-stopped` or `always`. This is agent-managed, not a runtime flag;
   `no` turns it off.
-- **Images**: `list_images`, `inspect_image`, `pull_image`, `tag_image`,
+- **Images**: `list_images`, `inspect_image`, `image_vulnerabilities`, `pull_image`, `tag_image`,
   `push_image` (needs a registry login done by the operator) and `save_image`
   (writes a tar on the **agent's** host, at a path on that machine).
 - **Volumes and networks**: `list_volumes`, `create_volume`, `inspect_volume`,
@@ -289,9 +289,10 @@ die.
   exit code and its stderr: that is the evidence behind any failure.
 - `recent_events` answers `{ summary, count, events }`, newest first, each
   event `{ time, type, action, id, name, exitCode }`: `type` is `container`,
-  `image` or `network` (volumes report no events); `action` is wslc's own —
-  `start`, `stop`, `kill`, `die`, `connect`, `disconnect`,
-  `health_status: unhealthy`… A `die` with a non-zero `exitCode` is a container
+  `image`, `network` or, from wslc 3.0.4, `volume` (older wslc reports no
+  volume events); `action` is wslc's own — `start`, `stop`, `kill`, `die`,
+  `connect`, `disconnect`, `health_status: unhealthy`, a volume's `create`,
+  `mount`, `unmount`, `destroy`, `prune`… A `die` with a non-zero `exitCode` is a container
   that ended on its own, not one the user stopped. `name` is null when the
   event carries none: name the object by its short id then. The agent keeps
   the last 100, and the list starts empty when the agent starts or listens to

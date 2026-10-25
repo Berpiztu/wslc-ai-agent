@@ -8,7 +8,7 @@
 <div class="wslc-card-members">
     @foreach (var member in Members)
     {
-        <MudText Typo="Typo.body2" Class="@(member.HasFailed ? "mud-error-text" : member.IsRunning ? "" : "mud-text-secondary")"
+        <MudText Typo="Typo.body2" Class="@(member.HasFailed ? "mud-error-text" : member.IsWarned ? "mud-warning-text" : member.IsRunning ? "" : "mud-text-secondary")"
                  title="@($"{member.Name}: {(member.HasFailed ? member.Failure : member.State)}")">@member.Name</MudText>
     }
 </div>

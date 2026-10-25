@@ -91,6 +91,9 @@
 </PageShell>
 
 @code {
+    /// <summary>Each network's Received and Sent are on its card's dials, and traffic sends no event.</summary>
+    protected override bool Measured => true;
+
     /// <summary>What every container has received and sent: what a network's dials are a share of.</summary>
     private long _received;
     private long _sent;

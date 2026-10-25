@@ -9,6 +9,8 @@ namespace WslcAgent.Server.Wslc;
 /// ended, how long it took and what it printed (<see cref="CliTraceBlock"/>) —
 /// where the Logs page and the <c>cli_activity</c> tool read it back. Only
 /// what is running right now lives in memory; the log file is the record.
+/// The values of environment variables and build arguments are hidden in
+/// all of it, in the line and in what it printed (<see cref="ShownValues"/>).
 /// </summary>
 public interface ICliActivity
 {
@@ -38,7 +40,7 @@ public sealed class CliActivity(ILogger<CliActivity> logger) : ICliActivity
             title = CliTitle.For(named, args);
         }
 
-        var trace = new CliTraceEntry(Guid.NewGuid().ToString("N"), DateTimeOffset.Now, null, args.ToList(), null, "running", "", "", kind, title, session, program);
+        var trace = new CliTraceEntry(Guid.NewGuid().ToString("N"), DateTimeOffset.Now, null, [.. ShownValues.Args(args)], null, "running", "", "", kind, title, session, program);
         lock (_gate)
         {
             _running[trace.Id] = trace;
@@ -70,7 +72,7 @@ public sealed class CliActivity(ILogger<CliActivity> logger) : ICliActivity
         // A container that was not there is not something that went wrong
         // ("not_found"): it stays in the record, out of that filter.
         var level = status is "success" or "cancelled" or "not_found" ? LogLevel.Information : LogLevel.Error;
-        logger.Log(level, "{Program} {Args}\n{Outcome}", trace.Program, string.Join(' ', trace.Args), CliTraceBlock.Write(id, status, exitCode, duration, stdout, stderr, Named(trace)));
+        logger.Log(level, "{Program} {Args}\n{Outcome}", trace.Program, string.Join(' ', trace.Args), CliTraceBlock.Write(id, status, exitCode, duration, ShownValues.Output(stdout), ShownValues.Output(stderr), Named(trace)));
     }
 
     /// <summary>The title a scope gave the command, which its arguments alone would not give back when the log is read; null for the rest.</summary>

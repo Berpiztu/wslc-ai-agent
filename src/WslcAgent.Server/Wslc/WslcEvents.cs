@@ -21,6 +21,12 @@ public sealed class WslcEvents
     /// <summary>True while a stream is open and the agent is being told what changes.</summary>
     public bool Live { get; internal set; }
 
+    /// <summary>The kinds this machine's <c>wslc</c> reports, as the reader last found them.</summary>
+    public IReadOnlyList<string> Reported { get; internal set; } = ChangeNotice.AlwaysReported;
+
+    /// <summary>Every kind is stale, and this is what <c>wslc</c> reports: the notice a listener starts from.</summary>
+    public ChangeNotice Everything => ChangeNotice.Everything with { Reported = Reported };
+
     /// <summary>
     /// A listener's own queue, and the notices written to it until it is
     /// disposed. The first notice a listener gets is always a full one: it has
@@ -32,7 +38,7 @@ public sealed class WslcEvents
         {
             FullMode = BoundedChannelFullMode.DropOldest,
         });
-        channel.Writer.TryWrite(ChangeNotice.Everything);
+        channel.Writer.TryWrite(Everything);
         lock (_gate)
         {
             _listeners.Add(channel);

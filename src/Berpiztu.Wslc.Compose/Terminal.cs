@@ -246,6 +246,37 @@ internal static class Terminal
         return said;
     }
 
+    /// <summary>Someone is there to answer a question: the input is a terminal, not a file, a pipe or nothing at all (a script, a scheduled task).</summary>
+    public static bool CanAsk => !Console.IsInputRedirected;
+
+    /// <summary>
+    /// A warning of what cannot be undone, in red where a warning is yellow:
+    /// it is about to be done, and the eye has to stop on it.
+    /// </summary>
+    public static void Danger(string text)
+    {
+        _said.Add((ClientReport.Warning, text));
+        ErrorLine(_err ? $"{Red}⚠ {text}{Reset}" : $"warning: {text}");
+    }
+
+    /// <summary>
+    /// <paramref name="danger"/> said in red (<see cref="Danger"/>), then
+    /// <paramref name="question"/> asked on the terminal. Only yes goes on
+    /// (y, yes); anything else, Enter alone included, does not, and so does
+    /// no terminal to ask on.
+    /// </summary>
+    public static bool Ask(string danger, string question)
+    {
+        Danger(danger);
+        if (!CanAsk)
+        {
+            return false;
+        }
+
+        Console.Error.Write(_err ? $"{Red}?{Reset} {question} [y/N] " : $"{question} [y/N] ");
+        return Console.ReadLine()?.Trim().ToLowerInvariant() is "y" or "yes";
+    }
+
     /// <summary>What follows a failure or a summary, in a lower voice.</summary>
     public static void Aside(string text) => ErrorLine(_err ? $"{Gray}{text}{Reset}" : text);
 

@@ -177,23 +177,26 @@ it its list of libraries after. A release goes out only with a list
 security-watch has checked.
 
 The same care then turned to the containers. Every image the agent builds
-has its Python libraries checked against OSV.dev, read from the image's own
-files without running anything in it, and one moderate or worse stops the
-build. Then the check moved to every container: before it is made, by Run,
-Create, an edit, an image update or a project's save, and before it starts.
+has its Python libraries and its system packages checked against OSV.dev,
+read from the image's own files without running anything in it, and one
+moderate or worse stops the build. Then the check moved to every new
+container: before it is made, by Run, Create, an edit, an image update or a
+project's save.
 The rule follows who can mend the image:
 
-- **An image built here** is yours to mend: while it is vulnerable, no
-  container of it is made or started. Build it again with the version the
-  check names.
-- **An image from a registry** is not: its containers always start, and are
-  marked instead, the state chip saying CVE in yellow or in red, with what
-  was found at the end of their logs. Whether it runs is yours to decide.
-- **A container that runs** is never stopped by the check.
+- **An image built here** is yours to mend: while it is vulnerable, no new
+  container of it is made, and its build stops. Build it again with the
+  version the check names.
+- **An image from a registry** is not: containers are made from it as
+  always, and marked, red or yellow. Whether one runs is yours to decide.
+- **A container that exists** is started, stopped and restarted as always:
+  the check never stops what runs.
 
-Each image's libraries and every vulnerability known for them are one click
-away, from a container's, a project's or an image's menu, least severe
-first.
+The check got a name, Zaindari, Basque for safekeeper. What it finds is kept
+on the image, which turns red or yellow on the Images page, and its
+containers say CVE in the same colour. Every vulnerability known for an
+image is one click away, from a container's, a project's or an image's
+menu, least severe first.
 
 `wslc` can still be used around the agent, and the agent now notices: a
 project with a service whose container is gone, and another container

@@ -9,9 +9,8 @@ public readonly record struct LogPart(string Text, string Class);
 /// <param name="Parts">The line cut into time, level, source and message, which together are <see cref="Text"/>; empty when it has neither a time nor a level at its start, and it is drawn whole.</param>
 public sealed record LogLine(string Text, string Level, IReadOnlyList<LogPart> Parts)
 {
-    public bool Matches(string query, string level) =>
-        (query.Length == 0 || Text.Contains(query, StringComparison.OrdinalIgnoreCase))
-        && (level.Length == 0 || Level == level || (level == "error" && Level == "critical"));
+    public bool Matches(string query) =>
+        query.Length == 0 || Text.Contains(query, StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>
@@ -21,6 +20,19 @@ public sealed record LogLine(string Text, string Level, IReadOnlyList<LogPart> P
 /// </summary>
 public static partial class LogLines
 {
+    public const string Info = "info";
+    public const string Warning = "warning";
+    public const string Error = "error";
+
+    /// <summary>The level toggle a line's level falls under: critical with errors, debug with information; null for a line with no level.</summary>
+    public static string? Group(string level) => level switch
+    {
+        "critical" or "error" => Error,
+        "warning" => Warning,
+        "info" or "debug" => Info,
+        _ => null,
+    };
+
     public static List<LogLine> Split(string text)
     {
         var plain = StripAnsi(text).Replace("\r\n", "\n").Replace('\r', '\n');

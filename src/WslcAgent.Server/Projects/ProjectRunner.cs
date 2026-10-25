@@ -42,6 +42,8 @@ public sealed class ProjectRunner(
     ProjectStore store,
     Publishing.PublishingService publishing,
     ProjectContexts contexts,
+    Images.ImageSecurity security,
+    ProjectGaps gaps,
     ILogger<ProjectRunner> logger)
 {
     /// <summary>What a project's row says in the Image column: it is no container's image.</summary>
@@ -94,13 +96,53 @@ public sealed class ProjectRunner(
             [
                 .. plan.Networks.Where(network => network.External && !state.Networks.Contains(network.Name)).Select(network => $"network {network.Name}"),
                 .. plan.Volumes.Where(volume => volume.External && !state.Volumes.Contains(volume.Name)).Select(volume => $"volume {volume.Name}"),
-            ]);
+            ],
+            FormerFile(plan, request.File));
     }
+
+    /// <summary>
+    /// The file the project was last saved from, when this save comes from
+    /// another: two Compose files that give themselves the same name are one
+    /// project, and the second one's save leaves the first one's other
+    /// services behind. A file is known by its path, on the machine that sent
+    /// it or else on this one; a pasted file has none, and is not compared.
+    /// </summary>
+    private string? FormerFile(ComposePlan plan, ComposePlanRequest file)
+    {
+        var now = Origin(file.ClientFile, plan.File);
+        var former = FormerFile(store.Read(plan.Name), now);
+        if (former is not null)
+        {
+            logger.LogWarning("project {Project}: saving it from {File} would replace {Former}, the file it was last saved from", plan.Name, now, former);
+        }
+
+        return former;
+    }
+
+    /// <summary>The kept project's file when <paramref name="now"/> is another; null when either has no path.</summary>
+    internal static string? FormerFile(StoredProject? kept, string now)
+    {
+        var former = kept is null ? "" : Origin(kept.ClientFile, kept.File);
+        return former.Length == 0 || now.Length == 0 || string.Equals(former, now, StringComparison.OrdinalIgnoreCase) ? null : former;
+    }
+
+    /// <summary>A file's path on the machine that sent it, or else on this one.</summary>
+    private static string Origin(string clientFile, string agentFile) => (clientFile.Trim().Length > 0 ? clientFile : agentFile).Trim();
 
     /// <summary>Starts the save. The file is read first, so one that cannot be read is refused here and no job is begun.</summary>
     public async Task<ProjectJob> StartAsync(ProjectUpRequest request, CancellationToken cancellationToken = default)
     {
         var plan = await projects.PlanAsync(request.File, cancellationToken);
+
+        // Checked here, and not only by the client that asked first: one too old to ask would
+        // replace the project's file without a word, and leave its other containers over.
+        if (!request.ReplaceFile && FormerFile(plan, request.File) is { } former)
+        {
+            throw new InvalidOperationException(
+                $"Project {plan.Name} was last saved from {former}, and this file would take its place. Nothing was done. "
+                + "Save it again saying it replaces that file: the Compose window and wslc-compose ask for it (wslc-compose up -y), from version 1.6.4.3 on.");
+        }
+
         return Begin(plan, (job, stop) => SaveAsync(job, plan, request, stop));
     }
 
@@ -182,6 +224,8 @@ public sealed class ProjectRunner(
     /// <summary>The job's work to its end, whichever it is: done, cancelled, or failed with why.</summary>
     private async Task RunAsync(Job job, string project, Func<Job, CancellationToken, Task> work)
     {
+        // Its containers are on their way while it runs: not a gap in the project (ProjectGaps).
+        gaps.Hold(project);
         try
         {
             await work(job, job.Cancellation.Token);
@@ -199,8 +243,38 @@ public sealed class ProjectRunner(
             job.Note("ERROR", ex.Message);
             job.Finish(ProjectJob.Failed, ex.Message);
         }
+        finally
+        {
+            gaps.Release(project);
+        }
+
+        try
+        {
+            store.KeepLastJob(job.Snapshot());
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            logger.LogWarning("project {Project}: the log of its last job could not be kept: {Message}", project, ex.Message);
+        }
 
         events.Publish(new ChangeNotice([ChangeNotice.Container]));
+    }
+
+    /// <summary>
+    /// The project's last save or build: the one under way, as it goes, or
+    /// else the last one kept, done, cancelled or failed. What the project's
+    /// Save log button opens, so a save that went well can still be read.
+    /// </summary>
+    public ProjectJob LastJob(string project)
+    {
+        var job = _jobs.Values.Where(job => job.Name == project && job.FinishedAt is null).Select(job => job.Snapshot()).FirstOrDefault()
+            ?? store.LastJob(project)
+            ?? throw new KeyNotFoundException($"Project {project} has no save or build kept yet.");
+
+        // What the project is now, after the save that made it: a service whose container is gone, and what cannot start for it.
+        return gaps.Of(project) is { } gap
+            ? job with { Log = [.. job.Log, $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} | {(gap.Blocked.Count > 0 ? "ERROR" : "WARNING"),-8} | Now: {gap.Text}"] }
+            : job;
     }
 
     private async Task SaveAsync(Job job, ComposePlan plan, ProjectUpRequest request, CancellationToken stop)
@@ -212,6 +286,11 @@ public sealed class ProjectRunner(
         var builds = services.Where(service => service.Build is not null).ToList();
         var orphans = request.RemoveOrphans ? Orphans(state, plan) : new List<Existing>();
         job.Expect(newNetworks.Count + newVolumes.Count + builds.Count + services.Count + orphans.Count);
+
+        // Kept before anything is made, not once all of it is: a save that fails half way leaves
+        // the project on the machine, in the list with its containers, and its file has to be
+        // there with it, the very one that was tried, to be opened, read and mended.
+        store.Keep(plan, request.File with { Services = Kept(plan, request, state) });
 
         foreach (var network in newNetworks)
         {
@@ -246,7 +325,6 @@ public sealed class ProjectRunner(
             job.Advance();
         }
 
-        store.Keep(plan, request.File with { Services = Kept(plan, request, state) });
         job.Say(request.Start ? "Started" : "Saved");
     }
 
@@ -386,6 +464,10 @@ public sealed class ProjectRunner(
             await wslc.StreamAsync(args, job.Add, stop);
         }
 
+        // Every build is checked before anything is made from it: under Block,
+        // a vulnerable library fails the job here, with no container made.
+        await security.GuardAsync(images, job.Note, stop);
+
         // The job counts a build a service: the one build is all of theirs.
         foreach (var _ in same)
         {
@@ -409,10 +491,8 @@ public sealed class ProjectRunner(
             throw new InvalidOperationException($"The build context of {string.Join(", ", images)} is not on the agent: it was not sent, or was let go of since. Run the build again from the machine that has the folder.");
         }
 
-        var result = await wslc.RunAsync(["version", "--format", "json"], cancellationToken: stop);
-        var row = WslcJson.ParseRows(result.Stdout).FirstOrDefault();
-        var said = row.ValueKind == JsonValueKind.Object && row.TryGetProperty("Client", out var client) ? client.GetString("Version") : "";
-        if (Version.TryParse(said.Split('-', '+', ' ')[0], out var version) && version < ReadsContextFromInput)
+        var said = await WslcVersion.ReadAsync(wslc, stop);
+        if (WslcVersion.Parse(said) is { } version && version < ReadsContextFromInput)
         {
             throw new InvalidOperationException($"This machine's wslc is {said}, and building from a folder of another machine needs {ReadsContextFromInput} or later, which reads the context sent. Update WSL (wsl --update), or build from a folder of this machine.");
         }
@@ -643,6 +723,9 @@ public sealed class ProjectRunner(
     /// <summary>One save: the step it is at, how far it has got, and what it has printed.</summary>
     private sealed class Job(string id, string name)
     {
+        /// <summary>The project the job is for.</summary>
+        public string Name => name;
+
         private readonly Lock _gate = new();
         private readonly LinkedList<string> _log = new();
         private string _state = ProjectJob.Running;

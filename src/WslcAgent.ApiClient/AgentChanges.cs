@@ -34,8 +34,17 @@ public sealed class AgentChanges(WslcAgentApi api) : IAsyncDisposable
     /// <summary>True while the agent is telling us what changes; false falls the screens back to their own clock.</summary>
     public bool Live { get; private set; }
 
-    /// <summary>Raised when <see cref="Live"/> changed, so a screen can slow down or speed up its own reading.</summary>
+    /// <summary>
+    /// The kinds the agent's <c>wslc</c> reports, as its last complete notice
+    /// said; an agent too old to say leaves <see cref="ChangeNotice.AlwaysReported"/>.
+    /// </summary>
+    public IReadOnlyList<string> Reported { get; private set; } = ChangeNotice.AlwaysReported;
+
+    /// <summary>Raised when <see cref="Live"/> or <see cref="Reported"/> changed, so a screen can slow down or speed up its own reading.</summary>
     public event Action? LiveChanged;
+
+    /// <summary>True when the agent hears of changes to <paramref name="kind"/>, so its list can wait to be told.</summary>
+    public bool Reports(string kind) => Reported.Contains(kind);
 
     /// <summary>Opens the stream the first time a screen asks; later calls are the same one.</summary>
     public void Start() => _reader ??= RunAsync(_stop.Token);
@@ -95,9 +104,25 @@ public sealed class AgentChanges(WslcAgentApi api) : IAsyncDisposable
             if (received.EndOfMessage &&
                 JsonSerializer.Deserialize<ChangeNotice>(Encoding.UTF8.GetString(buffer, 0, received.Count), Json) is { } notice)
             {
+                if (notice.Complete)
+                {
+                    SetReported(notice.Reported ?? ChangeNotice.AlwaysReported);
+                }
+
                 Changed?.Invoke(notice);
             }
         }
+    }
+
+    private void SetReported(IReadOnlyList<string> reported)
+    {
+        if (Reported.SequenceEqual(reported))
+        {
+            return;
+        }
+
+        Reported = reported;
+        LiveChanged?.Invoke();
     }
 
     private void SetLive(bool live)

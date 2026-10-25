@@ -32,7 +32,7 @@
                      ColumnResizeMode="ResizeMode.Container" DragDropColumnReordering="true" ShowColumnOptions="false"
                      MultiSelection="MultiSelection" SelectedItems="SelectedItems" SelectedItemsChanged="SelectedItemsChanged" SelectOnRowClick="false"
                      SortChanged="OnSortChanged"
-                     ChildRowContent="ChildRowContent" RowClassFunc="RowClassFunc">
+                     ChildRowContent="ChildRowContent" RowClassFunc="RowClassFunc" RowStyleFunc="RowStyleFunc">
             <Columns>
                 @Columns
                 @Actions
@@ -62,7 +62,7 @@
                      MultiSelection="MultiSelection" SelectedItems="SelectedItems" SelectedItemsChanged="SelectedItemsChanged" SelectOnRowClick="false"
                      SortChanged="OnSortChanged"
                      CurrentPage="Page" CurrentPageChanged="PageChanged" RowsPerPage="RowsPerPage"
-                     ChildRowContent="ChildRowContent" RowClassFunc="RowClassFunc"
+                     ChildRowContent="ChildRowContent" RowClassFunc="RowClassFunc" RowStyleFunc="RowStyleFunc"
                      PagerContent="Pager">
             <Columns>
                 @Columns
@@ -135,6 +135,9 @@
 
     /// <summary>A class for each row, from the item and its index; a log colours its rows by level this way.</summary>
     [Parameter] public Func<TItem, int, string>? RowClassFunc { get; set; }
+
+    /// <summary>A style for each row, from the item and its index: an image the agent found vulnerable paints its whole row in the alarm's colour this way.</summary>
+    [Parameter] public Func<TItem, int, string>? RowStyleFunc { get; set; }
 
     /// <summary>The sort the user set, so the page can show the cards in the same order.</summary>
     [Parameter] public EventCallback<SortDefinition<TItem>?> SortChanged { get; set; }

@@ -37,6 +37,10 @@ public static class ProjectEndpoints
         group.MapGet("/jobs/{id}", (string id, ProjectRunner runner) => runner.Get(id))
             .WithName("ProjectJob");
 
+        // The last save or build of a project, kept once it ends: the one that went well too.
+        group.MapGet("/{name}/last-job", (string name, ProjectRunner runner) => runner.LastJob(name))
+            .WithName("ProjectLastJob");
+
         // A build context from a client on another machine, in three steps, so that only what
         // the agent lacks travels. Which of the client's files, by their hashes, are not here.
         group.MapPost("/contexts/files/missing", (ContextFiles files, ProjectContexts contexts) => new ContextFiles(contexts.Missing(files.Hashes ?? [])))

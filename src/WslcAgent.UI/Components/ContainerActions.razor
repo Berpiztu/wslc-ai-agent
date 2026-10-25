@@ -68,7 +68,8 @@
         {
             <MudMenuItem Icon="@Icons.Material.Filled.Update" OnClick="UpdateImageAsync">Update image</MudMenuItem>
         }
-        <MudMenuItem Icon="@Icons.Material.Filled.Security" OnClick="ViewImagePackagesAsync">View image packages and CVEs</MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Filled.Security" IconColor="@ImageSecurityFlow.Tone(Container)" Class="@ImageSecurityFlow.TextClass(ImageSecurityFlow.Tone(Container))"
+                     OnClick="ViewImagePackagesAsync">@ImageSecurityFlow.Title</MudMenuItem>
         <MudMenuItem Icon="@Icons.Material.Filled.ContentCopy" OnClick="@(() => CopyRunAsync(false))">Copy run command</MudMenuItem>
         <MudMenuItem Icon="@Icons.Material.Filled.ContentCopy" OnClick="@(() => CopyRunAsync(true))">Copy run command, full variables</MudMenuItem>
         <MudMenuItem Icon="@Icons.Material.Filled.BugReport" OnClick="@(() => Snackbar.Add($"wslc Debug not yet implemented for {Container.Id}", Severity.Info))">Use wslc Debug</MudMenuItem>
@@ -212,10 +213,8 @@
         await Changed.InvokeAsync();
     }
 
-    /// <summary>The raw image inspect JSON under this name, until a real package and CVE view exists.</summary>
-    private Task ViewImagePackagesAsync() =>
-        DialogFlow.ShowAsync<Dialogs.JsonDialog>(Dialogs, "Image packages / CVEs (raw inspect)",
-            new DialogParameters<Dialogs.JsonDialog> { { d => d.Load, (Func<Task<string>>)(async () => (await Api.GetImageInspectAsync(Container.Image)).Json) } }, large: true);
+    /// <summary>The image's Python libraries and their known vulnerabilities (<see cref="ImageSecurityFlow"/>).</summary>
+    private Task ViewImagePackagesAsync() => ImageSecurityFlow.ShowAsync(Dialogs, Container.Image, [Container.Image], patchable: true);
 
     private Task OpenWithBrowserAsync() => BrowserFlow.OpenAsync(Dialogs, Snackbar, Js, Links, Http.BaseAddress, Simulated, Container.Id, Container.Ports, Container.Published);
 

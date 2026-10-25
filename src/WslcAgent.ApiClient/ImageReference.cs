@@ -11,6 +11,19 @@ public static class ImageReference
     /// <summary>The tag a reference means when it names none.</summary>
     public const string Latest = "latest";
 
+    /// <summary>What Zaindari's patch adds to the tag of the image it patches: <c>alpine:latest-patched</c>, built on this machine and published nowhere.</summary>
+    public const string PatchedSuffix = "-patched";
+
+    /// <summary>Whether the reference names a patch Zaindari built (<see cref="PatchedSuffix"/>).</summary>
+    public static bool IsPatched(string image) => Split(image).Tag.EndsWith(PatchedSuffix, StringComparison.Ordinal);
+
+    /// <summary>The image a patch was made from (<c>alpine:latest-patched</c> → <c>alpine:latest</c>); any other reference as it is.</summary>
+    public static string Unpatched(string image)
+    {
+        var (repository, tag) = Split(image);
+        return IsPatched(image) ? $"{repository}:{tag[..^PatchedSuffix.Length]}" : image;
+    }
+
     /// <summary>The repository and the tag; <see cref="Latest"/> when none is named, as wslc reads it.</summary>
     public static (string Repository, string Tag) Split(string image)
     {

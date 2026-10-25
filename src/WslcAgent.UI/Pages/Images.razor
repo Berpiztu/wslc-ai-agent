@@ -32,7 +32,9 @@
         @if (View == ViewMode.Table)
         {
             <ListGrid TItem="ListRow<ImageSummary>" Items="Rows" Loading="Loading" Page="Page" PageChanged="p => Page = p" SortChanged="SortChanged" EmptyText="No images."
-                      MultiSelection="true" @bind-SelectedItems="Selected">
+                      MultiSelection="true" @bind-SelectedItems="Selected"
+                      RowClassFunc="@((row, _) => Alarmed(row.Value) ? $"{CardTone.AlarmClass} wslc-row-alarm" : "")"
+                      RowStyleFunc="@((row, _) => CardTone.Alarm(AlarmOf(row.Value)) ?? "")">
                 <Columns>
                     <SelectColumn T="ListRow<ImageSummary>" Size="Size.Small" StickyLeft="true" HeaderClass="@GridColumn.Select" CellClass="@GridColumn.Select" />
                     @* The dot sorts the list by state: in use first, then the rest. *@
@@ -49,6 +51,13 @@
                                 <ProgressCell Name="@(context.Item.Value.IsDangling ? "<none>" : context.Item.Value.Repository)" Pct="pull.Pct" Status="@pull.Status" Failed="@(pull.State != "running")"
                                               OnLog="@(() => PullFlow.ShowLogAsync(Dialogs, pull.Image, finished: pull.State != "running"))" OnCancel="@(() => CancelPullAsync(pull.Image))"
                                               OnDismiss="@(() => DismissPullAsync(pull.Image))" />
+                            }
+                            else if (context.Item.Value.PatchingTo is { } patching)
+                            {
+                                @* Zaindari's patch being built from this image: the bar moves until it is. *@
+                                <ProgressCell Name="@context.Item.Value.Repository" Indeterminate="true" Status="@($"Patching: building {patching}…")"
+                                              LogTitle="View the patch's output" CancelTitle="Cancel the patch"
+                                              OnLog="@(() => PatchLogAsync(context.Item.Value.PatchJob, patching))" OnCancel="@(() => CancelPatchAsync(context.Item.Value.PatchJob))" />
                             }
                             else
                             {
@@ -85,7 +94,8 @@
         {
             <CardsGrid TItem="ImageSummary" Items="Visible" Loading="Loading" EmptyText="No images.">
                 <ItemTemplate Context="i">
-                    <EntityCard Title="@(i.IsDangling ? "<none>" : i.Repository)" Subtitle="@Dash(i.Tag)" AvatarColor="@(i.InUse ? Color.Success : Color.Default)" Key="@i.Reference">
+                    <EntityCard Title="@(i.IsDangling ? "<none>" : i.Repository)" Subtitle="@Dash(i.Tag)" AvatarColor="@(i.InUse ? Color.Success : Color.Default)" Key="@i.Reference"
+                                BodyTone="@AlarmOf(i)">
                         <HeaderActions>
                             @if (i.InUse)
                             {
@@ -98,6 +108,11 @@
                                 <ProgressRing Pct="pull.Pct" Status="@pull.Status" Failed="@(pull.State != "running")"
                                               OnLog="@(() => PullFlow.ShowLogAsync(Dialogs, pull.Image, finished: pull.State != "running"))" OnCancel="@(() => CancelPullAsync(pull.Image))"
                                               OnDismiss="@(() => DismissPullAsync(pull.Image))" />
+                            }
+                            else if (i.PatchingTo is { } patching)
+                            {
+                                <ProgressRing Pct="0" Status="@($"Patching: building {patching}")" LogTitle="View the patch's output" CancelTitle="Cancel the patch"
+                                              OnLog="@(() => PatchLogAsync(i.PatchJob, patching))" OnCancel="@(() => CancelPatchAsync(i.PatchJob))" />
                             }
                             else
                             {
@@ -229,6 +244,18 @@
         }
     }
 
+    /// <summary>The console of the patch being built from an image; nothing until the patch has its job.</summary>
+    private Task PatchLogAsync(string? job, string patch) =>
+        job is { Length: > 0 } ? PullFlow.ShowBuildLogAsync(Dialogs, job, patch) : Task.CompletedTask;
+
+    private async Task CancelPatchAsync(string? job)
+    {
+        if (job is { Length: > 0 } && await PullFlow.CancelBuildAsync(Dialogs, Api, Snackbar, job))
+        {
+            await RefreshAsync();
+        }
+    }
+
     private async Task CancelPullAsync(string image)
     {
         if (await PullFlow.CancelAsync(Dialogs, Api, Snackbar, image))
@@ -273,4 +300,14 @@
     /// <summary>The id, and under it the manifest digest when the registry gave one.</summary>
     private static string DigestTitle(ImageSummary i) =>
         i.Digest.Length > 0 ? $"{i.Id}\n{i.Digest}" : i.Id;
+
+    /// <summary>
+    /// The alarm an image raises, as a container's card raises one (CardTone.Alarm):
+    /// red or yellow by what Zaindari last found in it (ImageSecurityFlow.Tone), its
+    /// whole row and its whole card; none for an image with nothing against it.
+    /// </summary>
+    private static Color? AlarmOf(ImageSummary image) => ImageSecurityFlow.Tone(image) is var tone && tone != Color.Default ? tone : null;
+
+    private static bool Alarmed(ImageSummary image) => AlarmOf(image) is not null;
+
 }

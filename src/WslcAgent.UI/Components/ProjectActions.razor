@@ -8,7 +8,7 @@
    the project, after asking, and its volumes only after asking about them
    apart.
    A card has room a table row has not, so it leads with the verbs most reached
-   for, the Compose file and the project's logs, at its left end, where a
+   for, the Compose file, the project's logs and the log of its last save, at its left end, where a
    container's card has its own View & edit and Logs, and keeps the row's
    verbs at the far end (Shortcuts). The logs are the containers' as one,
    each line said by its container. The
@@ -26,6 +26,7 @@
     <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center" Class="wslc-row-shortcuts">
         <MudIconButton Icon="@Icons.Material.Filled.EditNote" Size="Size.Small" title="Compose file: view it, and apply it again" Disabled="Locked" OnClick="FileAsync" />
         <MudIconButton Icon="@Icons.Material.Filled.Subject" Size="Size.Small" title="Logs of the project's containers, as one" OnClick="LogsAsync" />
+        <MudIconButton Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Small" title="Log of the project's last save or build, however it ended" OnClick="SaveLogAsync" />
     </MudStack>
 }
 @if (!ShortcutsAlone)
@@ -48,7 +49,10 @@
         {
             <MudMenuItem Icon="@Icons.Material.Filled.EditNote" OnClick="FileAsync">Compose file</MudMenuItem>
             <MudMenuItem Icon="@Icons.Material.Filled.Subject" OnClick="LogsAsync">Logs</MudMenuItem>
+            <MudMenuItem Icon="@Icons.Material.Filled.ReceiptLong" OnClick="SaveLogAsync">Save log</MudMenuItem>
         }
+        <MudMenuItem Icon="@Icons.Material.Filled.Security" IconColor="@ImageSecurityFlow.Tone(Members)" Class="@ImageSecurityFlow.TextClass(ImageSecurityFlow.Tone(Members))"
+                     OnClick="ViewImagePackagesAsync">@ImageSecurityFlow.Title</MudMenuItem>
         <MudMenuItem Icon="@Icons.Material.Filled.ContentCopy" OnClick="CopyFileAsync">Copy Compose file</MudMenuItem>
     </MudMenu>
     <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="Down: remove the project"
@@ -66,6 +70,9 @@
 
     /// <summary>The project's containers, by name: what a down says it removes.</summary>
     [Parameter] public IReadOnlyList<string> Containers { get; set; } = [];
+
+    /// <summary>The project's containers as listed: whose images View image packages and CVEs shows, and the colour it is offered in.</summary>
+    [Parameter] public IReadOnlyList<ContainerSummary> Members { get; set; } = [];
 
     /// <summary>One of its containers runs: the first verb is Stop.</summary>
     [Parameter] public bool Running { get; set; }
@@ -105,6 +112,19 @@
     private Task LogsAsync() =>
         DialogFlow.ShowAsync<Dialogs.ProjectLogsDialog>(Dialogs, $"Logs — {Project}",
             new DialogParameters<Dialogs.ProjectLogsDialog> { { d => d.Project, Project } }, large: true);
+
+    /// <summary>Every image of the project's containers, one after the other, with their libraries and known vulnerabilities.</summary>
+    private Task ViewImagePackagesAsync() =>
+        ImageSecurityFlow.ShowAsync(Dialogs, Project, [.. Members.Select(member => member.Image).Distinct(StringComparer.OrdinalIgnoreCase)]);
+
+    /// <summary>
+    /// The log of the project's last save or build, the one under way or the
+    /// last one kept: a save that went well leaves the table at once, and this
+    /// is where what it did, and what the image check found, is read after.
+    /// </summary>
+    private Task SaveLogAsync() =>
+        DialogFlow.ShowAsync<Dialogs.ProjectLogDialog>(Dialogs, $"Save log — {Project}",
+            new DialogParameters<Dialogs.ProjectLogDialog> { { d => d.Project, Project } }, large: true);
 
     /// <summary>The Compose file kept with the project, as text on the clipboard: to paste into a file, or into another agent's Compose window.</summary>
     private async Task CopyFileAsync()

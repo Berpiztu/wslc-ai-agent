@@ -121,6 +121,34 @@ internal sealed partial class Commands(AgentConnection agent, Arguments argument
         return true;
     }
 
+    /// <summary>
+    /// The project was last saved from another file, and this one is about to
+    /// take its place: two files that give themselves the same name are one
+    /// project, and the second one's up leaves the first one's other services
+    /// behind. Said, and asked on a terminal; --yes answers it, and without a
+    /// terminal to ask on nothing else does. A dry run only says it.
+    /// </summary>
+    private bool Replaces(ProjectPreview preview, string former)
+    {
+        var left = preview.Orphans.Count > 0
+            ? $", and the containers of services it does not have are left over ({string.Join(", ", preview.Orphans)})"
+            : "";
+        var said = $"Project {preview.Name} was last saved from {former}. This file takes its place{left}.";
+        if (arguments.Has(Arguments.Yes) || arguments.Has(Arguments.DryRun))
+        {
+            Terminal.Danger(said);
+            return true;
+        }
+
+        if (Terminal.Ask(said, "Replace it?"))
+        {
+            return true;
+        }
+
+        Terminal.Error(Terminal.CanAsk ? "Not replaced: nothing was done." : "Nothing was done: --yes replaces it.");
+        return false;
+    }
+
     /// <summary>How many lines have the verdict, in the verdict's colour when there are any.</summary>
     private static string Counted(ComposePlan plan, string verdict) =>
         plan.Lines.Count(line => line.Verdict == verdict) is > 0 and var some ? Terminal.Tint($"{some}", Tone(verdict), onError: true) : "0";
@@ -213,6 +241,17 @@ internal sealed partial class Commands(AgentConnection agent, Arguments argument
         // to what the project is kept with, so `up web` and then `up` leave it kept with both.
         var up = new ProjectUpRequest(request, Start: !arguments.Has(Arguments.NoStart), RemoveOrphans: arguments.Has(Arguments.RemoveOrphans), AddServices: true);
         var preview = await Api.PreviewProjectAsync(up, Stop);
+        if (preview.FormerFile is { } former)
+        {
+            if (!Replaces(preview, former))
+            {
+                return Program.Failed;
+            }
+
+            // Said yes to: the agent takes a save from another file only when it is told so.
+            up = up with { ReplaceFile = true };
+        }
+
         if (preview.Edited is { Count: > 0 } edited)
         {
             Terminal.Warning($"Changed by hand since the file made them, and recreated now as the file says ({string.Join(", ", edited)}): what was changed in them is lost, the names they are published on apart.");

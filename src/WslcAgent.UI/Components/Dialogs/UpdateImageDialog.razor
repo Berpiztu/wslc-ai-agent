@@ -1,29 +1,45 @@
 @* Move a container to another version of its image: the repository it runs
    and the version to go to. The agent pulls it, then recreates the container
-   with everything else it has; the dialog closes and the container's row shows the pull. *@
+   with everything else it has; the dialog closes and the container's row shows the pull.
+   Zaindari's Patch…, beside the Version (PatchOffer), says, once it has asked, whether the image named
+   carries what pulling it again does not mend; its Patch… opens the patch
+   editor Zaindari's window opens (PatchImageDialog), with this container
+   ticked: the patch is built and moves it, and this dialog closes. A
+   container that runs a patch is offered its original, as published. *@
 @using WslcAgent.ApiClient
 @inject WslcAgentApi Api
+@inject IDialogService Dialogs
 
-<FormDialog SubmitText="Update" BusyText="Starting…" OnSubmit="UpdateAsync">
+<FormDialog SubmitText="Update" BusyText="Starting…" OnSubmit="UpdateAsync" Waiting="_checking">
     <MudTextField T="string" Value="Current" Label="Current image" ReadOnly="true" Variant="Variant.Filled" Margin="Margin.Dense" />
-    <MudTextField T="string" Value="_repository" ValueChanged="@(text => _repository = ImageReference.Normalize(text ?? ""))" Label="Repository" Immediate="true"
+    <MudTextField T="string" Value="_repository" ValueChanged="@(text => _repository = ImageReference.Normalize(text ?? ""))" Label="Repository" Immediate="true" OnBlur="CheckPatchAsync"
                   Required="true" RequiredError="A repository is required"
                   autocapitalize="none" autocorrect="off" spellcheck="false"
                   Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
-    <MudTextField T="string" @bind-Value="_version" Label="Version" Placeholder="1.5" Immediate="true"
-                  Required="true" RequiredError="A version is required"
-                  autocapitalize="none" autocorrect="off" spellcheck="false"
-                  Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+    @* Zaindari's Patch… and its note beside the Version, the image the update goes to. *@
+    <div class="wslc-field-beside mt-2">
+        <MudTextField T="string" @bind-Value="_version" Label="Version" Placeholder="1.5" Immediate="true" OnBlur="CheckPatchAsync"
+                      Required="true" RequiredError="A version is required"
+                      autocapitalize="none" autocorrect="off" spellcheck="false"
+                      Variant="Variant.Filled" Margin="Margin.Dense" />
+        <PatchOffer Image="@Target" Checking="_checking" Report="_report" OnPatch="PatchAsync" />
+    </div>
     <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
         The image is pulled, then the container is recreated with its ports, mounts, environment and name. If the new version does not start, the previous container stays as it was.
         Leave latest for the version published last, or type one (1.4) to go to that one, or back to it.
     </MudText>
+    @if (ImageReference.IsPatched(Current))
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">@Current is a patch built on this machine: Update goes to the image as published; Patch… patches it again.</MudText>
+    }
 </FormDialog>
 
 @code {
     private string _repository = "";
     /// <summary>latest unless another is typed: the version published last, which is what an update usually wants.</summary>
     private string _version = ImageReference.Latest;
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
 
     [Parameter, EditorRequired] public string Container { get; set; } = "";
 
@@ -33,11 +49,55 @@
     /// <summary>Told the image being pulled, once the update has started.</summary>
     [Parameter, EditorRequired] public Action<string> Started { get; set; } = default!;
 
-    protected override void OnInitialized() => _repository = ImageReference.RepositoryOf(ImageReference.Normalize(Current));
+    /// <summary>What Zaindari found on the image named, when it is on the machine.</summary>
+    private ImageVulnerabilities? _report;
+
+    /// <summary>Zaindari is being asked about the image named: the wheel turns and Update waits.</summary>
+    private bool _checking;
+
+    private string Target => $"{_repository}:{_version.Trim()}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _repository = ImageReference.RepositoryOf(ImageReference.Normalize(Current));
+        await CheckPatchAsync();
+    }
+
+    /// <summary>Asks Zaindari about the image named once a field is left.</summary>
+    private async Task CheckPatchAsync()
+    {
+        if (_report?.Image == Target)
+        {
+            return;
+        }
+
+        _checking = true;
+        try
+        {
+            _report = await Api.GetImageVulnerabilitiesAsync(Target);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _report = null;
+        }
+        finally
+        {
+            _checking = false;
+        }
+    }
+
+    /// <summary>The patch editor, this container ticked; once the patch has started, it moves the container and this dialog closes.</summary>
+    private async Task PatchAsync()
+    {
+        if (_report is { Found: true } report && await ImageSecurityFlow.ShowPatchAsync(Dialogs, report, [Container]))
+        {
+            Dialog.Cancel();
+        }
+    }
 
     private async Task UpdateAsync()
     {
-        var pull = await Api.UpdateContainerImageAsync(Container, $"{_repository}:{_version.Trim()}");
+        var pull = await Api.UpdateContainerImageAsync(Container, Target);
         Started(pull.Image);
     }
 }

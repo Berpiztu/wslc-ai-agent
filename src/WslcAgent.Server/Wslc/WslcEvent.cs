@@ -9,9 +9,9 @@ namespace WslcAgent.Server.Wslc;
 /// <param name="Time">When the CLI says it happened.</param>
 /// <param name="Type">The object's kind as the CLI names it: <c>container</c>, <c>network</c>, <c>image</c>, <c>volume</c>.</param>
 /// <param name="Action">What happened to it: <c>start</c>, <c>kill</c>, <c>die</c>, <c>stop</c>, <c>health_status: unhealthy</c>, <c>connect</c>, <c>disconnect</c>, …</param>
-/// <param name="Id">The object the action is about, by its full id.</param>
+/// <param name="Id">The object the action is about, by its full id; empty on an aggregate <c>prune</c>, which names none.</param>
 /// <param name="ExitCode">A container's exit code, on its <c>die</c> (wslc 3.0.2 on) or its <c>stop</c> (before); null on anything else.</param>
-/// <param name="Name">The object's name (its <c>name</c> attribute), for the Recent events list; null when the line has none.</param>
+/// <param name="Name">The object's name (its <c>name</c> attribute, a volume's id), for the Recent events list; null when the line has none.</param>
 public sealed record WslcEvent(DateTimeOffset Time, string Type, string Action, string Id, int? ExitCode = null, string? Name = null)
 {
     /// <summary>What the agent tells its clients: kind and action, without the id's noise.</summary>
@@ -25,7 +25,11 @@ public sealed record WslcEvent(DateTimeOffset Time, string Type, string Action, 
 /// 2026-09-22T19:33:11.000000000-05:00 container stop 8449a1cce27f… (exitCode=137, image=alpine:latest, name=jade_wasatch)
 /// 2026-10-07T09:12:40.123456789Z container die 8449a1cce27f… (execDuration=12, exitCode=1, image=alpine:latest, name=jade_wasatch)
 /// 2026-10-07T09:13:02.000000000Z container health_status: unhealthy 8449a1cce27f… (image=alpine:latest, name=jade_wasatch)
+/// 2026-10-19T20:30:05.000000000-05:00 volume create pgdata (driver=local)
+/// 2026-10-19T20:31:40.000000000-05:00 volume prune  (reclaimed=4096)
 /// </code>
+/// Volumes are there from wslc 3.0.4. A volume's id is its name, and its
+/// events carry no <c>name</c> attribute, so the id is its name here too.
 /// The fields before the bracket are all that is read, the action being two
 /// words when the first ends in a colon (a health status). What follows is
 /// the object's attributes, and an image label's own value carries commas and
@@ -57,16 +61,27 @@ public static class WslcEventParsing
             return null;
         }
 
-        if (!fields[2].EndsWith(':'))
+        var health = fields[2].EndsWith(':');
+        if (health && fields.Length < 5)
         {
-            var attributes = fields.Length > 4 ? string.Join(' ', fields[4..]) : "";
-            return new WslcEvent(time, fields[1], fields[2], fields[3], ExitCodeOf(attributes), AttributeOf(attributes, "name="));
+            return null;
         }
 
-        return fields.Length < 5
-            ? null
-            : new WslcEvent(time, fields[1], $"{fields[2]} {fields[3]}", fields[4], Name: AttributeOf(fields.Length > 5 ? fields[5] : "", "name="));
+        var type = fields[1];
+        var (id, attributes) = health ? Actor(fields[4..]) : Actor(fields[3..]);
+        return new WslcEvent(time, type, health ? $"{fields[2]} {fields[3]}" : fields[2], id, ExitCodeOf(attributes),
+            AttributeOf(attributes, "name=") ?? (type == "volume" && id.Length > 0 ? id : null));
     }
+
+    /// <summary>
+    /// The object's id and its attributes, from what follows the action. An
+    /// aggregate prune names no object, and the CLI prints its empty id as a
+    /// second space: the bracket then stands where the id would.
+    /// </summary>
+    private static (string Id, string Attributes) Actor(string[] rest) =>
+        rest[0].StartsWith('(')
+            ? ("", string.Join(' ', rest))
+            : (rest[0], string.Join(' ', rest[1..]));
 
     /// <summary>The number of the <c>exitCode</c> attribute; null when there is none.</summary>
     private static int? ExitCodeOf(string attributes) =>

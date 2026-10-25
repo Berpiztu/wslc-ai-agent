@@ -124,9 +124,14 @@ component uses the controls below with these parameters and never adds
   `MudIconButton Size="Size.Small" Variant="Variant.Filled"` with a Material
   icon in its verb's colour (green starts, blue does or does again, light
   blue takes a copy out, amber takes back, red destroys or wipes). A toggle
-  says its state the way a switch does: on it is green (`Color.Success`, what
-  everything chosen wears) and drawn pressed into the rail (`wslc-rail-on`),
-  off it is neutral and stands proud of it like every other button there. The
+  says its state by its colour (`RailToggle`): blue (`Color.Primary`) while it
+  is on, green (`Color.Success`) while it is off. The log viewer's level keys
+  (Info, Warning, Error) are keys instead: each in the colour its lines wear,
+  read from the same variable (`--wslc-level-info`, `-warning`, `-error`, and
+  their `-ink`), held down and sunk into the rail while its lines are shown
+  (`wslc-key-down`, as the table/cards key in use), standing proud while they
+  are hidden (`wslc-key-up`). A colour, a size or a text that means something
+  is defined once, and whatever shows it reads it from there. The
   exec window's rail holds every verb it has — Connect, Reconnect, Copy,
   Clear — because its pane takes the rest: a command is typed in the shell
   itself, not in a Command field over it. The search bar (`.wslc-action-search`)
@@ -392,7 +397,7 @@ Body lines are `Typo.body2` with the label in bold; secondary lines
   Toasts stay for what does not answer a click on the page: dialogs' own
   results, the agent's and the client's updates, unexpected errors.
 - Toasts appear top right, over the title bar: its height (36px), the application's body type, sliding in from the edge (position set once in `AddWslcAgentUi`, the rest in `wslc-agent-ui.css`). Held in the hand they come down under the title bar, across the top, the same toast (`Toasts`; the bottom edge is the status bar).
-- Confirmations: `DialogFlow.ConfirmAsync(Dialogs, "Remove container", "Remove {name} ({id})? This cannot be undone.", "Remove", destructive: true)` (`ConfirmRemoveAsync` for removals); the yes text is the verb, drawn in `Color.Error` when destructive and `Color.Primary` otherwise; never MudBlazor's message box.
+- Confirmations: `DialogFlow.ConfirmAsync(Dialogs, "Remove container", "Remove {name} ({id})? This cannot be undone.", "Remove", destructive: true)` (`ConfirmRemoveAsync` for removals); the yes text is the verb, drawn in `Color.Error` when destructive and `Color.Primary` otherwise; never MudBlazor's message box. What cannot be undone and is easily done by mistake (a project's file replaced by another) uses `DialogFlow.ConfirmIrreversibleAsync`: a filled `Severity.Error` alert above the message, and the verb enabled only once the name of what is lost is typed.
 - Picker dialogs (`NamedPickerDialog`, `HostFolderPickerDialog`), one
   composition: compact (`DialogFlow.PickAsync`, no close cross),
   the verbs in the title row after the title: Create / New (`Color.Primary`),

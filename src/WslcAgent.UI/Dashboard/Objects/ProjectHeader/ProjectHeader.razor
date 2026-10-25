@@ -20,7 +20,7 @@
         <EntityCardPart>
             <EntityCardHeader Title="@ProjectRow.Titled(head.Name)" Subtitle="@head.Image" AvatarColor="@StateColors.For(head.State)" Key="@head.Id" Avatar="@Ring(head)" Tone="@CardTone.Of(head)">
                 <HeaderActions>
-                    <StateChip State="@head.State" />
+                    <StateChip State="@head.State" Warned="@Members.Any(member => member.IsWarned || member.MissingServices is { Count: > 0 })" Cve="@ImageSecurityFlow.Worst(Members)" Tone="@ImageSecurityFlow.Tone(Members)" Patched="@ImageSecurityFlow.IsPatched(Members)" />
                 </HeaderActions>
             </EntityCardHeader>
         </EntityCardPart>

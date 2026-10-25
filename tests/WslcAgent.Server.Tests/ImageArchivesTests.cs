@@ -36,7 +36,9 @@ public sealed class ImageArchivesTests(WebApplicationFactory<Program> factory)
         }
 
         Assert.Equal("done", job?.State);
-        Assert.Equal(["#1 load", "#2 done"], job?.Output);
+        // What wslc printed, then the security check of the image it built.
+        Assert.Equal(["#1 load", "#2 done"], job!.Output.Take(2));
+        Assert.Contains(job.Output, line => line.Contains("Checking app:1's Python libraries", StringComparison.Ordinal));
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/v1/images/build", new BuildImageRequest(""))).StatusCode);
     }
 

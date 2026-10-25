@@ -3,7 +3,9 @@
    every step the agent takes and what the builds print, the lines coloured by
    level, with the view's rail (search, wrap, autorefresh, refresh, jump to
    end, copy). Close leaves the save running; Cancel, there while it runs,
-   stops it, after asking. *@
+   stops it, after asking. Opened on a project (Project) rather than a job,
+   it is the project's last save or build: the one under way, or the last one
+   kept however it ended, so a save that went well can still be read. *@
 @inject WslcAgentApi Api
 @inject IDialogService Dialogs
 @inject ISnackbar Snackbar
@@ -28,13 +30,29 @@
 
     [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
 
-    /// <summary>The id of the project's job on the agent.</summary>
-    [Parameter, EditorRequired] public string Job { get; set; } = "";
+    /// <summary>The id of the project's job on the agent; empty when <see cref="Project"/> is given.</summary>
+    [Parameter] public string Job { get; set; } = "";
+
+    /// <summary>The project whose last save or build is shown, whichever job that is.</summary>
+    [Parameter] public string Project { get; set; } = "";
+
+    /// <summary>The job read last: what Cancel stops.</summary>
+    private string _job = "";
 
     /// <summary>What the view shows: the job's log as it is now. Each read also says whether the save still runs, which is when Cancel is offered.</summary>
     private async Task<string> ReadAsync()
     {
-        var job = await Api.GetProjectJobAsync(Job);
+        ProjectJob job;
+        try
+        {
+            job = Project.Length > 0 ? await Api.GetProjectLastJobAsync(Project) : await Api.GetProjectJobAsync(Job);
+        }
+        catch (AgentApiException ex) when (ex.StatusCode == 404 && Project.Length > 0)
+        {
+            return "No save or build of this project has been kept yet.";
+        }
+
+        _job = job.Id;
         var running = job.State == ProjectJob.Running;
         if (running != _running)
         {
@@ -47,5 +65,5 @@
     }
 
     /// <summary>The window stays open on a cancelled save: its last lines say where it stopped.</summary>
-    private Task CancelAsync() => ProjectFlow.CancelAsync(Dialogs, Api, Snackbar, Job);
+    private Task CancelAsync() => ProjectFlow.CancelAsync(Dialogs, Api, Snackbar, _job);
 }

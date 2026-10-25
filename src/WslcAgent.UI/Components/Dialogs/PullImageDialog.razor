@@ -1,7 +1,9 @@
 @* Pull an image by reference: from the header row (empty) or a row's menu
    (prefilled). The agent runs the pull; the dialog closes at once, the
    title bar's activity line says it from its start to its end, and the
-   Images table shows its progress, its console and a way to stop it. *@
+   Images table shows its progress, its console and a way to stop it.
+   A patch Zaindari built (…-patched) is published nowhere: its pull is the
+   one of the image it was made from, which the field is filled with. *@
 @using WslcAgent.ApiClient
 @inject PullActivity Pulls
 
@@ -16,6 +18,10 @@
        tags, every tag of the repository, which nobody pulls. *@
     <SquareCheckBox Value="_latest" ValueChanged="@(on => _latest = on)" Label="Latest"
                     title="Pull the latest tag of the image named; clear it to pull the tag typed after the name" />
+    @if (_patchedFrom.Length > 0)
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">@_patchedFrom is a patch built on this machine and published nowhere: the pull is of the image it was made from.</MudText>
+    }
     <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">The pull runs on the agent: follow it, open its output or stop it from the Images table.</MudText>
 </FormDialog>
 
@@ -23,9 +29,16 @@
     private string _reference = "";
     private bool _latest = true;
 
+    /// <summary>The patch the dialog was opened for, whose original it pulls; empty for any other image.</summary>
+    private string _patchedFrom = "";
+
     [Parameter] public string Reference { get; set; } = "";
 
-    protected override void OnInitialized() => Typed(Reference);
+    protected override void OnInitialized()
+    {
+        _patchedFrom = ImageReference.IsPatched(Reference) ? Reference : "";
+        Typed(ImageReference.Unpatched(Reference));
+    }
 
     private void Typed(string text)
     {

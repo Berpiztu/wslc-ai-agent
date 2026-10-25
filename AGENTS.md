@@ -51,7 +51,10 @@ MudBlazor, .NET MAUI Blazor Hybrid, the official MCP C# SDK.
   them on. Keep it that way for any new one.
 - **Reuse.** One component per concept: one list-page shell
   ([docs/list-pages.md](docs/list-pages.md)), one picker and one creator per
-  resource. Extract duplicated logic before it appears a third time.
+  resource. Extract duplicated logic before it appears a third time. One
+  value per meaning: a colour, a size or a text that means something is
+  defined once (a `--wslc-…` variable, a constant) and everything that shows
+  it reads it from there; never a copy of the value.
 - **Controls** take the parameters in [docs/ui-controls.md](docs/ui-controls.md).
   Type sizes and form fields follow [docs/RULES.md](docs/RULES.md); do not
   change that scale or the CSS behind fields without an agreed issue.

@@ -29,12 +29,7 @@ public static class AgentEndpoints
     {
         try
         {
-            var result = await wslc.RunAsync(["version", "--format", "json"], cancellationToken: ct);
-            var row = WslcJson.ParseRows(result.Stdout).FirstOrDefault();
-            var wslcVersion = row.ValueKind == System.Text.Json.JsonValueKind.Object && row.TryGetProperty("Client", out var client)
-                ? client.GetString("Version")
-                : "";
-            return new VersionResponse(info.Version, wslcVersion);
+            return new VersionResponse(info.Version, await WslcVersion.ReadAsync(wslc, ct));
         }
         catch (WslcNotFoundException)
         {

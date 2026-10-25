@@ -1,7 +1,7 @@
 # WSLC AI Agent
 
-A **local agent, desktop, Compose and MCP server for WSLC** (Windows Subsystem
-for Linux Containers), with its skill included, so Claude, Hermes, OpenClaw and other
+A **local agent, desktop, Compose, Zaindari and MCP server for WSLC** (Windows
+Subsystem for Linux Containers), with its skill included, so Claude, Hermes, OpenClaw and other
 AI agents can operate your WSLC infrastructure: containers, images, volumes,
 networks and sessions. Destructive actions are off by default; switched on,
 each one still asks your approval.
@@ -12,6 +12,10 @@ from anywhere.
 
 **Compose, today**: `wslc` cannot run a Compose file yet, and
 `wslc-compose up -d` runs yours, from the command line, the web and the apps.
+
+**New: Zaindari**, Basque for safekeeper: it watches over your containers' images,
+checking their libraries and system packages for known vulnerabilities before a container is made
+from them, and whenever you ask ([how it works](docs/features/zaindari.md)).
 
 It is the small Windows process that sits next to `wslc`, talks to it for you,
 and exposes what it knows over HTTP, in a browser, in native apps and through
@@ -204,23 +208,26 @@ it its list of libraries after. A release goes out only with a list
 security-watch has checked.
 
 The same care then turned to the containers. Every image the agent builds
-has its Python libraries checked against OSV.dev, read from the image's own
-files without running anything in it, and one moderate or worse stops the
-build. Then the check moved to every container: before it is made, by Run,
-Create, an edit, an image update or a project's save, and before it starts.
+has its Python libraries and its system packages checked against OSV.dev,
+read from the image's own files without running anything in it, and one
+moderate or worse stops the build. Then the check moved to every new
+container: before it is made, by Run, Create, an edit, an image update or a
+project's save.
 The rule follows who can mend the image:
 
-- **An image built here** is yours to mend: while it is vulnerable, no
-  container of it is made or started. Build it again with the version the
-  check names.
-- **An image from a registry** is not: its containers always start, and are
-  marked instead, the state chip saying CVE in yellow or in red, with what
-  was found at the end of their logs. Whether it runs is yours to decide.
-- **A container that runs** is never stopped by the check.
+- **An image built here** is yours to mend: while it is vulnerable, no new
+  container of it is made, and its build stops. Build it again with the
+  version the check names.
+- **An image from a registry** is not: containers are made from it as
+  always, and marked, red or yellow. Whether one runs is yours to decide.
+- **A container that exists** is started, stopped and restarted as always:
+  the check never stops what runs.
 
-Each image's libraries and every vulnerability known for them are one click
-away, from a container's, a project's or an image's menu, least severe
-first.
+The check got a name, Zaindari, Basque for safekeeper. What it finds is kept
+on the image, which turns red or yellow on the Images page, and its
+containers say CVE in the same colour. Every vulnerability known for an
+image is one click away, from a container's, a project's or an image's
+menu, least severe first.
 
 `wslc` can still be used around the agent, and the agent now notices: a
 project with a service whose container is gone, and another container
@@ -258,6 +265,21 @@ its own previews, the first of them 1.6.4, for WSL 3.0.4.
   standard input since WSL 3.0.3. Only the files the agent lacks travel: a
   Dockerfile changed in a folder of fifty megabytes is sent as a Dockerfile.
   The Compose window does the same from a folder of your device.
+- **New: Zaindari, the safekeeper of your images.** Every image the agent
+  builds, and every image before a container is made from it, has its
+  Python libraries and its system packages (Alpine, Debian, Ubuntu) read in
+  the image itself, never run, and checked against the public vulnerability
+  database, OSV.dev. An image built here with a
+  vulnerability of moderate severity or worse stops the build and makes no
+  new container, naming the version that fixes it; one from a registry is
+  marked, never stopped: whether it runs is yours to decide. A marked image
+  is red or yellow on the Images page, and its containers say CVE in the
+  same colour. *Zaindari: check vulnerabilities*, in every container's,
+  project's and image's menu, checks it again there and then. When a system
+  package or a Python library has a fix its image does not carry yet,
+  *Patch* builds the image again with them upgraded and any command of yours
+  added, as a Windows update patches Windows, and moves its containers to it. Settings → Security sets whether it
+  stops, only warns, or is off ([how it works](docs/features/zaindari.md)).
 - **An MCP agent for WSLC, skill included for Claude, Hermes, OpenClaw,
   etc.**: 55 tools, the destructive ones off by default and asking your
   approval once switched on, and a skill installed with one click. One Windows program beside `wslc` that runs in
@@ -631,3 +653,5 @@ Python dashboard for `wslc` and was rebuilt in .NET before it was published:
 [the history of the project](#the-history-of-the-project).
 
 Special thanks to Alex, the AI agent who helped me create this project.
+And if Zaindari puzzles you, the name is Alex's idea: Basque for safekeeper,
+the one who watches over the flock, here your containers.

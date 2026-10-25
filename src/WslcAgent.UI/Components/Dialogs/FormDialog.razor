@@ -7,7 +7,7 @@
     <TitleContent>
         <DialogTitle Title="@Dialog.Title">
             <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="Cancel" Disabled="_busy">Cancel</MudButton>
-            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="SubmitAsync" Disabled="_busy">@(_busy ? BusyText : SubmitText)</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="SubmitAsync" Disabled="@(_busy || Waiting)">@(_busy ? BusyText : SubmitText)</MudButton>
         </DialogTitle>
     </TitleContent>
     <DialogContent>
@@ -39,10 +39,30 @@
     /// <summary>The action; an <see cref="AgentApiException"/> or <see cref="HttpRequestException"/> keeps the dialog open with the message.</summary>
     [Parameter, EditorRequired] public Func<Task> OnSubmit { get; set; } = default!;
 
+    /// <summary>Something the form shows is still being found out (Zaindari's patch offer): the verb waits for it.</summary>
+    [Parameter] public bool Waiting { get; set; }
+
+    private bool _waitingShown;
+
+    /// <summary>The buttons live in the dialog's own tree: told to repaint when the verb starts or stops waiting.</summary>
+    protected override void OnParametersSet()
+    {
+        if (_waitingShown != Waiting)
+        {
+            _waitingShown = Waiting;
+            Dialog.StateHasChanged();
+        }
+    }
+
     private void Cancel() => Dialog.Cancel();
 
     private async Task SubmitAsync()
     {
+        if (Waiting)
+        {
+            return;
+        }
+
         await _form.ValidateAsync();
         if (!_form.IsValid)
         {

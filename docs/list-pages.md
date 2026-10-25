@@ -328,8 +328,8 @@ Menu entries and buttons use `Icons.Material.Filled`, one icon per action
 across the application (the table in `docs/ui-controls.md`, Icons). No entry is disabled by
 the row's state (the CLI answers). An entry a
 later slice brings stays in place and says so through `NotYet`. The
-containers menu, complete: View details · View & edit · View image packages
-and CVEs (`JsonDialog` over `/images/inspect`) · Copy run command · Open in
+containers menu, complete: View details · View & edit · Zaindari: check
+vulnerabilities (`ImageVulnerabilitiesDialog` over `/image-security/vulnerabilities`) · Copy run command · Open in
 terminal (terminal slice) · Use wslc Debug (not built yet: a toast
 says so) · View files (files slice) · Restart · Open with browser
 (`OpenPortDialog`, every published port as a link; the `PortsLink` opens the

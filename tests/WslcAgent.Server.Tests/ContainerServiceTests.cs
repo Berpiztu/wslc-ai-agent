@@ -25,7 +25,13 @@ public sealed class ContainerServiceTests
         var restarter = new ContainerRestarter(runner, policies, NullLogger<ContainerRestarter>.Instance);
         var publishing = new Publishing.PublishingService(publications, new Publishing.PublishingSettingsStore(options), networks, new FakePublishedPlugin(), NullLogger<Publishing.PublishingService>.Instance);
         return new ContainerService(runner, networks, policies, publications, publishing, restarter, registry, new ContainerRecreations(), new ImageUpdatesUnderWay(), new WslcEvents(),
-            new ProjectDependencies(new ProjectStore(options), new ProjectService(), runner), new StartFailures(), NullLogger<ContainerService>.Instance);
+            new ProjectDependencies(new ProjectStore(options), new ProjectService(), runner), new StartFailures(),
+            new Images.ImageSecurity(runner, new HttpClient(), new Images.ImageSecuritySettingsStore(options), NullLogger<Images.ImageSecurity>.Instance),
+            new Images.ImageMarks(options, NullLogger<Images.ImageMarks>.Instance),
+            new Images.ContainerAudit(new Images.ImageSecurity(runner, new HttpClient(), new Images.ImageSecuritySettingsStore(options), NullLogger<Images.ImageSecurity>.Instance),
+                new Images.ImageMarks(options, NullLogger<Images.ImageMarks>.Instance), new WslcEvents(), NullLogger<Images.ContainerAudit>.Instance),
+            new ProjectGaps(new ProjectStore(options), new ProjectDependencies(new ProjectStore(options), new ProjectService(), runner), NullLogger<ProjectGaps>.Instance),
+            NullLogger<ContainerService>.Instance);
     }
 
     [Fact]

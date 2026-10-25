@@ -39,14 +39,16 @@
                     {
                         @* MudSimpleTable sets each row's colour to inherit, over a class on the row: the tone goes on its cells. *@
                         var tone = Tone(member);
+                        @* A container that failed, or whose image has known vulnerabilities: its row in the red or the yellow its card wears (CardTone.Alarm). *@
+                        var warned = Alarmed(member);
                         <tr @key="member.Id" title="@(member.HasFailed ? member.Failure : null)">
-                            <td class="wslc-col-dot"><StateDot Active="member.IsRunning" Title="running" Key="@member.Id" Working="@(member.IsRecreating || member.IsUpdating)" /></td>
-                            <td class="@tone">@Readings.Dash(member.Service)</td>
-                            <td class="@tone">@member.Name</td>
-                            <td class="@tone">@member.Status</td>
-                            <td><PortsLink Ports="member.Ports" Container="@member.Id" Publications="member.Published" /></td>
-                            <td class="@($"wslc-col-num {tone}")">@(member.IsRunning ? Readings.Dash(member.CpuPercent) : "—")</td>
-                            <td class="@($"wslc-col-num {tone}")">@Memory(member)</td>
+                            <td class="@($"wslc-col-dot {warned.Class}")" style="@warned.Style"><StateDot Active="member.IsRunning" Title="running" Key="@member.Id" Working="@(member.IsRecreating || member.IsUpdating)" /></td>
+                            <td class="@($"{tone} {warned.Class}")" style="@warned.Style">@Readings.Dash(member.Service)</td>
+                            <td class="@($"{tone} {warned.Class}")" style="@warned.Style">@member.Name</td>
+                            <td class="@($"{tone} {warned.Class}")" style="@warned.Style">@member.Status</td>
+                            <td class="@warned.Class" style="@warned.Style"><PortsLink Ports="member.Ports" Container="@member.Id" Publications="member.Published" /></td>
+                            <td class="@($"wslc-col-num {tone} {warned.Class}")" style="@warned.Style">@(member.IsRunning ? Readings.Dash(member.CpuPercent) : "—")</td>
+                            <td class="@($"wslc-col-num {tone} {warned.Class}")" style="@warned.Style">@Memory(member)</td>
                         </tr>
                     }
                 </tbody>
@@ -62,7 +64,11 @@
     /// written in; a running one as the object's text.
     /// </summary>
     private string Tone(ContainerSummary member) =>
-        member.HasFailed ? "mud-error-text" : member.IsRunning || Instance.Foreground is not null ? "" : "mud-text-secondary";
+        member.HasFailed || member.IsWarned || member.IsRunning || Instance.Foreground is not null ? "" : "mud-text-secondary";
+
+    /// <summary>The red a row takes when its container failed, or the yellow when its image has known vulnerabilities, with black ink.</summary>
+    private static (string Class, string? Style) Alarmed(ContainerSummary member) =>
+        CardTone.Alarm(member.HasFailed ? Color.Error : member.IsWarned ? Color.Warning : null) is { } alarm ? (CardTone.AlarmClass, alarm) : ("", null);
 
     /// <summary>Its share and what that is ("0.7% · 52MiB"); a dash while it is not running, when there is nothing to measure.</summary>
     private static string Memory(ContainerSummary member) =>

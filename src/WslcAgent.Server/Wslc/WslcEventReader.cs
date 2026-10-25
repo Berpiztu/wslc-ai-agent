@@ -47,6 +47,9 @@ public sealed class WslcEventReader(
     /// <summary>A stream that lasted this long was a real one: the next failure starts the wait over.</summary>
     private static readonly TimeSpan Settled = TimeSpan.FromSeconds(30);
 
+    /// <summary>The first <c>wslc</c> whose events report volumes: created, mounted, unmounted, destroyed, pruned.</summary>
+    private static readonly Version ReportsVolumes = new(3, 0, 4);
+
     private readonly HashSet<string> _pending = [];
     private readonly Lock _gate = new();
     private Task? _flush;
@@ -104,7 +107,8 @@ public sealed class WslcEventReader(
             // Every arrival is a fresh start: what happened while nothing was
             // listening was never reported, and --since cannot fill it either —
             // the event store starts empty with the session.
-            events.Publish(ChangeNotice.Everything);
+            events.Reported = await ReportedKindsAsync(stoppingToken);
+            events.Publish(events.Everything);
             recent.Listening(_session);
             events.Live = true;
             _lastWord = "";
@@ -187,6 +191,26 @@ public sealed class WslcEventReader(
 
         _waiting = !running;
         return running;
+    }
+
+    /// <summary>
+    /// The kinds this machine's <c>wslc</c> reports, asked every time a stream
+    /// opens: updating WSL takes the session down, so a new <c>wslc</c> always
+    /// comes with a new stream. One that does not say its version is taken for
+    /// one that reports the fewest, whose volume list keeps its own clock.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> ReportedKindsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return WslcVersion.Parse(await WslcVersion.ReadAsync(wslc, cancellationToken)) is { } version && version >= ReportsVolumes
+                ? [.. ChangeNotice.AlwaysReported, ChangeNotice.Volume]
+                : ChangeNotice.AlwaysReported;
+        }
+        catch (Exception failed) when (failed is not OperationCanceledException)
+        {
+            return ChangeNotice.AlwaysReported;
+        }
     }
 
     /// <summary>The pause before the next look; false when the agent is stopping.</summary>
