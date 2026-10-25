@@ -23,7 +23,7 @@ versionCode is the client's version as one number (`1.0.18` is `100018000`,
 | A patch | `1.6.1.4` | `.\deploy-release.ps1`: the next fourth part after every build |
 | A release for a WSL preview | `1.6.4` | `-Version 1.6.4`: WSL 3.0.4's patch number as the third part |
 | Its patches | `1.6.4.1`, `1.6.4.2`… | `.\deploy-release.ps1`, as any patch |
-| That WSL made official | `1.7.0` | `-Version 1.7.0`: the next minor |
+| `develop` made official | `1.7.0` | `-Version 1.7.0` on `main`: the next minor, when `develop` goes to `main` or its WSL is made official |
 
 Local builds and patches share the fourth part as one counter, so a patch is
 always above the builds before it and neither ever takes the other's number.
