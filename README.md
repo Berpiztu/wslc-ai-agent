@@ -27,7 +27,7 @@ products are **WSLC AI Agent** (the agent, `wslc-ai-agent.exe`) and
 
 <!-- The same text as docs/history.md: a change to the story is made in both. -->
 
-### A Python dashboard (June 2026)
+### From a simple Python dashboard (June 2026) to a full-featured solution today: an AI agent and MCP server, web, desktop and Android, Compose and Zaindari
 
 WSLC AI Agent began on 2026-06-30 as a small Python project, `wslc-dashboard`:
 a simpler Docker Desktop for everyday use, for the containers WSL had just

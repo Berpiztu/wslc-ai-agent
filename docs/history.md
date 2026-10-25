@@ -1,6 +1,6 @@
 # The history of the project
 
-## A Python dashboard (June 2026)
+## From a simple Python dashboard (June 2026) to a full-featured solution today: an AI agent and MCP server, web, desktop and Android, Compose and Zaindari
 
 WSLC AI Agent began on 2026-06-30 as a small Python project, `wslc-dashboard`:
 a simpler Docker Desktop for everyday use, for the containers WSL had just
