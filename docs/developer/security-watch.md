@@ -20,6 +20,11 @@ scripts do not.
 The build asks first: `status/wslc-ai-agent.json`, for the branch it is on
 (or the release tag, on a release's build on GitHub).
 
+On `main` and `develop` the build is judged on the libraries it uses: when
+the list security-watch holds is not this checkout's (a package or the SDK
+raised), this one is sent first and its answer waited for, three minutes at
+most; the list held says nothing of this build.
+
 - A library with a vulnerability **moderate or worse**, or a .NET SDK
   whose runtime a .NET security release has left behind, **stops the
   build**, naming each one, its advisory and the version that fixes it:
@@ -28,8 +33,8 @@ The build asks first: `status/wslc-ai-agent.json`, for the branch it is on
   the build goes on.
 - When security-watch **cannot be reached**, the build asks whether to go
   on. On GitHub Actions, with nobody to ask, it stops.
-- A branch security-watch has no list of yet builds, and its list is sent
-  after.
+- A working branch, whose list is never sent, builds when security-watch
+  has no list of it.
 
 `deploy-release.ps1` asks too, for the branch it releases (`main` or
 `develop`), before it commits anything, and more: what it is about to
