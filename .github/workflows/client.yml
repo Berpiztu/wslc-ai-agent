@@ -39,8 +39,19 @@ jobs:
     defaults:
       run:
         shell: pwsh
+    env:
+      # .NET in a folder of the job's, not Program Files: there its workloads
+      # are plain files the cache below keeps with the SDK (release.yml says why).
+      DOTNET_INSTALL_DIR: ${{ github.workspace }}/../dotnet
     steps:
       - uses: actions/checkout@v4
+
+      # The SDK and its workloads as the last run left them, for this SDK and
+      # this client project: downloaded again only when either changes.
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.DOTNET_INSTALL_DIR }}
+          key: dotnet-${{ runner.os }}-${{ hashFiles('global.json', 'src/WslcAgent.App/WslcAgent.App.csproj') }}
 
       - uses: actions/setup-dotnet@v4
         with:

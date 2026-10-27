@@ -26,6 +26,12 @@ jobs:
     defaults:
       run:
         shell: pwsh
+    env:
+      # .NET in a folder of the job's, not Program Files: there its workloads
+      # (MAUI, Android, gigabytes) are installed as plain files, which the cache
+      # below keeps with the SDK, where in Program Files they are MSIs that no
+      # cache brings back, and every run downloaded them all again.
+      DOTNET_INSTALL_DIR: ${{ github.workspace }}/../dotnet
     steps:
       - uses: actions/checkout@v4
 
@@ -38,6 +44,14 @@ jobs:
           $message = git tag -l --format='%(contents)' $tag
           "local=$(if ($message -match 'built locally') { 'true' } else { 'false' })" >> $env:GITHUB_OUTPUT
           "preview=$(if ($message -match '^Preview ') { 'true' } else { 'false' })" >> $env:GITHUB_OUTPUT
+
+      # The SDK and its workloads as the last run left them, for this SDK and
+      # this client project: downloaded again only when either changes.
+      - uses: actions/cache@v4
+        if: steps.tag.outputs.local != 'true'
+        with:
+          path: ${{ env.DOTNET_INSTALL_DIR }}
+          key: dotnet-${{ runner.os }}-${{ hashFiles('global.json', 'src/WslcAgent.App/WslcAgent.App.csproj') }}
 
       - uses: actions/setup-dotnet@v4
         if: steps.tag.outputs.local != 'true'
