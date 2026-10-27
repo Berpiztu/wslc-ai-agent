@@ -1,0 +1,34 @@
+@* Information's tab of a project's window (ProjectPanesDialog), the first:
+   what a container's card on the Containers page says of it, its header (its
+   name, its image and version, its state's chip, patched and CVE) and its
+   body (ContainerCardBody: its id, status, ports, networks, when it was made,
+   and the CPU and memory dials, read again on the window's clock). All: every
+   container's, one under the other. Nothing here to press: it reads. *@
+@inherits ProjectPaneTab
+
+<div class="wslc-action-body">
+    <div class="wslc-action-main">
+        <div class="wslc-fill-scroll wslc-member-step wslc-member-cards">
+            @foreach (var c in Shown)
+            {
+                @* A box of its own each: the card is as tall as what holds it, here its own content. *@
+                <div @key="c.Id">
+                    <EntityCard Title="@c.Name" Subtitle="@c.Image" AvatarColor="@StateColors.For(c.State)" Key="@c.Id" Tone="@CardTone.Of(c)"
+                                BodyTone="@(c.HasFailed ? Color.Error : c.IsWarned ? Color.Warning : null)" BodyTitle="@c.Failure">
+                        <HeaderActions>
+                            <StateChip State="@c.State" Warned="c.IsWarned" Cve="@c.ImageKnown" Tone="@ImageSecurityFlow.Tone(c)" Patched="@ImageSecurityFlow.IsPatched(c)" />
+                        </HeaderActions>
+                        <ChildContent>
+                            <ContainerCardBody Container="c" />
+                        </ChildContent>
+                    </EntityCard>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    /// <summary>The container chosen, or every one of the project's for All.</summary>
+    private IReadOnlyList<ContainerSummary> Shown => Chosen is { } one ? new[] { one } : Members;
+}

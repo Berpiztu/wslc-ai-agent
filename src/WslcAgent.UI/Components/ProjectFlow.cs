@@ -5,9 +5,18 @@ using WslcAgent.UI.Components.Dialogs;
 
 namespace WslcAgent.UI.Components;
 
-/// <summary>What the Containers page and the project's log window share about a project being saved from its Compose file: opening that window, and cancelling the save.</summary>
+/// <summary>What the Containers page and the project's windows share about a project: its window of two panes, the log of its save, and cancelling the save.</summary>
 public static class ProjectFlow
 {
+    /// <summary>
+    /// A project's window of two panes (<see cref="ProjectPanesDialog"/>): its containers at the left and
+    /// <paramref name="tabs"/> at the right, one alone the pane itself (Logs, Update image, Zaindari), several
+    /// in tabs (Project). Its size is the screen's, taken when it opens.
+    /// </summary>
+    public static Task<bool> ShowPanesAsync(IDialogService dialogs, string title, string project, IReadOnlyList<ContainerSummary> members, params ProjectTab[] tabs) =>
+        DialogFlow.ShowAsync<ProjectPanesDialog>(dialogs, title,
+            new DialogParameters<ProjectPanesDialog> { { d => d.Project, project }, { d => d.Members, members }, { d => d.Tabs, tabs } }, wide: true);
+
     /// <summary>The log of the save a row stands for, in the window a container's logs open in: every step the agent takes, and what the builds print.</summary>
     public static Task<bool> ShowLogAsync(IDialogService dialogs, ContainerLaunch row) =>
         DialogFlow.ShowAsync<ProjectLogDialog>(dialogs, $"Logs — {row.Name}", new DialogParameters<ProjectLogDialog> { { d => d.Job, row.Project } }, large: true);

@@ -6802,6 +6802,19 @@ html[data-wslc-rows~="outlined"] .wslc-files-table {
     overflow: hidden;
 }
 
+/* With tabs (Project), their panels are what a veil in a tab covers, the tab
+   bar left free, as the menu is. */
+.wslc-member-pane .wslc-tab-panels {
+    position: relative;
+}
+
+/* Information's cards, one under the other, a gap apart. */
+.wslc-member-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
 /* The work of a container under way in its pane (a pull's console): a column
    whose output takes what the status above it leaves, with the step's gutter. */
 .wslc-member-work {
@@ -6816,8 +6829,27 @@ html[data-wslc-rows~="outlined"] .wslc-files-table {
     padding-right: 8px;
 }
 
-/* "Nothing to accept or patch", beside the keys: one line, whole; the title
-   is what gives way on the row, as on every dialog's. */
+/* Zaindari's tab (ZaindariTab): its bar of steps over what the step shows,
+   which takes the rest of the pane; the bar a line of its own, its verbs at
+   its right. The step's content is positioned: a veil in it covers it, not
+   the bar. */
+.wslc-zaindari-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    margin-bottom: 4px;
+}
+
+.wslc-zaindari-body {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* "Nothing to accept or patch", beside the keys: one line, whole. */
 .wslc-zaindari-nothing-left {
     white-space: nowrap;
     flex-shrink: 0;

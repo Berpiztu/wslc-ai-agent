@@ -1,0 +1,35 @@
+@* The logs' tab of a project's window (ProjectPanesDialog), in the view a
+   container's logs are read in (LogsView), with its rail (search, wrap,
+   autorefresh, refresh, jump to end, copy). All: the project's logs as one,
+   what each container wrote in the order it was written, each line said by
+   its container, the names in a column; the agent puts them together (GET
+   /projects/{name}/logs), so the lines of several are in order in time and
+   not one container's after another's. A container: its own logs, as its
+   Logs opens them; while the agent carries something out on it, that work's
+   log instead (MemberWork): the pull's console, the patch's build log. *@
+@inherits ProjectPaneTab
+@inject WslcAgentApi Api
+
+@if (Chosen is { } chosen)
+{
+    <MemberWork Member="chosen">
+        <LogsView @key="chosen.Id" Container="@chosen.Id" />
+    </MemberWork>
+}
+else
+{
+    <LogsView @key="Project" Read="ReadAllAsync" />
+}
+
+@code {
+    /// <summary>The lines of each container All begins with: the view's own default for a container, for each of the project's.</summary>
+    private const int Tail = 200;
+
+    /// <summary>What All shows: the project's logs as they are now, a line each, said by its container.</summary>
+    private async Task<string> ReadAllAsync()
+    {
+        var lines = (await Api.GetProjectLogsAsync(Project, Tail)).Lines;
+        var width = lines.Select(line => line.Container.Length).DefaultIfEmpty(0).Max();
+        return string.Join('\n', lines.Select(line => $"{line.Container.PadRight(width)} | {line.Text}"));
+    }
+}

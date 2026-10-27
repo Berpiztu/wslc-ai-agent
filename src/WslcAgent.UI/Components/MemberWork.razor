@@ -1,0 +1,35 @@
+@* A project's container as a tab of its window shows it (ProjectPanesDialog):
+   while the agent carries something out on it, the work instead of the tab's
+   own content, nothing in it to press: its image being pulled, the pull's
+   console; being patched, its build's log, each as its row's ring opens it;
+   under way with no log yet (a patch not begun building, a recreate), the
+   tab's content under a veil saying what it does. At rest, the tab's
+   content (ChildContent). *@
+
+@if (Member is { UpdatingTo: { } pulling })
+{
+    @* In a main column, so the window keeps its frame. *@
+    <div class="wslc-action-body">
+        <div class="wslc-action-main">
+            <div class="wslc-member-work">
+                <PullConsole @key="@($"{Member.Id} {pulling}")" Image="@pulling" />
+            </div>
+        </div>
+    </div>
+}
+else if (Member is { PatchingTo: not null, PatchJob: { Length: > 0 } job })
+{
+    <BuildConsole @key="job" Job="@job" />
+}
+else
+{
+    @ChildContent
+    <BusyVeil Visible="@(!ProjectMemberPanes.AtRest(Member))" Text="@(ProjectMemberPanes.UnderWay(Member) ?? "")" />
+}
+
+@code {
+    [Parameter, EditorRequired] public ContainerSummary Member { get; set; } = default!;
+
+    /// <summary>The tab's own content, at rest.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

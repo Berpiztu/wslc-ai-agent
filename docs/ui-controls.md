@@ -85,8 +85,9 @@ component uses the controls below with these parameters and never adds
 - Size and behaviour are fixed in `DialogFlow` (small, full width, no cross,
   no backdrop close; `large: true` for the launch form, the pickers and the
   windows that show a view; `wide: true` for a window of two panes, a menu
-  at the left and what it opens: a project's Zaindari and Update image
-  windows, whose body is `ProjectMemberPanes`, their verb a `PaneVerb`). Yes/cancel questions use `DialogFlow.ConfirmAsync` /
+  at the left and what it opens: a project's `ProjectPanesDialog`, whose
+  menu is `ProjectMemberPanes`, each tab a `ProjectPaneTab` (one alone is
+  the pane; several are MudTabs), their verb a `PaneVerb`). Yes/cancel questions use `DialogFlow.ConfirmAsync` /
   `ConfirmRemoveAsync`; a picker returns its name through
   `DialogFlow.PickAsync`. A window over the whole screen is
   `DialogFlow.ShowFullScreenAsync` with `ContentClass="wslc-dialog-full"`:

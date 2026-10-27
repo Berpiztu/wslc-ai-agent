@@ -112,9 +112,9 @@ nothing.
   that fixes it, a line per library, and, for your image, a red line saying
   the agent refuses it. What it finds marks the image again, worse, better
   or clean. A project's window lists its containers at the left, each in
-  its image's colour, and for the one chosen shows, by the keys of its
-  title line, its **Vulnerabilities**, what to **Accept**, and its
-  **Patch**, each with its verb there, and *Up to date: nothing to accept
+  its image's colour, and for the one chosen shows, by the keys of a bar at
+  the top of its pane, its **Vulnerabilities**, what to **Accept**, and its
+  **Patch**, each with its verb on that bar, and *Up to date: nothing to accept
   or patch.* beside the keys when neither has anything to do; Cancel goes
   back to the vulnerabilities. The window stays open after a Save
   or a Patch, the next container is chosen, and one being patched turns its

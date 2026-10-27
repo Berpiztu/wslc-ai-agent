@@ -33,8 +33,7 @@ public static class ImageSecurityFlow
 
     /// <summary>A project's Zaindari window: its containers as a menu, and for the one chosen its report, what can be accepted, and its patch.</summary>
     public static Task<bool> ShowProjectAsync(IDialogService dialogs, string project, IReadOnlyList<ContainerSummary> members) =>
-        DialogFlow.ShowAsync<ProjectVulnerabilitiesDialog>(dialogs, $"{Label} — {project}",
-            new DialogParameters<ProjectVulnerabilitiesDialog> { { d => d.Project, project }, { d => d.Members, members } }, wide: true);
+        ProjectFlow.ShowPanesAsync(dialogs, $"{Label} — {project}", project, members, ProjectTab.Zaindari);
 
     /// <summary>
     /// The patch editor (<see cref="PatchImageDialog"/>), the same from Zaindari's

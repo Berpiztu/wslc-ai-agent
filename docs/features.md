@@ -308,7 +308,12 @@ publishing and cleaning up need them on.
   in a window that stays open for the next; each turns its wheel in the list
   while it is pulled and recreated, and, chosen meanwhile, shows the pull's
   console where its update was (a patch, its build's log), nothing in it to
-  press until it is done.
+  press until it is done. A project's **Project** window holds every tab at
+  once, for the container chosen at the left: **Information** (its card:
+  image and version, state, ports, networks, when it was made, its CPU and
+  memory dials, read every five seconds), **Logs**, **Update image** and
+  **Zaindari**; **All**, first in the list, shows every container's
+  information one under the other, and the project's logs as one.
 - **Actions**: start, stop, restart, kill, remove; logs; live stats; files;
   a shell; copy the run command; export JSON; back up.
 - **Details page**: logs, the editable form, the raw inspect JSON, bind

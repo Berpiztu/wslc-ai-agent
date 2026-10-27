@@ -1,0 +1,153 @@
+@* A project's window of two panes: its containers at the left
+   (ProjectMemberPanes) and at the right the tabs it is opened with
+   (ProjectTab), each a component of its own (InformationTab, LogsTab,
+   UpdateImageTab, ZaindariTab). Opened with one (Logs, Update image,
+   Zaindari), that tab is the pane, with no tab bar; with several (Project),
+   they are MudBlazor's tabs, as a container's details page has them. A tab
+   may put its verb on the title line, before Close (Update image); Zaindari
+   keeps its steps and their verbs in a bar of its own. All is first in the
+   menu when a tab is about the whole project (Information, Logs); chosen,
+   the other tabs wait, and a tab that was open on a container goes to the
+   first that is. The window is sized when it opens, as wide and as tall as
+   the screen lets it, and never changes; nothing closes it but Close. *@
+
+<MudDialog ContentClass="wslc-dialog-action wslc-dialog-tall">
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            @Active?.Verbs
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Disabled="_verb.Busy" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <ProjectMemberPanes @ref="_panes" Project="@Project" Members="Members" All="@(HasAll ? "All" : null)" AllDetail="@AllDetail"
+                            ReadEvery="@(Tabs.Contains(ProjectTab.Information) ? ReadingsEvery : null)"
+                            ChosenChanged="TakeChosen" MembersChanged="@(members => _members = members)"
+                            BusyFor="@_verb.For" BusyText="@(Active?.BusyText ?? "")">
+            @if (Tabs.Count == 1)
+            {
+                @Tab(Tabs[0])
+            }
+            else
+            {
+                <MudTabs Elevation="Style.Applied.TabsElevation" Rounded="Style.Applied.TabsRounded" Border="Style.Applied.TabsBorder"
+                         Centered="Style.Applied.TabsCentered" TabPanelsClass="wslc-tab-panels" Class="wslc-fill"
+                         MinimumTabWidth="@($"{Style.Applied.TabsMinWidth}px")" ActivePanelIndex="_index" ActivePanelIndexChanged="TabChanged">
+                    @foreach (var tab in Tabs)
+                    {
+                        <MudTabPanel @key="tab" Text="@Name(tab)" Disabled="@(_chosen is null && !ForAll(tab))">
+                            @Tab(tab)
+                        </MudTabPanel>
+                    }
+                </MudTabs>
+            }
+        </ProjectMemberPanes>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    [Inject] private WslcAgent.UI.Components.Styles.UiStyle Style { get; set; } = default!;
+
+    /// <summary>The project's name.</summary>
+    [Parameter, EditorRequired] public string Project { get; set; } = "";
+
+    /// <summary>Its containers as the list showed them: drawn at once, then read again from the agent as it says they change.</summary>
+    [Parameter] public IReadOnlyList<ContainerSummary> Members { get; set; } = [];
+
+    /// <summary>The tabs, in their order; one is the pane itself.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<ProjectTab> Tabs { get; set; } = [];
+
+    /// <summary>Where the CPU and memory dials are shown (Information), the containers are read again this often, as the Containers page reads them.</summary>
+    private static readonly TimeSpan ReadingsEvery = TimeSpan.FromSeconds(5);
+
+    private ProjectMemberPanes? _panes;
+    private ContainerSummary? _chosen;
+    private IReadOnlyList<ContainerSummary> _members = [];
+    private PaneVerb _verb = default!;
+    private int _index;
+
+    private InformationTab? _information;
+    private LogsTab? _logs;
+    private UpdateImageTab? _update;
+    private ZaindariTab? _zaindari;
+
+    private ProjectTab Current => Tabs.Count == 1 ? Tabs[0] : Tabs[Math.Clamp(_index, 0, Tabs.Count - 1)];
+
+    /// <summary>The tab shown: what the title line holds for it.</summary>
+    private ProjectPaneTab? Active => Current switch
+    {
+        ProjectTab.Information => _information,
+        ProjectTab.Logs => _logs,
+        ProjectTab.UpdateImage => _update,
+        _ => _zaindari,
+    };
+
+    private bool HasAll => Tabs.Any(ForAll);
+
+    /// <summary>What All shows, under its name in the menu: the tabs about the whole project.</summary>
+    private string AllDetail => string.Join(", ", Tabs.Where(ForAll).Select(tab => tab switch
+    {
+        ProjectTab.Information => "every container's information",
+        _ => "every container's logs, as one",
+    }));
+
+    protected override void OnInitialized() => _verb = new PaneVerb(Repaint);
+
+    private static bool ForAll(ProjectTab tab) => tab is ProjectTab.Information or ProjectTab.Logs;
+
+    private static string Name(ProjectTab tab) => tab switch
+    {
+        ProjectTab.Information => "Information",
+        ProjectTab.Logs => "Logs",
+        ProjectTab.UpdateImage => "Update image",
+        _ => ImageSecurityFlow.Name,
+    };
+
+    private RenderFragment Tab(ProjectTab tab) => tab switch
+    {
+        ProjectTab.Information => @<InformationTab @ref="_information" Project="@Project" Chosen="_chosen" Members="_members" Verb="_verb" ReadAgain="ReadAgainAsync" Repaint="Repaint" />,
+        ProjectTab.Logs => @<LogsTab @ref="_logs" Project="@Project" Chosen="_chosen" Members="_members" Verb="_verb" ReadAgain="ReadAgainAsync" Repaint="Repaint" />,
+        ProjectTab.UpdateImage => @<UpdateImageTab @ref="_update" Project="@Project" Chosen="_chosen" Members="_members" Verb="_verb" ReadAgain="ReadAgainAsync" Repaint="Repaint" />,
+        _ => @<ZaindariTab @ref="_zaindari" Project="@Project" Chosen="_chosen" Members="_members" Verb="_verb" ReadAgain="ReadAgainAsync" Repaint="Repaint" />,
+    };
+
+    /// <summary>The window's body and its title line, which MudBlazor draws apart.</summary>
+    private void Repaint()
+    {
+        StateHasChanged();
+        Dialog.StateHasChanged();
+    }
+
+    /// <summary>The container chosen, as the menu has it now; All on a tab about one container goes to the first tab about the whole project.</summary>
+    private void TakeChosen(ContainerSummary? chosen)
+    {
+        if (chosen?.Id != _chosen?.Id)
+        {
+            _verb.Clear();
+        }
+
+        _chosen = chosen;
+        if (chosen is null && !ForAll(Current) && Tabs.Count > 1)
+        {
+            _index = Tabs.ToList().FindIndex(ForAll);
+        }
+
+        Repaint();
+    }
+
+    /// <summary>MudTabs reports the index it settles on after every render: only a real change is taken.</summary>
+    private void TabChanged(int index)
+    {
+        if (index == _index || index < 0 || index >= Tabs.Count)
+        {
+            return;
+        }
+
+        _index = index;
+        _verb.Clear();
+        Repaint();
+    }
+
+    private Task ReadAgainAsync() => _panes?.ReadAsync() ?? Task.CompletedTask;
+}

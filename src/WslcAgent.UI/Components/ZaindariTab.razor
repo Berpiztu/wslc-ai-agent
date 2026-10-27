@@ -1,0 +1,238 @@
+@* Zaindari's tab of a project's window (ProjectPanesDialog): what the
+   container chosen needs, in three steps the keys of its own bar, at the
+   top of the tab, switch between; the step's verb and Cancel are on that
+   bar too, so the window's title line holds Close alone. Vulnerabilities: Zaindari's report of its image, as a container's
+   own window reads it (ImageReportLines). Accept: what no version fixes, to
+   accept, as the Accept window does (AcceptEditor), saved by Save. Patch: the
+   patch window's editor (PatchEditor), that container alone ticked, started
+   by Patch. A key is pressed only when its step has something to do, and
+   when neither has, the bar says so beside them. Cancel, on Accept and
+   Patch, goes back to the report. A container under
+   way shows its work instead (MemberWork), and its steps wait. Each image is
+   checked once while the tab is open, and again after something was
+   accepted in it. *@
+@inherits ProjectPaneTab
+@inject WslcAgentApi Api
+@inject WslcAgent.UI.Components.Styles.UiStyle Style
+
+@if (Chosen is { } chosen)
+{
+    @* The steps' bar, in the tab, over what each step shows: the keys at the left, with what they say when
+       neither has anything to do; at the right the step's verb and Cancel, each keeping its place on every
+       step (unseen where it has nothing to do), so a step chosen moves nothing. *@
+    <div class="wslc-zaindari-bar">
+        <MudToggleGroup T="string" Value="_step" ValueChanged="StepTo" Size="Style.Applied.ToggleSize" Color="Style.Applied.ToggleColor"
+                        Outlined="Style.Applied.ToggleOutlined" Delimiters="Style.Applied.ToggleDelimiters"
+                        Class="@(Style.Applied.ToggleRounded ? "rounded-pill" : null)" CheckMark="Style.Applied.ToggleCheckMark">
+            <MudToggleItem Value="@Vulnerabilities">Vulnerabilities</MudToggleItem>
+            <MudToggleItem Value="@Accept" Disabled="@(!CanAccept)">Accept</MudToggleItem>
+            <MudToggleItem Value="@Patch" Disabled="@(!CanPatch)">Patch</MudToggleItem>
+        </MudToggleGroup>
+        @if (NothingLeft)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary wslc-zaindari-nothing-left">Up to date: nothing to accept or patch.</MudText>
+        }
+        <MudSpacer />
+        @if (_step == Accept)
+        {
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" Disabled="@(Verb.Busy || !CanAccept)" OnClick="SaveAcceptedAsync">@(RunningHere ? "Saving…" : "Save")</MudButton>
+        }
+        else
+        {
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" Class="@(_step == Patch ? null : "invisible")"
+                       Disabled="@(Verb.Busy || !CanPatch || _step != Patch)" OnClick="PatchAsync">@(RunningHere ? "Starting…" : "Patch")</MudButton>
+        }
+        @* On Accept and Patch, Cancel drops what was ticked or written there and goes back to the report. *@
+        <MudButton Size="Size.Small" Variant="Variant.Filled" Class="@(_step == Vulnerabilities ? "invisible" : null)"
+                   Disabled="@(Verb.Busy || _step == Vulnerabilities)" OnClick="@(() => StepTo(Vulnerabilities))">Cancel</MudButton>
+    </div>
+
+    <div class="wslc-zaindari-body">
+    <MemberWork Member="chosen">
+        @if (_step == Vulnerabilities)
+        {
+            <LogsView @key="chosen.Image" Read="@(() => LinesAsync(chosen.Image))" Waiting="@($"Checking {ImageSecurityFlow.Label} for {chosen.Image}…")" />
+        }
+        else if (Report is { } report)
+        {
+            @* In the main column the report is in too, so the window keeps its frame on every step;
+               what is taller than the pane scrolls in it. *@
+            <div class="wslc-action-body">
+                <div class="wslc-action-main">
+                    <div class="wslc-fill-scroll wslc-member-step">
+                        @if (Verb.Error is { } error)
+                        {
+                            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">@error</MudAlert>
+                        }
+                        @if (_step == Accept)
+                        {
+                            <MudForm @ref="_acceptForm">
+                                <AcceptEditor @key="report.Image" @ref="_accept" Report="report" />
+                            </MudForm>
+                        }
+                        else
+                        {
+                            <PatchEditor @key="@($"{chosen.Id} {report.Image}")" @ref="_patch" Report="report" Only="@(new[] { chosen.Id })" />
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </MemberWork>
+    </div>
+}
+
+@code {
+    private const string Vulnerabilities = "vulnerabilities";
+    private const string Accept = "accept";
+    private const string Patch = "patch";
+
+    private string _step = Vulnerabilities;
+    private string? _shown;
+
+    /// <summary>What the veil says, set by the verb pressed: the step changes under it before it lifts.</summary>
+    private string _busyText = "";
+
+    /// <summary>Zaindari's report of each image asked for, by its name: one check per image while the tab is open, again after an acceptance.</summary>
+    private readonly Dictionary<string, Task<ImageVulnerabilities>> _reports = new(StringComparer.OrdinalIgnoreCase);
+
+    private MudForm? _acceptForm;
+    private AcceptEditor? _accept;
+    private PatchEditor? _patch;
+
+    /// <summary>The chosen container's report, once it has come; null while it is being made, or when it could not be.</summary>
+    private ImageVulnerabilities? Report =>
+        Chosen is { } chosen && _reports.TryGetValue(chosen.Image, out var report) && report.IsCompletedSuccessfully ? report.Result : null;
+
+    /// <summary>The container chosen is doing nothing the agent is carrying out: while it is, its pane shows that work, and the steps wait.</summary>
+    private bool AtRest => Chosen is { } chosen && ProjectMemberPanes.AtRest(chosen);
+
+    private bool CanAccept => AtRest && Report is { } report && ImageSecurityFlow.Acceptable(report).Count > 0;
+
+    /// <summary>A patch to build, and the container at rest.</summary>
+    private bool CanPatch => AtRest && Report is { Patch.Length: > 0 };
+
+    /// <summary>The report is in and neither Accept nor Patch has anything to do; not while the container is under way.</summary>
+    private bool NothingLeft => AtRest && Report is not null && !CanAccept && !CanPatch;
+
+    public override string BusyText => _busyText;
+
+    /// <summary>Another container starts on its report; the same one, read again, stays on its step unless that step has nothing to do any more (its patch begun).</summary>
+    protected override void OnParametersSet()
+    {
+        if (Chosen?.Id != _shown)
+        {
+            _shown = Chosen?.Id;
+            _step = Vulnerabilities;
+            Verb.Clear();
+        }
+
+        if ((_step == Patch && !CanPatch) || (_step == Accept && !CanAccept))
+        {
+            _step = Vulnerabilities;
+        }
+    }
+
+    private void StepTo(string step)
+    {
+        if (Verb.Busy)
+        {
+            return;
+        }
+
+        _step = step;
+        Verb.Clear();
+        Repaint();
+    }
+
+    /// <summary>The image's report, asked once; the title line's keys are told when it comes.</summary>
+    private Task<ImageVulnerabilities> ReportOf(string image)
+    {
+        if (!_reports.TryGetValue(image, out var report))
+        {
+            _reports[image] = report = Api.GetImageVulnerabilitiesAsync(image);
+            _ = RepaintWhenAsync(report);
+        }
+
+        return report;
+    }
+
+    private async Task RepaintWhenAsync(Task report)
+    {
+        try
+        {
+            await report;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            // Said in the report's own lines (LinesAsync).
+        }
+
+        await InvokeAsync(Repaint);
+    }
+
+    /// <summary>The report's lines, with what Patch would do when there is a patch to build.</summary>
+    private async Task<string> LinesAsync(string image)
+    {
+        try
+        {
+            var report = await ReportOf(image);
+            var lines = ImageReportLines.Of(report).ToList();
+            if (report.Patch.Length > 0)
+            {
+                lines.Add(ImageReportLines.PatchOffered(report));
+            }
+
+            return string.Join('\n', lines);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            return ImageReportLines.Line("ERROR", $"{image}: {ex.Message}");
+        }
+    }
+
+    /// <summary>Saved, the image is checked again, and its report shows what was accepted.</summary>
+    private async Task SaveAcceptedAsync()
+    {
+        if (_acceptForm is not { } form || _accept is not { } accept || Chosen is not { } chosen)
+        {
+            return;
+        }
+
+        // The veil stays until the report is to be read again and the menu read: nothing is pressable in between.
+        _busyText = "Saving what is accepted…";
+        await Verb.RunAsync(chosen.Id, async () =>
+        {
+            await form.ValidateAsync();
+            if (!form.IsValid)
+            {
+                return false;
+            }
+
+            await accept.SaveAsync();
+            _reports.Remove(chosen.Image);
+            _step = Vulnerabilities;
+            await ReadAgain();
+            return true;
+        });
+    }
+
+    /// <summary>Started, the agent builds it and the menu says so, its pane the build's log; the window stays, for the next container.</summary>
+    private async Task PatchAsync()
+    {
+        if (_patch is not { } patch || Chosen is not { } chosen)
+        {
+            return;
+        }
+
+        // The veil stays until the menu has the container being patched: Patch is never pressable in between.
+        _busyText = "Starting the patch…";
+        await Verb.RunAsync(chosen.Id, async () =>
+        {
+            await patch.StartAsync();
+            _step = Vulnerabilities;
+            await ReadAgain();
+            return true;
+        });
+    }
+}

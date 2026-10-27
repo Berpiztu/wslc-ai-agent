@@ -25,6 +25,7 @@
 @if (Shortcuts || ShortcutsAlone)
 {
     <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center" Class="wslc-row-shortcuts">
+        <MudIconButton Icon="@Icons.Material.Filled.Info" Size="Size.Small" title="Project: each container's information, logs, Update image and Zaindari, in one window" OnClick="ProjectAsync" />
         <MudIconButton Icon="@Icons.Material.Filled.EditNote" Size="Size.Small" title="Compose file: view it, and apply it again" Disabled="Locked" OnClick="FileAsync" />
         <MudIconButton Icon="@Icons.Material.Filled.Subject" Size="Size.Small" title="Logs: the project's as one, and each container's" OnClick="LogsAsync" />
         <MudIconButton Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Small" title="Log of the project's last save or build, however it ended" OnClick="SaveLogAsync" />
@@ -50,6 +51,7 @@
     <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" title="More actions" Disabled="Locked" OpenChanged="MenuOpenChanged">
         @if (!Shortcuts)
         {
+            <MudMenuItem Icon="@Icons.Material.Filled.Info" OnClick="ProjectAsync">Project</MudMenuItem>
             <MudMenuItem Icon="@Icons.Material.Filled.EditNote" OnClick="FileAsync">Compose file</MudMenuItem>
             <MudMenuItem Icon="@Icons.Material.Filled.Subject" OnClick="LogsAsync">Logs</MudMenuItem>
             <MudMenuItem Icon="@Icons.Material.Filled.ReceiptLong" OnClick="SaveLogAsync">Save log</MudMenuItem>
@@ -112,16 +114,21 @@
         }
     }
 
-    /// <summary>The logs of the project's containers as one, each line said by its container, in the window a container's logs open in.</summary>
-    private Task LogsAsync() =>
-        DialogFlow.ShowAsync<Dialogs.ProjectLogsDialog>(Dialogs, $"Logs — {Project}",
-            new DialogParameters<Dialogs.ProjectLogsDialog> { { d => d.Project, Project }, { d => d.Members, Members } }, wide: true);
+    /// <summary>The project's window with every tab: each container's information, logs, Update image and Zaindari, All first.</summary>
+    private async Task ProjectAsync()
+    {
+        await ProjectFlow.ShowPanesAsync(Dialogs, $"Project — {Project}", Project, Members,
+            ProjectTab.Information, ProjectTab.Logs, ProjectTab.UpdateImage, ProjectTab.Zaindari);
+        await Changed.InvokeAsync();
+    }
+
+    /// <summary>The project's logs as one (All), and each container's, in the window of two panes.</summary>
+    private Task LogsAsync() => ProjectFlow.ShowPanesAsync(Dialogs, $"Logs — {Project}", Project, Members, ProjectTab.Logs);
 
     /// <summary>The project's Update image window: each of its containers with its own Update image, without going one by one.</summary>
     private async Task UpdateImagesAsync()
     {
-        await DialogFlow.ShowAsync<Dialogs.ProjectUpdateImageDialog>(Dialogs, $"Update image — {Project}",
-            new DialogParameters<Dialogs.ProjectUpdateImageDialog> { { d => d.Project, Project }, { d => d.Members, Members } }, wide: true);
+        await ProjectFlow.ShowPanesAsync(Dialogs, $"Update image — {Project}", Project, Members, ProjectTab.UpdateImage);
         await Changed.InvokeAsync();
     }
 

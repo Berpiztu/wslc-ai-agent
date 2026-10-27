@@ -6,7 +6,7 @@ namespace WslcAgent.UI.Components;
 /// Zaindari's report of one image as the lines of a log, which the logs view
 /// colours by their level: the same in the window of a container or an image
 /// (<c>ImageVulnerabilitiesDialog</c>) and in a project's
-/// (<c>ProjectVulnerabilitiesDialog</c>).
+/// (<c>ZaindariTab</c>).
 /// </summary>
 public static class ImageReportLines
 {

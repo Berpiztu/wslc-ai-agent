@@ -1,17 +1,17 @@
-@* The body of a project's window of two panes (Zaindari, Update image,
-   Logs): its containers at the left, as a menu, each in the colour of its
-   image's mark, and at the right the pane of the one chosen (ChildContent),
-   which the window fills. A window about the whole project too (Logs) puts
-   an entry for it first (All), chosen to begin with, and is told null for it.
-   A container under way (patched, its image updated,
-   recreated) turns a wheel in its mark's slot and says so in the line its
-   image is in, until the agent is done; chosen, its pane shows the work: the
-   pull's console, the patch's build log, or a veil saying what it does (not
-   in Logs, whose pane only reads). The containers are read again as the
-   agent says they change, and the window is told the one chosen as it is
-   now. The menu has one width and scrolls; while the window's verb runs, the
-   veil covers the pane of the container it runs on and nothing else, so
-   another can be chosen meanwhile. *@
+@* The body of a project's window of two panes (ProjectPanesDialog): its
+   containers at the left, as a menu, each in the colour of its image's mark,
+   and at the right the pane of the one chosen (ChildContent), which the
+   window fills. A window with a tab about the whole project (Information,
+   Logs) puts an entry for it first (All), chosen to begin with, and is told
+   null for it. A container under way (patched, its image updated, recreated)
+   turns a wheel in its mark's slot and says so in the line its image is in,
+   until the agent is done; its tabs show the work (MemberWork). The
+   containers are read again as the agent says they change, and on a clock
+   where the window shows their readings (ReadEvery); the window is told the
+   one chosen and all of them as they are now. The menu has one width and
+   scrolls; while the window's verb runs, the veil covers the pane of the
+   container it runs on and nothing else, so another can be chosen
+   meanwhile. *@
 @inject WslcAgentApi Api
 @inject AgentChanges Changes
 @implements IDisposable
@@ -64,29 +64,9 @@
         {
             <MudText Typo="Typo.body2" Class="mud-text-secondary">No container in project @Project.</MudText>
         }
-        else if (ShowsWork && Chosen is { UpdatingTo: { } pulling } updating)
-        {
-            @* Its image being pulled: the pull's console, as its row's ring opens it, in a main column so the window keeps its frame. *@
-            <div class="wslc-action-body">
-                <div class="wslc-action-main">
-                    <div class="wslc-member-work">
-                        <PullConsole @key="@($"{updating.Id} {pulling}")" Image="@pulling" />
-                    </div>
-                </div>
-            </div>
-        }
-        else if (ShowsWork && Chosen is { PatchingTo: not null, PatchJob: { Length: > 0 } job })
-        {
-            @* Being patched: its build's log, as its row's ring opens it. *@
-            <BuildConsole @key="job" Job="@job" />
-        }
         else
         {
             @ChildContent
-
-            @* Under way with no log to show yet (a patch not begun building, a recreate): the pane veiled with what
-               it is doing, so nothing in it is pressed meanwhile; the menu stays free, for another container. *@
-            <BusyVeil Visible="@(ShowsWork && !Running && Chosen is { } chosen && !AtRest(chosen))" Text="@(Chosen is { } busy ? UnderWay(busy) ?? "" : "")" />
         }
 
         @* While the window's verb runs on this container: the wheel over its pane alone, so nothing in it is ticked
@@ -110,47 +90,64 @@
 
     [Parameter] public string BusyText { get; set; } = "";
 
-    /// <summary>The window's verb runs on the container shown.</summary>
-    private bool Running => BusyFor is not null && BusyFor == _selected;
-
     /// <summary>The container chosen as it is now: when another is chosen, and each time the containers are read again; null for <see cref="All"/>.</summary>
     [Parameter] public EventCallback<ContainerSummary?> ChosenChanged { get; set; }
 
-    /// <summary>The entry for the whole project, first in the menu and chosen to begin with (Logs: "All"); none when the window is only about its containers.</summary>
+    /// <summary>The project's containers as they are now, each time they are read again.</summary>
+    [Parameter] public EventCallback<IReadOnlyList<ContainerSummary>> MembersChanged { get; set; }
+
+    /// <summary>The entry for the whole project, first in the menu and chosen to begin with ("All"); none when the window is only about its containers.</summary>
     [Parameter] public string? All { get; set; }
 
     /// <summary>The line under <see cref="All"/>: what it shows.</summary>
     [Parameter] public string AllDetail { get; set; } = "";
 
-    /// <summary>
-    /// The pane of a container under way shows the work instead of the window's own pane: the pull's
-    /// console, the patch's build log, or a veil saying what it does. False where the pane only reads
-    /// (Logs: a container's logs are read on while it is updated).
-    /// </summary>
-    [Parameter] public bool ShowsWork { get; set; } = true;
+    /// <summary>How often the containers are read again where the window shows their readings (CPU, memory); none, only as the agent says they change.</summary>
+    [Parameter] public TimeSpan? ReadEvery { get; set; }
 
     /// <summary>A container doing nothing the agent is still carrying out (a patch, an image update, a recreate): what a window's verb on it waits for.</summary>
     public static bool AtRest(ContainerSummary member) => UnderWay(member) is null;
+
+    /// <summary>What a container is doing, in the line its image is in; null for one at rest.</summary>
+    public static string? UnderWay(ContainerSummary member) =>
+        member.PatchingTo is { } patching ? ImageSecurityFlow.PatchStatus(member, patching) + "…"
+        : member.UpdatingTo is { } updating ? $"Updating to {updating}…"
+        : member.IsRecreating ? "Being recreated…"
+        : null;
 
     /// <summary>The menu's value for <see cref="All"/>: no container's id is empty.</summary>
     private const string WholeProject = "";
 
     private List<ContainerSummary> _members = [];
     private string? _selected;
+    private readonly CancellationTokenSource _stop = new();
 
     private ContainerSummary? Chosen => _members.FirstOrDefault(member => member.Id == _selected);
 
     private bool WholeChosen => All is not null && _selected == WholeProject;
+
+    /// <summary>The window's verb runs on the container shown.</summary>
+    private bool Running => BusyFor is not null && BusyFor == _selected;
 
     protected override async Task OnInitializedAsync()
     {
         await TakeAsync(Members);
         Changes.Changed += OnAgentChanged;
         Changes.Start();
+        if (ReadEvery is { } every)
+        {
+            _ = PollAsync(every, _stop.Token);
+        }
+
         await ReadAsync();
     }
 
-    public void Dispose() => Changes.Changed -= OnAgentChanged;
+    public void Dispose()
+    {
+        Changes.Changed -= OnAgentChanged;
+        _stop.Cancel();
+        _stop.Dispose();
+    }
 
     /// <summary>The containers read again (after the window's verb); the menu stays as it was when the agent cannot be reached, and its next notice reads it again.</summary>
     public async Task ReadAsync()
@@ -167,12 +164,21 @@
         StateHasChanged();
     }
 
-    /// <summary>What a container is doing, in the line its image is in; null for one at rest.</summary>
-    private static string? UnderWay(ContainerSummary member) =>
-        member.PatchingTo is { } patching ? ImageSecurityFlow.PatchStatus(member, patching) + "…"
-        : member.UpdatingTo is { } updating ? $"Updating to {updating}…"
-        : member.IsRecreating ? "Being recreated…"
-        : null;
+    private async Task PollAsync(TimeSpan every, CancellationToken stop)
+    {
+        using var timer = new PeriodicTimer(every);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(stop))
+            {
+                await InvokeAsync(ReadAsync);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The window closed.
+        }
+    }
 
     /// <summary>The project's containers by name; the one chosen stays chosen, and when none is, the whole project or else the first.</summary>
     private async Task TakeAsync(IEnumerable<ContainerSummary> members)
@@ -183,6 +189,7 @@
             _selected = All is not null ? WholeProject : _members.FirstOrDefault()?.Id;
         }
 
+        await MembersChanged.InvokeAsync(_members);
         await ChosenChanged.InvokeAsync(Chosen);
     }
 
