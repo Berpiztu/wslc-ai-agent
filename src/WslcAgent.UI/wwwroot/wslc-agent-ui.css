@@ -6674,7 +6674,7 @@ html[data-wslc-rows~="outlined"] .wslc-files-table {
     max-width: min(30rem, 90vw);
 }
 
-/* The patch window's containers (PatchImageDialog): a box of one height, so
+/* The patch editor's containers (PatchEditor): a box of one height, so
    the window is the size it opened with whatever it lists. Four rows of the
    small dense checkbox, MudBlazor 9's: its glyph 1.25rem (.mud-icon-size-small)
    and 4px of padding each side (.mud-checkbox-dense). More scroll. */
@@ -6683,7 +6683,7 @@ html[data-wslc-rows~="outlined"] .wslc-files-table {
     overflow-y: auto;
 }
 
-/* The patch window (PatchImageDialog): two columns, the Dockerfile and its
+/* The patch editor (PatchEditor): two columns, the Dockerfile and its
    containers, and the requirements editor; one under the other where the
    window is narrower than two of them. The editor is as tall as the first
    column, its lines scrolling in it (its list grows from nothing, so it never
@@ -6717,4 +6717,67 @@ html[data-wslc-rows~="outlined"] .wslc-files-table {
 .wslc-patch-requirement-name {
     white-space: nowrap;
     overflow-x: auto;
+}
+
+/* A project's Zaindari window (ProjectVulnerabilitiesDialog): the menu of its
+   containers at the left, of one width whatever it lists, and the pane of
+   the one chosen taking the rest; both the dialog's whole height, each
+   scrolling in itself. 16rem holds a container's name; a narrow screen gives
+   the menu no more than 40% of it. Positioned: its veil covers it while
+   Save or Patch runs. */
+.wslc-zaindari-project {
+    position: relative;
+    display: grid;
+    grid-template-columns: min(16rem, 40%) minmax(0, 1fr);
+    gap: 12px;
+    flex: 1 1 0;
+    min-height: 0;
+}
+
+.wslc-zaindari-members {
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* The mark and the turning wheel take one slot, the wheel's: MudBlazor's small
+   circular progress is 24px, its small icon 1.25rem. A patch begun moves nothing. */
+.wslc-zaindari-member-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 24px;
+    height: 24px;
+}
+
+.wslc-zaindari-member-text {
+    min-width: 0;
+}
+
+/* A line of the menu is one line: a long name or image scrolls sideways, cut by nothing. */
+.wslc-zaindari-member-line {
+    white-space: nowrap;
+    overflow-x: auto;
+}
+
+/* The pane holds a main column on every step (the report's, or Accept's and
+   Patch's), so the dialog's content keeps one frame and nothing moves when
+   a step is chosen; a step's editor scrolls inside it, with the launch
+   form's gutter before its right edge. */
+.wslc-zaindari-pane {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.wslc-zaindari-step {
+    padding-right: 8px;
+}
+
+/* "Nothing to accept or patch", beside the keys: one line, whole; the title
+   is what gives way on the row, as on every dialog's. */
+.wslc-zaindari-nothing-left {
+    white-space: nowrap;
+    flex-shrink: 0;
 }

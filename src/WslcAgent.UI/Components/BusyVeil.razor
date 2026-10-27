@@ -1,0 +1,20 @@
+@* The veil over a window's work while the agent does what was asked: the
+   turning wheel and what it is doing, over the box it is placed in (which
+   is positioned), so nothing under it is changed or pressed meanwhile. The
+   launch form's, the Compose window's and a project's Zaindari window's. *@
+
+<MudOverlay Visible="Visible" Absolute="true" DarkBackground="true" AutoClose="false" LockScroll="false" ZIndex="10">
+    <MudPaper Class="pa-4" Elevation="4">
+        <MudStack AlignItems="AlignItems.Center" Spacing="2">
+            <MudProgressCircular Color="Color.Info" Size="Size.Large" Indeterminate="true" />
+            <MudText Typo="Typo.subtitle1" role="status">@Text</MudText>
+        </MudStack>
+    </MudPaper>
+</MudOverlay>
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+
+    /// <summary>What the agent is doing, under the wheel.</summary>
+    [Parameter] public string Text { get; set; } = "";
+}

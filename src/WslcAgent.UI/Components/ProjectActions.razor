@@ -113,9 +113,12 @@
         DialogFlow.ShowAsync<Dialogs.ProjectLogsDialog>(Dialogs, $"Logs — {Project}",
             new DialogParameters<Dialogs.ProjectLogsDialog> { { d => d.Project, Project } }, large: true);
 
-    /// <summary>Every image of the project's containers, one after the other, with their libraries and known vulnerabilities.</summary>
-    private Task ViewImagePackagesAsync() =>
-        ImageSecurityFlow.ShowAsync(Dialogs, Project, [.. Members.Select(member => member.Image).Distinct(StringComparer.OrdinalIgnoreCase)]);
+    /// <summary>The project's Zaindari window: each of its containers, its known vulnerabilities, what can be accepted, and its patch.</summary>
+    private async Task ViewImagePackagesAsync()
+    {
+        await ImageSecurityFlow.ShowProjectAsync(Dialogs, Project, Members);
+        await Changed.InvokeAsync();
+    }
 
     /// <summary>
     /// The log of the project's last save or build, the one under way or the

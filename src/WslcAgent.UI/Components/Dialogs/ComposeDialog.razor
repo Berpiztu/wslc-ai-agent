@@ -214,14 +214,7 @@
             </div>
 
             @* The veil while the agent works, as the launch form's: what is being done. *@
-            <MudOverlay Visible="_busy" Absolute="true" DarkBackground="true" AutoClose="false" LockScroll="false" ZIndex="10">
-                <MudPaper Class="pa-4" Elevation="4">
-                    <MudStack AlignItems="AlignItems.Center" Spacing="2">
-                        <MudProgressCircular Color="Color.Info" Size="Size.Large" Indeterminate="true" />
-                        <MudText Typo="Typo.subtitle1" role="status">@_busyTitle</MudText>
-                    </MudStack>
-                </MudPaper>
-            </MudOverlay>
+            <BusyVeil Visible="_busy" Text="@_busyTitle" />
         </div>
     </DialogContent>
 </MudDialog>

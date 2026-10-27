@@ -31,6 +31,11 @@ public static class ImageSecurityFlow
         DialogFlow.ShowAsync<ImageVulnerabilitiesDialog>(dialogs, $"{Label} — {about}",
             new DialogParameters<ImageVulnerabilitiesDialog> { { d => d.Images, images }, { d => d.About, about }, { d => d.Patchable, patchable } }, large: true);
 
+    /// <summary>A project's Zaindari window: its containers as a menu, and for the one chosen its report, what can be accepted, and its patch.</summary>
+    public static Task<bool> ShowProjectAsync(IDialogService dialogs, string project, IReadOnlyList<ContainerSummary> members) =>
+        DialogFlow.ShowAsync<ProjectVulnerabilitiesDialog>(dialogs, $"{Label} — {project}",
+            new DialogParameters<ProjectVulnerabilitiesDialog> { { d => d.Project, project }, { d => d.Members, members } }, wide: true);
+
     /// <summary>
     /// The patch editor (<see cref="PatchImageDialog"/>), the same from Zaindari's
     /// window, Update image and View &amp; edit: <paramref name="only"/> ticks those

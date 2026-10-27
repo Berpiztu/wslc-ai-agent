@@ -41,11 +41,14 @@ public static class DialogFlow
     /// <summary>For the launch form and the host folder picker: wider, tall enough for a form.</summary>
     private static readonly DialogOptions Large = Small with { MaxWidth = MaxWidth.Medium };
 
+    /// <summary>For a window of two panes, a menu and what it opens (a project's Zaindari window): as wide as the screen lets it, up to MudBlazor's large.</summary>
+    private static readonly DialogOptions Wide = Small with { MaxWidth = MaxWidth.Large };
+
     /// <summary>Shows a form dialog; true when it closed by submitting.</summary>
-    public static async Task<bool> ShowAsync<TDialog>(IDialogService dialogs, string title, DialogParameters? parameters = null, bool large = false)
+    public static async Task<bool> ShowAsync<TDialog>(IDialogService dialogs, string title, DialogParameters? parameters = null, bool large = false, bool wide = false)
         where TDialog : IComponent
     {
-        var reference = await dialogs.ShowAsync<TDialog>(title, parameters ?? new DialogParameters(), large ? Large : Small);
+        var reference = await dialogs.ShowAsync<TDialog>(title, parameters ?? new DialogParameters(), wide ? Wide : large ? Large : Small);
         var result = await reference.Result;
         return result is { Canceled: false };
     }

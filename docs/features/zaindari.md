@@ -111,7 +111,14 @@ nothing.
   vulnerabilities: each one in the colour of its severity with the version
   that fixes it, a line per library, and, for your image, a red line saying
   the agent refuses it. What it finds marks the image again, worse, better
-  or clean.
+  or clean. A project's window lists its containers at the left, each in
+  its image's colour, and for the one chosen shows, by the keys of its
+  title line, its **Vulnerabilities**, what to **Accept**, and its
+  **Patch**, each with its verb there, and *Up to date: nothing to accept
+  or patch.* beside the keys when neither has anything to do; Cancel goes
+  back to the vulnerabilities. The window stays open after a Save
+  or a Patch, the next container is chosen, and one being patched turns its
+  wheel in the list until the agent has moved it.
 - **When a container runs**: the image of a running container with no mark
   yet is checked once while the agent runs, whoever started it (the agent,
   `wslc` by hand, a script). A stopped container is not: one stopped for a
@@ -126,7 +133,7 @@ image with nothing wrong. Every finding is written in the agent's own log.
 A fix published by Alpine, Debian or Ubuntu reaches an official image only
 when that image is built again, which can take weeks, and a Python library's
 only when whoever made the image raises it. Zaindari's window, opened for a
-container or an image, offers **Patch**, as a Windows update patches
+container, an image or a project's container, offers **Patch**, as a Windows update patches
 Windows, a fix published or not: what has none is mended only by taking it
 out or replacing it. Its window shows the **Dockerfile** of the patch, whole,
 as it will be built into `<image>-patched` (`alpine:latest-patched`; a patch

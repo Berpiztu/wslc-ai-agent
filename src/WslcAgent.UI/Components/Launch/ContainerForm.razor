@@ -256,14 +256,7 @@
 @* The veil while the agent works: what is being done. Nothing here is clickable. A run or
    a create holds it only until the agent has taken the job: the form closes then, and the
    Containers table follows the pull and the start. *@
-<MudOverlay Visible="_busy" Absolute="true" DarkBackground="true" AutoClose="false" LockScroll="false" ZIndex="10">
-    <MudPaper Class="pa-4" Elevation="4">
-        <MudStack AlignItems="AlignItems.Center" Spacing="2">
-            <MudProgressCircular Color="Color.Info" Size="Size.Large" Indeterminate="true" />
-            <MudText Typo="Typo.subtitle1" role="status">@_busyTitle</MudText>
-        </MudStack>
-    </MudPaper>
-</MudOverlay>
+<BusyVeil Visible="_busy" Text="@_busyTitle" />
 </div>
 
 @code {

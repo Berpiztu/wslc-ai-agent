@@ -84,7 +84,8 @@ component uses the controls below with these parameters and never adds
   the dialog was submitted. Parameters: `new DialogParameters<TDialog> { { d => d.Prop, value } }`.
 - Size and behaviour are fixed in `DialogFlow` (small, full width, no cross,
   no backdrop close; `large: true` for the launch form, the pickers and the
-  windows that show a view). Yes/cancel questions use `DialogFlow.ConfirmAsync` /
+  windows that show a view; `wide: true` for a window of two panes, a menu
+  at the left and what it opens, as a project's Zaindari window). Yes/cancel questions use `DialogFlow.ConfirmAsync` /
   `ConfirmRemoveAsync`; a picker returns its name through
   `DialogFlow.PickAsync`. A window over the whole screen is
   `DialogFlow.ShowFullScreenAsync` with `ContentClass="wslc-dialog-full"`:
