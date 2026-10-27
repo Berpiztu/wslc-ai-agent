@@ -8,10 +8,11 @@
    the project, after asking, and its volumes only after asking about them
    apart.
    A card has room a table row has not, so it leads with the verbs most reached
-   for, the Compose file, the project's logs and the log of its last save, at its left end, where a
-   container's card has its own View & edit and Logs, and keeps the row's
-   verbs at the far end (Shortcuts). The logs are the containers' as one,
-   each line said by its container. The
+   for, the Compose file, the project's logs, the log of its last save,
+   Update image and Zaindari, at its left end, where a container's card has
+   its own View & edit and Logs, and keeps the row's verbs at the far end
+   (Shortcuts). The logs, Update image and Zaindari open a window of two
+   panes, the project's containers at the left (ProjectMemberPanes). The
    menu is the whole list minus what the view already has within reach, as a
    container's is, and is where a project's further verbs go. The
    dashboard's objects draw each group alone (ShortcutsAlone, and the row's
@@ -25,8 +26,10 @@
 {
     <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center" Class="wslc-row-shortcuts">
         <MudIconButton Icon="@Icons.Material.Filled.EditNote" Size="Size.Small" title="Compose file: view it, and apply it again" Disabled="Locked" OnClick="FileAsync" />
-        <MudIconButton Icon="@Icons.Material.Filled.Subject" Size="Size.Small" title="Logs of the project's containers, as one" OnClick="LogsAsync" />
+        <MudIconButton Icon="@Icons.Material.Filled.Subject" Size="Size.Small" title="Logs: the project's as one, and each container's" OnClick="LogsAsync" />
         <MudIconButton Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Small" title="Log of the project's last save or build, however it ended" OnClick="SaveLogAsync" />
+        <MudIconButton Icon="@Icons.Material.Filled.Update" Size="Size.Small" title="Update image: each container's, in one window" Disabled="Locked" OnClick="UpdateImagesAsync" />
+        <MudIconButton Icon="@Icons.Material.Filled.Security" Size="Size.Small" Color="@ImageSecurityFlow.Tone(Members)" title="@ImageSecurityFlow.Title" OnClick="ViewImagePackagesAsync" />
     </MudStack>
 }
 @if (!ShortcutsAlone)
@@ -50,9 +53,10 @@
             <MudMenuItem Icon="@Icons.Material.Filled.EditNote" OnClick="FileAsync">Compose file</MudMenuItem>
             <MudMenuItem Icon="@Icons.Material.Filled.Subject" OnClick="LogsAsync">Logs</MudMenuItem>
             <MudMenuItem Icon="@Icons.Material.Filled.ReceiptLong" OnClick="SaveLogAsync">Save log</MudMenuItem>
+            <MudMenuItem Icon="@Icons.Material.Filled.Update" OnClick="UpdateImagesAsync">Update image</MudMenuItem>
+            <MudMenuItem Icon="@Icons.Material.Filled.Security" IconColor="@ImageSecurityFlow.Tone(Members)" Class="@ImageSecurityFlow.TextClass(ImageSecurityFlow.Tone(Members))"
+                         OnClick="ViewImagePackagesAsync">@ImageSecurityFlow.Title</MudMenuItem>
         }
-        <MudMenuItem Icon="@Icons.Material.Filled.Security" IconColor="@ImageSecurityFlow.Tone(Members)" Class="@ImageSecurityFlow.TextClass(ImageSecurityFlow.Tone(Members))"
-                     OnClick="ViewImagePackagesAsync">@ImageSecurityFlow.Title</MudMenuItem>
         <MudMenuItem Icon="@Icons.Material.Filled.ContentCopy" OnClick="CopyFileAsync">Copy Compose file</MudMenuItem>
     </MudMenu>
     <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="Down: remove the project"
@@ -111,7 +115,15 @@
     /// <summary>The logs of the project's containers as one, each line said by its container, in the window a container's logs open in.</summary>
     private Task LogsAsync() =>
         DialogFlow.ShowAsync<Dialogs.ProjectLogsDialog>(Dialogs, $"Logs — {Project}",
-            new DialogParameters<Dialogs.ProjectLogsDialog> { { d => d.Project, Project } }, large: true);
+            new DialogParameters<Dialogs.ProjectLogsDialog> { { d => d.Project, Project }, { d => d.Members, Members } }, wide: true);
+
+    /// <summary>The project's Update image window: each of its containers with its own Update image, without going one by one.</summary>
+    private async Task UpdateImagesAsync()
+    {
+        await DialogFlow.ShowAsync<Dialogs.ProjectUpdateImageDialog>(Dialogs, $"Update image — {Project}",
+            new DialogParameters<Dialogs.ProjectUpdateImageDialog> { { d => d.Project, Project }, { d => d.Members, Members } }, wide: true);
+        await Changed.InvokeAsync();
+    }
 
     /// <summary>The project's Zaindari window: each of its containers, its known vulnerabilities, what can be accepted, and its patch.</summary>
     private async Task ViewImagePackagesAsync()

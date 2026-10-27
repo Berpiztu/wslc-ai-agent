@@ -1,5 +1,6 @@
-@* A Compose project's shortcuts: its Compose file, the logs of its
-   containers as one and the log of its last save, the group its card in the Containers list leads its
+@* A Compose project's shortcuts: its Compose file, its logs (the project's as
+   one, and each container's), the log of its last save, Update image and
+   Zaindari, the group its card in the Containers list leads its
    actions row with, standing alone; its own verbs are another object
    (ProjectOwnVerbs), so the user places each. It fills its cells with the
    row's tone and stands at the left, until another alignment is chosen. In
@@ -16,7 +17,7 @@
         <EntityCardPart>
             <MudCardActions Class="py-1" Style="@CardTone.Style(CardTone.Of(head))">
                 <VerbTaps>
-                    <ProjectActions Project="@head.Name" RowKey="@head.Id" Containers="MemberNames" Running="head.IsRunning" ShortcutsAlone="true"
+                    <ProjectActions Project="@head.Name" RowKey="@head.Id" Containers="MemberNames" Members="Members" Running="head.IsRunning" ShortcutsAlone="true"
                                     Changed="@(() => Containers.RefreshAsync())" />
                 </VerbTaps>
             </MudCardActions>

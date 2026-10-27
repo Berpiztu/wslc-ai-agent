@@ -303,7 +303,10 @@ publishing and cleaning up need them on.
 - **Update image**: a container moved to another version of its image, say
   one published from another machine: the version is pulled with its console,
   then the container is recreated with everything else it had, and the old one
-  stays if the new version does not start.
+  stays if the new version does not start. A project's **Update image** lists
+  its containers at the left and opens, for the one chosen, that same update,
+  in a window that stays open for the next; each turns its wheel in the list
+  while it is pulled and recreated.
 - **Actions**: start, stop, restart, kill, remove; logs; live stats; files;
   a shell; copy the run command; export JSON; back up.
 - **Details page**: logs, the editable form, the raw inspect JSON, bind

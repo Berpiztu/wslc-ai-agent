@@ -1,0 +1,171 @@
+@* The body of a project's window of two panes (Zaindari, Update image,
+   Logs): its containers at the left, as a menu, each in the colour of its
+   image's mark, and at the right the pane of the one chosen (ChildContent),
+   which the window fills. A window about the whole project too (Logs) puts
+   an entry for it first (All), chosen to begin with, and is told null for it.
+   A container under way (patched, its image updated,
+   recreated) turns a wheel in its mark's slot and says so in the line its
+   image is in, until the agent is done. The containers are read again as the
+   agent says they change, and the window is told the one chosen as it is
+   now. The menu has one width and scrolls; the veil covers both panes while
+   the window's verb runs. *@
+@inject WslcAgentApi Api
+@inject AgentChanges Changes
+@implements IDisposable
+
+<div class="wslc-member-panes">
+    <MudPaper Outlined="true" Class="wslc-member-menu">
+        <MudList T="string" SelectedValue="@_selected" SelectedValueChanged="ChooseAsync" Dense="true" role="list">
+            @if (All is { } all)
+            {
+                <MudListItem T="string" @key="WholeProject" Value="@WholeProject" role="listitem">
+                    <div class="d-flex align-center gap-2">
+                        <span class="wslc-member-mark">
+                            <MudIcon Icon="@Icons.Material.Filled.AccountTree" Size="Size.Small" />
+                        </span>
+                        <div class="wslc-member-text">
+                            <MudText Typo="Typo.body2" Class="wslc-member-line">@all</MudText>
+                            <MudText Typo="Typo.caption" Class="wslc-member-line mud-text-secondary">@AllDetail</MudText>
+                        </div>
+                    </div>
+                </MudListItem>
+            }
+            @foreach (var member in _members)
+            {
+                var tone = ImageSecurityFlow.Tone(member);
+                <MudListItem T="string" @key="member.Id" Value="@member.Id" role="listitem">
+                    <div class="d-flex align-center gap-2">
+                        @* One slot for the mark or the turning wheel, so a container under way moves nothing. *@
+                        <span class="wslc-member-mark">
+                            @if (UnderWay(member) is not null)
+                            {
+                                <MudProgressCircular Indeterminate="true" Size="Size.Small" Color="Color.Info" />
+                            }
+                            else
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Security" Size="Size.Small" Color="@tone" />
+                            }
+                        </span>
+                        <div class="wslc-member-text">
+                            <MudText Typo="Typo.body2" Class="@($"wslc-member-line {ImageSecurityFlow.TextClass(tone)}")">@member.Name</MudText>
+                            <MudText Typo="Typo.caption" Class="wslc-member-line mud-text-secondary">@(UnderWay(member) ?? member.Image)</MudText>
+                        </div>
+                    </div>
+                </MudListItem>
+            }
+        </MudList>
+    </MudPaper>
+
+    <div class="wslc-member-pane">
+        @if (Chosen is null && !WholeChosen)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">No container in project @Project.</MudText>
+        }
+        else
+        {
+            @ChildContent
+        }
+    </div>
+
+    @* While the window's verb runs: the wheel over both panes, so nothing is ticked or chosen meanwhile. *@
+    <BusyVeil Visible="Busy" Text="@BusyText" />
+</div>
+
+@code {
+    /// <summary>The project's name.</summary>
+    [Parameter, EditorRequired] public string Project { get; set; } = "";
+
+    /// <summary>Its containers as the list showed them: drawn at once, then read again from the agent.</summary>
+    [Parameter] public IReadOnlyList<ContainerSummary> Members { get; set; } = [];
+
+    /// <summary>The pane of the container chosen.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>The window's verb runs: the veil is up, and no other container can be chosen.</summary>
+    [Parameter] public bool Busy { get; set; }
+
+    [Parameter] public string BusyText { get; set; } = "";
+
+    /// <summary>The container chosen as it is now: when another is chosen, and each time the containers are read again; null for <see cref="All"/>.</summary>
+    [Parameter] public EventCallback<ContainerSummary?> ChosenChanged { get; set; }
+
+    /// <summary>The entry for the whole project, first in the menu and chosen to begin with (Logs: "All"); none when the window is only about its containers.</summary>
+    [Parameter] public string? All { get; set; }
+
+    /// <summary>The line under <see cref="All"/>: what it shows.</summary>
+    [Parameter] public string AllDetail { get; set; } = "";
+
+    /// <summary>The menu's value for <see cref="All"/>: no container's id is empty.</summary>
+    private const string WholeProject = "";
+
+    private List<ContainerSummary> _members = [];
+    private string? _selected;
+
+    private ContainerSummary? Chosen => _members.FirstOrDefault(member => member.Id == _selected);
+
+    private bool WholeChosen => All is not null && _selected == WholeProject;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await TakeAsync(Members);
+        Changes.Changed += OnAgentChanged;
+        Changes.Start();
+        await ReadAsync();
+    }
+
+    public void Dispose() => Changes.Changed -= OnAgentChanged;
+
+    /// <summary>The containers read again (after the window's verb); the menu stays as it was when the agent cannot be reached, and its next notice reads it again.</summary>
+    public async Task ReadAsync()
+    {
+        try
+        {
+            await TakeAsync((await Api.GetContainersAsync(all: true)).Containers);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            return;
+        }
+
+        StateHasChanged();
+    }
+
+    /// <summary>What a container is doing, in the line its image is in; null for one at rest.</summary>
+    private static string? UnderWay(ContainerSummary member) =>
+        member.PatchingTo is { } patching ? ImageSecurityFlow.PatchStatus(member, patching) + "…"
+        : member.UpdatingTo is { } updating ? $"Updating to {updating}…"
+        : member.IsRecreating ? "Being recreated…"
+        : null;
+
+    /// <summary>The project's containers by name; the one chosen stays chosen, and when none is, the whole project or else the first.</summary>
+    private async Task TakeAsync(IEnumerable<ContainerSummary> members)
+    {
+        _members = [.. members.Where(member => member.Project == Project).OrderBy(member => member.Name, StringComparer.OrdinalIgnoreCase)];
+        if (Chosen is null && !WholeChosen)
+        {
+            _selected = All is not null ? WholeProject : _members.FirstOrDefault()?.Id;
+        }
+
+        await ChosenChanged.InvokeAsync(Chosen);
+    }
+
+    /// <summary>A container changed somewhere (a patch, an update, a recreate): the menu is read again.</summary>
+    private void OnAgentChanged(ChangeNotice notice)
+    {
+        if (notice.Touches(ChangeNotice.Container))
+        {
+            _ = InvokeAsync(ReadAsync);
+        }
+    }
+
+    private async Task ChooseAsync(string? id)
+    {
+        if (id is null || id == _selected || Busy)
+        {
+            return;
+        }
+
+        _selected = id;
+        await ChosenChanged.InvokeAsync(Chosen);
+    }
+}

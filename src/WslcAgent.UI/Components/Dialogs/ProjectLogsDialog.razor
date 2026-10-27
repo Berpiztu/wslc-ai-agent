@@ -1,20 +1,32 @@
-@* A project's logs as one, in the window a container's logs open in and drawn
-   by the same view (LogsView, read through its Read): what each of its
-   containers wrote, in the order it was written, each line said by its
-   container, the names in a column, with the view's rail (search, wrap,
-   autorefresh, refresh, jump to end, copy). The agent puts the containers'
-   logs together (GET /projects/{name}/logs), so the lines of several are in
-   order in time and not one container's after another's. *@
+@* A project's logs (its body ProjectMemberPanes): All first, chosen to begin
+   with, the project's logs as one, and under it each of its containers, whose
+   own logs open as its Logs opens them. Both in the view a container's logs
+   are read in (LogsView), with its rail (search, wrap, autorefresh, refresh,
+   jump to end, copy). All is what each container wrote, in the order it was
+   written, each line said by its container, the names in a column: the agent
+   puts the containers' logs together (GET /projects/{name}/logs), so the lines
+   of several are in order in time and not one container's after another's.
+   The window is sized when it opens, as wide and as tall as the screen lets
+   it, and never changes. *@
 @inject WslcAgentApi Api
 
-<MudDialog ContentClass="wslc-dialog-action">
+<MudDialog ContentClass="wslc-dialog-action wslc-dialog-tall">
     <TitleContent>
         <DialogTitle Title="@Dialog.Title">
             <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
         </DialogTitle>
     </TitleContent>
     <DialogContent>
-        <LogsView Read="ReadAsync" />
+        <ProjectMemberPanes Project="@Project" Members="Members" All="All" AllDetail="Every container's logs, as one" ChosenChanged="Chosen">
+            @if (_chosen is { } chosen)
+            {
+                <LogsView @key="chosen.Id" Container="@chosen.Id" />
+            }
+            else
+            {
+                <LogsView @key="Project" Read="ReadAllAsync" />
+            }
+        </ProjectMemberPanes>
     </DialogContent>
 </MudDialog>
 
@@ -27,8 +39,19 @@
     /// <summary>The project's name.</summary>
     [Parameter, EditorRequired] public string Project { get; set; } = "";
 
-    /// <summary>What the view shows: the project's logs as they are now, a line each, said by its container.</summary>
-    private async Task<string> ReadAsync()
+    /// <summary>Its containers as the list showed them: drawn at once, then read again from the agent as it says they change.</summary>
+    [Parameter] public IReadOnlyList<ContainerSummary> Members { get; set; } = [];
+
+    /// <summary>The project's entry in the menu.</summary>
+    private const string All = "All";
+
+    /// <summary>The container chosen; null for All.</summary>
+    private ContainerSummary? _chosen;
+
+    private void Chosen(ContainerSummary? chosen) => _chosen = chosen;
+
+    /// <summary>What All shows: the project's logs as they are now, a line each, said by its container.</summary>
+    private async Task<string> ReadAllAsync()
     {
         var lines = (await Api.GetProjectLogsAsync(Project, Tail)).Lines;
         var width = lines.Select(line => line.Container.Length).DefaultIfEmpty(0).Max();

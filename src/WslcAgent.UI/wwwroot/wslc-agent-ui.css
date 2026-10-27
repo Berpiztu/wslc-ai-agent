@@ -2933,8 +2933,10 @@
 
 /* A grid row that raises an alarm (an image Zaindari found vulnerable): the row
    carries CardTone.Alarm's ground and ink, and every cell takes them, the sticky
-   ones too, which keep a ground of their own otherwise. */
-.mud-table-row.wslc-row-alarm > td {
+   ones too, which keep a ground of their own otherwise. All but the actions
+   cell: it keeps its own, so its buttons are seen in their colours, the red
+   of Delete on a red row among them. */
+.mud-table-row.wslc-row-alarm > td:not(.wslc-col-actions) {
     background-color: inherit !important;
     color: inherit !important;
 }
@@ -4396,8 +4398,10 @@
 
 /* A project's own row among its containers': the soft tertiary its card's
    body has (CardTone.Soft, the same share), on every cell, the pinned ones
-   too, which are painted apart to cover what scrolls under them. */
-.wslc-fill > .mud-table .mud-table-body .mud-table-row.wslc-bracket-project > .mud-table-cell {
+   too, which are painted apart to cover what scrolls under them; all but the
+   actions cell, which keeps its own, so its buttons are seen in their colours
+   (the red Delete on the red of a failed project's row among them). */
+.wslc-fill > .mud-table .mud-table-body .mud-table-row.wslc-bracket-project > .mud-table-cell:not(.wslc-col-actions) {
     background-color: color-mix(in srgb, var(--mud-palette-tertiary) 12%, var(--mud-palette-surface));
 }
 
@@ -4405,7 +4409,7 @@
    (could not start, or ended with an error): folded, the project's row is the
    only place left to say it. After the tertiary rule, which it takes the
    place of. */
-.wslc-fill > .mud-table .mud-table-body .mud-table-row.wslc-bracket-project.wslc-bracket-failed > .mud-table-cell {
+.wslc-fill > .mud-table .mud-table-body .mud-table-row.wslc-bracket-project.wslc-bracket-failed > .mud-table-cell:not(.wslc-col-actions) {
     background-color: color-mix(in srgb, var(--mud-palette-error) 25%, var(--mud-palette-surface));
 }
 
@@ -6719,13 +6723,13 @@ html[data-wslc-rows~="outlined"] .wslc-files-table {
     overflow-x: auto;
 }
 
-/* A project's Zaindari window (ProjectVulnerabilitiesDialog): the menu of its
-   containers at the left, of one width whatever it lists, and the pane of
-   the one chosen taking the rest; both the dialog's whole height, each
+/* A project's window of two panes (ProjectMemberPanes: Zaindari, Update
+   image): the menu of its containers at the left, of one width whatever it
+   lists, and the pane of the one chosen taking the rest; both the dialog's whole height, each
    scrolling in itself. 16rem holds a container's name; a narrow screen gives
    the menu no more than 40% of it. Positioned: its veil covers it while
    Save or Patch runs. */
-.wslc-zaindari-project {
+.wslc-member-panes {
     position: relative;
     display: grid;
     grid-template-columns: min(16rem, 40%) minmax(0, 1fr);
@@ -6734,14 +6738,14 @@ html[data-wslc-rows~="outlined"] .wslc-files-table {
     min-height: 0;
 }
 
-.wslc-zaindari-members {
+.wslc-member-menu {
     min-height: 0;
     overflow-y: auto;
 }
 
 /* The mark and the turning wheel take one slot, the wheel's: MudBlazor's small
    circular progress is 24px, its small icon 1.25rem. A patch begun moves nothing. */
-.wslc-zaindari-member-mark {
+.wslc-member-mark {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -6749,12 +6753,12 @@ html[data-wslc-rows~="outlined"] .wslc-files-table {
     height: 24px;
 }
 
-.wslc-zaindari-member-text {
+.wslc-member-text {
     min-width: 0;
 }
 
 /* A line of the menu is one line: a long name or image scrolls sideways, cut by nothing. */
-.wslc-zaindari-member-line {
+.wslc-member-line {
     white-space: nowrap;
     overflow-x: auto;
 }
@@ -6763,7 +6767,7 @@ html[data-wslc-rows~="outlined"] .wslc-files-table {
    Patch's), so the dialog's content keeps one frame and nothing moves when
    a step is chosen; a step's editor scrolls inside it, with the launch
    form's gutter before its right edge. */
-.wslc-zaindari-pane {
+.wslc-member-pane {
     display: flex;
     flex-direction: column;
     min-width: 0;
@@ -6771,7 +6775,7 @@ html[data-wslc-rows~="outlined"] .wslc-files-table {
     overflow: hidden;
 }
 
-.wslc-zaindari-step {
+.wslc-member-step {
     padding-right: 8px;
 }
 
