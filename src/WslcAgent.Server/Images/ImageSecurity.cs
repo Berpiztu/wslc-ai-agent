@@ -67,6 +67,9 @@ internal readonly record struct Installed(string Ecosystem, string Name, string 
 
     /// <summary>Not a package: the rule the packages were read by (<see cref="ImageSecurity.ReadRule"/>), kept with them, so packages kept by an earlier one are read again.</summary>
     public const string ReadBy = "read-by";
+
+    /// <summary>Not a package: a command the image carries where its system looks for commands (<c>usr/local/bin/uv</c>), its name as <see cref="Name"/>, so a patch knows whether to bring its own.</summary>
+    public const string Command = "command";
 }
 
 /// <summary>
@@ -436,10 +439,10 @@ public sealed partial class ImageSecurity(
 
         List<Installed>? packages;
         List<Installed> files;
-        bool ubuntuPro;
+        bool ubuntuPro, uv;
         try
         {
-            (packages, files, ubuntuPro) = Split(await PackagesAsync(image, id, cancellationToken));
+            (packages, files, ubuntuPro, uv) = Split(await PackagesAsync(image, id, cancellationToken));
         }
         catch (Exception ex) when (ex is TimeoutException or WslcNotFoundException or WslcException or IOException or InvalidDataException)
         {
@@ -474,8 +477,8 @@ public sealed partial class ImageSecurity(
             .ToList();
         return new ImageVulnerabilities(image, true, built, true, true, built && remedies.Count > 0 && settings.Get().Policy == ImageSecurityPolicy.Block,
             listed, advisories, remedies, Patch: ImagePatches.Named(image),
-            SystemUpgrade: ImagePatches.SystemUpgrade(packages, found), PythonFixes: fixes, PythonInstall: ImagePatches.PythonInstall(packages, fixes),
-            Requirements: requirements, PythonInstaller: ImagePatches.Installer(packages), PythonUninstaller: ImagePatches.Uninstaller(packages),
+            SystemUpgrade: ImagePatches.SystemUpgrade(packages, found), PythonFixes: fixes, PythonInstall: ImagePatches.PythonInstall(fixes),
+            Requirements: requirements, PythonInstaller: ImagePatches.Installer, PythonUninstaller: ImagePatches.Uninstaller, PythonSetup: ImagePatches.UvSetup(uv),
             PatchDockerfile: ImagePatches.Dockerfile(image, ImagePatches.SystemUpgrade(packages, found), [], user),
             RequirementFiles: [.. files.Select(file => new ImageTextFile(file.Name, file.Version))]);
     }
@@ -502,9 +505,10 @@ public sealed partial class ImageSecurity(
     /// <summary>
     /// The rule an image's packages are read by now: 1 when whether an Ubuntu
     /// image is attached to Ubuntu Pro came to be read, and a Python library
-    /// Debian or Ubuntu installed to be left to its package.
+    /// Debian or Ubuntu installed to be left to its package; 2 when whether it
+    /// carries uv came to be read (<see cref="Installed.Command"/>).
     /// </summary>
-    internal const string ReadRule = "1";
+    internal const string ReadRule = "2";
 
     /// <summary>Packages kept by an earlier rule than <see cref="ReadRule"/>: read again, once.</summary>
     private static bool ReadByEarlierRule(List<Installed>? kept) =>
@@ -588,13 +592,19 @@ public sealed partial class ImageSecurity(
     /// <summary>A requirements file larger than this is not one a person wrote.</summary>
     private const long MaxRequirementsFile = 256 * 1024;
 
-    /// <summary>The packages apart from the requirements files kept with them, and whether the image is attached to Ubuntu Pro; the packages null when there is none.</summary>
-    private static (List<Installed>? Packages, List<Installed> Files, bool UbuntuPro) Split(List<Installed>? read)
+    /// <summary>
+    /// The packages apart from the requirements files kept with them, whether
+    /// the image is attached to Ubuntu Pro, and whether it carries uv (the
+    /// command, or the library that brings it); the packages null when there is
+    /// none.
+    /// </summary>
+    private static (List<Installed>? Packages, List<Installed> Files, bool UbuntuPro, bool Uv) Split(List<Installed>? read)
     {
         var files = (read ?? []).Where(entry => entry.Ecosystem == Installed.RequirementsFile).ToList();
-        var packages = (read ?? []).Where(entry => entry.Ecosystem is not Installed.RequirementsFile and not Installed.UbuntuPro and not Installed.ReadBy).ToList();
+        var packages = (read ?? []).Where(entry => entry.Ecosystem is not Installed.RequirementsFile and not Installed.UbuntuPro and not Installed.ReadBy and not Installed.Command).ToList();
         var ubuntuPro = (read ?? []).Any(entry => entry.Ecosystem == Installed.UbuntuPro && entry.Name == Installed.Attached);
-        return (read is null || packages.Count == 0 ? null : packages, files, ubuntuPro);
+        var uv = (read ?? []).Any(entry => entry.Ecosystem is Installed.Command or Installed.PyPI && string.Equals(entry.Name, ImagePatches.Uv, StringComparison.OrdinalIgnoreCase));
+        return (read is null || packages.Count == 0 ? null : packages, files, ubuntuPro, uv);
     }
 
     /// <summary>
@@ -657,7 +667,7 @@ public sealed partial class ImageSecurity(
         bool ubuntuPro;
         try
         {
-            (packages, _, ubuntuPro) = Split(await PackagesAsync(image, id, cancellationToken));
+            (packages, _, ubuntuPro, _) = Split(await PackagesAsync(image, id, cancellationToken));
         }
         catch (Exception ex) when (ex is TimeoutException or WslcNotFoundException or WslcException or IOException or InvalidDataException)
         {
@@ -767,6 +777,12 @@ public sealed partial class ImageSecurity(
             var path = Normalized(entry.Name);
             proSources |= IsUbuntuProSource(path);
             proCredentials |= path == UbuntuProCredentials;
+            if (CommandFolders.Any(folder => path == $"{folder}/{ImagePatches.Uv}"))
+            {
+                found.Add(new Installed(Installed.Command, ImagePatches.Uv, ""));
+                continue;
+            }
+
             if (entry.DataStream is { } content && entry.EntryType != TarEntryType.HardLink)
             {
                 if (path is "etc/os-release" or "usr/lib/os-release")
@@ -838,6 +854,9 @@ public sealed partial class ImageSecurity(
     private static bool IsUbuntuProSource(string path) =>
         path.StartsWith("etc/apt/sources.list.d/ubuntu-esm-", StringComparison.Ordinal)
         && (path.EndsWith(".sources", StringComparison.Ordinal) || path.EndsWith(".list", StringComparison.Ordinal));
+
+    /// <summary>Where a Debian, Ubuntu or Alpine image looks for a command unless its own PATH says otherwise.</summary>
+    private static readonly string[] CommandFolders = ["usr/local/sbin", "usr/local/bin", "usr/sbin", "usr/bin", "sbin", "bin"];
 
     /// <summary>The credentials the ESM sources are read with, without which an upgrade cannot reach them.</summary>
     private const string UbuntuProCredentials = "etc/apt/auth.conf.d/90ubuntu-advantage";

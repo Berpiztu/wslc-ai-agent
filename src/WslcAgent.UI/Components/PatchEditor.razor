@@ -351,6 +351,12 @@
             lines.Add($"RUN {Report.PythonUninstaller} {string.Join(' ', takenOut)}");
         }
 
+        // uv first, for an image that does not carry it: every line above installs with it.
+        if (lines.Count > 0 && Report.PythonSetup.Length > 0)
+        {
+            lines.Insert(0, Report.PythonSetup);
+        }
+
         lines.ForEach(Insert);
         _written = lines;
     }

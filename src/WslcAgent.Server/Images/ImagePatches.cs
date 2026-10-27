@@ -108,31 +108,46 @@ public sealed class ImagePatches(IWslcRunner wslc, IImageSecurity security, Imag
             : "";
     }
 
-    /// <summary>
-    /// The command that would raise <paramref name="fixes"/>: <c>uv</c> whenever
-    /// the image carries it, else pip. A suggestion the user reads
-    /// before it runs: a virtual environment, or another Python, needs its own.
-    /// </summary>
-    internal static string PythonInstall(IReadOnlyCollection<Installed> packages, IReadOnlyList<string> fixes)
+    /// <summary>The command that would raise <paramref name="fixes"/>, by <see cref="Installer"/>. A suggestion the user reads before it runs.</summary>
+    internal static string PythonInstall(IReadOnlyList<string> fixes)
     {
         if (fixes.Count == 0)
         {
             return "";
         }
 
-        return $"{Installer(packages)} {string.Join(' ', fixes.Select(fix => $"\"{fix}\""))}";
+        return $"{Installer} {string.Join(' ', fixes.Select(fix => $"\"{fix}\""))}";
     }
 
-    /// <summary>The installer the image carries, the names to follow: <c>uv</c> whenever it has it (quicker, and it says what it changed), else pip.</summary>
-    internal static string Installer(IReadOnlyCollection<Installed> packages) =>
-        UsesUv(packages) ? "uv pip install --system --no-cache -U" : "python3 -m pip install --no-cache-dir -U";
+    internal const string Uv = "uv";
+
+    /// <summary>
+    /// The uv a patch brings an image that has none, from Astral's own image
+    /// (<c>/uv</c> in it); checked on ghcr.io when written.
+    /// </summary>
+    internal const string UvImage = "ghcr.io/astral-sh/uv:0.13.6";
+
+    /// <summary>
+    /// The Python a patch installs into: the one the image runs as
+    /// <c>python3</c>, a virtual environment's when its folder comes first in
+    /// the PATH (an image made by uv: <c>/opt/hermes/.venv</c>, with no pip in
+    /// it), else the system's.
+    /// </summary>
+    private const string PatchedPython = "--python \"$(command -v python3)\"";
+
+    /// <summary>
+    /// The installer, the names to follow: always uv, quicker than pip, never
+    /// missing as pip is from an environment uv made, and it says what it
+    /// changed; brought in by <see cref="UvSetup"/> when the image has none.
+    /// </summary>
+    internal const string Installer = $"uv pip install {PatchedPython} --no-cache -U";
 
     /// <summary>What takes a library out, by the same installer, the names to follow.</summary>
-    internal static string Uninstaller(IReadOnlyCollection<Installed> packages) =>
-        UsesUv(packages) ? "uv pip uninstall --system" : "python3 -m pip uninstall -y";
+    internal const string Uninstaller = $"uv pip uninstall {PatchedPython}";
 
-    private static bool UsesUv(IReadOnlyCollection<Installed> packages) =>
-        packages.Any(package => package.Ecosystem == Installed.PyPI && string.Equals(package.Name, "uv", StringComparison.OrdinalIgnoreCase));
+    /// <summary>The Dockerfile line that puts uv in an image that does not carry it, before <see cref="Installer"/> runs; empty when it does.</summary>
+    internal static string UvSetup(bool carriesUv) =>
+        carriesUv ? "" : $"COPY --from={UvImage} /uv /usr/local/bin/uv";
 
     /// <summary>The user's commands, one per line, blank ones left out.</summary>
     internal static List<string> Commands(string text) =>

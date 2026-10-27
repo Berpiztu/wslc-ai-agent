@@ -144,9 +144,10 @@ patched again builds on it and keeps its name):
 FROM ghcr.io/iosub/ia-pdf-excel-backend:latest
 USER root
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /usr/local/bin/uv
 COPY requirements.txt /backend/requirements.txt
-RUN uv pip install --system --no-cache -U -r /backend/requirements.txt
-RUN uv pip uninstall --system python-jose
+RUN uv pip install --python "$(command -v python3)" --no-cache -U -r /backend/requirements.txt
+RUN uv pip uninstall --python "$(command -v python3)" python-jose
 USER app
 ```
 
@@ -164,10 +165,15 @@ USER app
   choices, comments and options kept, a dependency added with the version
   that fixes it, and shown whole under the rows, with a button to copy it to
   your sources. As each choice is made, the Dockerfile is written by it: the
-  lines that copy the file in over the old one and install from it, with the
-  installer the image carries (`uv` when it has it, else pip), and take out
+  lines that copy the file in over the old one and install from it, and take out
   what was taken out, put in and taken away again with the choices, so the
-  Dockerfile shown is always what is built; the file goes beside it. A library raised
+  Dockerfile shown is always what is built; the file goes beside it. The
+  installer is always uv, quicker than pip and never missing as pip is from
+  an environment uv made (Hermes's `/opt/hermes/.venv`): it installs into the
+  Python the image runs as `python3`, its virtual environment's when that
+  comes first in the PATH. An image with no `uv` where its system looks for
+  commands, nor the library, gets it first, copied from Astral's image
+  (`COPY --from=ghcr.io/astral-sh/uv:…`). A library raised
   can break the program, which is why it is never done alone. An image with
   no requirements file was installed from files left outside it: its
   vulnerable dependencies can still be chosen, into a file of their own.

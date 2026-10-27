@@ -174,8 +174,6 @@ public sealed class ImageSecurityTests
         Assert.Equal(("python-jose[cryptography]==3.5.0", "", true), (said[1].Line, said[1].Suggested, said[1].Vulnerable));
         Assert.Contains("take it out", said[1].Note);
         Assert.False(said[2].Vulnerable);
-        Assert.Equal("python3 -m pip uninstall -y", ImagePatches.Uninstaller([new("PyPI", "pip", "24.0")]));
-        Assert.Equal("uv pip install --system --no-cache -U", ImagePatches.Installer([new("PyPI", "uv", "0.9.0")]));
     }
 
     [Fact]
@@ -191,13 +189,14 @@ public sealed class ImageSecurityTests
         Assert.Equal("", ImagePatches.SystemUpgrade([alpine[1]], zlib));
         Assert.Equal("", ImagePatches.SystemUpgrade(alpine, [zlib[0] with { FixedIn = "" }]));
 
-        // The highest fix of each library, and the installer the image carries.
+        // The highest fix of each library, always by uv, into the python3 the image runs (a venv with no pip in it too).
         var fixes = ImageSecurity.PythonFixes(black);
         Assert.Equal(["black>=24.10"], fixes);
-        Assert.Equal("python3 -m pip install --no-cache-dir -U \"black>=24.10\"", ImagePatches.PythonInstall([new("PyPI", "pip", "24.0")], fixes));
-        // An image with both: uv, quicker, and it says what it changed.
-        Assert.Equal("uv pip install --system --no-cache -U \"black>=24.10\"", ImagePatches.PythonInstall([new("PyPI", "pip", "24.0"), new("PyPI", "uv", "0.9.0")], fixes));
-        Assert.Equal("uv pip install --system --no-cache -U \"black>=24.10\"", ImagePatches.PythonInstall([new("PyPI", "uv", "0.9.0")], fixes));
+        Assert.Equal("uv pip install --python \"$(command -v python3)\" --no-cache -U \"black>=24.10\"", ImagePatches.PythonInstall(fixes));
+        Assert.Equal("uv pip uninstall --python \"$(command -v python3)\"", ImagePatches.Uninstaller);
+        // uv brought in only for an image that does not carry it.
+        Assert.Equal($"COPY --from={ImagePatches.UvImage} /uv /usr/local/bin/uv", ImagePatches.UvSetup(carriesUv: false));
+        Assert.Equal("", ImagePatches.UvSetup(carriesUv: true));
 
         Assert.Equal("FROM alpine:latest\nUSER root\nRUN apk upgrade --no-cache\n", ImagePatches.Dockerfile("alpine:latest", "apk upgrade --no-cache", [], ""));
         Assert.Equal("FROM web:1\nUSER root\nRUN pip install -U black\nRUN echo done\nUSER app\n",

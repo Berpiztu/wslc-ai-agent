@@ -82,10 +82,11 @@ public sealed record AcceptImageVulnerability(string Image, string Ecosystem, st
 /// <param name="Patch">The image Zaindari's patch would build from this one (<c>POST /api/v1/image-security/patch</c>): <c>alpine:latest-patched</c>. Offered whenever the image was read, a fix published or not: the user's own commands (a library taken out) are a patch too.</param>
 /// <param name="SystemUpgrade">The command the patch runs to upgrade the system packages (<c>apk upgrade --no-cache</c>, <c>apt-get update &amp;&amp; … apt-get upgrade -y …</c>); empty when no system package has a fix published, or the image has no package manager (distroless).</param>
 /// <param name="PythonFixes">Each Python library with a fix published, at the version that fixes all of its own: <c>aiohttp&gt;=3.13.6</c>; for the patch window to offer.</param>
-/// <param name="PythonInstall">The command that would raise them, with the installer the image carries (<c>python3 -m pip install …</c> or <c>uv pip install --system …</c>); a suggestion to read before it runs. Empty without <paramref name="PythonFixes"/>.</param>
+/// <param name="PythonInstall">The command that would raise them, by <paramref name="PythonInstaller"/>; a suggestion to read before it runs. Empty without <paramref name="PythonFixes"/>.</param>
 /// <param name="Requirements">Every library line of the image's own <c>requirements*.txt</c> files, the vulnerable ones with the change Zaindari suggests: for the patch window to choose, line by line, what to raise, take to its latest or take out, and for the user's sources.</param>
-/// <param name="PythonInstaller">The command the image installs Python libraries with, the names to follow: <c>python3 -m pip install --no-cache-dir -U</c>, or <c>uv pip install --system --no-cache -U</c> whenever it has uv.</param>
-/// <param name="PythonUninstaller">The command it takes them out with, the names to follow: <c>python3 -m pip uninstall -y</c>, or <c>uv pip uninstall --system</c>.</param>
+/// <param name="PythonInstaller">The command the patch installs Python libraries with, the names to follow: always uv, into the Python the image runs as <c>python3</c> (a virtual environment's when it comes first in the PATH), <c>uv pip install --python "$(command -v python3)" --no-cache -U</c>.</param>
+/// <param name="PythonUninstaller">The command it takes them out with, the names to follow: <c>uv pip uninstall --python "$(command -v python3)"</c>.</param>
+/// <param name="PythonSetup">The Dockerfile line that puts uv in an image that does not carry it, to go before the first <paramref name="PythonInstaller"/> or <paramref name="PythonUninstaller"/>: <c>COPY --from=ghcr.io/astral-sh/uv:… /uv /usr/local/bin/uv</c>; empty when the image has uv.</param>
 /// <param name="PatchDockerfile">The Dockerfile the patch would build, as the patch window first shows it to be read and changed: <c>FROM</c> the image, <c>USER root</c>, its system upgrade when it has one, and its own user given back.</param>
 /// <param name="RequirementFiles">The image's own <c>requirements*.txt</c> files, whole, comments and options kept: what the patch window rewrites by the choices made on <paramref name="Requirements"/>.</param>
 public sealed record ImageVulnerabilities(
@@ -107,7 +108,8 @@ public sealed record ImageVulnerabilities(
     string PythonInstaller = "",
     string PythonUninstaller = "",
     string PatchDockerfile = "",
-    IReadOnlyList<ImageTextFile>? RequirementFiles = null);
+    IReadOnlyList<ImageTextFile>? RequirementFiles = null,
+    string PythonSetup = "");
 
 /// <summary>A text file of an image, as a path in it and its text: a <c>requirements.txt</c>.</summary>
 public sealed record ImageTextFile(string Path, string Text);
