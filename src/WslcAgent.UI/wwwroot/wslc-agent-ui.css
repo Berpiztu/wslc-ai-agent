@@ -4505,7 +4505,8 @@
    while a container comes up. The line is cut instead and the whole of it is in
    the tooltip. */
 .wslc-card-texts > .mud-typography,
-.wslc-card-members > .mud-typography {
+.wslc-card-members > .mud-typography,
+.wslc-card-line {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -6827,6 +6828,14 @@ html[data-wslc-rows~="outlined"] .wslc-files-table {
 
 .wslc-member-step {
     padding-right: 8px;
+}
+
+/* Update image's line saying which version the tag chosen is: one line,
+   whatever it says, so the window keeps its size. */
+.wslc-update-version {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Zaindari's tab (ZaindariTab): its steps are MudBlazor's tabs, and what

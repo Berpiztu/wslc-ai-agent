@@ -8,7 +8,7 @@ using WslcAgent.Server.Wslc;
 namespace WslcAgent.Server.Images;
 
 /// <summary>Images as <c>wslc image list --format json</c> reports them, marked with container usage.</summary>
-public sealed class ImageService(IWslcRunner wslc, ContainerUsageScanner usage, ImagePulls pulls, Resources.ResourceRegistry registry, ImageMarks marks) : IImageService
+public sealed class ImageService(IWslcRunner wslc, ContainerUsageScanner usage, ImagePulls pulls, Resources.ResourceRegistry registry, ImageMarks marks, ImageVersions? versions = null) : IImageService
 {
     private const string None = "<none>";
     private static readonly TimeSpan PullTimeout = TimeSpan.FromMinutes(30);
@@ -30,6 +30,12 @@ public sealed class ImageService(IWslcRunner wslc, ContainerUsageScanner usage, 
         var uids = registry.Reconcile(Resources.ResourceRegistry.Image, tagged, complete: true);
         // What Zaindari last found in each, on the image itself (ImageMarks).
         var images = marks.Annotate([.. rows.Select(i => i.IsDangling ? i : i with { Uid = uids.GetValueOrDefault(i.Reference) })]);
+        // The version each says it is, read once by its id (ImageVersions).
+        if (versions is not null)
+        {
+            images = await versions.AnnotateAsync(images, cancellationToken);
+        }
+
         var aggregate = new ImageAggregate(images.Count, images.Sum(i => StatsParsing.Bytes(i.Size)));
         return new ImageListResponse(images, aggregate);
     }

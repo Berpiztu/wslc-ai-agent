@@ -18,6 +18,8 @@ namespace WslcAgent.ApiClient.Contracts;
 /// <param name="ImageUnfixed">The worst severity of its vulnerabilities moderate or worse that nobody downstream can mend, a system package its distribution has not fixed for it; said, never an alarm; empty for none.</param>
 /// <param name="ImageRefused">The agent makes no new container from it: built here, a vulnerability moderate or worse, Settings → Security set to Block.</param>
 /// <param name="ImageCheckedAt">When Zaindari last checked it (<c>yyyy-MM-dd HH:mm</c>, the agent's time); empty with no mark.</param>
+/// <param name="ImageVersion">The version it says it is: its <c>org.opencontainers.image.version</c> label, or else the one <c>*_VERSION</c> variable it sets (<see cref="ImageVersionFrom"/>); either may be the image it was built on's. Empty when it says none.</param>
+/// <param name="ImageVersionFrom">The variable <see cref="ImageVersion"/> was read from (<c>REDIS_VERSION</c>); empty when it is the label's, or there is none.</param>
 public sealed record ImageSummary(
     string Id,
     string Repository,
@@ -35,7 +37,9 @@ public sealed record ImageSummary(
     string ImageCheckedAt = "",
     string? PatchingTo = null,
     string? PatchJob = null,
-    string ImageUnfixed = "")
+    string ImageUnfixed = "",
+    string ImageVersion = "",
+    string ImageVersionFrom = "")
 {
     /// <summary>
     /// No name that is this image alone: no repository, or a repository whose
@@ -43,6 +47,17 @@ public sealed record ImageSummary(
     /// </summary>
     public bool IsDangling => Repository.Length == 0 || Tag.Length == 0;
 }
+
+/// <summary>
+/// Body of <c>GET /api/v1/images/registry-version?image=</c>: the version an
+/// image not on the machine says it is, read from its registry before it is
+/// pulled, as a pulled one is read (<see cref="ImageSummary.ImageVersion"/>).
+/// </summary>
+/// <param name="Image">The reference asked about, as the agent reads it.</param>
+/// <param name="Version">The version the image says it is: its label, or else its one <c>*_VERSION</c> variable; empty when it says none, or the registry did not say.</param>
+/// <param name="From">The variable <see cref="Version"/> was read from; empty for the label.</param>
+/// <param name="Note">Why there is no version, in words (the image says none, the registry asks for a login, it could not be reached); empty when there is one.</param>
+public sealed record RegistryImageVersion(string Image, string Version, string From, string Note);
 
 /// <summary>Totals for the page header.</summary>
 public sealed record ImageAggregate(int Count, long SizeBytes);

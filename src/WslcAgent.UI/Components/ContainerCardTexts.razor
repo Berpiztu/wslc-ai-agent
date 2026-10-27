@@ -1,6 +1,6 @@
 @* What a container's card says about it in words: its Id, its Status, its
-   Ports, its Networks, when it was created and its image's tag, with the
-   version its image says it is when it says one. The card's body draws them
+   Ports, its Networks, when it was created, and on a line of its own its
+   image's tag, with the version its image says it is when it says one. The card's body draws them
    beside its dials (ContainerCardBody); the dashboard's details object draws
    them alone, the dials being objects of their own. *@
 
@@ -9,21 +9,17 @@
     <MudText Typo="Typo.body2" title="@Container.Status"><b>Status</b> @Container.Status</MudText>
     <MudText Typo="Typo.body2"><b>Ports</b> <PortsLink Ports="Container.Ports" Container="@Container.Id" Publications="Container.Published" /></MudText>
     <MudText Typo="Typo.body2" title="@Container.Networks"><b>Networks</b> @Readings.Dash(Container.Networks)</MudText>
-    @* When it was made and the version it runs: on the one line, which had the room, so the card keeps its
-       height; one line as every line here is. *@
-    <MudText Typo="Typo.caption" Class="mud-text-secondary" title="@Container.CreatedAt">Created @Container.RunningFor · @Version</MudText>
+    @* When it was made, and the version it runs on a line of its own, always: a patched image's tag and the
+       version it says it is did not fit beside it. Each one line, as every line here is, cut where the card
+       ends and whole in its title. Blocks, as the lines above are: MudBlazor draws a caption as a span,
+       which no width holds, and it ran out of the card. *@
+    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block" title="@Container.CreatedAt">Created @Readings.Age(Container.CreatedAt, Container.RunningFor)</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block" title="@Version">@Version</MudText>
 </div>
 
 @code {
     [Parameter, EditorRequired] public ContainerSummary Container { get; set; } = default!;
 
-    /// <summary>Its image's tag, and the version the image says it is when it says one the tag does not (<c>latest (1.4.2)</c>).</summary>
-    private string Version
-    {
-        get
-        {
-            var tag = ImageReference.Split(Container.Image).Tag;
-            return Container.ImageVersion is { Length: > 0 } version && version != tag ? $"{tag} ({version})" : tag;
-        }
-    }
+    /// <summary>Its image's tag, and the version the image says it is when it says one the tag does not (<c>latest (1.23)</c>).</summary>
+    private string Version => ImageVersionText.WithTag(ImageReference.Split(Container.Image).Tag, Container.ImageVersion, Container.ImageVersionFrom);
 }

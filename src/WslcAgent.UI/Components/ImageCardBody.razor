@@ -1,10 +1,12 @@
 @* What an image's card says about it: one body, drawn by the Images page's
-   card and by an image's card on the dashboard, so the two never tell the image apart. *@
+   card and by an image's card on the dashboard, so the two never tell the image apart.
+   Its tag is the card's subtitle; the version it says it is, when it says one,
+   follows when it was made, on that one line, so the card keeps its height. *@
 
 <MudText Typo="Typo.body2"><b>Id</b> @Image.Id</MudText>
 <MudText Typo="Typo.body2"><b>Size</b> @Readings.Dash(Image.Size)</MudText>
 <MudText Typo="Typo.body2"><b>Containers</b> @(Image.Containers?.ToString() ?? "—")</MudText>
-<MudText Typo="Typo.caption" Class="mud-text-secondary">Created @Readings.Dash(Image.CreatedSince)</MudText>
+<MudText Typo="Typo.caption" Class="mud-text-secondary d-block wslc-card-line" title="@($"Created {Image.CreatedAt}{(Image.ImageVersion.Length > 0 ? $" · {ImageVersionText.Of(Image.ImageVersion, Image.ImageVersionFrom)}" : "")}")">Created @Readings.Age(Image.CreatedAt, Image.CreatedSince)@(Image.ImageVersion.Length > 0 ? $" · {ImageVersionText.Of(Image.ImageVersion, Image.ImageVersionFrom)}" : "")</MudText>
 
 @code {
     [Parameter, EditorRequired] public ImageSummary Image { get; set; } = default!;

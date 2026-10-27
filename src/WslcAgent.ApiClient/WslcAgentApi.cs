@@ -734,6 +734,10 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
         await http.GetFromJsonAsync<ImageListResponse>("api/v1/images", cancellationToken)
         ?? new ImageListResponse([], new ImageAggregate(0, 0));
 
+    /// <summary>The version an image not on the machine says it is, asked of its registry without a login.</summary>
+    public Task<RegistryImageVersion> GetRegistryImageVersionAsync(string image, CancellationToken cancellationToken = default) =>
+        GetAsync<RegistryImageVersion>($"api/v1/images/registry-version?image={Escape(image)}", cancellationToken);
+
     public Task<ImageInspect> GetImageInspectAsync(string reference, CancellationToken cancellationToken = default) =>
         GetAsync<ImageInspect>($"api/v1/images/inspect?reference={Escape(reference)}", cancellationToken);
 

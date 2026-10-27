@@ -7,7 +7,10 @@
    once it has asked, whether the image named carries what pulling it again
    does not mend; its Patch… opens the patch window (PatchImageDialog), with
    this container ticked: the patch is built and moves it (Patched). A
-   container that runs a patch is offered its original, as published. *@
+   container that runs a patch is offered its original, as published. Under
+   the Version, a line says which version the image named is: as its
+   registry has it now, what the update pulls (asked without a login), and
+   this machine's when it has another. *@
 @inject WslcAgentApi Api
 @inject IDialogService Dialogs
 
@@ -24,6 +27,8 @@
                   Variant="Variant.Filled" Margin="Margin.Dense" />
     <PatchOffer Image="@Target" Checking="_checking" Report="_report" OnPatch="PatchAsync" />
 </div>
+@* Which version the tag chosen is, read with Zaindari's answer, a line that is always there so nothing moves. *@
+<MudText Typo="Typo.caption" Class="mud-text-secondary mt-1 wslc-update-version">@VersionSaid</MudText>
 <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
     The image is pulled, then the container is recreated with its ports, mounts, environment and name. If the new version does not start, the previous container stays as it was.
     Leave latest for the version published last, or type one (1.4) to go to that one, or back to it.
@@ -58,6 +63,40 @@
 
     private string Target => $"{_repository}:{_version.Trim()}";
 
+    /// <summary>The image named, as this machine has it; null when it is not here, or not asked yet.</summary>
+    private ImageSummary? _local;
+
+    /// <summary>The image named as its registry has it now, what the update pulls; null until asked, or when it could not be.</summary>
+    private RegistryImageVersion? _published;
+
+    /// <summary>The image named has been looked for on this machine and in its registry.</summary>
+    private bool _looked;
+
+    /// <summary>
+    /// What the line under the Version says of the image named: the version the update goes to, as the
+    /// registry has it, and this machine's when it has another; or why the registry did not say.
+    /// </summary>
+    private string VersionSaid
+    {
+        get
+        {
+            if (_checking || !_looked)
+            {
+                return "Image version: …";
+            }
+
+            var here = _local is { ImageVersion.Length: > 0 } local ? ImageVersionText.Of(local.ImageVersion, local.ImageVersionFrom) : "";
+            if (_published is { Version.Length: > 0 } published)
+            {
+                var there = ImageVersionText.Of(published.Version, published.From);
+                return here.Length > 0 && here != there ? $"Image version: {there} in the registry; this machine has {here}" : $"Image version: {there}";
+            }
+
+            var why = _published?.Note is { Length: > 0 } note ? note : "the registry could not be asked";
+            return here.Length > 0 ? $"Image version: {here} on this machine; the registry: {why}" : $"Image version: {why}";
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         _repository = ImageReference.RepositoryOf(ImageReference.Normalize(Current));
@@ -75,6 +114,10 @@
         await CheckingAsync(true);
         try
         {
+            var target = ImageReference.Normalize(Target);
+            var published = PublishedAsync(Target);
+            _local = (await Api.GetImagesAsync()).Images.FirstOrDefault(image => !image.IsDangling && ImageReference.Normalize(image.Reference) == target);
+            _published = await published;
             _report = await Api.GetImageVulnerabilitiesAsync(Target);
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
@@ -83,7 +126,22 @@
         }
         finally
         {
+            // Looked for, whatever came of it: the line says what is known, never "…" for good.
+            _looked = true;
             await CheckingAsync(false);
+        }
+    }
+
+    /// <summary>The image as its registry has it; null when the agent could not ask (an agent too old to, or one not answering): the line then says so.</summary>
+    private async Task<RegistryImageVersion?> PublishedAsync(string image)
+    {
+        try
+        {
+            return await Api.GetRegistryImageVersionAsync(image);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            return null;
         }
     }
 
