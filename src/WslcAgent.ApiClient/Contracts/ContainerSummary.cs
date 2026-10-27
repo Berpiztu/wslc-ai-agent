@@ -25,7 +25,7 @@ namespace WslcAgent.ApiClient.Contracts;
 /// <param name="NetIoBytes">Network I/O received and sent together, in bytes: the card's Network dial and its share of every container's.</param>
 /// <param name="Uid">The agent's own number for this container (the resource registry, <c>resources.json</c>): no rename and no recreate changes it, so the dashboard points at it; 0 for a row the registry does not hold, such as a Files helper.</param>
 /// <param name="UpdatingTo">The image this container's image update is pulling, while the pull lasts (<c>/images/pulls</c> has its progress); null otherwise.</param>
-/// <param name="PatchingTo">The patch this container is to be moved to, while Zaindari's patch is built and moves it (<c>/image-security/patch</c>); null otherwise.</param>
+/// <param name="PatchingTo">The patch being built from this container's image, while Zaindari's patch is built (<c>/image-security/patch</c>): the one it is to be moved to, or, with <see cref="PatchImageOnly"/>, its image's alone; null otherwise.</param>
 /// <param name="PatchJob">That patch's build job (<c>/images/build/{job}</c>), its console and its cancel; null otherwise.</param>
 /// <param name="Project">The project it belongs to, when it was made from a Compose file (its <c>ai.berpiztu.wslc.project</c> label); empty for a container on its own.</param>
 /// <param name="Service">Its service in that project's Compose file; empty for a container on its own.</param>
@@ -36,6 +36,7 @@ namespace WslcAgent.ApiClient.Contracts;
 /// <param name="ImageWorst">The worst severity of its image's vulnerabilities moderate or worse that something can be done about (a fix the image's upgrade reaches, or a Python library), as Zaindari last found it in the image: <c>moderate</c>, <c>high</c> or <c>critical</c>; empty for an image with none, or not checked. What raises the alarm.</param>
 /// <param name="ImageUnfixed">The worst severity of its image's vulnerabilities moderate or worse that nobody downstream can mend: a system package its distribution has not fixed for the image (no fix, or one only Ubuntu Pro carries in an image not attached to it). Said, never an alarm; empty for none.</param>
 /// <param name="ImageCheckedAt">When Zaindari last checked its image (<c>yyyy-MM-dd HH:mm</c>, the agent's time); empty with no mark.</param>
+/// <param name="PatchImageOnly">The patch named in <see cref="PatchingTo"/> is its image's and does not move it (not ticked, or of a project, whose compose file names the image): it runs on as it is.</param>
 public sealed record ContainerSummary(
     string Id,
     string Name,
@@ -71,7 +72,8 @@ public sealed record ContainerSummary(
     string ImageCheckedAt = "",
     string? PatchingTo = null,
     string? PatchJob = null,
-    string ImageUnfixed = "")
+    string ImageUnfixed = "",
+    bool PatchImageOnly = false)
 {
     /// <summary>The agent's own state while a change to the container is being applied (a recreate).</summary>
     public const string Recreating = "recreating";

@@ -1,0 +1,34 @@
+@* The ring an image or a container wears where its avatar goes while
+   Zaindari's patch of the image is built: the same ring, words and verbs
+   wherever it is shown, its console and its cancel by the patch's build job,
+   none until the patch has it. *@
+@inject IDialogService Dialogs
+@inject WslcAgentApi Api
+@inject ISnackbar Snackbar
+
+<ProgressRing Pct="0" Status="@Status" LogTitle="View the patch's output" CancelTitle="Cancel the patch"
+              OnLog="LogAsync" OnCancel="CancelAsync" />
+
+@code {
+    /// <summary>The patch being built (<c>…-patched</c>), the console's title.</summary>
+    [Parameter, EditorRequired] public string Patch { get; set; } = "";
+
+    /// <summary>The patch's build job; null until it has one.</summary>
+    [Parameter] public string? Job { get; set; }
+
+    [Parameter, EditorRequired] public string Status { get; set; } = "";
+
+    /// <summary>After the patch was cancelled: the page reads its list again.</summary>
+    [Parameter] public EventCallback OnCancelled { get; set; }
+
+    private Task LogAsync() =>
+        Job is { Length: > 0 } job ? PullFlow.ShowBuildLogAsync(Dialogs, job, Patch) : Task.CompletedTask;
+
+    private async Task CancelAsync()
+    {
+        if (Job is { Length: > 0 } job && await PullFlow.CancelBuildAsync(Dialogs, Api, Snackbar, job))
+        {
+            await OnCancelled.InvokeAsync();
+        }
+    }
+}

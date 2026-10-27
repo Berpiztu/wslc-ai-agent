@@ -108,8 +108,8 @@
                             }
                             else if (context.Item.Value.PatchingTo is { } patching)
                             {
-                                @* Zaindari's patch, built by the agent with its window closed: the bar moves until the container is moved to it. *@
-                                <ProgressCell Lead="@Mark(context.Item.Value)" Name="@context.Item.Value.Name" Indeterminate="true" Status="@($"Patching: building {patching}…")"
+                                @* Zaindari's patch of its image, built by the agent with its window closed: the bar moves until the build ends. *@
+                                <ProgressCell Lead="@Mark(context.Item.Value)" Name="@context.Item.Value.Name" Indeterminate="true" Status="@($"{ImageSecurityFlow.PatchStatus(context.Item.Value, patching)}…")"
                                               LogTitle="View the patch's output" CancelTitle="Cancel the patch"
                                               OnLog="@(() => PatchLogAsync(context.Item.Value.PatchJob, patching))" OnCancel="@(() => CancelPatchAsync(context.Item.Value.PatchJob))" />
                             }
@@ -679,9 +679,8 @@
                             }
                             else if (c.PatchingTo is { } patching)
                             {
-                                @* Zaindari's patch, built by the agent with its window closed: the ring turns until the container is moved to it. *@
-                                <ProgressRing Pct="0" Status="@($"Patching: building {patching}")" LogTitle="View the patch's output" CancelTitle="Cancel the patch"
-                                              OnLog="@(() => PatchLogAsync(c.PatchJob, patching))" OnCancel="@(() => CancelPatchAsync(c.PatchJob))" />
+                                @* Zaindari's patch of its image, built by the agent with its window closed: the ring turns until the build ends. *@
+                                <PatchRing Patch="@patching" Job="@c.PatchJob" Status="@ImageSecurityFlow.PatchStatus(c, patching)" OnCancelled="RefreshAsync" />
                             }
                             else
                             {

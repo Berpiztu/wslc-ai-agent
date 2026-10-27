@@ -2,11 +2,10 @@
    image, the avatar in its state's colour, its state chip, and the pastel
    green of a running container — standing alone. While running the green
    wins over the object's Background; stopped, the Background shows.
-   While
-   files travel in or out of the container, the ring of its transfers takes
-   the avatar's place, as in the list. It fills its cells, as the header's
-   tinted tone does its row; its type size steps its name, its image line,
-   its chip and its avatar. *@
+   While it is recreated, a patch of its image is built, or files travel in
+   or out of it, that ring takes the avatar's place, as in the list. It
+   fills its cells, as the header's tinted tone does its row; its type size
+   steps its name, its image line, its chip and its avatar. *@
 @namespace WslcAgent.UI.Dashboard.Objects
 @using Berpiztu.Dashboard.Catalogue
 @using Berpiztu.Dashboard.Model
@@ -43,12 +42,17 @@
         Hear(h => Queue.QueueChanged += h, h => Queue.QueueChanged -= h);
     }
 
-    /// <summary>The ring in the avatar's place: turning while the container is being recreated, or its transfers'; nothing when nothing of the container's is under way.</summary>
+    /// <summary>The ring in the avatar's place: turning while the container is being recreated or a patch of its image is built, or its transfers'; nothing when nothing of the container's is under way.</summary>
     private RenderFragment? Ring(ContainerSummary c)
     {
         if (c.IsRecreating)
         {
             return @<TurningRing Color="Color.Info" Title="Being recreated" />;
+        }
+
+        if (c.PatchingTo is { } patching)
+        {
+            return @<PatchRing Patch="@patching" Job="@c.PatchJob" Status="@ImageSecurityFlow.PatchStatus(c, patching)" />;
         }
 
         return TransferFlow.Showing(TransferFlow.For(Transfers.Value ?? [], c.Id, c.Name)) is { Count: > 0 } moving

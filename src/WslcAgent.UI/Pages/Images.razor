@@ -111,8 +111,7 @@
                             }
                             else if (i.PatchingTo is { } patching)
                             {
-                                <ProgressRing Pct="0" Status="@($"Patching: building {patching}")" LogTitle="View the patch's output" CancelTitle="Cancel the patch"
-                                              OnLog="@(() => PatchLogAsync(i.PatchJob, patching))" OnCancel="@(() => CancelPatchAsync(i.PatchJob))" />
+                                <PatchRing Patch="@patching" Job="@i.PatchJob" Status="@($"Patching: building {patching}")" OnCancelled="RefreshAsync" />
                             }
                             else
                             {

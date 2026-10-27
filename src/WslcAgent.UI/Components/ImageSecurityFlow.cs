@@ -80,6 +80,10 @@ public static class ImageSecurityFlow
     /// <summary>Any of a project's containers runs a patch.</summary>
     public static bool IsPatched(IEnumerable<ContainerSummary> containers) => containers.Any(IsPatched);
 
+    /// <summary>What a container says while a patch of its image is built: that it is patched, or, one the patch does not move, that its image is.</summary>
+    public static string PatchStatus(ContainerSummary container, string patch) =>
+        container.PatchImageOnly ? $"Patching its image: building {patch}" : $"Patching: building {patch}";
+
     /// <summary>What a patch would mend, in the one line the offer has: how many system packages have a fix the image does not carry.</summary>
     public static string PatchSummary(ImageVulnerabilities report)
     {

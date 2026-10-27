@@ -34,7 +34,7 @@ public sealed class ImageMarks(IOptions<WslcOptions> options, ILogger<ImageMarks
 
     /// <summary>
     /// A patch of <paramref name="image"/> is being built, and will move
-    /// <paramref name="containers"/>: the image's row and theirs say so until
+    /// <paramref name="containers"/>: the image's row and its containers' say so until
     /// <see cref="PatchEnds"/>, so a build of half a minute shows on the cards.
     /// </summary>
     public void PatchBegins(string image, string patch, IReadOnlyList<string> containers) => _patching[image.Trim()] = (patch, [.. containers], null);
@@ -112,7 +112,12 @@ public sealed class ImageMarks(IOptions<WslcOptions> options, ILogger<ImageMarks
                 : image)];
     }
 
-    /// <summary>The containers list's rows with their image's mark, read by the name of their image, and the patch each is to be moved to.</summary>
+    /// <summary>
+    /// The containers list's rows with their image's mark, read by the name of
+    /// their image, and the patch being built: on the containers it is to move,
+    /// and on every other container of the image patched as its image's alone,
+    /// so a container Zaindari was opened from says it whether it moves or not.
+    /// </summary>
     public IReadOnlyList<ContainerSummary> AnnotateContainers(IReadOnlyList<ContainerSummary> containers)
     {
         var marked = Marks().IsEmpty
@@ -120,11 +125,19 @@ public sealed class ImageMarks(IOptions<WslcOptions> options, ILogger<ImageMarks
             : [.. containers.Select(row => Of(row.Image) is { } mark
                 ? row with { ImageWorst = mark.Worst, ImageUnfixed = mark.Unfixed, ImageRefused = mark.Refused, ImageCheckedAt = Stamp(mark) }
                 : row)];
-        return _patching.IsEmpty
-            ? marked
-            : [.. marked.Select(row => _patching.Values.FirstOrDefault(patching => patching.Containers.Any(named => Names(named, row))) is { Patch: { } patch } under
-                ? row with { PatchingTo = patch, PatchJob = under.Job }
-                : row)];
+        return _patching.IsEmpty ? marked : [.. marked.Select(Patching)];
+
+        ContainerSummary Patching(ContainerSummary row)
+        {
+            if (_patching.Values.FirstOrDefault(patching => patching.Containers.Any(named => Names(named, row))) is { Patch: { } patch } moving)
+            {
+                return row with { PatchingTo = patch, PatchJob = moving.Job };
+            }
+
+            return _patching.FirstOrDefault(patching => SameReference(patching.Key, row.Image)) is { Value: { Patch: { } own } under }
+                ? row with { PatchingTo = own, PatchJob = under.Job, PatchImageOnly = true }
+                : row;
+        }
     }
 
     /// <summary>A container a patch names by id (short or full) or by name.</summary>

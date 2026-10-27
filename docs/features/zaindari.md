@@ -178,7 +178,10 @@ The window closes when the patch starts, and the title bar's activity line
 follows it to its end, step by step (`[2/3] RUN apt-get …`), then says it
 was built and how many containers moved; a patch that fails says why in a
 window of its own. While it is built, the image's row and card and those of
-the containers it moves say *Patching: building …*. A patch of a patch
+the containers it moves say *Patching: building …*, with its console and
+its cancel; every other container of the image, one not ticked or of a
+project, says *Patching its image: building …*, on the Containers page and
+on its header on the Home, and runs on as it is. A patch of a patch
 builds on it: a library taken out, tried, then the next, one patch at a
 time. A patch is published nowhere, so **Pull** on it pulls the image it was
 made from. A container that runs a patch says **patched** after its state,
