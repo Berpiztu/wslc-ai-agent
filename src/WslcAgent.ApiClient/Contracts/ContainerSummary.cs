@@ -37,6 +37,7 @@ namespace WslcAgent.ApiClient.Contracts;
 /// <param name="ImageUnfixed">The worst severity of its image's vulnerabilities moderate or worse that nobody downstream can mend: a system package its distribution has not fixed for the image (no fix, or one only Ubuntu Pro carries in an image not attached to it). Said, never an alarm; empty for none.</param>
 /// <param name="ImageCheckedAt">When Zaindari last checked its image (<c>yyyy-MM-dd HH:mm</c>, the agent's time); empty with no mark.</param>
 /// <param name="PatchImageOnly">The patch named in <see cref="PatchingTo"/> is its image's and does not move it (not ticked in the patch window): it runs on as it is.</param>
+/// <param name="ImageVersion">The version its image says it is (its <c>org.opencontainers.image.version</c> label, which the container carries): what a tag such as <c>latest</c> does not say. An image can inherit it from the one it was built on (an Ubuntu base says <c>24.04</c>); empty when the image says none.</param>
 public sealed record ContainerSummary(
     string Id,
     string Name,
@@ -73,7 +74,8 @@ public sealed record ContainerSummary(
     string? PatchingTo = null,
     string? PatchJob = null,
     string ImageUnfixed = "",
-    bool PatchImageOnly = false)
+    bool PatchImageOnly = false,
+    string ImageVersion = "")
 {
     /// <summary>The agent's own state while a change to the container is being applied (a recreate).</summary>
     public const string Recreating = "recreating";

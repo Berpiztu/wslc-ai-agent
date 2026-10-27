@@ -2,8 +2,9 @@
    what a container's card on the Containers page says of it, its header (its
    name, its image and version, its state's chip, patched and CVE) and its
    body (ContainerCardBody: its id, status, ports, networks, when it was made,
-   and the CPU and memory dials, read again on the window's clock). All: every
-   container's, one under the other. Nothing here to press: it reads. *@
+   and the CPU and memory dials, read again on the window's clock), and the
+   verbs its card keeps at the right end (ContainerActions: start or stop,
+   restart, the menu, remove). All: every container's, one under the other. *@
 @inherits ProjectPaneTab
 
 <div class="wslc-action-body">
@@ -21,6 +22,13 @@
                         <ChildContent>
                             <ContainerCardBody Container="c" />
                         </ChildContent>
+                        <Actions>
+                            @* The card's own verbs at its right end, as the Containers page's card has them: start or stop,
+                               restart, the menu and remove; the menu is the whole list, as the dashboard's verbs' is. *@
+                            <VerbTaps>
+                                <ContainerActions Container="c" Changed="ReadAgain" />
+                            </VerbTaps>
+                        </Actions>
                     </EntityCard>
                 </div>
             }

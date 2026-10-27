@@ -601,8 +601,13 @@ public sealed partial class ContainerService(
             HealthStatus: row.GetString("HealthStatus"),
             Platform: platform,
             Project: project,
-            Service: service);
+            Service: service,
+            ImageVersion: ImageVersionLabel().Match(labels).Groups["value"].Value.Trim());
     }
+
+    /// <summary>The version an image says it is, among the labels its container carries (<c>key=value</c> joined by commas).</summary>
+    [GeneratedRegex(@"(?:^|,)org\.opencontainers\.image\.version=(?<value>[^,]*)")]
+    private static partial Regex ImageVersionLabel();
 
     /// <summary>
     /// Port bindings as <c>hostPort->containerPort</c>,

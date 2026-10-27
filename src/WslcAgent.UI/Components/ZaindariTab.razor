@@ -1,85 +1,80 @@
 @* Zaindari's tab of a project's window (ProjectPanesDialog): what the
-   container chosen needs, in three steps the keys of its own bar, at the
-   top of the tab, switch between; the step's verb and Cancel are on that
-   bar too, so the window's title line holds Close alone. Vulnerabilities: Zaindari's report of its image, as a container's
-   own window reads it (ImageReportLines). Accept: what no version fixes, to
-   accept, as the Accept window does (AcceptEditor), saved by Save. Patch: the
-   patch window's editor (PatchEditor), that container alone ticked, started
-   by Patch. A key is pressed only when its step has something to do, and
-   when neither has, the bar says so beside them. Cancel, on Accept and
-   Patch, goes back to the report. A container under
-   way shows its work instead (MemberWork), and its steps wait. Each image is
-   checked once while the tab is open, and again after something was
-   accepted in it. *@
+   container chosen needs, in three steps, MudBlazor's tabs as the window's
+   own are; the step's verb and Cancel stand at the right end of their tab
+   bar, so the window's title line holds Close alone. Vulnerabilities:
+   Zaindari's report of its image, as a container's own window reads it
+   (ImageReportLines). Accept: what no version fixes, to accept, as the
+   Accept window does (AcceptEditor), saved by Save. Patch: the patch
+   window's editor (PatchEditor), that container alone ticked, started by
+   Patch. A step's tab is pressed only when it has something to do, and when
+   neither has, the bar says so. Cancel, on Accept and Patch, goes back to
+   the report, in Zaindari's own window only: in the Project window the tabs
+   are the way back. A container under way shows its work instead (MemberWork),
+   and its steps wait. Each image is checked once while the tab is open, and
+   again after something was accepted in it. *@
 @inherits ProjectPaneTab
 @inject WslcAgentApi Api
 @inject WslcAgent.UI.Components.Styles.UiStyle Style
 
 @if (Chosen is { } chosen)
 {
-    @* The steps' bar, in the tab, over what each step shows: the keys at the left, with what they say when
-       neither has anything to do; at the right the step's verb and Cancel, each keeping its place on every
-       step (unseen where it has nothing to do), so a step chosen moves nothing. *@
-    <div class="wslc-zaindari-bar">
-        <MudToggleGroup T="string" Value="_step" ValueChanged="StepTo" Size="Style.Applied.ToggleSize" Color="Style.Applied.ToggleColor"
-                        Outlined="Style.Applied.ToggleOutlined" Delimiters="Style.Applied.ToggleDelimiters"
-                        Class="@(Style.Applied.ToggleRounded ? "rounded-pill" : null)" CheckMark="Style.Applied.ToggleCheckMark">
-            <MudToggleItem Value="@Vulnerabilities">Vulnerabilities</MudToggleItem>
-            <MudToggleItem Value="@Accept" Disabled="@(!CanAccept)">Accept</MudToggleItem>
-            <MudToggleItem Value="@Patch" Disabled="@(!CanPatch)">Patch</MudToggleItem>
-        </MudToggleGroup>
-        @if (NothingLeft)
-        {
-            <MudText Typo="Typo.body2" Class="mud-text-secondary wslc-zaindari-nothing-left">Up to date: nothing to accept or patch.</MudText>
-        }
-        <MudSpacer />
-        @if (_step == Accept)
-        {
-            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" Disabled="@(Verb.Busy || !CanAccept)" OnClick="SaveAcceptedAsync">@(RunningHere ? "Saving…" : "Save")</MudButton>
-        }
-        else
-        {
-            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" Class="@(_step == Patch ? null : "invisible")"
-                       Disabled="@(Verb.Busy || !CanPatch || _step != Patch)" OnClick="PatchAsync">@(RunningHere ? "Starting…" : "Patch")</MudButton>
-        }
-        @* On Accept and Patch, Cancel drops what was ticked or written there and goes back to the report. *@
-        <MudButton Size="Size.Small" Variant="Variant.Filled" Class="@(_step == Vulnerabilities ? "invisible" : null)"
-                   Disabled="@(Verb.Busy || _step == Vulnerabilities)" OnClick="@(() => StepTo(Vulnerabilities))">Cancel</MudButton>
-    </div>
-
-    <div class="wslc-zaindari-body">
-    <MemberWork Member="chosen">
-        @if (_step == Vulnerabilities)
-        {
-            <LogsView @key="chosen.Image" Read="@(() => LinesAsync(chosen.Image))" Waiting="@($"Checking {ImageSecurityFlow.Label} for {chosen.Image}…")" />
-        }
-        else if (Report is { } report)
-        {
-            @* In the main column the report is in too, so the window keeps its frame on every step;
-               what is taller than the pane scrolls in it. *@
-            <div class="wslc-action-body">
-                <div class="wslc-action-main">
-                    <div class="wslc-fill-scroll wslc-member-step">
-                        @if (Verb.Error is { } error)
-                        {
-                            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">@error</MudAlert>
-                        }
-                        @if (_step == Accept)
-                        {
-                            <MudForm @ref="_acceptForm">
-                                <AcceptEditor @key="report.Image" @ref="_accept" Report="report" />
-                            </MudForm>
-                        }
-                        else
-                        {
-                            <PatchEditor @key="@($"{chosen.Id} {report.Image}")" @ref="_patch" Report="report" Only="@(new[] { chosen.Id })" />
-                        }
-                    </div>
-                </div>
+    <MudTabs Elevation="Style.Applied.TabsElevation" Rounded="Style.Applied.TabsRounded" Border="Style.Applied.TabsBorder"
+             Centered="Style.Applied.TabsCentered" TabPanelsClass="wslc-tab-panels" Class="wslc-fill"
+             MinimumTabWidth="@($"{Style.Applied.TabsMinWidth}px")" ActivePanelIndex="StepIndex" ActivePanelIndexChanged="StepChanged"
+             HeaderPosition="TabHeaderPosition.After">
+        <Header>
+            @* After the steps, at the bar's right end: what they say when neither has anything to do, the step's
+               verb and Cancel, each keeping its place on every step (unseen where it has nothing to do), so a
+               step chosen moves nothing. *@
+            <div class="wslc-zaindari-verbs">
+                @if (NothingLeft)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary wslc-zaindari-nothing-left">Up to date: nothing to accept or patch.</MudText>
+                }
+                @if (_step == Accept)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" Disabled="@(Verb.Busy || !CanAccept)" OnClick="SaveAcceptedAsync">@(RunningHere ? "Saving…" : "Save")</MudButton>
+                }
+                else
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" Class="@(_step == Patch ? null : "invisible")"
+                               Disabled="@(Verb.Busy || !CanPatch || _step != Patch)" OnClick="PatchAsync">@(RunningHere ? "Starting…" : "Patch")</MudButton>
+                }
+                @* In Zaindari's own window, on Accept and Patch, Cancel drops what was ticked or written there and goes
+                   back to the report; in the Project window the tabs are the way back, and there is none. *@
+                @if (!AmongOthers)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Class="@(_step == Vulnerabilities ? "invisible" : null)"
+                               Disabled="@(Verb.Busy || _step == Vulnerabilities)" OnClick="@(() => StepTo(Vulnerabilities))">Cancel</MudButton>
+                }
             </div>
-        }
-    </MemberWork>
-    </div>
+        </Header>
+        <ChildContent>
+            <MudTabPanel Text="Vulnerabilities">
+                <MemberWork Member="chosen">
+                    <LogsView @key="chosen.Image" Read="@(() => LinesAsync(chosen.Image))" Waiting="@($"Checking {ImageSecurityFlow.Label} for {chosen.Image}…")" />
+                </MemberWork>
+            </MudTabPanel>
+            <MudTabPanel Text="Accept" Disabled="@(!CanAccept)">
+                @if (Report is { } report)
+                {
+                    <PaneStep Error="@Verb.Error">
+                        <MudForm @ref="_acceptForm">
+                            <AcceptEditor @key="report.Image" @ref="_accept" Report="report" />
+                        </MudForm>
+                    </PaneStep>
+                }
+            </MudTabPanel>
+            <MudTabPanel Text="Patch" Disabled="@(!CanPatch)">
+                @if (Report is { } report)
+                {
+                    <PaneStep Error="@Verb.Error">
+                        <PatchEditor @key="@($"{chosen.Id} {report.Image}")" @ref="_patch" Report="report" Only="@(new[] { chosen.Id })" />
+                    </PaneStep>
+                }
+            </MudTabPanel>
+        </ChildContent>
+    </MudTabs>
 }
 
 @code {
@@ -87,8 +82,22 @@
     private const string Accept = "accept";
     private const string Patch = "patch";
 
+    /// <summary>The steps, in the order of their tabs.</summary>
+    private static readonly string[] Steps = [Vulnerabilities, Accept, Patch];
+
     private string _step = Vulnerabilities;
     private string? _shown;
+
+    private int StepIndex => Array.IndexOf(Steps, _step);
+
+    /// <summary>MudTabs reports the index it settles on after every render: only a real change is a step chosen.</summary>
+    private void StepChanged(int index)
+    {
+        if (index >= 0 && index < Steps.Length && Steps[index] != _step)
+        {
+            StepTo(Steps[index]);
+        }
+    }
 
     /// <summary>What the veil says, set by the verb pressed: the step changes under it before it lifts.</summary>
     private string _busyText = "";

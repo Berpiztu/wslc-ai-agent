@@ -47,6 +47,9 @@ public abstract class ProjectPaneTab : ComponentBase
     /// <summary>Repaints the window, its title line included.</summary>
     [Parameter, EditorRequired] public Action Repaint { get; set; } = default!;
 
+    /// <summary>The tab is one of several (the Project window), not the pane itself: moving between its tabs is the way back, and a tab needs no Cancel of its own.</summary>
+    [Parameter] public bool AmongOthers { get; set; }
+
     /// <summary>The tab's verb on the title line, before Close (Update); a tab with steps keeps its verbs in a bar of its own (Zaindari).</summary>
     public virtual RenderFragment? Verbs => null;
 

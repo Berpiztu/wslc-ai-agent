@@ -106,10 +106,10 @@
 
     private RenderFragment Tab(ProjectTab tab) => tab switch
     {
-        ProjectTab.Information => @<InformationTab @ref="_information" Project="@Project" Chosen="_chosen" Members="_members" Verb="_verb" ReadAgain="ReadAgainAsync" Repaint="Repaint" />,
-        ProjectTab.Logs => @<LogsTab @ref="_logs" Project="@Project" Chosen="_chosen" Members="_members" Verb="_verb" ReadAgain="ReadAgainAsync" Repaint="Repaint" />,
-        ProjectTab.UpdateImage => @<UpdateImageTab @ref="_update" Project="@Project" Chosen="_chosen" Members="_members" Verb="_verb" ReadAgain="ReadAgainAsync" Repaint="Repaint" />,
-        _ => @<ZaindariTab @ref="_zaindari" Project="@Project" Chosen="_chosen" Members="_members" Verb="_verb" ReadAgain="ReadAgainAsync" Repaint="Repaint" />,
+        ProjectTab.Information => @<InformationTab @ref="_information" Project="@Project" Chosen="_chosen" Members="_members" Verb="_verb" ReadAgain="ReadAgainAsync" Repaint="Repaint" AmongOthers="@(Tabs.Count > 1)" />,
+        ProjectTab.Logs => @<LogsTab @ref="_logs" Project="@Project" Chosen="_chosen" Members="_members" Verb="_verb" ReadAgain="ReadAgainAsync" Repaint="Repaint" AmongOthers="@(Tabs.Count > 1)" />,
+        ProjectTab.UpdateImage => @<UpdateImageTab @ref="_update" Project="@Project" Chosen="_chosen" Members="_members" Verb="_verb" ReadAgain="ReadAgainAsync" Repaint="Repaint" AmongOthers="@(Tabs.Count > 1)" />,
+        _ => @<ZaindariTab @ref="_zaindari" Project="@Project" Chosen="_chosen" Members="_members" Verb="_verb" ReadAgain="ReadAgainAsync" Repaint="Repaint" AmongOthers="@(Tabs.Count > 1)" />,
     };
 
     /// <summary>The window's body and its title line, which MudBlazor draws apart.</summary>

@@ -1,0 +1,23 @@
+@* A step of a project's window of two panes (Accept, Patch, Update image) in
+   the main column the logs' view stands in too, so the window keeps one frame
+   whatever it shows; what is taller than the pane scrolls in it, under what
+   the agent refused of the last verb, when it refused it. *@
+
+<div class="wslc-action-body">
+    <div class="wslc-action-main">
+        <div class="wslc-fill-scroll wslc-member-step">
+            @if (Error is not null)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">@Error</MudAlert>
+            }
+            @ChildContent
+        </div>
+    </div>
+</div>
+
+@code {
+    /// <summary>Why the window's last verb did not go through (<see cref="PaneVerb.Error"/>); none, nothing is said.</summary>
+    [Parameter] public string? Error { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

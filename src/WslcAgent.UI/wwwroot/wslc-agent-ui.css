@@ -6829,24 +6829,15 @@ html[data-wslc-rows~="outlined"] .wslc-files-table {
     padding-right: 8px;
 }
 
-/* Zaindari's tab (ZaindariTab): its bar of steps over what the step shows,
-   which takes the rest of the pane; the bar a line of its own, its verbs at
-   its right. The step's content is positioned: a veil in it covers it, not
-   the bar. */
-.wslc-zaindari-bar {
+/* Zaindari's tab (ZaindariTab): its steps are MudBlazor's tabs, and what
+   follows them on their bar (the tabs' Header) stands at its right end, the
+   step's verb and Cancel, a gap from its edge. */
+.wslc-zaindari-verbs {
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-shrink: 0;
-    margin-bottom: 4px;
-}
-
-.wslc-zaindari-body {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-height: 0;
+    margin-left: auto;
+    padding-inline: 8px;
 }
 
 /* "Nothing to accept or patch", beside the keys: one line, whole. */

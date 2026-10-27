@@ -10,21 +10,12 @@
 @if (Chosen is { } chosen)
 {
     <MemberWork Member="chosen">
-        @* In a main column, as Zaindari's steps: the window keeps one frame. *@
-        <div class="wslc-action-body">
-            <div class="wslc-action-main">
-                <div class="wslc-fill-scroll wslc-member-step">
-                    @if (Verb.Error is { } error)
-                    {
-                        <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">@error</MudAlert>
-                    }
-                    <MudForm @ref="_form">
-                        <UpdateImageEditor @key="@($"{chosen.Id} {chosen.Image}")" @ref="_editor" Container="@chosen.Id" Current="@chosen.Image"
-                                           CheckingChanged="CheckingChanged" Patched="ReadAgain" />
-                    </MudForm>
-                </div>
-            </div>
-        </div>
+        <PaneStep Error="@Verb.Error">
+            <MudForm @ref="_form">
+                <UpdateImageEditor @key="@($"{chosen.Id} {chosen.Image}")" @ref="_editor" Container="@chosen.Id" Current="@chosen.Image"
+                                   CheckingChanged="CheckingChanged" Patched="ReadAgain" />
+            </MudForm>
+        </PaneStep>
     </MemberWork>
 }
 
