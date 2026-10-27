@@ -39,12 +39,12 @@
                 @* The step's verb keeps its place on every step, unseen on the report's, so a step chosen moves nothing on the line. *@
                 @if (_step == Accept)
                 {
-                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_verb.Busy || !CanAccept)" OnClick="SaveAcceptedAsync">@(_verb.Busy ? "Saving…" : "Save")</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_verb.Busy || !CanAccept)" OnClick="SaveAcceptedAsync">@(RunningHere ? "Saving…" : "Save")</MudButton>
                 }
                 else
                 {
                     <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" Class="@(_step == Patch ? null : "invisible")"
-                               Disabled="@(_verb.Busy || !CanPatch || _step != Patch)" OnClick="PatchAsync">@(_verb.Busy ? "Starting…" : "Patch")</MudButton>
+                               Disabled="@(_verb.Busy || !CanPatch || _step != Patch)" OnClick="PatchAsync">@(RunningHere ? "Starting…" : "Patch")</MudButton>
                 }
                 @* Close leaves the window from the report; Cancel, on Accept and Patch, drops what was
                    ticked or written there and goes back to the report, the window still open. *@
@@ -61,7 +61,7 @@
     </TitleContent>
     <DialogContent>
         <ProjectMemberPanes @ref="_panes" Project="@Project" Members="Members" ChosenChanged="Chosen"
-                            Busy="_verb.Busy" BusyText="@(_step == Accept ? "Saving what is accepted…" : "Starting the patch…")">
+                            BusyFor="@_verb.For" BusyText="@_busyText">
             @if (_chosen is { } chosen)
             {
                 @if (_step == Vulnerabilities)
@@ -116,6 +116,12 @@
     private string _step = Vulnerabilities;
     private PaneVerb _verb = default!;
 
+    /// <summary>The verb runs on the container shown: its button says so; on another one it only waits.</summary>
+    private bool RunningHere => _verb.Busy && _verb.For == _chosen?.Id;
+
+    /// <summary>What the veil says, set by the verb pressed: the step changes under it before it lifts.</summary>
+    private string _busyText = "";
+
     /// <summary>Zaindari's report of each image asked for, by its name: one check per image while the window is open, again after an acceptance.</summary>
     private readonly Dictionary<string, Task<ImageVulnerabilities>> _reports = new(StringComparer.OrdinalIgnoreCase);
 
@@ -127,13 +133,16 @@
     private ImageVulnerabilities? Report =>
         _chosen is { } chosen && _reports.TryGetValue(chosen.Image, out var report) && report.IsCompletedSuccessfully ? report.Result : null;
 
-    private bool CanAccept => Report is { } report && ImageSecurityFlow.Acceptable(report).Count > 0;
+    /// <summary>The container chosen is doing nothing the agent is carrying out: while it is, its pane shows that work, and the steps wait.</summary>
+    private bool AtRest => _chosen is { } chosen && ProjectMemberPanes.AtRest(chosen);
 
-    /// <summary>A patch to build, and the container not on its way to one already.</summary>
-    private bool CanPatch => Report is { Patch.Length: > 0 } && _chosen is { PatchingTo: null };
+    private bool CanAccept => AtRest && Report is { } report && ImageSecurityFlow.Acceptable(report).Count > 0;
 
-    /// <summary>The report is in and neither Accept nor Patch has anything to do; not while a patch of it is being built.</summary>
-    private bool NothingLeft => Report is not null && _chosen is { PatchingTo: null } && !CanAccept && !CanPatch;
+    /// <summary>A patch to build, and the container at rest.</summary>
+    private bool CanPatch => AtRest && Report is { Patch.Length: > 0 };
+
+    /// <summary>The report is in and neither Accept nor Patch has anything to do; not while the container is under way.</summary>
+    private bool NothingLeft => AtRest && Report is not null && !CanAccept && !CanPatch;
 
     protected override void OnInitialized() => _verb = new PaneVerb(Repaint);
 
@@ -230,36 +239,41 @@
             return;
         }
 
-        if (await _verb.RunAsync(async () =>
-            {
-                await form.ValidateAsync();
-                if (!form.IsValid)
-                {
-                    return false;
-                }
-
-                await accept.SaveAsync();
-                return true;
-            }))
+        // The veil stays until the report is to be read again and the menu read: nothing is pressable in between.
+        _busyText = "Saving what is accepted…";
+        await _verb.RunAsync(chosen.Id, async () =>
         {
+            await form.ValidateAsync();
+            if (!form.IsValid)
+            {
+                return false;
+            }
+
+            await accept.SaveAsync();
             _reports.Remove(chosen.Image);
             _step = Vulnerabilities;
             await ReadAgainAsync();
-        }
+            return true;
+        });
     }
 
-    /// <summary>Started, the agent builds it and the menu says so; the window stays, for the next container.</summary>
+    /// <summary>Started, the agent builds it and the menu says so, its pane the build's log; the window stays, for the next container.</summary>
     private async Task PatchAsync()
     {
-        if (_patch is { } patch && await _verb.RunAsync(async () =>
-            {
-                await patch.StartAsync();
-                return true;
-            }))
+        if (_patch is not { } patch || _chosen is not { } chosen)
         {
+            return;
+        }
+
+        // The veil stays until the menu has the container being patched: Patch is never pressable in between.
+        _busyText = "Starting the patch…";
+        await _verb.RunAsync(chosen.Id, async () =>
+        {
+            await patch.StartAsync();
             _step = Vulnerabilities;
             await ReadAgainAsync();
-        }
+            return true;
+        });
     }
 
     private Task ReadAgainAsync() => _panes?.ReadAsync() ?? Task.CompletedTask;

@@ -1,0 +1,43 @@
+@* The log of a patch's build (any build job of the agent's), in its own window
+   (BuildLogDialog) and in the pane of a project's container being patched
+   (ProjectMemberPanes), drawn by the view logs are read in: what the build
+   prints and what the check and the move say, the lines coloured by level,
+   with the view's rail (search, levels, wrap, autorefresh, refresh, jump to
+   end, copy). *@
+@inject WslcAgentApi Api
+
+<LogsView Read="ReadAsync" />
+
+@code {
+    private bool _running;
+
+    /// <summary>The build job on the agent (<c>/images/build/{job}</c>).</summary>
+    [Parameter, EditorRequired] public string Job { get; set; } = "";
+
+    /// <summary>Told when the build starts or stops running: its window offers Cancel while it runs.</summary>
+    [Parameter] public EventCallback<bool> RunningChanged { get; set; }
+
+    /// <summary>What the view shows: the job's lines as they are now. Each read also says whether it still runs.</summary>
+    private async Task<string> ReadAsync()
+    {
+        BuildJob job;
+        try
+        {
+            job = await Api.GetImageBuildAsync(Job);
+        }
+        catch (AgentApiException ex) when (ex.StatusCode == 404)
+        {
+            return "This build is no longer kept by the agent: its end is in the agent's log (Logs).";
+        }
+
+        var running = job.State == "running";
+        if (running != _running)
+        {
+            _running = running;
+            await InvokeAsync(() => RunningChanged.InvokeAsync(running));
+        }
+
+        var lines = (job.Truncated ? ["… earlier output trimmed …"] : Array.Empty<string>()).Concat(job.Output);
+        return string.Join('\n', job.Error.Length > 0 ? lines.Append($"ERROR: {job.Error}") : lines);
+    }
+}

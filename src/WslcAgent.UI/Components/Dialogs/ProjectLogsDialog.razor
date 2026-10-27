@@ -17,7 +17,7 @@
         </DialogTitle>
     </TitleContent>
     <DialogContent>
-        <ProjectMemberPanes Project="@Project" Members="Members" All="All" AllDetail="Every container's logs, as one" ChosenChanged="Chosen">
+        <ProjectMemberPanes Project="@Project" Members="Members" All="All" AllDetail="Every container's logs, as one" ShowsWork="false" ChosenChanged="Chosen">
             @if (_chosen is { } chosen)
             {
                 <LogsView @key="chosen.Id" Container="@chosen.Id" />

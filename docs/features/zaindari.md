@@ -118,7 +118,8 @@ nothing.
   or patch.* beside the keys when neither has anything to do; Cancel goes
   back to the vulnerabilities. The window stays open after a Save
   or a Patch, the next container is chosen, and one being patched turns its
-  wheel in the list until the agent has moved it.
+  wheel in the list until the agent has moved it, and shows its build's log
+  in the pane, its steps waiting.
 - **When a container runs**: the image of a running container with no mark
   yet is checked once while the agent runs, whoever started it (the agent,
   `wslc` by hand, a script). A stopped container is not: one stopped for a

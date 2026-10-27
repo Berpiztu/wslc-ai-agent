@@ -1,0 +1,127 @@
+@* The console of a pull or a push the agent runs: its progress, its status and
+   its live wslc output, in its own window (PullLogDialog) and in the pane of a
+   project's container whose image is being pulled (ProjectMemberPanes). The
+   output follows its end while the ring is on; while the reader holds it —
+   pointer over it, finger on it — it stays where it is. *@
+@implements IDisposable
+@inject WslcAgentApi Api
+@inject IJSRuntime Js
+
+<MudProgressLinear Value="_pct" Color="Color.Primary" Class="flex-shrink-0" />
+@* The status line, and at its end the Logs page's Autorefresh ring. *@
+<div class="d-flex align-center flex-shrink-0 my-1">
+    <MudText Typo="Typo.body2" Class="flex-grow-1" role="status">@_status</MudText>
+    <div class="wslc-action-rail wslc-action-row" role="toolbar">
+        <FollowRing Follow="_follow" Held="Held" Title="@FollowRing.TitleFor($"the {Noun} output", _follow, Held)" FollowChanged="ToggleFollowAsync" />
+    </div>
+</div>
+<pre id="@_outputId" class="wslc-logs-output wslc-logs-pre wslc-logs-wrap"
+     @onpointerenter="@(() => _pointerOn = true)" @onpointerleave="@(() => _pointerOn = false)"
+     @ontouchstart="@(() => _fingerOn = true)" @ontouchend="@(() => _fingerOn = false)" @ontouchcancel="@(() => _fingerOn = false)">@_log</pre>
+
+@code {
+    private static readonly TimeSpan PollEvery = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan StartWait = TimeSpan.FromSeconds(45);
+
+    private readonly string _outputId = "image-job-log-" + Guid.NewGuid().ToString("N");
+    private readonly CancellationTokenSource _stop = new();
+    private readonly DateTimeOffset _openedAt = DateTimeOffset.UtcNow;
+    private bool _seenActive;
+    private bool _follow = true;
+    private bool _pointerOn;
+    private bool _fingerOn;
+    private int _pct;
+    private string _status = "";
+    private string _log = "";
+
+    [Parameter, EditorRequired] public string Image { get; set; } = "";
+
+    /// <summary>Opened from a row that already knows the pull has ended: its output is painted at once.</summary>
+    [Parameter] public bool Finished { get; set; }
+
+    /// <summary>The push of <see cref="Image"/>, not its pull.</summary>
+    [Parameter] public bool Push { get; set; }
+
+    /// <summary>Told at each reading whether the pull still runs: its window offers Cancel while it does.</summary>
+    [Parameter] public EventCallback<bool> ActiveChanged { get; set; }
+
+    private string Verb => Push ? "Push" : "Pull";
+
+    private string Noun => Verb.ToLowerInvariant();
+
+    protected override void OnInitialized()
+    {
+        _status = $"Waiting for wslc {Noun}…";
+        _log = $"Waiting for wslc {Noun} output…";
+        _seenActive = Finished;
+        _ = PollAsync(_stop.Token);
+    }
+
+    /// <summary>
+    /// A pull just asked for may not be running yet: until it has been seen running (45 s
+    /// at most) the console waits instead of painting a previous pull's output as done.
+    /// </summary>
+    private async Task PollAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(PollEvery);
+        try
+        {
+            do
+            {
+                var state = await (Push ? Api.GetImagePushLogAsync(Image, cancellationToken) : Api.GetImagePullLogAsync(Image, cancellationToken));
+                _seenActive |= state.Active;
+                if (!state.Active && !_seenActive && DateTimeOffset.UtcNow - _openedAt < StartWait)
+                {
+                    continue;
+                }
+
+                _pct = Math.Clamp(state.Pct, 0, 100);
+                _status = state.Status.Length > 0 ? state.Status : state.Active ? $"{Verb}ing..." : $"{Verb} finished";
+                _log = (state.Truncated ? "… earlier output trimmed …\n" : "") + (state.Log.Length > 0 ? state.Log : $"Waiting for wslc {Noun} output…");
+                await InvokeAsync(async () =>
+                {
+                    StateHasChanged();
+                    await ActiveChanged.InvokeAsync(state.Active);
+                });
+                if (_follow && !Held)
+                {
+                    await Js.InvokeVoidAsync("wslcAgent.scrollToEnd", cancellationToken, _outputId, true);
+                }
+
+                if (!state.Active && _seenActive)
+                {
+                    return;
+                }
+            }
+            while (await timer.WaitForNextTickAsync(cancellationToken));
+        }
+        catch (OperationCanceledException)
+        {
+            // The console went away (its window closed, another container chosen).
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _status = ex.Message.Length > 0 ? ex.Message : $"Could not read {Noun} output";
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>The reader holds the console — pointer over it, finger on it — and it stays where it is until they leave.</summary>
+    private bool Held => _pointerOn || _fingerOn;
+
+    /// <summary>The ring: on, the console follows its end (jumping there at once); off, the text stays where the reader left it.</summary>
+    private async Task ToggleFollowAsync()
+    {
+        _follow = !_follow;
+        if (_follow)
+        {
+            await Js.InvokeVoidAsync("wslcAgent.scrollToEnd", _outputId);
+        }
+    }
+
+    public void Dispose()
+    {
+        _stop.Cancel();
+        _stop.Dispose();
+    }
+}

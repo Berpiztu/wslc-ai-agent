@@ -13,12 +13,12 @@
 <MudDialog ContentClass="wslc-dialog-action wslc-dialog-tall">
     <TitleContent>
         <DialogTitle Title="@Dialog.Title">
-            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_verb.Busy || !CanUpdate)" OnClick="UpdateAsync">@(_verb.Busy ? "Starting…" : "Update")</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_verb.Busy || !CanUpdate)" OnClick="UpdateAsync">@(RunningHere ? "Starting…" : "Update")</MudButton>
             <MudButton Size="Size.Small" Variant="Variant.Filled" Disabled="_verb.Busy" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
         </DialogTitle>
     </TitleContent>
     <DialogContent>
-        <ProjectMemberPanes @ref="_panes" Project="@Project" Members="Members" ChosenChanged="Chosen" Busy="_verb.Busy" BusyText="Starting the update…">
+        <ProjectMemberPanes @ref="_panes" Project="@Project" Members="Members" ChosenChanged="Chosen" BusyFor="@_verb.For" BusyText="Starting the update…">
             @if (_chosen is { } chosen)
             {
                 @* In a main column, as the Zaindari window's steps: the window keeps one frame. *@
@@ -53,6 +53,9 @@
     private ProjectMemberPanes? _panes;
     private ContainerSummary? _chosen;
     private PaneVerb _verb = default!;
+
+    /// <summary>The verb runs on the container shown: its button says so; on another one it only waits.</summary>
+    private bool RunningHere => _verb.Busy && _verb.For == _chosen?.Id;
     private MudForm? _form;
     private UpdateImageEditor? _editor;
 
@@ -60,7 +63,7 @@
     private bool _checking;
 
     /// <summary>The container chosen is at rest (as its own Update image asks) and Zaindari has answered.</summary>
-    private bool CanUpdate => _chosen is { PatchingTo: null, IsUpdating: false, IsRecreating: false } && !_checking;
+    private bool CanUpdate => _chosen is { } chosen && ProjectMemberPanes.AtRest(chosen) && !_checking;
 
     protected override void OnInitialized() => _verb = new PaneVerb(Repaint);
 
@@ -96,22 +99,20 @@
             return;
         }
 
-        string? pulling = null;
-        if (await _verb.RunAsync(async () =>
-            {
-                await form.ValidateAsync();
-                if (!form.IsValid)
-                {
-                    return false;
-                }
-
-                pulling = await editor.StartAsync();
-                return true;
-            }) && pulling is not null)
+        // The veil stays until the menu has the container under way: its pane then shows the pull, and Update is never pressable in between.
+        await _verb.RunAsync(chosen.Id, async () =>
         {
+            await form.ValidateAsync();
+            if (!form.IsValid)
+            {
+                return false;
+            }
+
+            var pulling = await editor.StartAsync();
             Activity.Say($"{chosen.Name}: updating to {pulling}. The container is recreated once the pull ends.");
             await ReadAgainAsync();
-        }
+            return true;
+        });
     }
 
     private Task ReadAgainAsync() => _panes?.ReadAsync() ?? Task.CompletedTask;

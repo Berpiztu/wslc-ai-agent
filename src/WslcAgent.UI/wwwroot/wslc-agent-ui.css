@@ -6727,10 +6727,9 @@ html[data-wslc-rows~="outlined"] .wslc-files-table {
    image): the menu of its containers at the left, of one width whatever it
    lists, and the pane of the one chosen taking the rest; both the dialog's whole height, each
    scrolling in itself. 16rem holds a container's name; a narrow screen gives
-   the menu no more than 40% of it. Positioned: its veil covers it while
-   Save or Patch runs. */
+   the menu no more than 40% of it. The veils are the pane's (.wslc-member-pane
+   is positioned): the menu is never covered. */
 .wslc-member-panes {
-    position: relative;
     display: grid;
     grid-template-columns: min(16rem, 40%) minmax(0, 1fr);
     gap: 12px;
@@ -6738,9 +6737,36 @@ html[data-wslc-rows~="outlined"] .wslc-files-table {
     min-height: 0;
 }
 
+/* The menu on the ground the logs' box has (.wslc-logs-output), the pane
+   beside it being a log or read as one. */
 .wslc-member-menu {
     min-height: 0;
     overflow-y: auto;
+    background-color: var(--mud-palette-background);
+}
+
+/* The one chosen is not green here, as what is chosen is everywhere else:
+   green, yellow and red are what a container's line says of its image, so
+   the choice is the primary's tint, and every line keeps its own colour (its
+   name its image's mark, the line under it the secondary text). MudBlazor's
+   own tint is set !important: a gradient is painted over it, as the pickers'
+   chosen line is. */
+.wslc-member-menu .mud-list .mud-list-item.mud-selected-item {
+    background-image: linear-gradient(color-mix(in srgb, var(--mud-palette-primary) 24%, transparent), color-mix(in srgb, var(--mud-palette-primary) 24%, transparent));
+}
+
+.wslc-member-menu .mud-list .mud-list-item.mud-selected-item,
+.wslc-member-menu .mud-list .mud-list-item.mud-selected-item .mud-icon-root,
+.wslc-member-menu .mud-list .mud-list-item.mud-selected-item .mud-typography {
+    color: var(--mud-palette-text-primary);
+}
+
+.wslc-member-menu .mud-list .mud-list-item.mud-selected-item .mud-typography.mud-text-secondary {
+    color: var(--mud-palette-text-secondary);
+}
+
+.wslc-member-menu .mud-list .mud-list-item.mud-selected-item .mud-typography.wslc-warning-text {
+    color: var(--wslc-level-warning);
 }
 
 /* The mark and the turning wheel take one slot, the wheel's: MudBlazor's small
@@ -6768,11 +6794,22 @@ html[data-wslc-rows~="outlined"] .wslc-files-table {
    a step is chosen; a step's editor scrolls inside it, with the launch
    form's gutter before its right edge. */
 .wslc-member-pane {
+    position: relative;
     display: flex;
     flex-direction: column;
     min-width: 0;
     min-height: 0;
     overflow: hidden;
+}
+
+/* The work of a container under way in its pane (a pull's console): a column
+   whose output takes what the status above it leaves, with the step's gutter. */
+.wslc-member-work {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    padding-right: 8px;
 }
 
 .wslc-member-step {

@@ -1,10 +1,8 @@
-@* The log of a patch's build (any build job of the agent's), in the window a
-   project's save log opens in (ProjectLogDialog) and drawn by the same view:
-   what the build prints and what the check and the move say, the lines
-   coloured by level, with the view's rail (search, levels, wrap, autorefresh,
-   refresh, jump to end, copy). Close leaves the build running; Cancel, there
-   while it runs, stops it, after asking: the containers it was to move run on
-   as they were. *@
+@* The window of a patch's build (any build job of the agent's): its log
+   (BuildConsole), in the window a project's save log opens in
+   (ProjectLogDialog). Close leaves the build running; Cancel, there while it
+   runs, stops it, after asking: the containers it was to move run on as they
+   were. *@
 @inject WslcAgentApi Api
 @inject IDialogService Dialogs
 @inject ISnackbar Snackbar
@@ -20,7 +18,7 @@
         </DialogTitle>
     </TitleContent>
     <DialogContent>
-        <LogsView Read="ReadAsync" />
+        <BuildConsole Job="@Job" RunningChanged="RunningChanged" />
     </DialogContent>
 </MudDialog>
 
@@ -32,29 +30,11 @@
     /// <summary>The build job on the agent (<c>/images/build/{job}</c>).</summary>
     [Parameter, EditorRequired] public string Job { get; set; } = "";
 
-    /// <summary>What the view shows: the job's lines as they are now. Each read also says whether it still runs, which is when Cancel is offered.</summary>
-    private async Task<string> ReadAsync()
+    /// <summary>Cancel lives in the title line, the dialog's own tree.</summary>
+    private void RunningChanged(bool running)
     {
-        BuildJob job;
-        try
-        {
-            job = await Api.GetImageBuildAsync(Job);
-        }
-        catch (AgentApiException ex) when (ex.StatusCode == 404)
-        {
-            return "This build is no longer kept by the agent: its end is in the agent's log (Logs).";
-        }
-
-        var running = job.State == "running";
-        if (running != _running)
-        {
-            _running = running;
-            // Cancel lives in the title line, the dialog's own tree.
-            await InvokeAsync(Dialog.StateHasChanged);
-        }
-
-        var lines = (job.Truncated ? ["… earlier output trimmed …"] : Array.Empty<string>()).Concat(job.Output);
-        return string.Join('\n', job.Error.Length > 0 ? lines.Append($"ERROR: {job.Error}") : lines);
+        _running = running;
+        Dialog.StateHasChanged();
     }
 
     /// <summary>The window stays open on a cancelled build: its last lines say where it stopped.</summary>
