@@ -165,9 +165,15 @@ USER app
   vulnerable dependencies can still be chosen, into a file of their own.
 - **The containers** of the image, every one ticked to begin with, are moved
   to the patch once it is built, each recreated with its ports, mounts,
-  environment and name, and started if it was running. A project's are left
-  as they are: its compose file names its image, so the image there is
-  changed by hand.
+  environment and name, and started if it was running. A project's are
+  listed with their project, and moved the same. Its compose file still
+  names the original, so the agent records the service on the patch
+  (`patched-services.json`), and every save of the project brings it up on
+  the patch and says so in its question and its log: while the file names
+  that image and the image is the one patched. A file that names another
+  image, the original pulled anew or built again (a newer version, checked
+  as any), or the patch gone from the machine, and the save brings the
+  service up on what its file says, says why, and lets the record go.
 
 The patch is checked as any build, and never refused: what is left in it, a
 fix nobody has published yet, is its original's to mend, and refusing it
@@ -179,8 +185,8 @@ follows it to its end, step by step (`[2/3] RUN apt-get …`), then says it
 was built and how many containers moved; a patch that fails says why in a
 window of its own. While it is built, the image's row and card and those of
 the containers it moves say *Patching: building …*, with its console and
-its cancel; every other container of the image, one not ticked or of a
-project, says *Patching its image: building …*, on the Containers page and
+its cancel; every other container of the image, one not ticked, says
+*Patching its image: building …*, on the Containers page and
 on its header on the Home, and runs on as it is. A patch of a patch
 builds on it: a library taken out, tried, then the next, one patch at a
 time. A patch is published nowhere, so **Pull** on it pulls the image it was

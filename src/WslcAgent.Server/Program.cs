@@ -122,6 +122,7 @@ builder.Services.AddSingleton(services => new ImageSecurity(
     services.GetRequiredService<ImageMarks>(),
     services.GetRequiredService<ImageAcceptanceStore>()));
 builder.Services.AddSingleton<ImageBuilds>();
+builder.Services.AddSingleton<PatchedServices>();
 builder.Services.AddSingleton<ImagePatches>();
 builder.Services.AddSingleton<ImagePulls>();
 builder.Services.AddSingleton<ImagePushes>();

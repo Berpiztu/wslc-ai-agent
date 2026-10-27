@@ -44,6 +44,7 @@ public sealed class ProjectRunner(
     ProjectContexts contexts,
     Images.ImageSecurity security,
     ProjectGaps gaps,
+    Images.PatchedServices patched,
     ILogger<ProjectRunner> logger)
 {
     /// <summary>What a project's row says in the Image column: it is no container's image.</summary>
@@ -65,13 +66,15 @@ public sealed class ProjectRunner(
         var plan = await projects.PlanAsync(request.File, cancellationToken);
         var state = await StateAsync(plan, cancellationToken);
         var services = plan.Services.Where(service => service.Enabled).ToList();
+        var notes = new List<string>();
+        var images = await PatchesAsync(plan, (_, text) => notes.Add(text), settle: false, cancellationToken);
 
         // As things stand now: an image the save itself builds is not built yet, so a container it
         // will recreate for that is still listed as left alone here, and said when the save gets to it.
         var stale = new HashSet<string>(StringComparer.Ordinal);
         foreach (var service in services)
         {
-            if (state.Containers.TryGetValue(service.Name, out var made) && await ImageChangedAsync(made, service.Launch.Image, cancellationToken))
+            if (state.Containers.TryGetValue(service.Name, out var made) && await ImageChangedAsync(made, images.GetValueOrDefault(service.Name, service.Launch.Image), cancellationToken))
             {
                 stale.Add(service.Name);
             }
@@ -88,7 +91,7 @@ public sealed class ProjectRunner(
             plan.Volumes.Where(volume => !volume.External && !state.Volumes.Contains(volume.Name)).Select(volume => volume.Name).ToList(),
             services.Where(service => service.Build is not null).Select(service => service.Launch.Image).ToList(),
             plan.Unsupported,
-            plan.Warnings,
+            [.. plan.Warnings, .. notes],
             // The mark of what it was made from is written by a save and by nothing else: a container
             // of the project without it was recreated since, by hand.
             services.Where(service => state.Containers.TryGetValue(service.Name, out var existing) && existing.Config.Length == 0).Select(service => service.Launch.Name).ToList(),
@@ -307,6 +310,7 @@ public sealed class ProjectRunner(
             await BuildAsync(job, same, stop);
         }
 
+        var images = await PatchesAsync(plan, job.Note, settle: true, stop);
         foreach (var service in services)
         {
             if (request.Start)
@@ -314,7 +318,7 @@ public sealed class ProjectRunner(
                 await DependenciesAsync(job, plan, service, stop);
             }
 
-            await ContainerAsync(job, plan, service, state, request.Start, stop);
+            await ContainerAsync(job, plan, service, images.GetValueOrDefault(service.Name, service.Launch.Image), state, request.Start, stop);
         }
 
         // Never without the caller having been asked: a container is not removed for having left a file.
@@ -553,6 +557,61 @@ public sealed class ProjectRunner(
         }
     }
 
+    /// <summary>
+    /// The services Zaindari's patch moved to it (<see cref="Images.PatchedServices"/>),
+    /// with the patch each runs: while its file names the image it was patched
+    /// from, that image is still the one patched, and the patch is on the
+    /// machine. Otherwise the service runs what its file says: the file names
+    /// another image, the image was pulled anew or built again (a newer version,
+    /// which Zaindari checks as any), or the patch is gone; and, when
+    /// <paramref name="settle"/> (a save, not its question), the record is let
+    /// go. Each is said, either way, so nobody wonders what a service runs.
+    /// </summary>
+    private async Task<Dictionary<string, string>> PatchesAsync(ComposePlan plan, Action<string, string> say, bool settle, CancellationToken cancellationToken)
+    {
+        var images = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var record in patched.Of(plan.Name))
+        {
+            var service = plan.Services.FirstOrDefault(other => other.Name == record.Service);
+            var name = service?.Launch.Name ?? record.Service;
+            var otherwise =
+                service is null ? $"{name}: the file has no such service any more"
+                : service.Build is not null || !Images.ImageMarks.SameReference(service.Launch.Image, record.Original) ? $"{name}: its file names {service.Launch.Image} now, not {record.Original}"
+                : await IdAsync(record.Patch, cancellationToken) is not { Length: > 0 } ? $"{name}: its patch {record.Patch} is no longer on the machine"
+                : record.OriginalId.Length > 0 && await IdAsync(record.Original, cancellationToken) is { Length: > 0 } now && now != record.OriginalId
+                    ? $"{name}: {record.Original} is another image now than the one patched (pulled anew or built again)"
+                : null;
+
+            if (otherwise is null)
+            {
+                images[record.Service] = record.Patch;
+                say("INFO", $"{name} runs its patch {record.Patch}, Zaindari's of {record.Original} ({record.At:yyyy-MM-dd HH:mm}).");
+                continue;
+            }
+
+            say("INFO", $"{otherwise}; it runs what its file says, and its patch {record.Patch} is {(settle ? "let go" : "let go at the save")}.");
+            if (settle)
+            {
+                patched.Forget(plan.Name, record.Service);
+            }
+        }
+
+        return images;
+    }
+
+    /// <summary>The id of the image a name points to; empty when it is not on the machine, or cannot be told.</summary>
+    private async Task<string> IdAsync(string image, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Inspected((await wslc.RunAsync(["image", "inspect", image], cancellationToken: cancellationToken)).Stdout, "Id");
+        }
+        catch (Exception ex) when (ex is WslcException or WslcNotFoundException or TimeoutException or JsonException)
+        {
+            return "";
+        }
+    }
+
     /// <summary>A text of what an inspect says of its one object: the answer is a list of one.</summary>
     private static string Inspected(string json, string name)
     {
@@ -595,10 +654,13 @@ public sealed class ProjectRunner(
         }
     }
 
-    /// <summary>The service's container: made, left as it is, started, or recreated when the service changed.</summary>
-    private async Task ContainerAsync(Job job, ComposePlan plan, ComposeService service, State state, bool start, CancellationToken stop)
+    /// <summary>
+    /// The service's container: made, left as it is, started, or recreated when the service changed.
+    /// It runs <paramref name="image"/>, its file's or the patch it was moved to; its mark is of the service as its file has it.
+    /// </summary>
+    private async Task ContainerAsync(Job job, ComposePlan plan, ComposeService service, string image, State state, bool start, CancellationToken stop)
     {
-        var launch = service.Launch with { Project = $"{plan.Name}/{service.Name}", ProjectConfig = Hash(service), Start = start };
+        var launch = service.Launch with { Image = image, Project = $"{plan.Name}/{service.Name}", ProjectConfig = Hash(service), Start = start };
         if (!state.Containers.TryGetValue(service.Name, out var existing))
         {
             // Created, and then started, as Compose does it, and not run in one step: a container

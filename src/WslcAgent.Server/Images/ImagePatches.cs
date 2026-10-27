@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using WslcAgent.ApiClient;
 using WslcAgent.ApiClient.Contracts;
 using WslcAgent.Mcp;
+using WslcAgent.Server.Projects;
 using WslcAgent.Server.Wslc;
 
 namespace WslcAgent.Server.Images;
@@ -15,12 +16,14 @@ namespace WslcAgent.Server.Images;
 /// published that the image does not carry yet; and the user's own commands,
 /// a Python library raised to the version Zaindari names, anything the image
 /// needs. Then the containers chosen are moved to it, each with everything else
-/// it has, as an image update moves one. The build is an ordinary build job:
+/// it has, as an image update moves one; a project's too, kept on the patch at
+/// its project's saves by <see cref="PatchedServices"/>, since its file names
+/// the original. The build is an ordinary build job:
 /// its console, its cancel, its check; a patch is never refused by the check,
 /// since what is left in it is its original's to mend. If the patch does not
 /// work, the container goes back to the image it had, by View &amp; edit.
 /// </summary>
-public sealed class ImagePatches(IWslcRunner wslc, IImageSecurity security, ImageBuilds builds, IContainerService containers, ImageMarks marks, WslcEvents events, IOptions<WslcOptions> options)
+public sealed class ImagePatches(IWslcRunner wslc, IImageSecurity security, ImageBuilds builds, IContainerService containers, ImageMarks marks, PatchedServices patched, WslcEvents events, IOptions<WslcOptions> options)
 {
     /// <summary>The build started; 409 for a patch with nothing to do.</summary>
     public async Task<BuildJob> StartAsync(PatchImageRequest request, CancellationToken cancellationToken = default) =>
@@ -41,9 +44,10 @@ public sealed class ImagePatches(IWslcRunner wslc, IImageSecurity security, Imag
         }
 
         // The patch window's Dockerfile is built as the user left it; the rest is written here from the choices.
+        var (id, user) = await InspectAsync(image, cancellationToken);
         var dockerfile = written.Length > 0
             ? written.ReplaceLineEndings("\n") + "\n"
-            : Dockerfile(image, upgrade, commands, await UserAsync(image, cancellationToken));
+            : Dockerfile(image, upgrade, commands, user);
         var patch = Named(image);
         var context = Path.Combine(options.Value.DataDirectory, "image-patches", string.Join("_", patch.Split(Path.GetInvalidFileNameChars().Append(':').ToArray())));
         Directory.CreateDirectory(context);
@@ -64,7 +68,7 @@ public sealed class ImagePatches(IWslcRunner wslc, IImageSecurity security, Imag
         // The image's card and its containers' say a patch is being built until the job ends, however it ends.
         marks.PatchBegins(image, patch, moved);
         events.Publish(new ChangeNotice([ChangeNotice.Container, ChangeNotice.Image]));
-        var job = builds.Start(new BuildImageRequest(context, patch), (say, token) => MoveAsync(patch, moved, say, token), () =>
+        var job = builds.Start(new BuildImageRequest(context, patch), (say, token) => MoveAsync(image, id, patch, moved, say, token), () =>
         {
             marks.PatchEnds(image);
             events.Publish(new ChangeNotice([ChangeNotice.Container, ChangeNotice.Image]));
@@ -157,8 +161,8 @@ public sealed class ImagePatches(IWslcRunner wslc, IImageSecurity security, Imag
         return string.Join('\n', lines) + "\n";
     }
 
-    /// <summary>The user the image runs as (<c>Config.User</c>); empty for root, or when it cannot be read.</summary>
-    private async Task<string> UserAsync(string image, CancellationToken cancellationToken)
+    /// <summary>The image's id and the user it runs as (<c>Config.User</c>); empty for root, and both empty when it cannot be read.</summary>
+    private async Task<(string Id, string User)> InspectAsync(string image, CancellationToken cancellationToken)
     {
         try
         {
@@ -168,20 +172,22 @@ public sealed class ImagePatches(IWslcRunner wslc, IImageSecurity security, Imag
                 JsonArray array => array.FirstOrDefault(),
                 var single => single,
             };
-            return ((string?)inspected?["Config"]?["User"] ?? "").Trim();
+            return (((string?)inspected?["Id"] ?? "").Trim(), ((string?)inspected?["Config"]?["User"] ?? "").Trim());
         }
         catch (Exception ex) when (ex is WslcException or WslcNotFoundException or TimeoutException or JsonException)
         {
-            return "";
+            return ("", "");
         }
     }
 
     /// <summary>
     /// Each container chosen, recreated on the patch with everything else it has
     /// and started if it was running; one that fails is said and the others go on,
-    /// and the job ends in error naming it.
+    /// and the job ends in error naming it. A project's keeps the mark of the
+    /// service it was made from, so its project's next save finds it as it left
+    /// it, and is recorded on the patch (<see cref="PatchedServices"/>).
     /// </summary>
-    private async Task MoveAsync(string patch, IReadOnlyList<string> moved, Action<string> say, CancellationToken cancellationToken)
+    private async Task MoveAsync(string image, string id, string patch, IReadOnlyList<string> moved, Action<string> say, CancellationToken cancellationToken)
     {
         var failed = new List<string>();
         foreach (var container in moved)
@@ -189,8 +195,18 @@ public sealed class ImagePatches(IWslcRunner wslc, IImageSecurity security, Imag
             try
             {
                 var details = await containers.DetailsAsync(container, cancellationToken);
-                await containers.RecreateAsync(details.Id, details.Form with { Image = patch, Start = details.IsRunning }, cancellationToken);
-                say($"INFO: {details.Name} now runs {patch}.");
+                var (project, service) = ProjectLabels.Split(details.Form.Project);
+                await containers.RecreateAsync(details.Id, details.Form with { Image = patch, Start = details.IsRunning, ProjectConfig = ConfigOf(details.Inspect) }, cancellationToken);
+                if (project.Length == 0)
+                {
+                    say($"INFO: {details.Name} now runs {patch}.");
+                    continue;
+                }
+
+                // A patch of a patch keeps the image the file names, and that image's id, as the first one recorded them.
+                var before = patched.Of(project, service);
+                patched.Record(new PatchedService(project, service, before?.Original ?? image, before?.OriginalId ?? id, patch, DateTimeOffset.Now));
+                say($"INFO: {details.Name} now runs {patch}. Project {project} keeps it on the patch at every save, while its file names {before?.Original ?? image} and that image is the one patched.");
             }
             catch (Exception ex) when (ex is WslcException or WslcNotFoundException or TimeoutException or ArgumentException or InvalidOperationException)
             {
@@ -202,6 +218,24 @@ public sealed class ImagePatches(IWslcRunner wslc, IImageSecurity security, Imag
         if (failed.Count > 0)
         {
             throw new InvalidOperationException($"{patch} was built, but {string.Join(", ", failed)} {(failed.Count == 1 ? "was" : "were")} not moved to it.");
+        }
+    }
+
+    /// <summary>The project's mark of the service a container was made from (<see cref="ProjectLabels.Config"/>), read from its inspect; empty for none.</summary>
+    private static string ConfigOf(string inspect)
+    {
+        try
+        {
+            var inspected = JsonNode.Parse(inspect) switch
+            {
+                JsonArray array => array.FirstOrDefault(),
+                var single => single,
+            };
+            return (string?)inspected?["Config"]?["Labels"]?[ProjectLabels.Config] ?? "";
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            return "";
         }
     }
 }

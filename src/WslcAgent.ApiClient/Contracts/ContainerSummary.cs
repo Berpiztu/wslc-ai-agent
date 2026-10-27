@@ -36,7 +36,7 @@ namespace WslcAgent.ApiClient.Contracts;
 /// <param name="ImageWorst">The worst severity of its image's vulnerabilities moderate or worse that something can be done about (a fix the image's upgrade reaches, or a Python library), as Zaindari last found it in the image: <c>moderate</c>, <c>high</c> or <c>critical</c>; empty for an image with none, or not checked. What raises the alarm.</param>
 /// <param name="ImageUnfixed">The worst severity of its image's vulnerabilities moderate or worse that nobody downstream can mend: a system package its distribution has not fixed for the image (no fix, or one only Ubuntu Pro carries in an image not attached to it). Said, never an alarm; empty for none.</param>
 /// <param name="ImageCheckedAt">When Zaindari last checked its image (<c>yyyy-MM-dd HH:mm</c>, the agent's time); empty with no mark.</param>
-/// <param name="PatchImageOnly">The patch named in <see cref="PatchingTo"/> is its image's and does not move it (not ticked, or of a project, whose compose file names the image): it runs on as it is.</param>
+/// <param name="PatchImageOnly">The patch named in <see cref="PatchingTo"/> is its image's and does not move it (not ticked in the patch window): it runs on as it is.</param>
 public sealed record ContainerSummary(
     string Id,
     string Name,
