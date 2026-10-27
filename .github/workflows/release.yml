@@ -26,14 +26,16 @@ jobs:
     defaults:
       run:
         shell: pwsh
-    env:
+    steps:
+      - uses: actions/checkout@v4
+
       # .NET in a folder of the job's, not Program Files: there its workloads
       # (MAUI, Android, gigabytes) are installed as plain files, which the cache
       # below keeps with the SDK, where in Program Files they are MSIs that no
-      # cache brings back, and every run downloaded them all again.
-      DOTNET_INSTALL_DIR: ${{ github.workspace }}/../dotnet
-    steps:
-      - uses: actions/checkout@v4
+      # cache brings back, and every run downloaded them all again. A whole
+      # path: the cache takes no '..' in one.
+      - name: Where .NET goes
+        run: '"DOTNET_INSTALL_DIR=$env:RUNNER_TEMP\dotnet" >> $env:GITHUB_ENV'
 
       - name: Built locally? A preview?
         id: tag
