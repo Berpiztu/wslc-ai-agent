@@ -4,7 +4,7 @@ using WslcAgent.ApiClient.Contracts;
 
 namespace WslcAgent.Mcp.Tools;
 
-/// <summary>Read and additive tools for volumes. Remove and prune are destructive and come with the gated tools.</summary>
+/// <summary>Read and additive tools for volumes, their backups too. Remove, prune and restore are destructive and go through the approval gate.</summary>
 [McpServerToolType]
 public static class VolumeTools
 {
@@ -61,6 +61,39 @@ public static class VolumeTools
         }
 
         return await volumes.PruneAsync(cancellationToken);
+    }
+
+    [McpServerTool(Name = "backup_volume")]
+    [Description("Back up a volume: the agent packs it into <volume>-<date>.tar.gz in its backup folder (its own, else a folder named after it in the folder of every volume; volume_backups says which) or the folder given, in the background, and keeps it in the volume's backup history. Returns the job at once; volume_backups follows it.")]
+    public static VolumeBackupJob BackupVolume(
+        IVolumeBackups backups,
+        [Description("Volume name.")] string name,
+        [Description("Empty for the volume's backup folder; else a folder of the agent's machine, by its full path (C:\\Backups), made when it is not there.")] string folder = "") =>
+        backups.StartBackup(name, folder);
+
+    [McpServerTool(Name = "volume_backups", ReadOnly = true)]
+    [Description("The volume backups and restores under way or just ended (state, step, output), every backup's history, newest first (volume, file, size, when, and whether the file is still there), and where backups go: the default folder and each volume's own.")]
+    public static VolumeBackupList ListVolumeBackups(IVolumeBackups backups) => backups.List();
+
+    [McpServerTool(Name = "restore_volume", Destructive = true)]
+    [Description("Restore a backup (.tar.gz) into a volume, in the background: the volume is created when it is not there, and its contents are replaced by the backup's. Refused while a running container uses it. Destructive: it asks for the user's approval first, through their client's prompt or a confirm token.")]
+    public static async Task<object> RestoreVolume(
+        IVolumeBackups backups,
+        ApprovalGate approvals,
+        McpServer? server,
+        [Description("The backup, a .tar.gz of the agent's machine, by its full path.")] string file,
+        [Description("The volume it goes into.")] string name,
+        [Description("The confirm token from the previous answer, once the user approved.")] string? confirm = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (await approvals.CheckAsync(server, "restore_volume", $"restore {file} into volume {name}, replacing what it holds", name,
+                new Dictionary<string, string> { ["volume"] = name, ["file"] = file },
+                confirm, cancellationToken) is { } required)
+        {
+            return required;
+        }
+
+        return backups.StartRestore(file, name);
     }
 
     [McpServerTool(Name = "create_volume")]

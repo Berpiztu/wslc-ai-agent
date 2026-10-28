@@ -4,7 +4,7 @@ namespace WslcAgent.UI.Components;
 
 /// <summary>
 /// The groups the Logs page filters by from its rail: the resource a
-/// <c>wslc</c> command acts on, or a file it carries in or out of a container, as the agent classifies it
+/// <c>wslc</c> command acts on, a file it carries in or out of a container, or a volume's backup, as the agent classifies it
 /// (<c>CliTraceEntry.Kind</c>, <c>AgentLogEntry.Kind</c>), and general for
 /// every other command and every other entry. Each carries the icon its
 /// section has in the navigation, so the rail reads as the sidebar does.
@@ -21,6 +21,8 @@ public static class CliKinds
         // The agent's own update goes here too, as it waits for the transfers;
         // a group of its own would not fit the filter bar.
         ("transfers", "File transfers", Icons.Material.Filled.SwapVert),
+        // A volume's backup or restore, every line of it, to follow one through.
+        ("backups", "Backups", Icons.Material.Filled.Backup),
         ("general", "General", Icons.Material.Filled.Notes),
     ];
 

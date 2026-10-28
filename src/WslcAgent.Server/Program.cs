@@ -134,6 +134,8 @@ builder.Services.AddSingleton<ImageUpdatesUnderWay>();
 builder.Services.AddSingleton<ContainerImageUpdates>();
 builder.Services.AddSingleton<ImageArchives>();
 builder.Services.AddSingleton<IVolumeService, VolumeService>();
+builder.Services.AddSingleton<VolumeBackups>();
+builder.Services.AddSingleton<IVolumeBackups>(services => services.GetRequiredService<VolumeBackups>());
 builder.Services.AddSingleton<INetworkService, NetworkService>();
 builder.Services.AddSingleton<ProjectContexts>();
 builder.Services.AddSingleton<IProjectService, ProjectService>();

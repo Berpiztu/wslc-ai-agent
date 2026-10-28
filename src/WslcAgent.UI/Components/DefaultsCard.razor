@@ -1,0 +1,100 @@
+@* Settings → Defaults: the agent's default values, the same for every client,
+   which what is set closer to the work goes over. The first, the folder
+   volume backups go to: the Volumes page's Backup & restore gives every
+   volume another, and a volume's Backup & restore that volume its own.
+   Leaving the page, or the tab, with a value not saved asks first. *@
+@inject WslcAgentApi Api
+@inject IDialogService Dialogs
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<MudPaper Outlined="true" Class="pa-4">
+    <MudText Typo="Typo.h6">Defaults</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+        What things start from until they are given their own.
+    </MudText>
+    @if (_saved is null)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else
+    {
+        <div class="wslc-field-pick has-note">
+            <MudTextField T="string" @bind-Value="_backupFolder" Label="Volume backup folder" Placeholder="C:\Backups\WSLC" Immediate="true"
+                          HelperTextOnFocus="true" Variant="Variant.Filled" Margin="Margin.Dense" Required="true" RequiredError="A folder is required"
+                          HelperText="A folder of the agent's machine. The Volumes page's Backup & restore can give every volume another, and a volume its own."
+                          autocapitalize="none" autocorrect="off" spellcheck="false" />
+            <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick a folder" OnClick="PickBackupFolderAsync" />
+        </div>
+        <MudStack Row="true" Spacing="2" Class="mt-3">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" Disabled="@(!Changed)" OnClick="SaveAsync">Save defaults</MudButton>
+        </MudStack>
+    }
+</MudPaper>
+
+@code {
+    private VolumeBackupSettings? _saved;
+    private string _backupFolder = "";
+    private IDisposable? _guard;
+
+    private bool Changed => _saved is { } saved && _backupFolder.Trim().Length > 0 && _backupFolder.Trim() != saved.DefaultFolder;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _guard = Navigation.RegisterLocationChangingHandler(LeavingAsync);
+        await ReadAsync();
+    }
+
+    public void Dispose() => _guard?.Dispose();
+
+    /// <summary>Unsaved work asks before it is left: Save keeps it and goes, Discard lets it go, Cancel stays.</summary>
+    private async ValueTask LeavingAsync(LocationChangingContext context)
+    {
+        if (!Changed)
+        {
+            return;
+        }
+
+        switch (await DialogFlow.LeaveUnsavedAsync(Dialogs, "The defaults have changes that are not saved. Save them, or discard them, and leave?"))
+        {
+            case UnsavedChoice.Save:
+                await SaveAsync();
+                return;
+            case UnsavedChoice.Discard:
+                _backupFolder = _saved?.DefaultFolder ?? "";
+                return;
+            default:
+                context.PreventNavigation();
+                return;
+        }
+    }
+
+    private async Task ReadAsync()
+    {
+        try
+        {
+            _saved = await Api.GetVolumeBackupSettingsAsync();
+            _backupFolder = _saved.DefaultFolder;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            await DialogFlow.ExplainAsync(Dialogs, "Defaults", "The defaults could not be read.", ex.Message);
+        }
+    }
+
+    private async Task PickBackupFolderAsync()
+    {
+        if (await Pickers.HostFolderAsync(Dialogs, _backupFolder) is { } folder)
+        {
+            _backupFolder = folder;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_saved is { } saved && await VolumeBackupFlow.SaveSettingsAsync(Dialogs, Api, saved with { DefaultFolder = _backupFolder.Trim() }))
+        {
+            await ReadAsync();
+        }
+    }
+}

@@ -1,6 +1,7 @@
 @* Per-volume actions: [📁 files] [⋮ more] [remove].
    Files open through a helper container with the volume mounted; the menu
-   holds container usage and View & edit. *@
+   holds container usage, View & edit, and Backup & restore, its window of
+   them. While the agent backs it up or restores it, Remove waits. *@
 @inherits EntityActionsBase
 
 @* On a card the menu held only these two, so they are buttons there and the
@@ -12,6 +13,7 @@
     <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center" Class="wslc-row-shortcuts">
         <MudIconButton Icon="@Icons.Material.Filled.EditNote" Size="Size.Small" title="View &amp; edit" Disabled="Busy" OnClick="InspectAsync" />
         <MudIconButton Icon="@Icons.Material.Filled.Inventory2" Size="Size.Small" title="View container usage" Disabled="Busy" OnClick="UsageAsync" />
+        <MudIconButton Icon="@Icons.Material.Filled.Backup" Size="Size.Small" title="Backup &amp; restore" OnClick="BackupsAsync" />
     </MudStack>
 }
 @if (!ShortcutsAlone)
@@ -23,9 +25,10 @@
         <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" title="More actions" Disabled="Busy" OpenChanged="MenuOpenChanged">
             <MudMenuItem Icon="@Icons.Material.Filled.EditNote" OnClick="InspectAsync">View &amp; edit</MudMenuItem>
             <MudMenuItem Icon="@Icons.Material.Filled.Inventory2" OnClick="UsageAsync">View container usage</MudMenuItem>
+            <MudMenuItem Icon="@Icons.Material.Filled.Backup" OnClick="BackupsAsync">Backup &amp; restore</MudMenuItem>
         </MudMenu>
     }
-    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="Remove volume" Disabled="Busy"
+    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="Remove volume" Disabled="@(Busy || BackingUp)"
                    OnClick="@(() => RemoveAsync("volume", Volume.Name, ct => Api.RemoveVolumeAsync(Volume.Name, ct)))" />
 </MudStack>
 }
@@ -40,12 +43,22 @@
     /// <summary>The shortcuts with nothing else: the dashboard's object of them, the resource's own verbs being another.</summary>
     [Parameter] public bool ShortcutsAlone { get; set; }
 
+    /// <summary>The agent is backing it up or restoring it: a remove waits until it ends.</summary>
+    [Parameter] public bool BackingUp { get; set; }
+
     protected override string Key => Volume.Name;
 
     /// <summary>The volume's files from its root, through the helper the agent keeps for it until the window closes.</summary>
     private Task FilesAsync() =>
         ResourceViews.FilesAsync(Dialogs, $"Files — volume {Volume.Name}", $"volume {Volume.Name}",
             () => Api.OpenVolumeFilesAsync(Volume.Name), _ => Api.CloseVolumeFilesAsync(Volume.Name));
+
+    /// <summary>Its Backup &amp; restore window; the page reads its list again after, for what was started there.</summary>
+    private async Task BackupsAsync()
+    {
+        await VolumeBackupFlow.ShowAsync(Dialogs, Volume.Name);
+        await Changed.InvokeAsync();
+    }
 
     private Task UsageAsync() =>
         ResourceViews.ReportAsync(Dialogs, $"Container usage — {Volume.Name}", async () =>

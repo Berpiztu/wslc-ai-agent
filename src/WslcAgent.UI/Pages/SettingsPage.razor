@@ -19,9 +19,10 @@
    agents it can talk to. Saved logins keeps the logins the host browser pane offers, and Testing can
    make this client behave as a remote one. *@
 <PageShell Title="Settings">
-    @* Six subjects, six tabs: who may reach the agent
+    @* One subject a tab: who may reach the agent
        (Security), a container port on a public name (Publish), the MCP server and
-       its skill (MCP), the agent updating itself (Update), what the person's own devices keep — the agents a client
+       its skill (MCP), the agent updating itself (Update), what it notifies (Notifications),
+       the values things start from (Defaults: where volume backups go), what the person's own devices keep — the agents a client
        knows, the saved logins, the testing switch (User) — and what the
        application looks like (Layout). What is chosen in Layout is not a
        sample, it is the application; Apply puts it on every screen without writing it down, so the
@@ -377,6 +378,13 @@
         </div>
             </div>
         </MudTabPanel>
+        <MudTabPanel Text="Defaults">
+            <div class="wslc-fill-scroll">
+        <div class="wslc-settings-grid">
+            <DefaultsCard />
+        </div>
+            </div>
+        </MudTabPanel>
         <MudTabPanel Text="User">
             <div class="wslc-fill-scroll">
         <div class="wslc-settings-grid">
@@ -658,7 +666,7 @@
 
 @code {
     /// <summary>The tabs, in their order; the query names one.</summary>
-    private static readonly string[] Tabs = ["security", "publish", "mcp", "update", "notifications", "user", "layout"];
+    private static readonly string[] Tabs = ["security", "publish", "mcp", "update", "notifications", "defaults", "user", "layout"];
 
     private int _tab;
 

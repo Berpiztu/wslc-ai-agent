@@ -1,0 +1,54 @@
+@* The log of a volume's backup or restore, in the view logs are read in:
+   each step, the wslc command it ran and what it printed, followed while it
+   runs. Close leaves it running; Cancel, there while it runs, stops it, after
+   asking. *@
+@inject WslcAgentApi Api
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+<MudDialog ContentClass="wslc-dialog-action">
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            @if (_job is { Running: true } job)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" OnClick="@(() => VolumeBackupFlow.CancelAsync(Dialogs, Api, Snackbar, job))">Cancel</MudButton>
+            }
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <LogsView Read="ReadAsync" />
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private VolumeBackupJob? _job;
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    /// <summary>The job on the agent (<c>/volume-backups/{id}</c>).</summary>
+    [Parameter, EditorRequired] public string Job { get; set; } = "";
+
+    /// <summary>What the view shows: the job's lines as they are now. Each read also says whether it still runs, for Cancel in the title line.</summary>
+    private async Task<string> ReadAsync()
+    {
+        VolumeBackupJob job;
+        try
+        {
+            job = await Api.GetVolumeBackupJobAsync(Job);
+        }
+        catch (AgentApiException ex) when (ex.StatusCode == 404)
+        {
+            return "This backup or restore is no longer kept by the agent: its end is in the agent's log (Logs).";
+        }
+
+        if (job.Running != _job?.Running)
+        {
+            _job = job;
+            await InvokeAsync(Dialog.StateHasChanged);
+        }
+
+        _job = job;
+        return string.Join('\n', job.Output);
+    }
+}

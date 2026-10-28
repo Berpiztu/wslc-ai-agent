@@ -119,6 +119,8 @@ public sealed class AgentLogsTests
         Assert.Equal("transfers", AgentLogs.KindOf("wslc container exec web mv -f -- /data/wslc-cp-0a1b /data/app.msi"));
         Assert.Equal("containers", AgentLogs.KindOf("wslc container exec web cp -a -- /data/a.txt /data/b.txt"));
         Assert.Equal("transfers", AgentLogs.KindOf("transfer: app.msi → web:/data started"));
+        // A volume's backup or restore, every line of it, its own group.
+        Assert.Equal("backups", AgentLogs.KindOf("backup: hermes-data: INFO: Packing hermes-data."));
     }
 
     [Fact]

@@ -20,6 +20,7 @@ agents alike.
   - Run, create, edit, recreate, start, stop, restart, kill, remove, back up, export
   - Paste a `docker run` or `wslc run` line and get the form filled in, checked before it runs
   - Pull, build, tag, push, save, import and load images; create and prune everything
+  - Back up a volume to a `.tar.gz` and restore it, into the same volume or a new one on another machine, in the background, with each volume's history of backups
   - Live stats, a live network map, per-session disk usage and VHDX compaction
   - Restart policies enforced by the agent itself
 - **Manage from anywhere, you or your AI agents**: not only the WSLC machine, its containers too

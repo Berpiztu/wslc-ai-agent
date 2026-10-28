@@ -41,7 +41,18 @@
                             <StateDot Active="context.Item.Value.InUse" Key="@context.Item.Value.Name" />
                         </CellTemplate>
                     </TemplateColumn>
-                    <PropertyColumn T="ListRow<VolumeSummary>" TProperty="string" Property="v => v.Value.Name" Title="Name" StickyLeft="true" HeaderClass="@GridColumn.Width(29)" CellClass="@GridColumn.Width(29)" />
+                    <PropertyColumn T="ListRow<VolumeSummary>" TProperty="string" Property="v => v.Value.Name" Title="Name" StickyLeft="true" HeaderClass="@GridColumn.Width(29)" CellClass="@GridColumn.Width(29)">
+                        <CellTemplate>
+                            @if (VolumeBackupFlow.For(_jobs, context.Item.Value.Name) is { } job)
+                            {
+                                <VolumeBackupRing Job="job" Row="true" Changed="RefreshAsync" />
+                            }
+                            else
+                            {
+                                @context.Item.Value.Name
+                            }
+                        </CellTemplate>
+                    </PropertyColumn>
                     <PropertyColumn T="ListRow<VolumeSummary>" TProperty="string" Property="v => v.Value.Driver" Title="Driver" StickyLeft="true" HeaderClass="@GridColumn.Width(4)" CellClass="@GridColumn.Width(4)" />
                     <PropertyColumn T="ListRow<VolumeSummary>" TProperty="string" Property="v => v.Value.Mountpoint" Title="Mountpoint" HeaderClass="@GridColumn.Stretch(108)" CellClass="@GridColumn.Stretch(108)">
                         <CellTemplate>
@@ -52,7 +63,7 @@
                 <Actions>
                     <TemplateColumn T="ListRow<VolumeSummary>" Title="Actions" Sortable="false" Resizable="false" DragAndDropEnabled="false" StickyRight="true" HeaderClass="@GridColumn.Actions" CellClass="@GridColumn.Actions">
                         <CellTemplate>
-                            <VolumeActions Volume="context.Item.Value" Changed="RefreshAsync" />
+                            <VolumeActions Volume="context.Item.Value" BackingUp="@(VolumeBackupFlow.For(_jobs, context.Item.Value.Name) is { Running: true })" Changed="RefreshAsync" />
                         </CellTemplate>
                     </TemplateColumn>
                 </Actions>
@@ -69,11 +80,21 @@
                                 <StateChip State="in use" />
                             }
                         </HeaderActions>
+                        <Avatar>
+                            @if (VolumeBackupFlow.For(_jobs, v.Name) is { } job)
+                            {
+                                <VolumeBackupRing Job="job" Changed="RefreshAsync" />
+                            }
+                            else
+                            {
+                                <MudAvatar Color="@(v.InUse ? Color.Success : Color.Default)" Variant="Variant.Filled">@(v.Name.Length > 0 ? v.Name[..1].ToUpperInvariant() : "?")</MudAvatar>
+                            }
+                        </Avatar>
                         <ChildContent>
                             <VolumeCardBody Volume="v" TotalRead="_read" TotalWritten="_written" />
                         </ChildContent>
                         <Actions>
-                            <VolumeActions Volume="v" Changed="RefreshAsync" Shortcuts="true" />
+                            <VolumeActions Volume="v" BackingUp="@(VolumeBackupFlow.For(_jobs, v.Name) is { Running: true })" Changed="RefreshAsync" Shortcuts="true" />
                         </Actions>
                     </EntityCard>
                 </ItemTemplate>
@@ -90,9 +111,14 @@
     private long _read;
     private long _written;
 
+    /// <summary>The backups and restores under way or just ended: each on its volume's card, as a ring, and its row, as a bar.</summary>
+    private IReadOnlyList<VolumeBackupJob> _jobs = [];
+
     protected override async Task<IReadOnlyList<VolumeSummary>> LoadAsync()
     {
+        var backups = Api.GetVolumeBackupsAsync();
         var list = await Api.GetVolumesAsync();
+        _jobs = (await backups).Jobs;
         _read = list.DiskReadBytes;
         _written = list.DiskWriteBytes;
         return list.Volumes;

@@ -44,11 +44,12 @@ public static class DialogFlow
     /// <summary>For a window of two panes, a menu and what it opens (a project's Zaindari window): as wide as the screen lets it, up to MudBlazor's large.</summary>
     private static readonly DialogOptions Wide = Small with { MaxWidth = MaxWidth.Large };
 
-    /// <summary>Shows a form dialog; true when it closed by submitting.</summary>
-    public static async Task<bool> ShowAsync<TDialog>(IDialogService dialogs, string title, DialogParameters? parameters = null, bool large = false, bool wide = false)
+    /// <summary>Shows a form dialog; true when it closed by submitting. <paramref name="persistent"/> for a window with work to save: Escape does not close it, its Close asks.</summary>
+    public static async Task<bool> ShowAsync<TDialog>(IDialogService dialogs, string title, DialogParameters? parameters = null, bool large = false, bool wide = false, bool persistent = false)
         where TDialog : IComponent
     {
-        var reference = await dialogs.ShowAsync<TDialog>(title, parameters ?? new DialogParameters(), wide ? Wide : large ? Large : Small);
+        var options = wide ? Wide : large ? Large : Small;
+        var reference = await dialogs.ShowAsync<TDialog>(title, parameters ?? new DialogParameters(), persistent ? options with { CloseOnEscapeKey = false } : options);
         var result = await reference.Result;
         return result is { Canceled: false };
     }

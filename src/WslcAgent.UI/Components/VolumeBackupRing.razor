@@ -1,0 +1,55 @@
+@* A volume the agent backs up or restores: on its card, the ring where its
+   avatar goes; in a table row, the bar in its Name cell (Row). The same words
+   and verbs in both, its log at the top and its cancel at the bottom; once it
+   failed or was cancelled, red, saying why, its cross dismissing it. *@
+@inject IDialogService Dialogs
+@inject WslcAgentApi Api
+@inject ISnackbar Snackbar
+
+@if (Row)
+{
+    <ProgressCell Name="@(Name ?? Job.Volume)" Indeterminate="true" Status="@Status" Failed="Job.Failed" Done="@(Job.State == "success")"
+                  LogTitle="@LogTitle" CancelTitle="@CancelTitle" OnLog="LogAsync" OnCancel="CancelAsync" OnDismiss="DismissAsync" />
+}
+else
+{
+    <ProgressRing Pct="0" Status="@Status" Failed="Job.Failed" Done="@(Job.State == "success")"
+                  LogTitle="@LogTitle" CancelTitle="@CancelTitle" OnLog="LogAsync" OnCancel="CancelAsync" OnDismiss="DismissAsync" />
+}
+
+@code {
+    [Parameter, EditorRequired] public VolumeBackupJob Job { get; set; } = default!;
+
+    /// <summary>In a table row's first cell, as a bar; else the ring of a card.</summary>
+    [Parameter] public bool Row { get; set; }
+
+    /// <summary>What the row's bar is named by: the volume (a list of every volume's), or what it does (one volume's own list); the volume when not given.</summary>
+    [Parameter] public string? Name { get; set; }
+
+    /// <summary>After it was cancelled or dismissed: the page reads its list again.</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private string Said => VolumeBackupFlow.Said(Job.Kind).ToLowerInvariant();
+
+    private string LogTitle => $"View the {Said} log";
+
+    private string CancelTitle => $"Cancel the {Said}";
+
+    private string Status => Job.Failed && Job.Error.Length > 0 ? Job.Error : $"{VolumeBackupFlow.Said(Job.Kind)}: {Job.Status}";
+
+    private Task LogAsync() => VolumeBackupFlow.ShowLogAsync(Dialogs, Job);
+
+    private async Task CancelAsync()
+    {
+        if (await VolumeBackupFlow.CancelAsync(Dialogs, Api, Snackbar, Job))
+        {
+            await Changed.InvokeAsync();
+        }
+    }
+
+    private async Task DismissAsync()
+    {
+        await VolumeBackupFlow.DismissAsync(Api, Snackbar, Job);
+        await Changed.InvokeAsync();
+    }
+}

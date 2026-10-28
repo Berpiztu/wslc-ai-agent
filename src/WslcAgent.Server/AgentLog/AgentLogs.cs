@@ -68,6 +68,16 @@ public sealed partial class AgentLogs(AgentLogFile file, ICliActivity activity) 
         return ReadAll().Where(entry => ids.Contains(entry.Id)).Select(entry => ToContract(entry, whole: true)).ToList();
     }
 
+    /// <summary>
+    /// Every entry whose message begins with <paramref name="prefix"/>, of every
+    /// file and not a tail, the oldest first, the prefix taken off: one kind of
+    /// work's own lines followed through the whole log (a volume's backups,
+    /// <see cref="Volumes.VolumeBackups.LogPrefix"/>).
+    /// </summary>
+    public IReadOnlyList<(string Timestamp, string Level, string Message)> Messages(string prefix) =>
+        [.. ReadAll().Where(entry => entry.Message.StartsWith(prefix, StringComparison.Ordinal))
+            .Select(entry => (entry.Timestamp, entry.Level, entry.Message[prefix.Length..]))];
+
     /// <summary>The <c>wslc</c> commands, newest first: the ones running now, then the finished ones the files hold.</summary>
     public IReadOnlyList<CliTraceEntry> Recent(int max)
     {
@@ -265,9 +275,10 @@ public sealed partial class AgentLogs(AgentLogFile file, ICliActivity activity) 
     private static DateTimeOffset FinishedAt(string timestamp) =>
         new(DateTime.SpecifyKind(DateTime.ParseExact(timestamp, TimestampFormat, CultureInfo.InvariantCulture), DateTimeKind.Local));
 
-    /// <summary>The resource a logged <c>wslc</c> command line acts on, the group the type chips filter by; a step of a file transfer is a file transfer, and so is a step of the agent's own update, which waits for them; a notification goes with what raised it, as its line names; any other message is general.</summary>
+    /// <summary>The resource a logged <c>wslc</c> command line acts on, the group the type chips filter by; a step of a file transfer is a file transfer, and so is a step of the agent's own update, which waits for them; a line of a volume's backup or restore is a backup; a notification goes with what raised it, as its line names; any other message is general.</summary>
     internal static string KindOf(string message) =>
         Notifications.Notifier.AreaIn(message) is { } area ? area
+        : message.StartsWith(Volumes.VolumeBackups.LogPrefix, StringComparison.Ordinal) ? CliTraceDescription.Backups
         : message.StartsWith("wslc ", StringComparison.Ordinal)
             ? CliTraceDescription.Describe(message[5..].Split(' ', StringSplitOptions.RemoveEmptyEntries)).Kind
         : message.StartsWith(CliTraceDescription.TransferProgram + " ", StringComparison.Ordinal)

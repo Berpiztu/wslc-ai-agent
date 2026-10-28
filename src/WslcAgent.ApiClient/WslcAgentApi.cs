@@ -956,6 +956,41 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task PruneVolumesAsync(CancellationToken cancellationToken = default) =>
         PostAsync("api/v1/volumes/prune", cancellationToken);
 
+    /// <summary>The volume packed into a <c>.tar.gz</c> in its backup folder, or <paramref name="folder"/>; returns at once, the agent runs it.</summary>
+    public Task<VolumeBackupJob> BackupVolumeAsync(string name, string folder = "", CancellationToken cancellationToken = default) =>
+        PostJsonAsync<BackupVolumeRequest, VolumeBackupJob>($"api/v1/volumes/{Escape(name)}/backup", new BackupVolumeRequest(folder), cancellationToken);
+
+    /// <summary>A backup put back into a volume, created when it is not there; returns at once, the agent runs it.</summary>
+    public Task<VolumeBackupJob> RestoreVolumeAsync(string file, string volume, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<RestoreVolumeRequest, VolumeBackupJob>("api/v1/volumes/restore", new RestoreVolumeRequest(file, volume), cancellationToken);
+
+    public Task<VolumeBackupList> GetVolumeBackupsAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<VolumeBackupList>("api/v1/volume-backups", cancellationToken);
+
+    /// <summary>Where backups go: the default folder and each volume's own.</summary>
+    public Task<VolumeBackupSettings> GetVolumeBackupSettingsAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<VolumeBackupSettings>("api/v1/volume-backups/settings", cancellationToken);
+
+    public Task<VolumeBackupSettings> SaveVolumeBackupSettingsAsync(VolumeBackupSettings settings, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<VolumeBackupSettings, VolumeBackupSettings>("api/v1/volume-backups/settings", settings, cancellationToken, HttpMethod.Put);
+
+    /// <summary>The backup and restore lines of the agent's log, of <paramref name="volume"/>, or of every volume when it is empty, each said by its volume; the oldest first.</summary>
+    public Task<IReadOnlyList<string>> GetVolumeBackupLogAsync(string volume = "", CancellationToken cancellationToken = default) =>
+        GetAsync<IReadOnlyList<string>>(volume.Length > 0 ? $"api/v1/volume-backups/log?volume={Escape(volume)}" : "api/v1/volume-backups/log", cancellationToken);
+
+    /// <summary>A backup of the history deleted, its file with it.</summary>
+    public Task DeleteVolumeBackupAsync(string path, CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Delete, $"api/v1/volume-backups/history?path={Escape(path)}", cancellationToken);
+
+    public Task<VolumeBackupJob> GetVolumeBackupJobAsync(string id, CancellationToken cancellationToken = default) =>
+        GetAsync<VolumeBackupJob>($"api/v1/volume-backups/{Escape(id)}", cancellationToken);
+
+    public Task CancelVolumeBackupJobAsync(string id, CancellationToken cancellationToken = default) =>
+        PostAsync($"api/v1/volume-backups/{Escape(id)}/cancel", cancellationToken);
+
+    public Task DismissVolumeBackupJobAsync(string id, CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Delete, $"api/v1/volume-backups/{Escape(id)}", cancellationToken);
+
     // Networks
 
     public async Task<NetworkListResponse> GetNetworksAsync(CancellationToken cancellationToken = default) =>

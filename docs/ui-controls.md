@@ -623,6 +623,8 @@ from this table, or adds a row to it; nothing is inlined twice with two icons.
 | Image packages and CVEs | `Security` | — | container menu |
 | Pull, Download | `Download` | Primary as a page verb | Images verb, image row, Files |
 | Push, Upload | `Upload` | — | image menu, Files |
+| Back up, Backup & restore | `Backup` | Primary as a verb | container menu, volume row and card, Volumes verb, the backups window's title |
+| Restore a backup | `CloudDownload` | Warning | the backups window's title, a backup's line |
 | Build | `Build` | — | Images verb |
 | Import an archive | `Input` | — | Images verb |
 | Load an archive | `Unarchive` | — | Images verb |

@@ -85,6 +85,43 @@ public sealed class FilesHelpers(IWslcRunner wslc, IImageService images, ILogger
         return new FilesSession(container, VolumeMount);
     }
 
+    /// <summary>
+    /// A helper of its own for one piece of work on a volume (a backup, a
+    /// restore), never the Files view's, of <paramref name="image"/>, pulled
+    /// when it is missing: the volume mounted at <see cref="VolumeMount"/>,
+    /// hidden as the others are. Removed by <see cref="RemoveHelperAsync"/>.
+    /// </summary>
+    public async Task<string> StartVolumeWorkAsync(string volume, string image, TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        var name = WslcArgs.Require(volume, "volume name");
+        var helper = $"{VolumePrefix}{Hash(name, 10)}-{Guid.NewGuid():N}"[..(VolumePrefix.Length + 19)];
+        WslcResult result;
+        try
+        {
+            result = await wslc.RunAsync(
+                ["container", "run", "--detach", "--name", helper, "--entrypoint", "sleep", "--volume", $"{name}:{VolumeMount}", image, "infinity"],
+                timeout, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // Stopped while its image was pulled or it was starting: it may be there already.
+            await RemoveQuietlyAsync(helper);
+            throw;
+        }
+
+        var container = IdOrName(result.Stdout, helper);
+        if (!await MountVisibleAsync(container, cancellationToken))
+        {
+            await RemoveQuietlyAsync(container);
+            throw new WslcException($"Guest volume mount not ready at {VolumeMount}", result);
+        }
+
+        return container;
+    }
+
+    /// <summary>A work helper removed, best effort: it may be gone already.</summary>
+    public Task RemoveHelperAsync(string container) => RemoveQuietlyAsync(container);
+
     /// <summary>Stops and removes an image helper, found by its name; anything that is not one of these helpers is refused.</summary>
     public async Task CloseImageAsync(string container, CancellationToken cancellationToken = default)
     {

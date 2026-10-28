@@ -2,7 +2,7 @@ namespace WslcAgent.Server.Wslc;
 
 /// <summary>
 /// What a <c>wslc</c> command line is, for CLI Activity: the group it belongs to
-/// (containers, images, networks, volumes, file transfers or general), a title a person reads
+/// (containers, images, networks, volumes, file transfers, backups or general), a title a person reads
 /// before the raw line, and the session it ran in.
 /// </summary>
 public static class CliTraceDescription
@@ -21,6 +21,9 @@ public static class CliTraceDescription
     /// container — the Files view's paste — is the container's.
     /// </summary>
     public const string Transfers = "transfers";
+
+    /// <summary>A volume's backup or restore, every line of it (written after <c>backup: </c>): a group of its own, to follow a backup through the log.</summary>
+    public const string Backups = "backups";
 
     /// <summary>The names a transfer travels under: the file inside the container (ContainerFiles) and the folder it is staged in on the host (Staging).</summary>
     private static readonly string[] TransferNames = ["wslc-cp-", "wslc-files-"];

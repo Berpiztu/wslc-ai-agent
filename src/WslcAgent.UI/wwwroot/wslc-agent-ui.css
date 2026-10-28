@@ -2632,9 +2632,12 @@
     --wslc-dialog-field: var(--mud-palette-background);
 }
 
+/* A window of tabs (a project's, a volume's backups) keeps one frame whatever
+   tab is shown: one with a rail of its own (Logs) would otherwise take the
+   box away and the whole window would move as the tab changes. */
 .mud-dialog .wslc-action-main:not(.wslc-terminal):not(:has(> .wslc-logs-output)),
 .wslc-frame .wslc-action-main,
-.mud-dialog .mud-dialog-content:not(.wslc-dialog-full):not(:has(.wslc-action-main)) {
+.mud-dialog .mud-dialog-content:not(.wslc-dialog-full):not(:has(.wslc-action-main)):not(:has(.wslc-tab-panels)) {
     background-color: var(--wslc-dialog-content);
     border: 1px solid var(--mud-palette-lines-default);
     border-radius: var(--mud-default-borderradius);
@@ -2645,7 +2648,7 @@
     padding: 8px 0 8px 8px;
 }
 
-.mud-dialog .mud-dialog-content:not(.wslc-dialog-full):not(:has(.wslc-action-main)) {
+.mud-dialog .mud-dialog-content:not(.wslc-dialog-full):not(:has(.wslc-action-main)):not(:has(.wslc-tab-panels)) {
     margin: 0 16px 16px;
 }
 
