@@ -246,7 +246,7 @@
     /// <summary>Logs in their own window, as every other entry of this menu: the details page is what "View details" is for.</summary>
     private Task LogsAsync() =>
         DialogFlow.ShowAsync<Dialogs.ContainerLogsDialog>(Dialogs, $"Logs — {Container.Name}",
-            new DialogParameters<Dialogs.ContainerLogsDialog> { { d => d.Container, Container.Id } }, large: true);
+            new DialogParameters<Dialogs.ContainerLogsDialog> { { d => d.Container, Container.Id }, { d => d.Name, Container.Name } }, large: true);
 
     private Task StatsAsync() =>
         DialogFlow.ShowAsync<Dialogs.ContainerStatsDialog>(Dialogs, $"Container stats — {Container.Name}",

@@ -1,6 +1,9 @@
 @* The logs window: the same view the details tab shows, in its own
    window, with its action rail (search, wrap, autorefresh, refresh, jump to
-   end, copy, clear). Everything the row menu opens opens like this. *@
+   end, copy, clear), its backups and restores among its lines. Everything
+   the row menu opens opens like this. *@
+
+@inject WslcAgentApi Api
 
 <MudDialog ContentClass="wslc-dialog-action">
     <TitleContent>
@@ -9,7 +12,7 @@
         </DialogTitle>
     </TitleContent>
     <DialogContent>
-        <LogsView Container="@Container" />
+        <LogsView Container="@Container" Backups="@(Name.Length > 0 ? () => BackupLogLines.OfContainerAsync(Api, Name) : null)" />
     </DialogContent>
 </MudDialog>
 
@@ -17,4 +20,7 @@
     [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
 
     [Parameter, EditorRequired] public string Container { get; set; } = "";
+
+    /// <summary>Its name, which its backups are kept by: their lines are among its own.</summary>
+    [Parameter] public string Name { get; set; } = "";
 }

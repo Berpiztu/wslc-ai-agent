@@ -133,7 +133,10 @@ component uses the controls below with these parameters and never adds
   read from the same variable (`--wslc-level-info`, `-warning`, `-error`, and
   their `-ink`), held down and sunk into the rail while its lines are shown
   (`wslc-key-down`, as the table/cards key in use), standing proud while they
-  are hidden (`wslc-key-up`). A colour, a size or a text that means something
+  are hidden (`wslc-key-up`). A container's or a project's logs, which show
+  their backups among their lines (`LogsView`'s `Backups`), have two more
+  keys the same way: what the containers wrote (`Terminal`) and the backups
+  (`Backup`). A colour, a size or a text that means something
   is defined once, and whatever shows it reads it from there. The
   exec window's rail holds every verb it has — Connect, Reconnect, Copy,
   Clear — because its pane takes the rest: a command is typed in the shell

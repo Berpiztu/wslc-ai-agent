@@ -9,7 +9,12 @@
    under a reader, and nothing scrolls when nothing new arrived. The same view
    draws a log that is not a container's (a project being saved): given what to
    read (Read), it shows that text the same way, with the same rail but its
-   Clear, which is the agent's memory of a container's log. *@
+   Clear, which is the agent's memory of a container's log. Given the
+   backups and restores of what it shows (Backups: a container's own, a
+   project's and its containers'), they are put among its lines in the order
+   they were written, each an entry of time, level, kind and message (a
+   project's lines too, with whose they are), and two keys of the rail show
+   or hide either: what the containers wrote, and the backups. *@
 @using System.Globalization
 @using WslcAgent.ApiClient
 @inject WslcAgentApi Api
@@ -89,6 +94,16 @@
                            title="@($"{label} lines {(shown ? "shown — click to hide" : "hidden — click to show")}")" aria-pressed="@(shown ? "true" : "false")"
                            OnClick="@(() => ToggleLevel(level))" />
         }
+        @* What the containers wrote and their backups, each a key as the levels are: both held down, all of it in order. *@
+        @if (Backups is not null)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Terminal" Class="@(_showOutput ? "wslc-key-down" : "wslc-key-up")" Size="Size.Small" Variant="Variant.Filled"
+                           title="@($"What the containers wrote {(_showOutput ? "shown — click to hide" : "hidden — click to show")}")" aria-pressed="@(_showOutput ? "true" : "false")"
+                           OnClick="@(() => ToggleSourceAsync(output: true))" />
+            <MudIconButton Icon="@Icons.Material.Filled.Backup" Class="@(_showBackups ? "wslc-key-down" : "wslc-key-up")" Size="Size.Small" Variant="Variant.Filled"
+                           title="@($"Backups and restores {(_showBackups ? "shown — click to hide" : "hidden — click to show")}")" aria-pressed="@(_showBackups ? "true" : "false")"
+                           OnClick="@(() => ToggleSourceAsync(output: false))" />
+        }
         <MudIconButton Icon="@Icons.Material.Filled.WrapText" Color="@RailToggle.Color(_wrap)" Class="@RailToggle.Class(_wrap)" Size="Size.Small" Variant="Variant.Filled"
                        title="@(_wrap ? "Wrap on — click to turn off" : "Wrap off — click to turn on")" OnClick="@(() => _wrap = !_wrap)" />
         <FollowRing Follow="_follow" Held="Held" Title="@FollowRing.TitleFor("the log", _follow, Held)" FollowChanged="ToggleFollowAsync" />
@@ -148,6 +163,19 @@
     /// read. Given, the view reads this and nothing of a container's.
     /// </summary>
     [Parameter] public Func<Task<string>>? Read { get; set; }
+
+    /// <summary>
+    /// The backups and restores of what the view shows, with their times: put
+    /// among its lines in order, as entries, with the rail's keys to
+    /// show either alone; none, the view is what it reads alone.
+    /// </summary>
+    [Parameter] public Func<Task<IReadOnlyList<TimedLine>>>? Backups { get; set; }
+
+    /// <summary>With <see cref="Read"/> and <see cref="Backups"/>: what it reads with each line's time, so the backups' fall in order among them.</summary>
+    [Parameter] public Func<Task<IReadOnlyList<TimedLine>>>? ReadTimed { get; set; }
+
+    private bool _showOutput = true;
+    private bool _showBackups = true;
 
     /// <summary>What the view says, beside a turning wheel, while a reading that takes a while is made (Zaindari's: "Checking Zaindari for …"); none, "Reading…" under the bar.</summary>
     [Parameter] public string? Waiting { get; set; }
@@ -216,12 +244,13 @@
         _loading = true;
         try
         {
-            var text = Read is { } read
-                ? await read()
-                : _clearedAt is { } cleared
-                    ? LinesAfter(await Api.GetContainerLogsAsync(Container, Tail, true, since: Rfc3339(cleared)), cleared)
-                    : await Api.GetContainerLogsAsync(Container, Tail, false);
-            var shown = LogLines.Split(text);
+            var shown = Backups is { } backups
+                ? await WithBackupsAsync(backups)
+                : LogLines.Split(Read is { } read
+                    ? await read()
+                    : _clearedAt is { } cleared
+                        ? LinesAfter(await Api.GetContainerLogsAsync(Container, Tail, true, since: Rfc3339(cleared)), cleared)
+                        : await Api.GetContainerLogsAsync(Container, Tail, false));
             // The end is sought only when something new arrived: a box that jumps to
             // where it already is still jumps.
             _scrollPending = _follow && !shown.Select(l => l.Text).SequenceEqual(_lines.Select(l => l.Text));
@@ -395,6 +424,62 @@
                 yield return (stamp, parts.Length > 1 ? parts[1] : "");
             }
         }
+    }
+
+    /// <summary>
+    /// What the keys show, all in the order it was written: what the
+    /// containers wrote and the backups' lines. Those of a project
+    /// (<see cref="ReadTimed"/>) and every backup's are entries, each part its
+    /// colour (<see cref="LogLines.Entry"/>): the time on this machine's
+    /// clock, the level, whose it is, its kind, the message; a container's own
+    /// lines stand as it wrote them, read with their stamps, after a view
+    /// clear only what came since.
+    /// </summary>
+    private async Task<List<LogLine>> WithBackupsAsync(Func<Task<IReadOnlyList<TimedLine>>> backups)
+    {
+        var entries = new List<TimedLine>();
+        var written = new List<(DateTimeOffset At, LogLine Line)>();
+        if (_showOutput)
+        {
+            if (ReadTimed is { } timed)
+            {
+                entries.AddRange(await timed());
+            }
+            else if (Read is { } read)
+            {
+                written.AddRange(LogLines.Split(await read()).Select(line => (DateTimeOffset.MinValue, line)));
+            }
+            else
+            {
+                written.AddRange(Stamped(await Api.GetContainerLogsAsync(Container, Tail, true, since: _clearedAt is { } cleared ? Rfc3339(cleared) : ""))
+                    .Where(line => _clearedAt is not { } after || line.Stamp > after)
+                    .Select(line => (line.Stamp, LogLines.Of(line.Text))));
+            }
+        }
+
+        if (_showBackups)
+        {
+            entries.AddRange(await backups());
+        }
+
+        var width = entries.Select(entry => entry.Source.Length).DefaultIfEmpty(0).Max();
+        return [.. written.Concat(entries.Select(entry => (entry.At, Line: LogLines.Entry(entry, width))))
+            .OrderBy(line => line.At)
+            .Select(line => line.Line)];
+    }
+
+    private async Task ToggleSourceAsync(bool output)
+    {
+        if (output)
+        {
+            _showOutput = !_showOutput;
+        }
+        else
+        {
+            _showBackups = !_showBackups;
+        }
+
+        await RefreshAsync();
     }
 
     /// <summary>A moment as wslc's --since takes it.</summary>

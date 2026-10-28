@@ -50,7 +50,7 @@
                      Centered="Style.Applied.TabsCentered"
                      TabPanelsClass="wslc-tab-panels" Class="wslc-fill" MinimumTabWidth="@($"{Style.Applied.TabsMinWidth}px")" ActivePanelIndex="_tab" ActivePanelIndexChanged="OnTabChanged">
                 <MudTabPanel Text="Logs">
-                    <LogsView Container="@Id" />
+                    <LogsView Container="@Id" Backups="BackupLinesAsync" />
                 </MudTabPanel>
                 <MudTabPanel Text="Inspect">
                     @* The form is the action view: the summary card and the fields scroll in the main column, the rail stands at the top of the second. *@
@@ -139,6 +139,9 @@
 
     /// <summary><c>?file=</c>: the file open in the Files editor. Opening one is a step, so Back from it returns to its folder.</summary>
     [SupplyParameterFromQuery(Name = "file")] public string? FileEdited { get; set; }
+
+    /// <summary>Its backups and restores, among its lines in Logs: kept by its name.</summary>
+    private Task<IReadOnlyList<TimedLine>> BackupLinesAsync() => BackupLogLines.OfContainerAsync(Api, _details?.Name ?? Id);
 
     private string Title => _details is null ? "Container" : _details.Name.Length > 0 ? _details.Name : _details.Id;
 

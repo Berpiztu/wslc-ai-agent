@@ -302,3 +302,16 @@ Built as a project's windows are, and to the UI rules (`docs/RULES.md`,
   read the same lines from a small file of their own (`volume-backups.log`),
   kept across restarts: reading the whole agent's log every second was
   slow.
+- **A container's logs and a project's show their backups among their
+  lines.** A container's Logs (its window, its row's Logs, a project's
+  window with it chosen): its own backups and restores in the order they
+  were written among what the container wrote, which stands as it wrote it;
+  each backup line is an entry, `time | LEVEL | backup | message`. A
+  project's Logs with All chosen: every line an entry, `time | LEVEL |
+  whose | kind | message`, whose the container or the project, kind
+  `output` or `backup`: the time is the one wslc stamped (the agent's for a
+  backup), on this machine's clock, the same for every container however
+  each writes its own; the parts take the Logs page's colours
+  (`LogLines.Entry`). Two keys of the rail show either alone: what the
+  containers wrote, and the backups. A volume's and an image's logs stay as
+  they are.

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace WslcAgent.UI.Components;
@@ -32,6 +33,62 @@ public static partial class LogLines
         "info" or "debug" => Info,
         _ => null,
     };
+
+    /// <summary>What a container wrote, in a log put together from several (<see cref="Entry"/>).</summary>
+    public const string Output = "output";
+
+    /// <summary>A line of a backup or a restore, in a log put together from several (<see cref="Entry"/>).</summary>
+    public const string Backup = "backup";
+
+    /// <summary>The width of the kind column, the longer of <see cref="Output"/> and <see cref="Backup"/>.</summary>
+    private static readonly int KindWidth = Math.Max(Output.Length, Backup.Length);
+
+    /// <summary>The width of the level column: CRITICAL, the longest level.</summary>
+    private const int LevelWidth = 8;
+
+    /// <summary>One line as it stands, cut as <see cref="Split"/> cuts each of its lines.</summary>
+    public static LogLine Of(string line)
+    {
+        var plain = StripAnsi(line).TrimEnd('\r');
+        return new LogLine(plain, DetectLevel(plain), PartsOf(plain));
+    }
+
+    /// <summary>
+    /// An entry of a log put together from several (a project's containers and
+    /// its backups, a container's backups among its own lines), drawn as the
+    /// Logs page draws its entries, each part its colour: the moment it was
+    /// written on this machine's clock, its level, whose it is (a column of
+    /// <paramref name="sourceWidth"/>, none at 0), its kind
+    /// (<see cref="Output"/>, <see cref="Backup"/>) and its message, as it was
+    /// written but for a level it begins with (<c>INFO:</c>), which the level
+    /// column already says.
+    /// </summary>
+    public static LogLine Entry(TimedLine line, int sourceWidth)
+    {
+        var message = StripAnsi(line.Text).TrimEnd('\r');
+        var level = DetectLevel(message);
+        var prefix = Prefix().Match(message);
+        if (prefix.Success)
+        {
+            message = message[prefix.Length..].TrimStart();
+        }
+
+        var time = line.At == DateTimeOffset.MinValue
+            ? new string(' ', "yyyy-MM-dd HH:mm:ss".Length)
+            : line.At.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+        var separator = new LogPart(" | ", "wslc-log-sep");
+        List<LogPart> parts = [new(time, "wslc-log-time"), separator, new(level.ToUpperInvariant().PadRight(LevelWidth), "wslc-log-level"), separator];
+        if (sourceWidth > 0)
+        {
+            parts.Add(new(line.Source.PadRight(sourceWidth), "wslc-log-source"));
+            parts.Add(separator);
+        }
+
+        parts.Add(new(line.Kind.PadRight(KindWidth), "wslc-log-source"));
+        parts.Add(separator);
+        parts.Add(new(message, "wslc-log-message"));
+        return new LogLine(string.Concat(parts.Select(part => part.Text)), level, parts);
+    }
 
     public static List<LogLine> Split(string text)
     {
