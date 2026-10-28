@@ -90,10 +90,12 @@ public sealed class ContainerBackups(IWslcRunner wslc, IContainerService contain
     {
         var name = WslcArgs.Require(container, "container");
         var settings = Settings();
+        // What is asked for is checked before anything is read: a wrong one is the caller's, refused as such.
+        var asked = (what ?? "").Trim().Length > 0 ? Checked(what!) : "";
         if ((folder ?? "").Trim().Length == 0 && settings.Plan(name).Folder.Length == 0
             && (await containers.ListAsync(all: true, cancellationToken: cancellationToken)).Containers.FirstOrDefault(row => row.Name == name) is { Project.Length: > 0 } member)
         {
-            var held = (what ?? "").Trim().Length > 0 ? Checked(what!) : settings.WhatOf(name);
+            var held = asked.Length > 0 ? asked : settings.WhatOf(name);
             // Resolved here, not given: a project's backups drive each of its containers' (they need these), and a
             // container of a project is backed up by them.
             return await services.GetRequiredService<ProjectBackups>().StartBackupAsync(member.Project, "", stop, null, name, held, settings.StopOf(name), cancellationToken);
