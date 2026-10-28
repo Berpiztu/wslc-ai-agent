@@ -12,12 +12,14 @@ public interface IContainerBackups
     /// backup folder when <paramref name="folder"/> is empty; returns at once
     /// with the job. The running containers that use its volumes, it among
     /// them, are stopped and started again when its settings say so, or
-    /// <paramref name="stop"/> says the user agreed.
+    /// <paramref name="stop"/> says the user agreed. One of a project's whose
+    /// own settings name no folder goes into its project's backups, a date of
+    /// them holding it alone.
     /// </summary>
-    BackupJob StartBackup(string container, string what, string folder, bool stop);
+    Task<BackupJob> StartBackupAsync(string container, string what, string folder, bool stop, CancellationToken cancellationToken);
 
     /// <summary>A backup put back, what it holds: the image loaded, the volumes' contents replaced, the container made again; returns at once with the job. Destructive: callers confirm with the user first.</summary>
-    BackupJob StartRestore(string folder, string container);
+    BackupJob StartRestore(string folder, string container, string what = "");
 
     /// <summary>The jobs under way or just ended, the history of backups and where they go.</summary>
     BackupList List();

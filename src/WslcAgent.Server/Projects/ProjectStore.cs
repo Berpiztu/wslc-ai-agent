@@ -129,6 +129,42 @@ public sealed partial class ProjectStore(IOptions<WslcOptions> options)
         }
     }
 
+    /// <summary>What is kept for a project (its file and what it was read with) copied into <paramref name="target"/>, for its backup; false when nothing is kept.</summary>
+    public bool CopyTo(string name, string target)
+    {
+        var folder = Folder(name);
+        if (!File.Exists(Path.Combine(folder, FileName)))
+        {
+            return false;
+        }
+
+        Directory.CreateDirectory(target);
+        foreach (var file in new[] { FileName, AboutName }.Where(file => File.Exists(Path.Combine(folder, file))))
+        {
+            File.Copy(Path.Combine(folder, file), Path.Combine(target, file), overwrite: true);
+        }
+
+        return true;
+    }
+
+    /// <summary>What a backup kept of a project (<see cref="CopyTo"/>) put back as what is kept for it, over what is; false when the backup holds none.</summary>
+    public bool RestoreFrom(string name, string source)
+    {
+        if (!File.Exists(Path.Combine(source, FileName)))
+        {
+            return false;
+        }
+
+        var folder = Folder(name);
+        Directory.CreateDirectory(folder);
+        foreach (var file in new[] { FileName, AboutName }.Where(file => File.Exists(Path.Combine(source, file))))
+        {
+            File.Copy(Path.Combine(source, file), Path.Combine(folder, file), overwrite: true);
+        }
+
+        return true;
+    }
+
     /// <summary>The project's folder. Its name is a part of a path here, so only what a project can be named is taken.</summary>
     private string Folder(string name) =>
         ProjectName().IsMatch(name)

@@ -237,6 +237,9 @@
     /// <summary>The containers' backups and restores under way or just ended: each on its card, as a ring, and its row, as a bar.</summary>
     private IReadOnlyList<BackupJob> _backups = [];
 
+    /// <summary>The projects' backups and restores, each turning its project's ring as its containers' turn theirs.</summary>
+    private IReadOnlyList<BackupJob> _projectBackups = [];
+
     /// <summary>The agent's pulls, read only while a container's image update is pulling.</summary>
     private IReadOnlyList<ImagePullState> _pulls = [];
     private readonly HashSet<string> _reportedLaunches = [];
@@ -249,6 +252,7 @@
         _launches = await Api.GetContainerLaunchesAsync();
         _transfers = await Api.GetContainerTransfersAsync();
         _backups = (await Api.GetBackupsAsync(BackupKind.Container.Key)).Jobs;
+        _projectBackups = (await Api.GetBackupsAsync(BackupKind.Project.Key)).Jobs;
         _pulls = response.Containers.Any(row => row.IsUpdating) ? await Api.GetImagePullsAsync() : [];
         ReportFinishedLaunches();
         var runs = _launches.Where(l => !l.IsProject && !l.Done)
@@ -486,7 +490,10 @@
     {
         if (SavingOf(head.Name) is not { } saving)
         {
-            return GoingName(head);
+            // Its backup or restore, run by the agent: the bar with its log and its cancel, as a container's row has it.
+            return BackupFlow.For(_projectBackups, head.Name) is { } backup
+                ? @<BackupRing Kind="BackupKind.Project" Job="backup" Row="true" Lead="@Mark(head)" Changed="RefreshAsync" />
+                : GoingName(head);
         }
 
         return @<ProgressCell Lead="@Mark(head)" Name="@Titled(head)" Pct="saving.Pct" Status="@saving.Status" Failed="@(!saving.Active && !saving.Done)" Done="saving.Done"
@@ -602,6 +609,11 @@
                         <ProgressRing Pct="saving.Pct" Status="@saving.Status" Failed="@(!saving.Active && !saving.Done)" Done="saving.Done"
                                       LogTitle="View project progress" CancelTitle="Cancel project" DismissTitle="Dismiss project"
                                       OnLog="@(() => ShowLaunchLogAsync(saving))" OnCancel="@(() => CancelLaunchAsync(saving))" OnDismiss="@(() => DismissLaunchAsync(saving))" />
+                    }
+                    else if (BackupFlow.For(_projectBackups, head.Name) is { } backup)
+                    {
+                        @* Its backup or restore, as each of its containers' turns its own ring. *@
+                        <BackupRing Kind="BackupKind.Project" Job="backup" Changed="RefreshAsync" />
                     }
                     else if (WorkOf(head.Name) is { } going)
                     {

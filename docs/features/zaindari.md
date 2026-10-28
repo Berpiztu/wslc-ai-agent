@@ -113,7 +113,8 @@ nothing.
   the agent refuses it. What it finds marks the image again, worse, better
   or clean. A project's window lists its containers at the left, each in
   its image's colour, and for the one chosen shows, in tabs of its pane,
-  its **Vulnerabilities**, what to **Accept**, and its **Patch**, each with
+  its **Vulnerabilities**, what to **Accept**, its **Patch**, and, for one
+  on a patch, its **Changes** (What a patch changed, below), each with
   its verb at the right end of their bar, and *Up to date: nothing to accept
   or patch.* on that bar when neither has anything to do; Cancel goes
   back to the vulnerabilities. The window stays open after a Save

@@ -53,14 +53,14 @@ public static class ProjectRow
     /// <summary>
     /// Something is being done to the project that this client knows of
     /// wherever it is shown: a verb going through its containers, its own
-    /// down, or a verb, a recreate or an image update on one of its
-    /// containers. What is done to a container of a project is done to the
+    /// down, or a verb, a recreate, an image update, a backup or a restore
+    /// on one of its containers. What is done to a container of a project is done to the
     /// project, which shows it as its own work.
     /// </summary>
     public static bool Working(string project, IEnumerable<ContainerSummary> members, ProjectVerbs verbs, BusyRows busy) =>
         verbs.IsGoing(project)
         || busy.IsBusy(ProjectVerbs.RowPrefix + project)
-        || members.Any(member => busy.IsBusy(member.Id) || member.IsRecreating || member.IsUpdating);
+        || members.Any(member => busy.IsBusy(member.Id) || member.IsRecreating || member.IsUpdating || member.BackingUp is not null);
 
     /// <summary>What a project is called on screen: its name with <c>-compose</c> after it, which says what it is among rows and cards that are containers.</summary>
     public static string Titled(string name) => $"{name}-compose";

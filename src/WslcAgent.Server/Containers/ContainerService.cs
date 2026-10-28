@@ -35,7 +35,8 @@ public sealed partial class ContainerService(
     ProjectGaps gaps,
     ILogger<ContainerService> logger,
     Images.ImageVersions? imageVersions = null,
-    Backups.BusyVolumes? busyVolumes = null) : IContainerService
+    Backups.BusyVolumes? busyVolumes = null,
+    Backups.BackupMarks? backupMarks = null) : IContainerService
 {
     private const string MetadataLabel = "com.microsoft.wsl.container.metadata=";
 
@@ -59,6 +60,8 @@ public sealed partial class ContainerService(
         var uids = registry.Reconcile(Resources.ResourceRegistry.Container, [.. owned.Select(c => (c.Id, c.Name))], complete: all);
         var containers = recreations.Overlay([.. (helpers ? rows : owned).Select(c => c with { Uid = uids.GetValueOrDefault(c.Id) })], complete: all);
         var annotated = await gaps.AnnotateAsync(imageMarks.AnnotateContainers(failures.Annotate(updates.Annotate(publications.Annotate(policies.Annotate(containers))))), complete: all, cancellationToken);
+        // Being backed up or restored, as a patch or an update says it: every view of a container shows it turning.
+        annotated = backupMarks?.Annotate(annotated) ?? annotated;
         // The version an image says only in its variables (REDIS_VERSION), for a container whose labels said none.
         if (imageVersions is not null)
         {

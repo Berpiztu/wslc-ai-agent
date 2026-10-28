@@ -81,14 +81,14 @@ public static class ContainerTools
     }
 
     [McpServerTool(Name = "backup_container")]
-    [Description("Back up a container, in the background, into a folder <container>-<date> in its backup folder (its own, else a folder named after it in the folder of every container; container_backups says which) or the folder given: what holds any of its parts, with commas between: config (its settings, to make it again as it was), image, volumes (config,image,volumes is all of it); empty for what its backup settings tick. Its volumes need every container that uses them stopped, it among them: they are stopped and started again when it ends if its backup settings say yes, or stop=true says the user agreed; if they say no, or ask and stop is false, the backup is refused while they run. A host folder mounted into it is not in the backup. Returns the job at once; container_backups follows it.")]
-    public static BackupJob BackupContainer(
+    [Description("Back up a container, in the background, into a folder named by its date (2026-10-28_065115) in its backup folder (its own, else a folder named after it in the folder of every container; container_backups says which) or the folder given: what holds any of its parts, with commas between: config (its settings, to make it again as it was), image, volumes (config,image,volumes is all of it); empty for what its backup settings tick. Its volumes need every container that uses them stopped, it among them: they are stopped and started again when it ends if its backup settings say yes, or stop=true says the user agreed; if they say no, or ask and stop is false, the backup is refused while they run. A host folder mounted into it is not in the backup. Returns the job at once; container_backups follows it.")]
+    public static Task<BackupJob> BackupContainer(
         IContainerBackups backups,
         [Description("Container name.")] string container,
         [Description("Any of config, image and volumes, with commas between; empty for its backup settings'.")] string what = "",
         [Description("Empty for the container's backup folder; else a folder of the agent's machine, by its full path (C:\\Backups), made when it is not there.")] string folder = "",
         [Description("The user agreed to stop it and the running containers that use its volumes; they are started again when the backup ends.")] bool stop = false) =>
-        backups.StartBackup(container, what, folder, stop);
+        backups.StartBackupAsync(container, what, folder, stop, CancellationToken.None);
 
     [McpServerTool(Name = "container_backups", ReadOnly = true)]
     [Description("The container backups and restores under way or just ended (state, step, output), every backup's history, newest first (container, folder, what it holds, size, when, and whether it is still there), and where backups go: the default folder and each container's own.")]

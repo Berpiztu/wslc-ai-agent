@@ -1,0 +1,90 @@
+@* What a project's backup holds, as a tree of ticks in a box of its own
+   (ProjectTree): All; under it, a step in, the project's configuration (its
+   Compose file) and Containers; under Containers each container, and under
+   each its configuration, its image by name and Volumes, with each volume a
+   step further. Each box shows what it gives now: what the project decides
+   (Picks), else what its container's own settings say. A box touched is the
+   project's to decide, and a parent touched decides every box under it, so
+   ticking Containers backs up every container whole, whatever each one's
+   settings say. Default, first where it is offered (the project's settings),
+   forgets what the project decided: every box follows its container again.
+   In a box of one height that scrolls, so a project of many containers moves
+   nothing. *@
+
+<MudText Typo="Typo.caption" Class="mud-text-secondary">What to back up</MudText>
+<MudPaper Outlined="true" Class="wslc-backup-parts wslc-picker-list">
+    @if (Defaultable)
+    {
+        <SquareCheckBox Value="@(Picks.Count == 0)" ValueChanged="@((bool on) => DecideAsync(on ? new Dictionary<string, bool>() : Settled()))"
+                        Label="Default: each container as its own settings say" />
+    }
+    @Box("All", AllBoxes)
+    <div class="wslc-backup-parts-children">
+        @Box("Project configuration (Compose file)", [ProjectPicks.Compose])
+        @Box("Containers", ContainerBoxes)
+        <div class="wslc-backup-parts-children">
+            @foreach (var container in Tree.Containers)
+            {
+                @Box(container.Name, [.. ProjectPicks.Of(container)])
+                <div class="wslc-backup-parts-children">
+                    @Box("Configuration", [ProjectPicks.Configuration(container.Name)])
+                    @Box($"Image: {container.Image}", [ProjectPicks.Image(container.Name)])
+                    @if (container.Volumes.Count > 0)
+                    {
+                        @Box("Volumes", [.. container.Volumes.Select(volume => ProjectPicks.Volume(container.Name, volume))])
+                        <div class="wslc-backup-parts-children">
+                            @foreach (var volume in container.Volumes)
+                            {
+                                @Box(volume, [ProjectPicks.Volume(container.Name, volume)])
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</MudPaper>
+
+@code {
+    /// <summary>The project's containers, their images and volumes, and what their own settings back up.</summary>
+    [Parameter, EditorRequired] public ProjectTree Tree { get; set; } = default!;
+
+    /// <summary>What the project decides itself, box by box; empty, every box follows its container.</summary>
+    [Parameter] public IReadOnlyDictionary<string, bool> Picks { get; set; } = new Dictionary<string, bool>();
+
+    [Parameter] public EventCallback<IReadOnlyDictionary<string, bool>> PicksChanged { get; set; }
+
+    /// <summary>Default is offered first: the project's settings, which can leave every box to its container.</summary>
+    [Parameter] public bool Defaultable { get; set; }
+
+    private IReadOnlyList<string> ContainerBoxes => [.. Tree.Containers.SelectMany(ProjectPicks.Of)];
+
+    private IReadOnlyList<string> AllBoxes => [ProjectPicks.Compose, .. ContainerBoxes];
+
+    private bool On(string box) => Tree.On(box, Picks);
+
+    /// <summary>A box over the boxes under it (a leaf over itself): ticked when every one is, the dash when some are; touched, the project decides every one.</summary>
+    private RenderFragment Box(string label, IReadOnlyList<string> boxes) => __builder =>
+    {
+        var on = boxes.Count(On);
+        <SquareCheckBox Value="@(boxes.Count > 0 && on == boxes.Count)" Partly="@(on > 0 && on < boxes.Count)" Disabled="@(boxes.Count == 0)"
+                        ValueChanged="@((bool ticked) => DecideAsync(Decided(boxes, ticked)))" Label="@label" />
+    };
+
+    /// <summary>The project's picks with every box of <paramref name="boxes"/> decided.</summary>
+    private Dictionary<string, bool> Decided(IEnumerable<string> boxes, bool ticked)
+    {
+        var picks = new Dictionary<string, bool>(Picks, StringComparer.Ordinal);
+        foreach (var box in boxes)
+        {
+            picks[box] = ticked;
+        }
+
+        return picks;
+    }
+
+    /// <summary>Default unticked: every box decided as it stands now, so nothing changes until a box is touched.</summary>
+    private Dictionary<string, bool> Settled() => Decided(AllBoxes, true).Keys.ToDictionary(box => box, On, StringComparer.Ordinal);
+
+    private Task DecideAsync(IReadOnlyDictionary<string, bool> picks) => PicksChanged.InvokeAsync(picks);
+}

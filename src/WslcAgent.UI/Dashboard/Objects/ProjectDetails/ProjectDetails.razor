@@ -42,7 +42,7 @@
                         @* A container that failed, or whose image has known vulnerabilities: its row in the red or the yellow its card wears (CardTone.Alarm). *@
                         var warned = Alarmed(member);
                         <tr @key="member.Id" title="@(member.HasFailed ? member.Failure : null)">
-                            <td class="@($"wslc-col-dot {warned.Class}")" style="@warned.Style"><StateDot Active="member.IsRunning" Title="running" Key="@member.Id" Working="@(member.IsRecreating || member.IsUpdating)" /></td>
+                            <td class="@($"wslc-col-dot {warned.Class}")" style="@warned.Style"><StateDot Active="member.IsRunning" Title="running" Key="@member.Id" Working="@(member.IsRecreating || member.IsUpdating || member.BackingUp is not null)" /></td>
                             <td class="@($"{tone} {warned.Class}")" style="@warned.Style">@Readings.Dash(member.Service)</td>
                             <td class="@($"{tone} {warned.Class}")" style="@warned.Style">@member.Name</td>
                             <td class="@($"{tone} {warned.Class}")" style="@warned.Style">@member.Status</td>

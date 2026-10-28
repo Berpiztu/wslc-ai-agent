@@ -23,8 +23,16 @@
             {
                 <MudListItem T="string" @key="WholeProject" Value="@WholeProject" role="listitem">
                     <div class="d-flex align-center gap-2">
+                        @* The whole project's slot turns while any of its containers is under way: its backup goes through them. *@
                         <span class="wslc-member-mark">
-                            <MudIcon Icon="@Icons.Material.Filled.AccountTree" Size="Size.Small" />
+                            @if (_members.Any(member => UnderWay(member) is not null))
+                            {
+                                <MudProgressCircular Indeterminate="true" Size="Size.Small" Color="Color.Info" />
+                            }
+                            else
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.AccountTree" Size="Size.Small" />
+                            }
                         </span>
                         <div class="wslc-member-text">
                             <MudText Typo="Typo.body2" Class="wslc-member-line">@all</MudText>
@@ -105,7 +113,7 @@
     /// <summary>How often the containers are read again where the window shows their readings (CPU, memory); none, only as the agent says they change.</summary>
     [Parameter] public TimeSpan? ReadEvery { get; set; }
 
-    /// <summary>A container doing nothing the agent is still carrying out (a patch, an image update, a recreate): what a window's verb on it waits for.</summary>
+    /// <summary>A container doing nothing the agent is still carrying out (a patch, an image update, a recreate, a backup or a restore): what a window's verb on it waits for.</summary>
     public static bool AtRest(ContainerSummary member) => UnderWay(member) is null;
 
     /// <summary>What a container is doing, in the line its image is in; null for one at rest.</summary>
@@ -113,6 +121,7 @@
         member.PatchingTo is { } patching ? ImageSecurityFlow.PatchStatus(member, patching) + "…"
         : member.UpdatingTo is { } updating ? $"Updating to {updating}…"
         : member.IsRecreating ? "Being recreated…"
+        : member.BackingUp is { } doing ? $"{doing}…"
         : null;
 
     /// <summary>The menu's value for <see cref="All"/>: no container's id is empty.</summary>

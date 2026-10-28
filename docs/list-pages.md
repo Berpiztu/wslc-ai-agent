@@ -329,14 +329,15 @@ across the application (the table in `docs/ui-controls.md`, Icons). No entry is 
 the row's state (the CLI answers). An entry a
 later slice brings stays in place and says so through `NotYet`. The
 containers menu, complete: View details · View & edit · Zaindari: check
-vulnerabilities (`ImageVulnerabilitiesDialog` over `/image-security/vulnerabilities`) · Copy run command · Open in
+vulnerabilities (`ImageVulnerabilitiesDialog` over `/image-security/vulnerabilities`) · Backup & restore
+(`BackupsDialog` on the container alone: its backups, logs and settings) · Copy run command · Open in
 terminal (terminal slice) · Use wslc Debug (not built yet: a toast
 says so) · View files (files slice) · Restart · Open with browser
 (`OpenPortDialog`, every published port as a link; the `PortsLink` opens the
-preferred one) · View browser sessions (browser slice) · Logs · Stats
+preferred one) · View browser sessions (only in the menu: a card's buttons hold
+Zaindari and Backup & restore in its place) · Logs · Stats
 (`ContainerStatsDialog`, also the details tab) · Exec (terminal slice) ·
-Export JSON (`/containers/{id}/inspect.json` download) · Backup & restore
-(`BackupsDialog` on the container alone: its backups, logs and settings) · Kill.
+Export JSON (`/containers/{id}/inspect.json` download) · Kill.
 
 ## 5. Data and behaviour
 

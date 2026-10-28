@@ -1,29 +1,47 @@
-@* The parts a container's backup holds, a tick each (BackupWhat): All first,
-   which ticks every one and shows the dash while only some are, then
-   Configuration, Image and Volumes, any of them; the last one ticked cannot
-   be unticked, so a backup always holds something. A level with one below
-   has Default first: ticked, the level below's parts show and cannot be
-   changed; unticked, the level's own, starting from those. *@
+@* The parts a container's backup holds (BackupWhat), as a small tree in a
+   box of its own: All, and under it, a step in, Configuration, Image and
+   Volumes; for one container (its settings), its image by name and, under
+   Volumes, a step further, each of its volumes. A tick ticks every one under
+   it, an untick unticks them, and each is then ticked or unticked alone; a
+   box shows the dash while only some under it are. A volume unticked is
+   left out (LeftOut), the rest backed up, one it is given later too; all of
+   them unticked unticks Volumes. None ticked is said in red, and what the
+   parts are for (a save, a backup) waits for one (BackupWhat.Nothing). A
+   level with one below has Default first, ticked while the level below's
+   parts are taken; a tick changed makes them the level's own, starting from
+   those, and Default ticked again takes the level below's back. *@
 
 <div class="@Class">
     <MudText Typo="Typo.caption" Class="mud-text-secondary">What to back up</MudText>
-    <div class="d-flex flex-wrap align-center gap-3">
+    <MudPaper Outlined="true" Class="wslc-backup-parts">
         @if (Inherited is not null)
         {
-            <SquareCheckBox Value="@IsDefault" ValueChanged="SetDefaultAsync" Label="Default" />
+            <SquareCheckBox Value="@IsDefault" ValueChanged="SetDefaultAsync" Label="@($"Default ({BackupWhat.Said(Inherited)})")" />
         }
-        <SquareCheckBox Value="@(Shown.Count == BackupWhat.OfContainer.Count)" Partly="@(Shown.Count < BackupWhat.OfContainer.Count)"
-                        ValueChanged="TickAllAsync" Label="All" Disabled="@(IsDefault || Shown.Count == BackupWhat.OfContainer.Count)" />
-        @foreach (var part in BackupWhat.OfContainer)
-        {
-            <SquareCheckBox Value="@Shown.Contains(part)" ValueChanged="@((bool on) => TickAsync(part, on))" Label="@BackupWhat.SaidPart(part)"
-                            Disabled="@(IsDefault || (Shown.Count == 1 && Shown.Contains(part)))" />
-        }
-    </div>
+        <SquareCheckBox Value="@Whole" Partly="@(!Whole && Shown.Count > 0)" ValueChanged="TickAllAsync" Label="All" />
+        <div class="wslc-backup-parts-children">
+            @foreach (var part in BackupWhat.OfContainer)
+            {
+                <SquareCheckBox Value="@Shown.Contains(part)" Partly="@(part == BackupWhat.Volumes && Shown.Contains(part) && Left.Count > 0)"
+                                ValueChanged="@((bool on) => TickAsync(part, on))" Label="@PartSaid(part)" />
+                @if (part == BackupWhat.Volumes && Volumes is { Count: > 0 } volumes)
+                {
+                    <div class="wslc-backup-parts-children">
+                        @foreach (var volume in volumes)
+                        {
+                            <SquareCheckBox Value="@(Shown.Contains(BackupWhat.Volumes) && !Left.Contains(volume))" ValueChanged="@((bool on) => TickVolumeAsync(volume, on))" Label="@volume" />
+                        }
+                    </div>
+                }
+            }
+        </div>
+    </MudPaper>
+    @* Kept its line whether it says anything or not, so ticking moves nothing. *@
+    <MudText Typo="Typo.caption" Class="@(Shown.Count == 0 ? "mud-error-text" : "invisible")">Tick at least one: a backup holds something.</MudText>
 </div>
 
 @code {
-    /// <summary>The level's own parts (<see cref="BackupWhat.Of"/>); empty for Default, or, with no level below, for every part.</summary>
+    /// <summary>The level's own parts (<see cref="BackupWhat.Of"/>); empty for Default, or, with no level below, for every part; <see cref="BackupWhat.Nothing"/> while none is ticked.</summary>
     [Parameter] public string Value { get; set; } = "";
 
     [Parameter] public EventCallback<string> ValueChanged { get; set; }
@@ -31,21 +49,94 @@
     /// <summary>The level below's parts, what Default gives; null where there is none below (the agent's default, a backup's own question).</summary>
     [Parameter] public string? Inherited { get; set; }
 
+    /// <summary>One container's: its image, said beside Image.</summary>
+    [Parameter] public string? ImageName { get; set; }
+
+    /// <summary>One container's: its volumes, each a tick under Volumes.</summary>
+    [Parameter] public IReadOnlyList<string>? Volumes { get; set; }
+
+    /// <summary>One container's: the volumes left out (<see cref="BackupPlan.LeaveVolumes"/>).</summary>
+    [Parameter] public IReadOnlyList<string>? LeftOut { get; set; }
+
+    [Parameter] public EventCallback<IReadOnlyList<string>> LeftOutChanged { get; set; }
+
     [Parameter] public string Class { get; set; } = "";
 
-    private bool IsDefault => Inherited is not null && BackupWhat.PartsOf(Value).Count == 0;
+    private bool IsDefault => Inherited is not null && Value.Length == 0;
 
-    /// <summary>The parts ticked as they show: the level's own, else the level below's, else every one.</summary>
+    private IReadOnlyList<string> Left => LeftOut ?? [];
+
+    /// <summary>The parts ticked as they show: none while none is; the level's own; else the level below's; else every one.</summary>
     private IReadOnlyList<string> Shown =>
-        BackupWhat.PartsOf(Value) is { Count: > 0 } own ? own
+        Value == BackupWhat.Nothing ? []
+        : BackupWhat.PartsOf(Value) is { Count: > 0 } own ? own
         : BackupWhat.PartsOf(Inherited) is { Count: > 0 } below ? below
         : BackupWhat.OfContainer;
 
-    /// <summary>Default ticked gives the level below's again; unticked, the level's own start as those.</summary>
-    private Task SetDefaultAsync(bool on) => ValueChanged.InvokeAsync(on ? BackupChoice.Default : BackupWhat.Of(Shown));
+    /// <summary>Every part, and every volume, ticked.</summary>
+    private bool Whole => Shown.Count == BackupWhat.OfContainer.Count && Left.Count == 0;
 
-    private Task TickAllAsync(bool on) => on ? ValueChanged.InvokeAsync(BackupWhat.All) : Task.CompletedTask;
+    private string PartSaid(string part) =>
+        part == BackupWhat.Image && ImageName is { Length: > 0 } image ? $"{BackupWhat.SaidPart(part)}: {image}" : BackupWhat.SaidPart(part);
 
-    private Task TickAsync(string part, bool on) =>
-        ValueChanged.InvokeAsync(BackupWhat.Of(on ? Shown.Append(part) : Shown.Where(shown => shown != part)));
+    /// <summary>Default ticked gives the level below's again, every volume in; unticked, the level's own start as those.</summary>
+    private async Task SetDefaultAsync(bool on)
+    {
+        await ValueChanged.InvokeAsync(on ? BackupChoice.Default : BackupWhat.Of(Shown));
+        if (on)
+        {
+            await LeaveAsync([]);
+        }
+    }
+
+    private async Task TickAllAsync(bool on)
+    {
+        await ValueChanged.InvokeAsync(on ? BackupWhat.All : BackupWhat.Nothing);
+        await LeaveAsync([]);
+    }
+
+    /// <summary>A part ticked or unticked; Volumes takes every volume in, or out, with it.</summary>
+    private async Task TickAsync(string part, bool on)
+    {
+        await ValueChanged.InvokeAsync(Written(on ? Shown.Append(part) : Shown.Where(shown => shown != part)));
+        if (part == BackupWhat.Volumes)
+        {
+            await LeaveAsync([]);
+        }
+    }
+
+    /// <summary>
+    /// A volume ticked or unticked: ticked with Volumes unticked, it alone of
+    /// them is in; unticked, it is left out, and the last one unticked unticks
+    /// Volumes.
+    /// </summary>
+    private async Task TickVolumeAsync(string volume, bool on)
+    {
+        var all = Volumes ?? [];
+        if (on && !Shown.Contains(BackupWhat.Volumes))
+        {
+            await ValueChanged.InvokeAsync(Written(Shown.Append(BackupWhat.Volumes)));
+            await LeaveAsync([.. all.Where(other => other != volume)]);
+            return;
+        }
+
+        var left = on ? Left.Where(other => other != volume).ToList() : [.. Left.Append(volume).Distinct()];
+        if (all.All(left.Contains))
+        {
+            await ValueChanged.InvokeAsync(Written(Shown.Where(shown => shown != BackupWhat.Volumes)));
+            left = [];
+        }
+        else if (IsDefault)
+        {
+            // A tick changed makes the level's parts its own.
+            await ValueChanged.InvokeAsync(BackupWhat.Of(Shown));
+        }
+
+        await LeaveAsync(left);
+    }
+
+    private Task LeaveAsync(IReadOnlyList<string> left) => LeftOutChanged.InvokeAsync(left);
+
+    /// <summary>The parts as a value: <see cref="BackupWhat.Nothing"/> when none is left.</summary>
+    private static string Written(IEnumerable<string> parts) => BackupWhat.Of(parts) is { Length: > 0 } written ? written : BackupWhat.Nothing;
 }

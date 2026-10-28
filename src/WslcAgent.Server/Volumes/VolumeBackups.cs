@@ -22,8 +22,8 @@ namespace WslcAgent.Server.Volumes;
 /// those running, as its settings say, and starts them again (<see cref="BackupStops"/>);
 /// a restore is refused while one runs.
 /// </summary>
-public sealed class VolumeBackups(IWslcRunner wslc, FilesHelpers helpers, IVolumeService volumes, BusyVolumes busy, BackupStops stops, WslcEvents events, AgentLogs agentLogs, IOptions<WslcOptions> options, ILogger<VolumeBackups> logger)
-    : BackupService("volume", ChangeNotice.Volume, wslc, events, agentLogs, options.Value.DataDirectory, logger), IVolumeBackups
+public sealed class VolumeBackups(IWslcRunner wslc, FilesHelpers helpers, IVolumeService volumes, BusyVolumes busy, BackupStops stops, BackupBase backupBase, WslcEvents events, AgentLogs agentLogs, IOptions<WslcOptions> options, ILogger<VolumeBackups> logger)
+    : BackupService("volume", ChangeNotice.Volume, wslc, backupBase, events, agentLogs, options.Value.DataDirectory, logger), IVolumeBackups
 {
     /// <summary>The helper's image: small, with <c>tar</c> and <c>gzip</c>; pulled the first time it is needed.</summary>
     internal const string HelperImage = "alpine:3.24";
@@ -53,8 +53,9 @@ public sealed class VolumeBackups(IWslcRunner wslc, FilesHelpers helpers, IVolum
 
     public override string LogPrefix => Prefix;
 
-    protected override string FirstDefaultFolder { get; } =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "WSLC AI Agent", "Volume backups");
+    protected override string BaseSubfolder => "Volumes";
+
+    protected override string FormerBaseSubfolder => "Volume backups";
 
     public override async Task<BackupPreview> PreviewAsync(string name, string what, CancellationToken cancellationToken)
     {
@@ -67,7 +68,7 @@ public sealed class VolumeBackups(IWslcRunner wslc, FilesHelpers helpers, IVolum
         var name = WslcArgs.Require(volume, "volume name");
         var settings = Settings();
         var directory = FullPath((folder ?? "").Trim().Length > 0 ? folder! : settings.FolderOf(name), "backup folder");
-        var file = Path.Combine(directory, $"{name}-{DateTimeOffset.Now:yyyyMMdd-HHmmss}{Extension}");
+        var file = Path.Combine(directory, $"{Stamp()}{Extension}");
         return Start(BackupJob.Backup, name, BackupWhat.Volume, file, async (job, ct) =>
         {
             var running = await stops.RunningUsersAsync([name], ct);

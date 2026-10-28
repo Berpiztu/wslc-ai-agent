@@ -1,0 +1,335 @@
+@* The Backups tab of one project or one container (BackupsView): its backups
+   as a tree, in a table as every list is (ListGrid), the line round each
+   backup as round a project's rows on the Containers page. The parent is a
+   backup, by its date (the window is the project's or the container's: its
+   name is not said again); under it, a step in, what it holds. A project's:
+   its configuration (its Compose file) and each of its containers' backups,
+   and under each container, a step further, its image and its volumes. A
+   container's: its configuration (its settings), its image and its volumes.
+   Only a date has a +/−; the dates come folded, and the Backup column's head
+   unfolds or folds every one at once. Each row restores what it is, alone:
+   a date all of it, a configuration, an image or a volume that one, a
+   project's container that container; a date's and a project's container's
+   row delete what they are (a project's container then no longer in the
+   project's backup). A backup or restore under way stands above them, its
+   bar by when it started and, a project's, under it each container's,
+   waiting its turn, then on its own steps, each with its log and its
+   cancel. *@
+@inject WslcAgentApi Api
+@inject IDialogService Dialogs
+
+<ListGrid TItem="ListRow<BackupTreeLine>" Items="_rows" Loading="Loading" EmptyText="@($"No backup of {Name} yet.")"
+          RowClassFunc="@((row, _) => Bracket(row))">
+    <Columns>
+        <PropertyColumn T="ListRow<BackupTreeLine>" TProperty="string" Property="r => r.Value.Name" Title="Backup" Sortable="false" StickyLeft="true" HeaderClass="@GridColumn.Width(29)" CellClass="@GridColumn.Width(29)">
+            <HeaderTemplate>
+                <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center">
+                    <MudIconButton Icon="@Icons.Material.Filled.UnfoldMore" Size="Size.Small" title="Show what every backup holds" Disabled="@(Backups.All(backup => _open.Contains(backup.Path)))" OnClick="UnfoldAll" />
+                    <MudIconButton Icon="@Icons.Material.Filled.UnfoldLess" Size="Size.Small" title="Fold every backup to its date" Disabled="@(_open.Count == 0)" OnClick="FoldAll" />
+                    <span>Backup</span>
+                </MudStack>
+            </HeaderTemplate>
+            <CellTemplate>
+                @if (context.Item.Value.Job is { } job)
+                {
+                    @* The backup's own by when it started, as its backups are by their dates; a project's container's by its name. *@
+                    <BackupRing Kind="@(context.Item.Value.IsDate ? Kind : BackupKind.Container)" Job="job" Row="true"
+                                Name="@(context.Item.Value.IsDate ? job.StartedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") : null)"
+                                Lead="@Mark(context.Item.Value)" Changed="Changed" />
+                }
+                else
+                {
+                    <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center">
+                        @Mark(context.Item.Value)
+                        <span>@Said(context.Item.Value)</span>
+                    </MudStack>
+                }
+            </CellTemplate>
+        </PropertyColumn>
+        <PropertyColumn T="ListRow<BackupTreeLine>" TProperty="string" Property="r => r.Value.What" Title="What" Sortable="false" HeaderClass="@GridColumn.Width(16)" CellClass="@GridColumn.Width(16)">
+            <CellTemplate>@WhatOf(context.Item.Value)</CellTemplate>
+        </PropertyColumn>
+        <PropertyColumn T="ListRow<BackupTreeLine>" TProperty="long" Property="r => r.Value.Bytes" Title="Size" Sortable="false" HeaderClass="@GridColumn.Number(8)" CellClass="@GridColumn.Number(8)">
+            <CellTemplate>@(context.Item.Value is { Job: null, Bytes: > 0 } sized ? ChartBytes.Compact(sized.Bytes) : "")</CellTemplate>
+        </PropertyColumn>
+        @* One moved or deleted since says so before its path, in the error colour, and cannot be restored. *@
+        <PropertyColumn T="ListRow<BackupTreeLine>" TProperty="string" Property="r => r.Value.Path" Title="Folder" Sortable="false" HeaderClass="@GridColumn.Stretch(40)" CellClass="@($"{GridColumn.Stretch(40)} wslc-mono")">
+            <CellTemplate>
+                @if (context.Item.Value is { Job: null, Exists: false })
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Color="Color.Error" Size="Size.Small" title="No longer there" />
+                }
+                @context.Item.Value.Path
+            </CellTemplate>
+        </PropertyColumn>
+    </Columns>
+    <Actions>
+        <TemplateColumn T="ListRow<BackupTreeLine>" Title="Actions" Sortable="false" Resizable="false" DragAndDropEnabled="false" StickyRight="true" HeaderClass="@GridColumn.Actions" CellClass="@GridColumn.Actions">
+            <CellTemplate>
+                @* A network is put back with its configuration, never alone: it has no verb of its own. *@
+                @if (context.Item.Value is { Job: null, Backup: not null } line && line.Kind != BackupTreeLine.Network)
+                {
+                    <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center">
+                        <MudIconButton Icon="@Icons.Material.Filled.CloudDownload" Size="Size.Small" Color="Color.Warning" title="@RestoreTitle(line)"
+                                       Disabled="@(!line.Exists || Busy)" OnClick="@(() => RestoreAsync(line))" />
+                        @if (line.IsDate || (line.Kind == BackupTreeLine.Container && Kind.HoldsContainers))
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                           title="@(line.IsDate ? "Delete this backup, all of it" : $"Delete {line.Name}'s backup alone")"
+                                           Disabled="Busy" OnClick="@(() => DeleteAsync(line))" />
+                        }
+                    </MudStack>
+                }
+            </CellTemplate>
+        </TemplateColumn>
+    </Actions>
+</ListGrid>
+<MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+    @* The same words for every one: a note that names it would take another line for a longer name and move the table. *@
+    @(Kind.HoldsContainers
+        ? "A backup holds the project's Compose file and each container's backup, with its image and its volumes. Restore a date for all of it, or one of its rows alone."
+        : "A backup holds the container's settings, its image and its volumes, as ticked when it was made. Restore a date for all of it, or one of its rows alone.")
+</MudText>
+
+@code {
+    /// <summary>A project's backups or a container's (<see cref="BackupKind.Project"/>, <see cref="BackupKind.Container"/>).</summary>
+    [Parameter, EditorRequired] public BackupKind Kind { get; set; } = default!;
+
+    /// <summary>The project or the container.</summary>
+    [Parameter, EditorRequired] public string Name { get; set; } = "";
+
+    /// <summary>Its backups and restores under way or just ended.</summary>
+    [Parameter] public IReadOnlyList<BackupJob> Jobs { get; set; } = [];
+
+    /// <summary>A project's: its containers' backups and restores under way or just ended, those its own drives standing under it.</summary>
+    [Parameter] public IReadOnlyList<BackupJob> MemberJobs { get; set; } = [];
+
+    /// <summary>Its backups, each with what it holds (<see cref="BackupEntry.Members"/>, <see cref="BackupEntry.Contents"/>).</summary>
+    [Parameter] public IReadOnlyList<BackupEntry> Backups { get; set; } = [];
+
+    /// <summary>A restore started, a backup deleted, a job cancelled or dismissed: the window reads everything again.</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    /// <summary>The backups are being read the first time: the table's bar moves until they come.</summary>
+    [Parameter] public bool Loading { get; set; }
+
+    /// <summary>The dates unfolded, by the backup's path: none to begin with, so the tree opens on its dates alone.</summary>
+    private readonly HashSet<string> _open = new(StringComparer.OrdinalIgnoreCase);
+
+    private List<ListRow<BackupTreeLine>> _rows = [];
+
+    /// <summary>The rows each backup's rows end with, by key: the line round it closes under them.</summary>
+    private readonly HashSet<string> _ends = new(StringComparer.Ordinal);
+
+    private bool Busy => BackupFlow.For(Jobs, Name) is { Running: true };
+
+    protected override void OnParametersSet() => Build();
+
+    /// <summary>
+    /// The rows: what is under way first (the backup's job and, a project's,
+    /// under it its containers' that are not done), then each backup, the
+    /// newest first, by its date; unfolded, what it holds under it.
+    /// </summary>
+    private void Build()
+    {
+        _rows = [];
+        _ends.Clear();
+        foreach (var job in Jobs.Where(job => job.State != "success").OrderByDescending(job => job.StartedAt))
+        {
+            Add([
+                new($"job {job.Id}", new BackupTreeLine(job.Id, BackupTreeLine.Date, Name, 0, null, Job: job)),
+                .. MemberJobs.Where(member => member.State != "success" && member.StartedAt >= job.StartedAt.AddSeconds(-1))
+                    .OrderBy(member => member.Name, StringComparer.Ordinal)
+                    .Select(member => new ListRow<BackupTreeLine>($"job {member.Id}", new BackupTreeLine(job.Id, BackupTreeLine.Container, member.Name, 1, null, Job: member))),
+            ]);
+        }
+
+        foreach (var backup in Backups.OrderByDescending(backup => backup.CreatedAt))
+        {
+            var group = new List<ListRow<BackupTreeLine>> { new(backup.Path, new BackupTreeLine(backup.Path, BackupTreeLine.Date, Name, 0, backup)) };
+            if (_open.Contains(backup.Path))
+            {
+                group.AddRange(Kind.HoldsContainers ? ProjectsHolds(backup) : ContainersHolds(backup, backup.Contents, null, Name, 1));
+            }
+
+            Add(group);
+        }
+    }
+
+    /// <summary>What a project's backup holds: its configuration, then each container's backup with what it holds under it.</summary>
+    private IEnumerable<ListRow<BackupTreeLine>> ProjectsHolds(BackupEntry backup)
+    {
+        yield return new($"{backup.Path} configuration", new BackupTreeLine(backup.Path, BackupTreeLine.Configuration, Name, 1, backup));
+        foreach (var member in backup.Members ?? [])
+        {
+            yield return new($"{backup.Path} {member.Path}", new BackupTreeLine(backup.Path, BackupTreeLine.Container, member.Name, 1, backup, member));
+            foreach (var row in ContainersHolds(backup, member.Contents, member, member.Name, 2, withConfiguration: false))
+            {
+                yield return row;
+            }
+        }
+    }
+
+    /// <summary>
+    /// What a container's backup holds, at <paramref name="depth"/>: its
+    /// configuration with its networks a step under it (a project's container,
+    /// whose own row stands for its configuration, its networks beside its
+    /// image), its image, its volumes, each that it holds.
+    /// </summary>
+    private static IEnumerable<ListRow<BackupTreeLine>> ContainersHolds(BackupEntry backup, BackupContents? contents, BackupMember? member, string container, int depth,
+        bool withConfiguration = true)
+    {
+        if (contents is null)
+        {
+            yield break;
+        }
+
+        var key = $"{backup.Path} {member?.Path}";
+        if (contents.Configuration && withConfiguration)
+        {
+            yield return new($"{key} configuration", new BackupTreeLine(backup.Path, BackupTreeLine.Configuration, container, depth, backup, member));
+        }
+
+        foreach (var network in contents.Networks ?? [])
+        {
+            yield return new($"{key} network {network}", new BackupTreeLine(backup.Path, BackupTreeLine.Network, network, withConfiguration ? depth + 1 : depth, backup, member));
+        }
+
+        if (contents.Image.Length > 0)
+        {
+            yield return new($"{key} image", new BackupTreeLine(backup.Path, BackupTreeLine.Image, contents.Image, depth, backup, member));
+        }
+
+        foreach (var volume in contents.Volumes)
+        {
+            yield return new($"{key} {volume.Name}", new BackupTreeLine(backup.Path, BackupTreeLine.Volume, volume.Name, depth, backup, member, Archive: volume));
+        }
+    }
+
+    /// <summary>A backup's rows: the last closes the line round them.</summary>
+    private void Add(List<ListRow<BackupTreeLine>> group)
+    {
+        _rows.AddRange(group);
+        _ends.Add(group[^1].Key);
+    }
+
+    /// <summary>The line round a backup's rows, as round a project's on the Containers page: over its date's, under its last; red on one under way that failed.</summary>
+    private string Bracket(ListRow<BackupTreeLine> row) =>
+        $"wslc-bracket wslc-bracket-stopped{(row.Value.IsDate ? " wslc-bracket-start wslc-bracket-project" : "")}"
+        + $"{(_ends.Contains(row.Key) ? " wslc-bracket-end" : "")}{(row.Value is { IsDate: true, Job.Failed: true } ? " wslc-bracket-failed" : "")}";
+
+    /// <summary>What a row is called: a backup by its date and time (the window says whose), its configuration by what it is, a container, an image or a volume by its name.</summary>
+    private string Said(BackupTreeLine line) => line.Kind switch
+    {
+        BackupTreeLine.Date => line.When.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"),
+        BackupTreeLine.Configuration => Kind.HoldsContainers ? "Project configuration" : "Container configuration",
+        _ => line.Name,
+    };
+
+    private string WhatOf(BackupTreeLine line) => line.Kind switch
+    {
+        BackupTreeLine.Configuration => Kind.HoldsContainers ? "Compose file" : "Settings",
+        BackupTreeLine.Image => "Image",
+        BackupTreeLine.Volume => "Volume",
+        BackupTreeLine.Network => "Network",
+        _ => BackupWhat.Said(line.What),
+    };
+
+    /// <summary>
+    /// Before a row's name: a date's +/−, folding what is under it; a step in
+    /// for each level under a date, the + kept its place unseen, as a
+    /// container under its project on the Containers page.
+    /// </summary>
+    private RenderFragment Mark(BackupTreeLine line) => __builder =>
+    {
+        if (line is { IsDate: true, Job: null, Backup: { } backup })
+        {
+            var open = _open.Contains(backup.Path);
+            <MudIconButton Icon="@(open ? Icons.Material.Filled.Remove : Icons.Material.Filled.Add)" Size="Size.Small"
+                           title="@(open ? "Fold what it holds" : "Show what it holds")" OnClick="@(() => Fold(backup.Path))" />
+            return;
+        }
+
+        for (var step = 0; step < Math.Max(line.Depth, 1); step++)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" Class="invisible" Disabled="true" aria-hidden="true" />
+        }
+    };
+
+    private void Fold(string path)
+    {
+        if (!_open.Remove(path))
+        {
+            _open.Add(path);
+        }
+
+        Build();
+    }
+
+    private void UnfoldAll()
+    {
+        _open.UnionWith(Backups.Select(backup => backup.Path));
+        Build();
+    }
+
+    private void FoldAll()
+    {
+        _open.Clear();
+        Build();
+    }
+
+    private string RestoreTitle(BackupTreeLine line) => line.Kind switch
+    {
+        BackupTreeLine.Date => $"Restore all of {Name} from this backup",
+        BackupTreeLine.Configuration => Kind.HoldsContainers ? $"Restore {Name}'s Compose file alone" : $"Restore {Name}'s settings alone, making it again",
+        BackupTreeLine.Image => $"Load the image {line.Name} alone",
+        BackupTreeLine.Volume => $"Restore volume {line.Name} alone",
+        _ => $"Restore {line.Name} alone",
+    };
+
+    /// <summary>
+    /// What the row is, put back alone: a date all of the backup; a project's
+    /// configuration its Compose file; a container's configuration or an
+    /// image that part of its container's backup; a volume that volume, as
+    /// its own backup is; a project's container that container.
+    /// </summary>
+    private async Task RestoreAsync(BackupTreeLine line)
+    {
+        if (line.Backup is not { } backup)
+        {
+            return;
+        }
+
+        var started = line.Kind switch
+        {
+            BackupTreeLine.Volume when line.Archive is { } volume => await BackupFlow.RestoreIntoAsync(Dialogs, Api, BackupKind.Volume, volume.Name, volume.Path),
+            BackupTreeLine.Image => await BackupFlow.RestoreContainerPartAsync(Dialogs, Api, line.Member?.Name ?? Name, line.Folder, BackupWhat.Image, line.Name),
+            BackupTreeLine.Configuration when !Kind.HoldsContainers => await BackupFlow.RestoreContainerPartAsync(Dialogs, Api, Name, line.Folder, BackupWhat.Config, Name),
+            _ when !Kind.HoldsContainers => await BackupFlow.RestoreIntoAsync(Dialogs, Api, Kind, Name, backup.Path),
+            BackupTreeLine.Date => await BackupFlow.RestoreProjectAsync(Dialogs, Api, Name, backup, null),
+            BackupTreeLine.Configuration => await BackupFlow.RestoreProjectAsync(Dialogs, Api, Name, backup, new BackupFlow.ProjectRestoreChoice(true, [])),
+            _ => await BackupFlow.RestoreProjectAsync(Dialogs, Api, Name, backup, new BackupFlow.ProjectRestoreChoice(false, [line.Name])),
+        };
+        if (started)
+        {
+            await Changed.InvokeAsync();
+        }
+    }
+
+    /// <summary>A date's row deletes all of it; a project's container's, that container's backup alone.</summary>
+    private async Task DeleteAsync(BackupTreeLine line)
+    {
+        if (line.Backup is not { } backup)
+        {
+            return;
+        }
+
+        var deleted = Kind.HoldsContainers
+            ? await BackupFlow.DeleteProjectAsync(Dialogs, Api, Name, backup, line.IsDate ? null : line.Member)
+            : await BackupFlow.DeleteAsync(Dialogs, Api, Kind, backup);
+        if (deleted)
+        {
+            await Changed.InvokeAsync();
+        }
+    }
+}

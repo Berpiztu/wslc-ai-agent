@@ -374,11 +374,11 @@ public static class ContainerEndpoints
     /// </summary>
     private static void MapBackupStarts(RouteGroupBuilder group)
     {
-        group.MapPost("/{container}/backup", (string container, BackupContainerRequest request, ContainerBackups backups) =>
-                backups.StartBackup(container, request.What, request.Folder, request.Stop))
+        group.MapPost("/{container}/backup", (string container, BackupContainerRequest request, ContainerBackups backups, CancellationToken ct) =>
+                backups.StartBackupAsync(container, request.What, request.Folder, request.Stop, ct))
             .WithName("BackupContainer");
 
-        group.MapPost("/restore", (RestoreContainerRequest request, ContainerBackups backups) => backups.StartRestore(request.Folder, request.Container))
+        group.MapPost("/restore", (RestoreContainerRequest request, ContainerBackups backups) => backups.StartRestore(request.Folder, request.Container, request.What))
             .WithName("RestoreContainer");
     }
 

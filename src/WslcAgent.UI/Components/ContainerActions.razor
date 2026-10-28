@@ -13,8 +13,9 @@
 @inject ProjectVerbs Verbs
 
 @* A card has room a table row has not, so it leads with the verbs most
-   reached for — details, edit, update image, exec, files, browser, its
-   sessions, logs — and keeps
+   reached for — details, edit, update image, exec, files, browser,
+   Zaindari in its image's colour (as a project's card has it), backup &
+   restore, logs — and keeps
    the row's own verbs (start or stop, the menu, remove) at the far end. They
    stay in the menu as well, which is the whole list; a table row draws that
    group alone. The dashboard's objects draw each group alone (ShortcutsAlone,
@@ -31,7 +32,8 @@
         <MudIconButton Icon="@Icons.Material.Filled.Terminal" Size="Size.Small" title="Exec" Disabled="Locked" OnClick="ExecAsync" />
         <MudIconButton Icon="@Icons.Material.Filled.Folder" Size="Size.Small" title="View files" Disabled="Locked" OnClick="FilesAsync" />
         <MudIconButton Icon="@Icons.Material.Filled.OpenInBrowser" Size="Size.Small" title="Open with browser" Disabled="Locked" OnClick="OpenWithBrowserAsync" />
-        <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" title="View browser sessions" Disabled="Locked" OnClick="BrowserSessionsAsync" />
+        <MudIconButton Icon="@Icons.Material.Filled.Security" Size="Size.Small" Color="@ImageSecurityFlow.Tone(Container)" title="@ImageSecurityFlow.Title" Disabled="Locked" OnClick="ViewImagePackagesAsync" />
+        <MudIconButton Icon="@Icons.Material.Filled.Backup" Size="Size.Small" title="Backup &amp; restore" Disabled="Locked" OnClick="BackupAsync" />
         <MudIconButton Icon="@Icons.Material.Filled.Subject" Size="Size.Small" title="Logs" Disabled="Locked" OnClick="LogsAsync" />
     </MudStack>
 }
@@ -68,8 +70,12 @@
         {
             <MudMenuItem Icon="@Icons.Material.Filled.Update" OnClick="UpdateImageAsync">Update image</MudMenuItem>
         }
-        <MudMenuItem Icon="@Icons.Material.Filled.Security" IconColor="@ImageSecurityFlow.Tone(Container)" Class="@ImageSecurityFlow.TextClass(ImageSecurityFlow.Tone(Container))"
-                     OnClick="ViewImagePackagesAsync">@ImageSecurityFlow.Title</MudMenuItem>
+        @if (!Shortcuts)
+        {
+            <MudMenuItem Icon="@Icons.Material.Filled.Security" IconColor="@ImageSecurityFlow.Tone(Container)" Class="@ImageSecurityFlow.TextClass(ImageSecurityFlow.Tone(Container))"
+                         OnClick="ViewImagePackagesAsync">@ImageSecurityFlow.Title</MudMenuItem>
+            <MudMenuItem Icon="@Icons.Material.Filled.Backup" OnClick="BackupAsync">Backup &amp; restore</MudMenuItem>
+        }
         <MudMenuItem Icon="@Icons.Material.Filled.ContentCopy" OnClick="@(() => CopyRunAsync(false))">Copy run command</MudMenuItem>
         <MudMenuItem Icon="@Icons.Material.Filled.ContentCopy" OnClick="@(() => CopyRunAsync(true))">Copy run command, full variables</MudMenuItem>
         <MudMenuItem Icon="@Icons.Material.Filled.BugReport" OnClick="@(() => Snackbar.Add($"wslc Debug not yet implemented for {Container.Id}", Severity.Info))">Use wslc Debug</MudMenuItem>
@@ -77,8 +83,8 @@
         {
             <MudMenuItem Icon="@Icons.Material.Filled.Folder" OnClick="FilesAsync">View files</MudMenuItem>
             <MudMenuItem Icon="@Icons.Material.Filled.OpenInBrowser" OnClick="OpenWithBrowserAsync">Open with browser</MudMenuItem>
-            <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="BrowserSessionsAsync">View browser sessions</MudMenuItem>
         }
+        <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="BrowserSessionsAsync">View browser sessions</MudMenuItem>
         <MudDivider />
         @if (!Shortcuts)
         {
@@ -91,7 +97,6 @@
         }
         <MudMenuItem Icon="@Icons.Material.Filled.FileDownload" OnClick="ExportJson">Export JSON</MudMenuItem>
         <MudMenuItem Icon="@Icons.Material.Filled.DataObject" OnClick="ExportFullAsync">Export JSON, full variables</MudMenuItem>
-        <MudMenuItem Icon="@Icons.Material.Filled.Backup" OnClick="BackupAsync">Backup &amp; restore</MudMenuItem>
         <MudMenuItem Icon="@Icons.Material.Filled.Bolt" OnClick="@(() => RunAsync(Container.Name, "kill", ct => Api.KillContainerAsync(Container.Id, ct)))">Kill</MudMenuItem>
     </MudMenu>
     <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="Remove"

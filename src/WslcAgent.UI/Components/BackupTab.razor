@@ -1,0 +1,25 @@
+@* The Backup tab of a project's window (ProjectPanesDialog): with All chosen,
+   the project's own backups, logs and settings (BackupsView of the project:
+   its Compose file and each of its containers' backup, the parts ticked, and
+   whether its containers keep their backups under its folder); with a
+   container chosen, that container's, as its own Backup & restore shows
+   them. Their verbs (Back up, Restore, Save) on the window's title line,
+   before Close, which asks while a setting is not saved. *@
+@inherits ProjectPaneTab
+
+@if (Chosen is { } chosen)
+{
+    <BackupsView @key="chosen.Name" @ref="_view" Kind="BackupKind.Container" Name="@chosen.Name" Changed="Repaint" />
+}
+else
+{
+    <BackupsView @key="@($"\u0001{Project}")" @ref="_view" Kind="BackupKind.Project" Name="@Project" Changed="Repaint" />
+}
+
+@code {
+    private BackupsView? _view;
+
+    public override RenderFragment? Verbs => _view?.Verbs;
+
+    public override Task<bool> LeavingAsync() => _view?.LeavingAsync() ?? Task.FromResult(true);
+}

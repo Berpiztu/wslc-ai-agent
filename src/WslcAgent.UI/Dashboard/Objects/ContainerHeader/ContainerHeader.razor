@@ -42,7 +42,7 @@
         Hear(h => Queue.QueueChanged += h, h => Queue.QueueChanged -= h);
     }
 
-    /// <summary>The ring in the avatar's place: turning while the container is being recreated or a patch of its image is built, or its transfers'; nothing when nothing of the container's is under way.</summary>
+    /// <summary>The ring in the avatar's place: turning while the container is being recreated, a patch of its image is built, or it is being backed up or restored, or its transfers'; nothing when nothing of the container's is under way.</summary>
     private RenderFragment? Ring(ContainerSummary c)
     {
         if (c.IsRecreating)
@@ -53,6 +53,11 @@
         if (c.PatchingTo is { } patching)
         {
             return @<PatchRing Patch="@patching" Job="@c.PatchJob" Status="@ImageSecurityFlow.PatchStatus(c, patching)" />;
+        }
+
+        if (c.BackingUp is { } doing)
+        {
+            return @<TurningRing Color="Color.Info" Title="@doing" />;
         }
 
         return TransferFlow.Showing(TransferFlow.For(Transfers.Value ?? [], c.Id, c.Name)) is { Count: > 0 } moving

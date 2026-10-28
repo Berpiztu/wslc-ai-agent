@@ -17,6 +17,12 @@ namespace WslcAgent.UI.Components;
 /// </summary>
 public static partial class BackupFlow
 {
+    /// <summary>What a project's backup decides itself, box by box, for that backup alone.</summary>
+    public sealed record ProjectPicksChoice(IReadOnlyDictionary<string, bool> Picks);
+
+    /// <summary>What of a project's backup is put back: its Compose file, and the containers named.</summary>
+    public sealed record ProjectRestoreChoice(bool File, IReadOnlyList<string> Containers);
+
     /// <summary>A volume's backups the host file picker lists: its last extension, <c>.gz</c> of <c>.tar.gz</c>.</summary>
     private const string BackupFiles = ".gz";
 
@@ -41,8 +47,22 @@ public static partial class BackupFlow
     public static async Task<bool> BackupAsync(IDialogService dialogs, WslcAgentApi api, BackupKind kind, string name)
     {
         BackupPreview preview;
+        IReadOnlyDictionary<string, bool>? picks = null;
         try
         {
+            // A project's: its tree asked, ticked as its settings and each container's own decide it.
+            if (kind.HoldsContainers)
+            {
+                var tree = await api.GetProjectBackupTreeAsync(name);
+                if (await DialogFlow.ChooseAsync<ProjectBackupDialog, ProjectPicksChoice>(dialogs, $"Back up {name}",
+                        new DialogParameters<ProjectBackupDialog> { { d => d.Tree, tree } }) is not { } chosen)
+                {
+                    return false;
+                }
+
+                picks = chosen.Picks;
+            }
+
             preview = await api.GetBackupPreviewAsync(kind.Key, name);
             if (kind.InParts)
             {
@@ -82,7 +102,7 @@ public static partial class BackupFlow
             stop = true;
         }
 
-        return await StartAsync(dialogs, "Back up", () => kind.Backup(api, name, preview.What, stop));
+        return await StartAsync(dialogs, "Back up", () => kind.HoldsContainers ? api.BackupProjectAsync(name, stop, picks) : kind.Backup(api, name, preview.What, stop));
     }
 
     /// <summary>
@@ -107,10 +127,74 @@ public static partial class BackupFlow
         return await RestoreIntoAsync(dialogs, api, kind, into, backup);
     }
 
+    /// <summary>
+    /// A project's backup put back, all of it (<paramref name="choice"/> null:
+    /// its Compose file and every container's backup) or what a row of its
+    /// tree holds, after saying what it replaces; refused
+    /// while one of the containers runs, said in a window.
+    /// </summary>
+    public static async Task<bool> RestoreProjectAsync(IDialogService dialogs, WslcAgentApi api, string project, BackupEntry backup, ProjectRestoreChoice? choice)
+    {
+        var when = backup.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
+        var (what, danger) = choice switch
+        {
+            null => ($"Restore all of {project} from its backup of {when}? Every container of it must be stopped.", BackupKind.Project.Replaces(project)),
+            { Containers.Count: 0 } => ($"Restore {project}'s Compose file from its backup of {when}?", $"The Compose file the agent keeps of {project} is replaced by the backup's."),
+            _ => ($"Restore {string.Join(", ", choice.Containers)}{(choice.File ? " and the Compose file" : "")} from {project}'s backup of {when}? {(choice.Containers.Count == 1 ? "It" : "They")} must be stopped.",
+                $"What the backup holds replaces what {string.Join(", ", choice.Containers)} {(choice.Containers.Count == 1 ? "has" : "have")}: image, volumes' contents and settings{(choice.File ? $"; and {project}'s Compose file" : "")}."),
+        };
+        return await DialogFlow.ConfirmAsync(dialogs, "Restore", what, "Restore", danger: danger)
+            && await StartAsync(dialogs, "Restore", () => api.RestoreProjectAsync(backup.Path, project, choice?.Containers, choice?.File ?? true));
+    }
+
+    /// <summary>
+    /// One part of a container's backup put back alone, after saying what it
+    /// does: its configuration (<see cref="BackupWhat.Config"/>, the container
+    /// made again with the settings it holds) or its image
+    /// (<see cref="BackupWhat.Image"/>, <paramref name="named"/>, loaded).
+    /// </summary>
+    public static async Task<bool> RestoreContainerPartAsync(IDialogService dialogs, WslcAgentApi api, string container, string folder, string part, string named)
+    {
+        var (what, danger) = part == BackupWhat.Image
+            ? ($"Load the image {named} from {folder}?", $"The image {named} on this machine is replaced by the backup's; the containers on it are not touched.")
+            : ($"Make {container} again with the settings {folder} holds? It must be stopped.", $"{container} is made again with the backup's settings, stopped; its image and volumes stay as they are.");
+        return await DialogFlow.ConfirmAsync(dialogs, "Restore", what, "Restore", danger: danger)
+            && await StartAsync(dialogs, "Restore", () => api.RestoreContainerAsync(folder, container, part));
+    }
+
     /// <summary>A backup put back into <paramref name="name"/>, after saying what it does to it.</summary>
     public static async Task<bool> RestoreIntoAsync(IDialogService dialogs, WslcAgentApi api, BackupKind kind, string name, string backup) =>
         await ConfirmRestoreAsync(dialogs, api, kind, name, backup)
         && await StartAsync(dialogs, "Restore", () => kind.Restore(api, backup, name));
+
+    /// <summary>
+    /// A project's backup deleted, after asking: all of it (<paramref name="member"/>
+    /// null: its folder and each of its containers' backups), or one
+    /// container's alone, which the project's backup then no longer holds.
+    /// </summary>
+    public static async Task<bool> DeleteProjectAsync(IDialogService dialogs, WslcAgentApi api, string project, BackupEntry backup, BackupMember? member)
+    {
+        var what = member is { } one
+            ? $"Delete {one.Name}'s backup {one.Path}? It goes from the disk, and {project}'s backup of {backup.CreatedAt.ToLocalTime():yyyy-MM-dd HH:mm} no longer holds it; the other containers' stay."
+            : $"Delete {project}'s backup of {backup.CreatedAt.ToLocalTime():yyyy-MM-dd HH:mm}, {backup.Path}, and each of its containers' backups? They all go from the disk, and can no longer be restored.";
+        if (!await DialogFlow.ConfirmAsync(dialogs, "Delete backup", what, "Delete", destructive: true))
+        {
+            return false;
+        }
+
+        try
+        {
+            await (member is { } container
+                ? api.DeleteProjectBackupMemberAsync(backup.Path, container.Path)
+                : api.DeleteBackupAsync(BackupKind.Project.Key, backup.Path));
+            return true;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            await DialogFlow.ExplainAsync(dialogs, "Delete backup", "The backup was not deleted.", ex.Message);
+            return false;
+        }
+    }
 
     /// <summary>A backup of the history deleted, its file or its folder with it, after asking.</summary>
     public static async Task<bool> DeleteAsync(IDialogService dialogs, WslcAgentApi api, BackupKind kind, BackupEntry backup)
@@ -194,12 +278,17 @@ public static partial class BackupFlow
     /// <summary><c>Backup</c> or <c>Restore</c>, as titles say it.</summary>
     public static string Said(string kind) => kind == BackupJob.Backup ? "Backup" : "Restore";
 
-    /// <summary>What a backup is named after: its file's or its folder's name without the date the agent adds and a volume's extension.</summary>
+    /// <summary>
+    /// What a backup is named after: the folder it is in, when its own name is
+    /// its date alone (<c>Volumes\hermes-data\2026-10-28_065115.tar.gz</c>);
+    /// else, one made before, its name without the date the agent added and a
+    /// volume's extension.
+    /// </summary>
     internal static string NameOf(string backup)
     {
-        var name = Path.GetFileName(backup.Replace('\\', '/').TrimEnd('/'));
-        name = name.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ? name[..^".tar.gz".Length] : name;
-        return Dated().Replace(name, "");
+        var parts = backup.Replace('\\', '/').TrimEnd('/').Split('/');
+        var name = parts[^1].EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ? parts[^1][..^".tar.gz".Length] : parts[^1];
+        return OnlyDate().IsMatch(name) && parts.Length > 1 ? parts[^2] : Dated().Replace(name, "");
     }
 
     /// <summary>One that is there has what the backup holds replace its own, said in red; one that is not is created, said plainly.</summary>
@@ -226,4 +315,7 @@ public static partial class BackupFlow
 
     [GeneratedRegex(@"-\d{8}-\d{6}$")]
     private static partial Regex Dated();
+
+    [GeneratedRegex(@"^\d{4}-\d{2}-\d{2}_\d{6}$")]
+    private static partial Regex OnlyDate();
 }

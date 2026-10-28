@@ -1,0 +1,34 @@
+@* What a project's backup holds, asked before it is made: its tree
+   (ProjectPicksTree), ticked as the project's settings and each container's
+   own decide it, to change for this backup alone (only its volumes today,
+   say). Cancel and Back up in the title row; Back up waits for one tick.
+   Returns what this backup decides; nothing when cancelled. *@
+
+<MudDialog>
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Cancel</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Backup"
+                       Disabled="@(!Anything)" OnClick="@(() => Dialog.Close(DialogResult.Ok(new BackupFlow.ProjectPicksChoice(_picks))))">Back up</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        @* The title row is MudBlazor's own tree: told at each tick, or Back up keeps the state it had. *@
+        <ProjectPicksTree Tree="Tree" Picks="_picks" PicksChanged="@((IReadOnlyDictionary<string, bool> picks) => { _picks = picks; Dialog.StateHasChanged(); })" />
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">Its volumes are backed up with the containers that use them stopped.</MudText>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    /// <summary>The project's tree, with what its settings decide.</summary>
+    [Parameter, EditorRequired] public ProjectTree Tree { get; set; } = default!;
+
+    private IReadOnlyDictionary<string, bool> _picks = new Dictionary<string, bool>();
+
+    protected override void OnInitialized() => _picks = Tree.Picks;
+
+    /// <summary>Some box is ticked: the Compose file, or a part of a container.</summary>
+    private bool Anything => Tree.On(ProjectPicks.Compose, _picks) || Tree.Containers.SelectMany(ProjectPicks.Of).Any(box => Tree.On(box, _picks));
+}

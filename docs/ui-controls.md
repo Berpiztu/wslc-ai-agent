@@ -381,6 +381,32 @@ Body lines are `Typo.body2` with the label in bold; secondary lines
 
 ## Feedback
 
+### Work under way: everywhere its object is shown, the same way
+
+Anything the agent carries out over time — a run, a project's save or verb,
+a recreate, an image update, a patch, a transfer, a backup, a restore — is
+drawn in every place its object appears, never in some of them. Check each
+one before a change is done:
+
+1. **The agent marks the object** in its list (`ContainerSummary.PatchingTo`,
+   `UpdatingTo`, `IsRecreating`, `BackingUp`; a volume's job by its name), so
+   every view that reads the list has it without knowing the job.
+2. **Its card:** the avatar is the ring (`ProgressRing`, `TurningRing`, or the
+   job's own: `BackupRing`, `PatchRing`), log at the top, cancel at the bottom.
+3. **Its table row:** the bar in the name cell (`ProgressCell`, or the job's
+   ring with `Row`), same log and cancel; the state dot pulses.
+4. **A window's list** (a project's window, a backups window): its slot turns
+   a wheel (`wslc-member-mark`), its line under the name says what it does.
+5. **The dashboard's objects** (`ContainerHeader`, `ProjectDetails`): the same
+   ring, the same dot.
+6. **A project's work goes through its containers:** a job per container from
+   the start, waiting its turn, then on its own steps, each with its ring,
+   bar, log and cancel; the project's card and row turn as well
+   (`ProjectRow.Working`), as a project's stop does.
+7. **The table that lists the work's results** (a backups table) shows the
+   jobs under way above them, the project's with its containers' under it,
+   and its bar moves while it is read the first time (`ListGrid Loading`).
+
 - Load errors: `<MudAlert Severity="Severity.Error" Class="mb-2 flex-shrink-0">@_error</MudAlert>` above the grid.
 - What the user's own verbs do is said on the title bar's second line
   (`ActivityLine`, drawn by `ActivityLineView`), never in a toast that covers
@@ -618,12 +644,12 @@ from this table, or adds a row to it; nothing is inlined twice with two icons.
 | Exec, terminal | `Terminal` | — | rows, navigation verbs |
 | Files | `Folder` | — | rows, cards |
 | Open with browser | `OpenInBrowser` | — | container row |
-| Browser sessions | `Visibility` | — | container row |
+| Browser sessions | `Visibility` | — | container menu |
 | Container usage | `Inventory2` | — | image and volume menus |
-| Image packages and CVEs | `Security` | — | container menu |
+| Zaindari: image packages and CVEs | `Security` | its image's tone (`ImageSecurityFlow.Tone`) | container, image and project cards, their menus elsewhere |
 | Pull, Download | `Download` | Primary as a page verb | Images verb, image row, Files |
 | Push, Upload | `Upload` | — | image menu, Files |
-| Back up, Backup & restore | `Backup` | Primary as a verb | container menu, volume row and card, Volumes verb, the backups window's title |
+| Back up, Backup & restore | `Backup` | Primary as a verb | container card and menu, volume row and card, Containers and Volumes verbs, the backups window's title |
 | Restore a backup | `CloudDownload` | Warning | the backups window's title, a backup's line |
 | Build | `Build` | — | Images verb |
 | Import an archive | `Input` | — | Images verb |

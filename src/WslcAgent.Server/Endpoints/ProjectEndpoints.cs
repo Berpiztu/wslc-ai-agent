@@ -98,6 +98,14 @@ public static class ProjectEndpoints
             .WithName("ProjectContainers");
 
         // The verbs on the whole project, its containers taken in the order its services start in.
+        // A project's backup and restore, run by the agent, followed by the jobs of /project-backups.
+        group.MapPost("/{name}/backup", (string name, BackupProjectRequest request, ProjectBackups backups, CancellationToken ct) =>
+                backups.StartBackupAsync(name, request.Folder, request.Stop, request.Picks, ct))
+            .WithName("BackupProject");
+
+        group.MapPost("/restore", (RestoreProjectRequest request, ProjectBackups backups) => backups.StartRestore(request.Folder, request.Project, request.Containers, request.File))
+            .WithName("RestoreProject");
+
         group.MapPost("/{name}/start", (string name, ProjectLifecycle lifecycle, CancellationToken ct) => lifecycle.VerbAsync(name, ProjectLifecycle.Start, ct))
             .WithName("StartProject");
 
@@ -137,6 +145,19 @@ public static class ProjectEndpoints
             })
             .WithName("OpenProjectFile");
 
+        api.MapBackups<ProjectBackups>("/project-backups", "Project");
+
+        // What a project's backup can hold, as its tree draws it, and what its settings decide themselves.
+        api.MapGet("/project-backups/tree", (string name, ProjectBackups backups, CancellationToken ct) => backups.TreeAsync(name, ct))
+            .WithName("ProjectBackupTree");
+
+        // One container's backup of a project's deleted, the project's no longer holding it.
+        api.MapDelete("/project-backups/history/member", (string path, string member, ProjectBackups backups) =>
+            {
+                backups.DeleteMember(path, member);
+                return TypedResults.NoContent();
+            })
+            .WithName("DeleteProjectBackupMember");
         return api;
     }
 }

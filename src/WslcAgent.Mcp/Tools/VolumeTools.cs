@@ -64,7 +64,7 @@ public static class VolumeTools
     }
 
     [McpServerTool(Name = "backup_volume")]
-    [Description("Back up a volume, every container that uses it stopped: the agent packs it into <volume>-<date>.tar.gz in its backup folder (its own, else a folder named after it in the folder of every volume; volume_backups says which) or the folder given, in the background, and keeps it in the volume's backup history. Running containers that use it are stopped and started again when it ends if its backup settings say yes, or stop=true says the user agreed; if they say no, or ask and stop is false, the backup is refused while they run. Returns the job at once; volume_backups follows it.")]
+    [Description("Back up a volume, every container that uses it stopped: the agent packs it into <date>.tar.gz (2026-10-28_065115.tar.gz) in its backup folder (its own, else a folder named after it in the folder of every volume; volume_backups says which) or the folder given, in the background, and keeps it in the volume's backup history. Running containers that use it are stopped and started again when it ends if its backup settings say yes, or stop=true says the user agreed; if they say no, or ask and stop is false, the backup is refused while they run. Returns the job at once; volume_backups follows it.")]
     public static BackupJob BackupVolume(
         IVolumeBackups backups,
         [Description("Volume name.")] string name,

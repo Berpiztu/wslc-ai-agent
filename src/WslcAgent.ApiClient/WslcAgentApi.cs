@@ -683,9 +683,21 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<BackupJob> BackupContainerAsync(string name, string what, bool stop = false, string folder = "", CancellationToken cancellationToken = default) =>
         PostJsonAsync<BackupContainerRequest, BackupJob>($"api/v1/containers/{Escape(name)}/backup", new BackupContainerRequest(what, folder, stop), cancellationToken);
 
+    /// <summary>The project backed up, box by box as <paramref name="picks"/> decide (null: its settings); <paramref name="stop"/>, the user agreed to stop what runs; returns at once, the agent runs it.</summary>
+    public Task<BackupJob> BackupProjectAsync(string name, bool stop = false, IReadOnlyDictionary<string, bool>? picks = null, string folder = "", CancellationToken cancellationToken = default) =>
+        PostJsonAsync<BackupProjectRequest, BackupJob>($"api/v1/projects/{Escape(name)}/backup", new BackupProjectRequest(folder, stop, picks), cancellationToken);
+
+    /// <summary>What a project's backup can hold, as its tree draws it, and what its settings decide themselves.</summary>
+    public Task<ProjectTree> GetProjectBackupTreeAsync(string name, CancellationToken cancellationToken = default) =>
+        GetAsync<ProjectTree>($"api/v1/project-backups/tree?name={Escape(name)}", cancellationToken);
+
+    /// <summary>A project's backup put back into <paramref name="project"/>: its Compose file when <paramref name="file"/> says so, and its containers, those named (null: every one; empty: none); returns at once, the agent runs it.</summary>
+    public Task<BackupJob> RestoreProjectAsync(string folder, string project, IReadOnlyList<string>? containers = null, bool file = true, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<RestoreProjectRequest, BackupJob>("api/v1/projects/restore", new RestoreProjectRequest(folder, project, containers, file), cancellationToken);
+
     /// <summary>A container's backup put back, what it holds, into <paramref name="container"/>, created when it is not there; returns at once, the agent runs it.</summary>
-    public Task<BackupJob> RestoreContainerAsync(string folder, string container, CancellationToken cancellationToken = default) =>
-        PostJsonAsync<RestoreContainerRequest, BackupJob>("api/v1/containers/restore", new RestoreContainerRequest(folder, container), cancellationToken);
+    public Task<BackupJob> RestoreContainerAsync(string folder, string container, string what = "", CancellationToken cancellationToken = default) =>
+        PostJsonAsync<RestoreContainerRequest, BackupJob>("api/v1/containers/restore", new RestoreContainerRequest(folder, container, what), cancellationToken);
 
     public Task<RestartPolicyInfo> GetRestartPolicyAsync(string container, CancellationToken cancellationToken = default) =>
         GetAsync<RestartPolicyInfo>($"api/v1/containers/{Escape(container)}/restart-policy", cancellationToken);
@@ -966,6 +978,13 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<BackupJob> RestoreVolumeAsync(string file, string volume, CancellationToken cancellationToken = default) =>
         PostJsonAsync<RestoreVolumeRequest, BackupJob>("api/v1/volumes/restore", new RestoreVolumeRequest(file, volume), cancellationToken);
 
+    /// <summary>The folder every kind of backup's default starts from.</summary>
+    public Task<BackupBaseFolder> GetBackupBaseAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<BackupBaseFolder>("api/v1/backup-base", cancellationToken);
+
+    public Task<BackupBaseFolder> SaveBackupBaseAsync(BackupBaseFolder folder, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<BackupBaseFolder, BackupBaseFolder>("api/v1/backup-base", folder, cancellationToken, HttpMethod.Put);
+
     // Every kind of backup, by its kind ("volume", "container"): /api/v1/{kind}-backups.
 
     /// <summary>The backups and restores under way or just ended, every backup of the history and where they go.</summary>
@@ -987,7 +1006,11 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<IReadOnlyList<string>> GetBackupLogAsync(string kind, string name = "", CancellationToken cancellationToken = default) =>
         GetAsync<IReadOnlyList<string>>(name.Length > 0 ? $"api/v1/{kind}-backups/log?name={Escape(name)}" : $"api/v1/{kind}-backups/log", cancellationToken);
 
-    /// <summary>A backup of the history deleted, its file or its folder with it.</summary>
+    /// <summary>One container's backup of a project's deleted, from the disk and its history; the project's backup no longer holds it.</summary>
+    public Task DeleteProjectBackupMemberAsync(string path, string member, CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Delete, $"api/v1/project-backups/history/member?path={Escape(path)}&member={Escape(member)}", cancellationToken);
+
+    /// <summary>A backup of the history deleted, its file or its folder with it; a project's, each of its containers' backups with it.</summary>
     public Task DeleteBackupAsync(string kind, string path, CancellationToken cancellationToken = default) =>
         SendAsync(HttpMethod.Delete, $"api/v1/{kind}-backups/history?path={Escape(path)}", cancellationToken);
 

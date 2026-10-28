@@ -6691,6 +6691,24 @@ html[data-wslc-rows~="outlined"] .wslc-files-table {
     overflow-y: auto;
 }
 
+/* A window's settings (a backups window's Settings tab): one column, a
+   form's width at most, each setting under the other, so a field's picker
+   stays beside it and a phone shows the same column, narrower. */
+.wslc-settings-column {
+    width: 100%;
+    max-width: 36rem;
+}
+
+/* What a backup holds (BackupParts): its ticks in a box of their own, All
+   and, a checkbox's width in under it, its parts, as a tree is drawn. */
+.wslc-backup-parts {
+    padding: 4px 8px;
+}
+
+.wslc-backup-parts-children {
+    padding-inline-start: 1.5rem;
+}
+
 /* What Zaindari says of a patch before it is built, and what trying it said
    (PatchEditor): a box of its own height, scrolling, so what it says, long or
    short, never moves the rest of the window. */

@@ -49,6 +49,11 @@ MudBlazor, .NET MAUI Blazor Hybrid, the official MCP C# SDK.
 - **Destructive MCP tools** (remove, prune, kill, exec, publish, stop a
   session) go through the approval gate and are off unless the user switches
   them on. Keep it that way for any new one.
+- **Work under way shows everywhere, the same way.** A job of the agent's
+  (run, save, verb, recreate, update, patch, transfer, backup, restore) is
+  drawn wherever its object is: card ring, table bar, window list wheel,
+  dashboard object; a project's work as a job per container, every one
+  turning. The checklist: [docs/ui-controls.md](docs/ui-controls.md#work-under-way-everywhere-its-object-is-shown-the-same-way).
 - **Reuse.** One component per concept: one list-page shell
   ([docs/list-pages.md](docs/list-pages.md)), one picker and one creator per
   resource. Extract duplicated logic before it appears a third time. One

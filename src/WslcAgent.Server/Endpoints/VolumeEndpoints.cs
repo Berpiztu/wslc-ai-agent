@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using WslcAgent.ApiClient.Contracts;
 using WslcAgent.Mcp;
+using WslcAgent.Server.Backups;
 using WslcAgent.Server.Containers;
 using WslcAgent.Server.Volumes;
 
@@ -63,6 +64,13 @@ public static class VolumeEndpoints
 
         // Their own group: under /volumes a literal would hide a volume of that name.
         api.MapBackups<VolumeBackups>("/volume-backups", "Volume");
+
+        // The folder every kind of backup's default starts from (Settings → Defaults, at the top).
+        api.MapGet("/backup-base", (BackupBase backupBase) => backupBase.Get())
+            .WithName("GetBackupBase");
+
+        api.MapPut("/backup-base", (BackupBaseFolder folder, BackupBase backupBase) => backupBase.Save(folder))
+            .WithName("SaveBackupBase");
 
         return api;
     }

@@ -29,4 +29,39 @@ public static class ProjectTools
         var plan = await projects.PlanAsync(new ComposePlanRequest(path, yaml, name, variables, profiles, folder), cancellationToken);
         return plan with { Lines = [], Notes = [] };
     }
+
+    [McpServerTool(Name = "backup_project")]
+    [Description("Back up a project, in the background: a folder <project>-<date> in its backup folder (project_backups says which) with the Compose file the agent keeps of it, and each of its containers' backup, its configuration, image and each volume as the project's backup settings tick them box by box, else as that container's own settings say, in the backup's own folder and each container's history, so a container's backups are in one place whether made from the project or alone. Its containers' volumes need every container that uses them stopped: pass stop=true only when the user agreed to stop them; they are started again when it ends. Returns the job at once; project_backups follows it.")]
+    public static Task<BackupJob> BackupProject(
+        IProjectBackups backups,
+        [Description("Project name.")] string project,
+        [Description("Empty for the project's backup folder; else a folder of the agent's machine, by its full path (C:\\Backups), made when it is not there.")] string folder = "",
+        [Description("The user agreed to stop the running containers that use its containers' volumes; they are started again when the backup ends.")] bool stop = false) =>
+        backups.StartBackupAsync(project, folder, stop, null, CancellationToken.None);
+
+    [McpServerTool(Name = "project_backups", ReadOnly = true)]
+    [Description("The project backups and restores under way or just ended (state, step, output), every project backup's history, newest first (project, folder, what it holds, size, when, and whether it is still there), and where backups go: the default folder and each project's own, and whether its containers keep theirs under it.")]
+    public static BackupList ListProjectBackups(IProjectBackups backups) => backups.List();
+
+    [McpServerTool(Name = "restore_project", Destructive = true)]
+    [Description("Restore a project's backup (a folder with its project-backup.json), in the background: the Compose file the agent keeps of it, and each of its containers' backups, as restore_container puts one back (image loaded, volumes replaced, the container made again, stopped). Refused while one of its containers runs. Destructive: it asks for the user's approval first, through their client's prompt or a confirm token.")]
+    public static async Task<object> RestoreProject(
+        IProjectBackups backups,
+        ApprovalGate approvals,
+        McpServer? server,
+        [Description("The backup's folder on the agent's machine, by its full path.")] string folder,
+        [Description("The project it goes into; empty for the one the backup was made of.")] string project = "",
+        [Description("The confirm token from the previous answer, once the user approved.")] string? confirm = null,
+        CancellationToken cancellationToken = default)
+    {
+        var target = project.Length > 0 ? project : "the project it was made of";
+        if (await approvals.CheckAsync(server, "restore_project", $"restore {folder} into {target}, replacing its containers' volumes and making them again", folder,
+                new Dictionary<string, string> { ["folder"] = folder, ["project"] = target },
+                confirm, cancellationToken) is { } required)
+        {
+            return required;
+        }
+
+        return backups.StartRestore(folder, project, null, true);
+    }
 }

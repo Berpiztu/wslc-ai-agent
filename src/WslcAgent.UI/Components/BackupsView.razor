@@ -1,0 +1,464 @@
+@* The backups of volumes or of containers (BackupKind), as their window
+   (BackupsDialog) and a project's Backup tab (BackupTab) show them. One's own
+   (its card's or its row's Backup & restore, a project's container) is that
+   one alone: its tabs, no list. A page's is built as a project's window is
+   (ProjectPanesDialog, ProjectMemberPanes): the list at the left, All first, then each one, with
+   those only the history still names (removed since); at the right the same
+   tabs for the one chosen. Backups: a volume's backups, and All's every
+   one's (BackupTable), a backup or restore under way above them with its
+   bar; a project's or a container's own as a tree by their dates
+   (BackupTree), what each holds under it, and what is under way the same
+   way; the table's bar moves until they are read. Logs: the
+   lines of one's backups and restores, All's every one's, a line each said by
+   its name. Settings: one's own backup folder, whether its backup stops the
+   running containers it needs stopped, and a container's or a project's what
+   it holds (BackupChoices), Default for All's; All's the same for all of them, Default
+   for Settings → Defaults; the place a schedule goes when backups are
+   scheduled. The open tab's verbs (Verbs) go where the host puts them, its
+   title row: Back up and Restore in Backups, Save in Settings; leaving asks
+   while a setting is not saved (LeavingAsync). One under way turns a wheel
+   in its slot of the list; its ring is on its card. Read again as the agent
+   says they change; sized by its host and never changes. *@
+@inject WslcAgentApi Api
+@inject AgentChanges Changes
+@inject IDialogService Dialogs
+@inject WslcAgent.UI.Components.Styles.UiStyle Style
+@implements IDisposable
+
+@* One's own Backup & restore is it alone, its tabs and nothing else, as a container's own Update image is; a
+   page's opens on All, with the list. *@
+@if (Alone)
+{
+    @Tabs
+}
+else
+{
+    <div class="wslc-member-panes">
+        <MudPaper Outlined="true" Class="wslc-member-menu">
+            <MudList T="string" SelectedValue="@(_chosen ?? AllOfThem)" SelectedValueChanged="Choose" Dense="true" role="list">
+                <MudListItem T="string" @key="AllOfThem" Value="@AllOfThem" role="listitem">
+                    <div class="d-flex align-center gap-2">
+                        <span class="wslc-member-mark">
+                            <MudIcon Icon="@Icons.Material.Filled.AccountTree" Size="Size.Small" />
+                        </span>
+                        <div class="wslc-member-text">
+                            <MudText Typo="Typo.body2" Class="wslc-member-line">All</MudText>
+                            <MudText Typo="Typo.caption" Class="wslc-member-line mud-text-secondary">every @Kind.Noun's backups, logs and settings</MudText>
+                        </div>
+                    </div>
+                </MudListItem>
+                @foreach (var name in Listed)
+                {
+                    <MudListItem T="string" @key="name" Value="@name" role="listitem">
+                        <div class="d-flex align-center gap-2">
+                            @* One slot for the mark or the turning wheel, so one under way moves nothing. *@
+                            <span class="wslc-member-mark">
+                                @if (Running(name))
+                                {
+                                    <MudProgressCircular Indeterminate="true" Size="Size.Small" Color="Color.Info" />
+                                }
+                                else
+                                {
+                                    <MudIcon Icon="@Kind.Icon" Size="Size.Small" />
+                                }
+                            </span>
+                            <div class="wslc-member-text">
+                                <MudText Typo="Typo.body2" Class="wslc-member-line">@name</MudText>
+                                <MudText Typo="Typo.caption" Class="wslc-member-line mud-text-secondary">@Caption(name)</MudText>
+                            </div>
+                        </div>
+                    </MudListItem>
+                }
+            </MudList>
+        </MudPaper>
+
+        <div class="wslc-member-pane">
+            @Tabs
+        </div>
+    </div>
+}
+
+@code {
+    private const int BackupsTab = 0;
+    private const int SettingsTab = 2;
+
+    /// <summary>All's entry in the list, which no name can be.</summary>
+    private const string AllOfThem = "\u0001all";
+
+    [Parameter, EditorRequired] public BackupKind Kind { get; set; } = default!;
+
+    /// <summary>Its host's title row repainted: the verbs are drawn there, outside this component's tree.</summary>
+    [Parameter] public Action? Changed { get; set; }
+
+    /// <summary>
+    /// The open tab's verbs, for the host's title row: Back up and Restore in
+    /// Backups, Save in Settings.
+    /// </summary>
+    public RenderFragment Verbs => __builder =>
+    {
+        if (_tab == BackupsTab)
+        {
+            if (_chosen is { } name)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Backup"
+                           Disabled="@(!_names.Contains(name) || Running(name))" OnClick="BackupAsync">Back up</MudButton>
+            }
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Warning" StartIcon="@Icons.Material.Filled.CloudDownload"
+                       Disabled="@(_chosen is { } busy && Running(busy))" OnClick="RestoreAsync">Restore</MudButton>
+        }
+        else if (_tab == SettingsTab)
+        {
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                       Disabled="@(!Unsaved || NothingTicked)" OnClick="SaveAsync">Save</MudButton>
+        }
+    };
+
+    /// <summary>Whose backups they are, alone; empty for all of them, the list at the left and All chosen first.</summary>
+    [Parameter] public string Name { get; set; } = "";
+
+    /// <summary>One's own window: its tabs alone, no list.</summary>
+    private bool Alone => Name.Length > 0;
+
+    /// <summary>The tabs of what is chosen, the same whether the window is one's alone or all of them.</summary>
+    private RenderFragment Tabs => __builder =>
+    {
+        <MudTabs Elevation="Style.Applied.TabsElevation" Rounded="Style.Applied.TabsRounded" Border="Style.Applied.TabsBorder"
+                 Centered="Style.Applied.TabsCentered" TabPanelsClass="wslc-tab-panels" Class="wslc-fill"
+                 MinimumTabWidth="@($"{Style.Applied.TabsMinWidth}px")" ActivePanelIndex="_tab" ActivePanelIndexChanged="TabChanged">
+            <MudTabPanel Text="Backups">
+                @if (Kind != BackupKind.Volume && _chosen is { } one)
+                {
+                    @* A project's or a container's own: its backups as a tree, by their dates. *@
+                    <BackupTree @key="one" Kind="Kind" Name="@one" Jobs="@JobsOf(one)" MemberJobs="_memberJobs" Backups="@Backups(one)"
+                                Loading="_loading" Changed="ReadAsync" />
+                }
+                else if (_chosen is { } name)
+                {
+                    <BackupTable @key="name" Kind="Kind" Name="@name" Jobs="@JobsOf(name)" Backups="@Backups(name)" Loading="_loading" Changed="ReadAsync" />
+                }
+                else
+                {
+                    <BackupTable Kind="Kind" Jobs="_backups.Jobs" Backups="_backups.History" Loading="_loading" Changed="ReadAsync" />
+                }
+            </MudTabPanel>
+            <MudTabPanel Text="Logs">
+                <LogsView @key="@(_chosen ?? AllOfThem)" Read="ReadLogsAsync" />
+            </MudTabPanel>
+            <MudTabPanel Text="Settings">
+                @* One column, as wide as a form's and no wider, each setting under the other: the folder with its
+                   picker beside it, then its stopping, then what it holds; on a phone the same column, narrower. *@
+                <div class="wslc-settings-column">
+                    <div class="wslc-field-pick has-note">
+                        @if (_chosen is { } name)
+                        {
+                            <MudTextField T="string" @key="name" Value="@PlanOf(name).Folder" ValueChanged="@((string folder) => EditPlan(name, plan => plan with { Folder = folder }))"
+                                          Label="Backup folder" Placeholder="default" Immediate="true" HelperTextOnFocus="true"
+                                          Variant="Variant.Filled" Margin="Margin.Dense" HelperText="@(Kind.HoldsContainers ? "Its backups go into a folder named after the project in it. Empty: default, the folder of every project." : $"Empty: default, a folder named after the {Kind.Noun} in the folder of every {Kind.Noun}.")"
+                                          autocapitalize="none" autocorrect="off" spellcheck="false" />
+                        }
+                        else
+                        {
+                            <MudTextField T="string" Value="_allFolder" ValueChanged="@((string folder) => EditAll(() => _allFolder = folder))"
+                                          Label="@($"Backup folder of every {Kind.Noun}")" Placeholder="default" Immediate="true" HelperTextOnFocus="true"
+                                          Variant="Variant.Filled" Margin="Margin.Dense" HelperText="@($"Empty: default, the folder of Settings → Defaults. A {Kind.Noun} with its own keeps it.")"
+                                          autocapitalize="none" autocorrect="off" spellcheck="false" />
+                        }
+                        <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick a folder" OnClick="PickFolderAsync" />
+                    </div>
+                    @if (_chosen is { } one)
+                    {
+                        var plan = PlanOf(one);
+                        @* A container's own: its image and its volumes in the tree, each volume unticked left out. *@
+                        <BackupChoices @key="one" Kind="Kind" Below="@Edited" FieldClass="mt-2"
+                                       Stop="@plan.Stop" StopChanged="@((string stop) => EditPlan(one, edited => edited with { Stop = stop }))"
+                                       What="@plan.What" WhatChanged="@((string what) => EditPlan(one, edited => edited with { What = what }))"
+                                       ImageName="@_container?.Image" Volumes="@ContainerVolumes" LeftOut="@plan.LeaveVolumes"
+                                       LeftOutChanged="@((IReadOnlyList<string> left) => EditPlan(one, edited => edited with { LeaveVolumes = left.Count > 0 ? left : null }))" />
+                        @* A project's: its tree, each box as it decides, else as its container's own settings say. *@
+                        @if (Kind.HoldsContainers && _tree is { } tree)
+                        {
+                            <div class="mt-2">
+                                <ProjectPicksTree Tree="tree" Defaultable="true" Picks="@(plan.Picks ?? new Dictionary<string, bool>())"
+                                                  PicksChanged="@((IReadOnlyDictionary<string, bool> picks) => EditPlan(one, edited => edited with { Picks = picks.Count > 0 ? picks : null }))" />
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <BackupChoices Kind="Kind" Below="@(Settings with { AllStop = BackupChoice.Default, AllWhat = BackupChoice.Default })" FieldClass="mt-2"
+                                       Stop="@_allStop" StopChanged="@((string stop) => EditAll(() => _allStop = stop))"
+                                       What="@_allWhat" WhatChanged="@((string what) => EditAll(() => _allWhat = what))" />
+                    }
+                </div>
+            </MudTabPanel>
+        </MudTabs>
+    };
+
+    private IReadOnlyList<string> _names = [];
+    private BackupList _backups = new([], []);
+
+    /// <summary>Read the first time yet: the table's bar moves until it is.</summary>
+    private bool _loading = true;
+
+    /// <summary>A project's: its containers' backups and restores, those its own drives standing under it.</summary>
+    private IReadOnlyList<BackupJob> _memberJobs = [];
+
+    /// <summary>The one chosen; null for All.</summary>
+    private string? _chosen;
+
+    private int _tab;
+
+    /// <summary>All of them's folder and choices as edited; empty for Settings → Defaults.</summary>
+    private string _allFolder = "";
+    private string _allStop = BackupChoice.Default;
+    private string _allWhat = BackupChoice.Default;
+
+    /// <summary>Each one's own plan as edited, by its name, for those touched since the last save.</summary>
+    private readonly Dictionary<string, BackupPlan> _plans = new(StringComparer.Ordinal);
+
+    /// <summary>Where backups go and how they are made, as the agent last said; empty until read.</summary>
+    private BackupSettings Settings => _backups.Settings ?? new BackupSettings("", []);
+
+    /// <summary>
+    /// The settings as the window stands: the agent's, all of them's and the
+    /// plans touched as edited over them; what Save sends, and what a level's
+    /// Default reads.
+    /// </summary>
+    private BackupSettings Edited =>
+        _plans.Values.Aggregate(Settings with { AllFolder = _allFolder.Trim(), AllStop = _allStop, AllWhat = _allWhat },
+            (settings, plan) => settings.WithPlan(Trimmed(plan)));
+
+    /// <summary>One's own plan as it stands in the window: edited, else saved.</summary>
+    private BackupPlan PlanOf(string name) => _plans.TryGetValue(name, out var edited) ? edited : Settings.Plan(name);
+
+    /// <summary>Where one with no folder of its own backs up, as the window stands: inside it, a folder named after it.</summary>
+    private string AllFolder => _allFolder.Trim().Length > 0 ? _allFolder.Trim() : Settings.DefaultFolder;
+
+    /// <summary>A setting edited and not saved.</summary>
+    private bool Unsaved =>
+        _allFolder.Trim() != Settings.AllFolder || _allStop != Settings.AllStop || _allWhat != Settings.AllWhat
+        || _plans.Values.Any(plan => !Same(Trimmed(plan), Settings.Plan(plan.Name)));
+
+    /// <summary>Two plans the same, their volumes left out compared by what they name.</summary>
+    private static bool Same(BackupPlan one, BackupPlan other) =>
+        one with { LeaveVolumes = null, Picks = null } == other with { LeaveVolumes = null, Picks = null }
+        && (one.LeaveVolumes ?? []).Order().SequenceEqual((other.LeaveVolumes ?? []).Order())
+        && (one.Picks ?? new Dictionary<string, bool>()).OrderBy(pick => pick.Key).SequenceEqual((other.Picks ?? new Dictionary<string, bool>()).OrderBy(pick => pick.Key));
+
+    /// <summary>A container's, read for its settings' tree: its image, its volumes; null for any other, or one no longer there.</summary>
+    private ContainerDetails? _container;
+
+    /// <summary>A project's, read for its settings' tree: its containers, their images and volumes, what their own settings back up.</summary>
+    private ProjectTree? _tree;
+
+    private IReadOnlyList<string>? ContainerVolumes =>
+        _container?.Mounts.Where(mount => mount.Type == "volume").Select(mount => mount.Source).Distinct().ToList();
+
+    private static BackupPlan Trimmed(BackupPlan plan) => plan with { Folder = plan.Folder.Trim() };
+
+    /// <summary>A level's parts all unticked: nothing to save until one is ticked.</summary>
+    private bool NothingTicked => _allWhat == BackupWhat.Nothing || _plans.Values.Any(plan => plan.What == BackupWhat.Nothing);
+
+    /// <summary>The ones on the machine, then those only the history still names, each once, by name.</summary>
+    private IEnumerable<string> Listed =>
+        _names.Concat(_backups.History.Select(backup => backup.Name)).Distinct(StringComparer.Ordinal).Order(StringComparer.OrdinalIgnoreCase);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Changes.Changed += OnAgentChanged;
+        Changes.Start();
+        _chosen = Name.Length > 0 ? Name : null;
+        await ReadAsync();
+        TakeAll();
+    }
+
+    public void Dispose() => Changes.Changed -= OnAgentChanged;
+
+    private void OnAgentChanged(ChangeNotice notice)
+    {
+        if (notice.Touches(Kind.Change))
+        {
+            _ = InvokeAsync(ReadAsync);
+        }
+    }
+
+    /// <summary>The names, the jobs, the history and the settings read again; the folders being edited stay as they are.</summary>
+    private async Task ReadAsync()
+    {
+        try
+        {
+            var names = Kind.Names(Api);
+            _backups = await Api.GetBackupsAsync(Kind.Key);
+            _names = await names;
+            if (Kind == BackupKind.Container && _chosen is { } container && _names.Contains(container))
+            {
+                _container = await Api.GetContainerDetailsAsync(container);
+            }
+
+            if (Kind.HoldsContainers && _chosen is { } project)
+            {
+                _tree = await Api.GetProjectBackupTreeAsync(project);
+                var members = (await Api.GetContainersAsync(all: true)).Containers.Where(container => container.Project == project).Select(container => container.Name).ToHashSet(StringComparer.Ordinal);
+                _memberJobs = [.. (await Api.GetBackupsAsync(BackupKind.Container.Key)).Jobs.Where(job => members.Contains(job.Name))];
+            }
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            // Kept as last read: the next change notice reads them again.
+        }
+        finally
+        {
+            _loading = false;
+        }
+
+        StateHasChanged();
+        Changed?.Invoke();
+    }
+
+    private void Choose(string? chosen)
+    {
+        _chosen = chosen is null or AllOfThem ? null : chosen;
+        Changed?.Invoke();
+    }
+
+    /// <summary>MudTabs reports the index it settles on after every render: only a real change is taken, and the title row's verbs follow it.</summary>
+    private void TabChanged(int index)
+    {
+        if (index == _tab)
+        {
+            return;
+        }
+
+        _tab = index;
+        Changed?.Invoke();
+    }
+
+    /// <summary>The title row is MudBlazor's own tree: Save is repainted at every change, or it stays off until a click elsewhere.</summary>
+    private void EditAll(Action change)
+    {
+        change();
+        Changed?.Invoke();
+    }
+
+    private void EditPlan(string name, Func<BackupPlan, BackupPlan> change)
+    {
+        _plans[name] = change(PlanOf(name));
+        Changed?.Invoke();
+    }
+
+    /// <summary>All of them's folder and choices as the agent last said.</summary>
+    private void TakeAll() => (_allFolder, _allStop, _allWhat) = (Settings.AllFolder, Settings.AllStop, Settings.AllWhat);
+
+    private bool Running(string name) => BackupFlow.For(_backups.Jobs, name) is { Running: true };
+
+    private List<BackupJob> JobsOf(string name) => [.. _backups.Jobs.Where(job => job.Name == name)];
+
+    private List<BackupEntry> Backups(string name) => [.. _backups.History.Where(backup => backup.Name == name)];
+
+    /// <summary>Under a name: what it is doing, else how many backups it has and the last; a removed one says so.</summary>
+    private string Caption(string name)
+    {
+        if (BackupFlow.For(_backups.Jobs, name) is { Running: true } job)
+        {
+            return $"{BackupFlow.Said(job.Kind)}: {job.Status}";
+        }
+
+        var backups = Backups(name);
+        var said = backups.Count switch
+        {
+            0 => "no backup",
+            1 => $"1 backup, {backups[0].CreatedAt.ToLocalTime():yyyy-MM-dd HH:mm}",
+            _ => $"{backups.Count} backups, the last {backups[0].CreatedAt.ToLocalTime():yyyy-MM-dd HH:mm}",
+        };
+        return _names.Contains(name) ? said : $"removed; {said}";
+    }
+
+    /// <summary>
+    /// What Logs shows: the chosen one's backup and restore lines as the agent
+    /// keeps them, the oldest first, every one it holds; All's every one's,
+    /// each line said by its name, the names in a column, as a project's All
+    /// says its containers.
+    /// </summary>
+    private async Task<string> ReadLogsAsync()
+    {
+        var lines = await Api.GetBackupLogAsync(Kind.Key, _chosen ?? "");
+        return lines.Count > 0 ? string.Join("\n", lines) : $"No backup or restore of {_chosen ?? $"any {Kind.Noun}"} in the agent's log.";
+    }
+
+    private async Task PickFolderAsync()
+    {
+        var current = _chosen is { } name ? (PlanOf(name).Folder.Trim() is { Length: > 0 } own ? own : AllFolder) : AllFolder;
+        if (await Pickers.HostFolderAsync(Dialogs, current) is not { } folder)
+        {
+            return;
+        }
+
+        if (_chosen is { } chosen)
+        {
+            EditPlan(chosen, plan => plan with { Folder = folder });
+        }
+        else
+        {
+            EditAll(() => _allFolder = folder);
+        }
+    }
+
+    /// <summary>The settings edited, saved: all of them's, and each one's own, empty for default.</summary>
+    private async Task<bool> SaveAsync()
+    {
+        if (!await BackupFlow.SaveSettingsAsync(Dialogs, Api, Kind, Edited))
+        {
+            return false;
+        }
+
+        _plans.Clear();
+        await ReadAsync();
+        TakeAll();
+        return true;
+    }
+
+    /// <summary>A backup is made as the settings say once they are saved: one edited and not saved is saved first, or the backup waits.</summary>
+    private async Task BackupAsync()
+    {
+        if (_chosen is not { } name || (Unsaved && !await SaveFirstAsync()))
+        {
+            return;
+        }
+
+        if (await BackupFlow.BackupAsync(Dialogs, Api, Kind, name))
+        {
+            await ReadAsync();
+        }
+    }
+
+    /// <summary>A backup into the chosen one, or, from All, into the one named; the picker opens on its last backup, or its backup folder.</summary>
+    private async Task RestoreAsync()
+    {
+        var start = _chosen is { } name
+            ? Backups(name).FirstOrDefault(backup => backup.Exists)?.Path ?? Settings.FolderOf(name)
+            : Settings.FolderOfAll;
+        if (await BackupFlow.RestoreAsync(Dialogs, Api, Kind, _chosen ?? "", start))
+        {
+            await ReadAsync();
+        }
+    }
+
+    /// <summary>Unsaved settings: saved, left as they are, or the verb waits.</summary>
+    private async Task<bool> SaveFirstAsync() =>
+        await DialogFlow.LeaveUnsavedAsync(Dialogs, "A backup setting is edited and not saved.") switch
+        {
+            UnsavedChoice.Save => await SaveAsync(),
+            UnsavedChoice.Discard => Discard(),
+            _ => false,
+        };
+
+    private bool Discard()
+    {
+        _plans.Clear();
+        TakeAll();
+        return true;
+    }
+
+    /// <summary>It may be left: nothing edited and not saved, or it was saved, or let go.</summary>
+    public async Task<bool> LeavingAsync() => !Unsaved || await SaveFirstAsync();
+}

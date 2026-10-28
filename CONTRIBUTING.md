@@ -68,6 +68,12 @@ The full set is in [docs/architecture.md](docs/architecture.md) and
   raises `MinimumAgentLevel`. A change that only adds raises neither. Native
   clients check these against `/health` and stop, or warn, when either side
   is behind.
+- **Work under way shows everywhere, the same way.** A job of the agent's
+  (run, save, verb, recreate, update, patch, transfer, backup, restore) is
+  drawn wherever its object is: card ring, table bar, window list wheel,
+  dashboard object; a project's work as a job per container, every one
+  turning. The checklist is in
+  [docs/ui-controls.md](docs/ui-controls.md#work-under-way-everywhere-its-object-is-shown-the-same-way).
 - **Reuse before you add.** One component per concept (one list-page shell,
   one details view, one picker per kind of resource), fed different data.
   When two places do the same thing, extract it before a third appears.

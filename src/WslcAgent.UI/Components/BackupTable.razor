@@ -1,4 +1,4 @@
-@* The Backups tab of the window of backups (BackupsDialog): a table as every
+@* The Backups tab of the backups of one, or of all (BackupsView): a table as every
    list is (ListGrid), the newest first, each row with Restore and Delete; the
    table takes the height left and only its rows scroll. One's own (Name
    given): when, what it holds (a container's), size and its file or folder.
@@ -10,7 +10,7 @@
 @inject WslcAgentApi Api
 @inject IDialogService Dialogs
 
-<ListGrid TItem="BackupRow" Items="Rows" EmptyText="@(Name is { } name ? $"No backup of {name} yet." : $"No backup of any {Kind.Noun} yet.")">
+<ListGrid TItem="BackupRow" Items="Rows" Loading="Loading" EmptyText="@(Name is { } name ? $"No backup of {name} yet." : $"No backup of any {Kind.Noun} yet.")">
     <Columns>
         @if (Name is null)
         {
@@ -95,14 +95,17 @@
     /// <summary>A restore started, a backup deleted, a job cancelled or dismissed: the window reads everything again.</summary>
     [Parameter] public EventCallback Changed { get; set; }
 
+    /// <summary>The backups are being read the first time: the table's bar moves until they come.</summary>
+    [Parameter] public bool Loading { get; set; }
+
     private IReadOnlyList<BackupRow> Rows => BackupRow.Of(Jobs, Backups);
 
     /// <summary>Its backup or restore is under way: nothing of its own can be restored or deleted meanwhile.</summary>
     private bool Running(string name) => BackupFlow.For(Jobs, name) is { Running: true };
 
     private string Note => Kind.InFolders
-        ? "Back up writes a folder <container>-<date> in the backup folder. Restore puts back what it holds, the container and its volumes' users stopped first; Delete removes the folder."
-        : "Back up writes <volume>-<date>.tar.gz in the backup folder. Restore replaces what the volume holds with the backup's contents, its containers stopped first; Delete removes the file.";
+        ? "Back up writes a folder named by its date in the backup folder. Restore puts back what it holds, the container and its volumes' users stopped first; Delete removes the folder."
+        : "Back up writes <date>.tar.gz, named by its date, in the backup folder. Restore replaces what the volume holds with the backup's contents, its containers stopped first; Delete removes the file.";
 
     private async Task RestoreAsync(BackupEntry backup)
     {

@@ -279,7 +279,8 @@ public sealed partial class AgentLogs(AgentLogFile file, ICliActivity activity) 
     internal static string KindOf(string message) =>
         Notifications.Notifier.AreaIn(message) is { } area ? area
         : message.StartsWith(Volumes.VolumeBackups.Prefix, StringComparison.Ordinal)
-            || message.StartsWith(Containers.ContainerBackups.Prefix, StringComparison.Ordinal) ? CliTraceDescription.Backups
+            || message.StartsWith(Containers.ContainerBackups.Prefix, StringComparison.Ordinal)
+            || message.StartsWith(Projects.ProjectBackups.Prefix, StringComparison.Ordinal) ? CliTraceDescription.Backups
         : message.StartsWith("wslc ", StringComparison.Ordinal)
             ? CliTraceDescription.Describe(message[5..].Split(' ', StringSplitOptions.RemoveEmptyEntries)).Kind
         : message.StartsWith(CliTraceDescription.TransferProgram + " ", StringComparison.Ordinal)

@@ -137,6 +137,8 @@ builder.Services.AddSingleton<ImageArchives>();
 builder.Services.AddSingleton<IVolumeService, VolumeService>();
 builder.Services.AddSingleton<BusyVolumes>();
 builder.Services.AddSingleton<BackupStops>();
+builder.Services.AddSingleton<BackupMarks>();
+builder.Services.AddSingleton<BackupBase>();
 builder.Services.AddSingleton<VolumeBackups>();
 builder.Services.AddSingleton<IVolumeBackups>(services => services.GetRequiredService<VolumeBackups>());
 builder.Services.AddSingleton<ContainerBackups>();
@@ -144,6 +146,9 @@ builder.Services.AddSingleton<IContainerBackups>(services => services.GetRequire
 // Every kind of backup, for what waits on them all: the agent's own update.
 builder.Services.AddSingleton<BackupService>(services => services.GetRequiredService<VolumeBackups>());
 builder.Services.AddSingleton<BackupService>(services => services.GetRequiredService<ContainerBackups>());
+builder.Services.AddSingleton<ProjectBackups>();
+builder.Services.AddSingleton<IProjectBackups>(services => services.GetRequiredService<ProjectBackups>());
+builder.Services.AddSingleton<BackupService>(services => services.GetRequiredService<ProjectBackups>());
 builder.Services.AddSingleton<INetworkService, NetworkService>();
 builder.Services.AddSingleton<ProjectContexts>();
 builder.Services.AddSingleton<IProjectService, ProjectService>();

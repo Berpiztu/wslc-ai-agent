@@ -40,11 +40,23 @@ public sealed record BackupKind(
         (api, name, what, stop) => api.BackupContainerAsync(name, what, stop),
         (api, path, name) => api.RestoreContainerAsync(path, name));
 
-    /// <summary>The noun at the start of a title: <c>Volume</c>, <c>Container</c>.</summary>
+    /// <summary>A project's: what the agent keeps of it and each of its containers' backup, the parts ticked, each in the container's own folder.</summary>
+    public static readonly BackupKind Project = new(
+        "project", "project", MudBlazor.Icons.Material.Filled.AccountTree, ChangeNotice.Container, false, true,
+        async api => [.. (await api.GetContainersAsync(all: true)).Containers.Select(container => container.Project).Where(project => project.Length > 0).Distinct(StringComparer.Ordinal)],
+        (api, name, _, stop) => api.BackupProjectAsync(name, stop),
+        (api, path, name) => api.RestoreProjectAsync(path, name));
+
+    /// <summary>A project's: a backup holds its containers' backups, and their volumes.</summary>
+    public bool HoldsContainers => Key == Project.Key;
+
+    /// <summary>The noun at the start of a title: <c>Volume</c>, <c>Container</c>, <c>Project</c>.</summary>
     public string Title => char.ToUpperInvariant(Noun[0]) + Noun[1..];
 
     /// <summary>What a restore does to one that is there, said in red before it runs.</summary>
-    public string Replaces(string name) => InFolders
+    public string Replaces(string name) => HoldsContainers
+        ? $"What the backup holds replaces what {name} has: its Compose file, and each of its containers' image, volumes' contents and settings, as their backups hold them."
+        : InFolders
         ? $"What the backup holds replaces what {name} has: its image, its volumes' contents, and, with its configuration, {name} itself, made again with its settings."
         : $"Everything {name} holds now is replaced by the backup's contents.";
 }

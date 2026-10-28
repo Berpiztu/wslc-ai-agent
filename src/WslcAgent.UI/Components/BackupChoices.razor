@@ -19,7 +19,8 @@
 </MudSelect>
 @if (Kind.InParts)
 {
-    <BackupParts Value="@What" ValueChanged="WhatChanged" Inherited="@(Below?.WhatOfAll)" Class="@FieldClass" />
+    <BackupParts Value="@What" ValueChanged="WhatChanged" Inherited="@(Below?.WhatOfAll)" Class="@FieldClass"
+                 ImageName="@ImageName" Volumes="Volumes" LeftOut="LeftOut" LeftOutChanged="LeftOutChanged" />
 }
 
 @code {
@@ -45,4 +46,15 @@
 
     /// <summary>Each field's class: its space from the field above where the fields stand in a column.</summary>
     [Parameter] public string FieldClass { get; set; } = "";
+
+    /// <summary>One container's: its image, said beside Image in its tree.</summary>
+    [Parameter] public string? ImageName { get; set; }
+
+    /// <summary>One container's: its volumes, each a tick under Volumes.</summary>
+    [Parameter] public IReadOnlyList<string>? Volumes { get; set; }
+
+    /// <summary>One container's: the volumes its backup leaves out.</summary>
+    [Parameter] public IReadOnlyList<string>? LeftOut { get; set; }
+
+    [Parameter] public EventCallback<IReadOnlyList<string>> LeftOutChanged { get; set; }
 }

@@ -225,6 +225,10 @@ die.
 - **Keep it running across reboots**: `set_restart_policy` with
   `unless-stopped` or `always`. This is agent-managed, not a runtime flag;
   `no` turns it off.
+- **Project backups**: `backup_project` (its Compose file and each of its
+  containers' backup, the parts asked, in each container's own folder;
+  `stop=true` only once the user agreed), `project_backups`,
+  `restore_project` (gated: refused while one of its containers runs).
 - **Container backups**: `backup_container` (what: any of `config`, its
   settings, `image` and `volumes`, with commas between; empty for its
   settings'; its volumes need every container that uses them stopped, it

@@ -17,11 +17,14 @@ public enum ProjectTab
 
     /// <summary>Zaindari: a container's vulnerabilities, what to accept, its patch.</summary>
     Zaindari,
+
+    /// <summary>A container's backups, their logs and its backup settings.</summary>
+    Backup,
 }
 
 /// <summary>
 /// One tab of a project's window of two panes (<c>ProjectPanesDialog</c>):
-/// Information, Logs, Update image, Zaindari. It is given the container chosen
+/// Information, Logs, Update image, Zaindari, Backup. It is given the container chosen
 /// (null for All), the project's containers, the window's verb and a way to
 /// read the containers again; it draws the pane, and gives the window's title
 /// line its verb, if it has one there. The window repaints the title line when
@@ -55,6 +58,9 @@ public abstract class ProjectPaneTab : ComponentBase
 
     /// <summary>What the veil says while the tab's verb runs.</summary>
     public virtual string BusyText => "";
+
+    /// <summary>The window may close: nothing of the tab's is edited and not saved, or it was saved, or let go (Backup's settings).</summary>
+    public virtual Task<bool> LeavingAsync() => Task.FromResult(true);
 
     /// <summary>The verb runs on the container shown: its button says so; on another one it only waits.</summary>
     protected bool RunningHere => Verb.Busy && Verb.For == Chosen?.Id;

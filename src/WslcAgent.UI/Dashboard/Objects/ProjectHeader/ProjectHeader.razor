@@ -31,12 +31,16 @@
     /// <summary>
     /// The ring of a verb going through the project's containers, in the
     /// avatar's place: how far it has got, and where it stopped when it did
-    /// not get to its end, until its cross lets it go. Nothing when no verb
-    /// is on the project.
+    /// not get to its end, until its cross lets it go; turning while one of
+    /// its containers is backed up or restored. Nothing when nothing is
+    /// being done to the project.
     /// </summary>
     private RenderFragment? Ring(ContainerSummary head) =>
         Verbs.Of(head.Name) is { } going
             ? @<ProgressRing Pct="going.Bar" Status="@going.Step" Mixed="@(!going.Failed)" Failed="going.Failed" KeepPct="true"
                              CancelTitle="Stop after this container" OnCancel="@(() => Verbs.Cancel(head.Name))" OnDismiss="@(() => Verbs.Dismiss(head.Name))" />
+            : Members.FirstOrDefault(member => member.BackingUp is not null) is { } member
+            // Its backup or restore going through its containers: the ring turns, as each container's does.
+            ? @<TurningRing Color="Color.Info" Mixed="true" Title="@($"{member.BackingUp}: {member.Name}")" />
             : null;
 }

@@ -24,7 +24,7 @@ namespace WslcAgent.Server.Backups;
 /// </summary>
 /// <param name="kind"><c>volume</c> or <c>container</c>: the names of its files.</param>
 /// <param name="changed">What the agent says changed when a job starts or ends (<see cref="ChangeNotice"/>): the volumes, the containers.</param>
-public abstract partial class BackupService(string kind, string changed, IWslcRunner wslc, WslcEvents events, AgentLogs agentLogs, string dataDirectory, ILogger logger)
+public abstract partial class BackupService(string kind, string changed, IWslcRunner wslc, BackupBase backupBase, WslcEvents events, AgentLogs agentLogs, string dataDirectory, ILogger logger)
 {
     private static readonly TimeSpan KeepDone = TimeSpan.FromSeconds(5);
 
@@ -59,8 +59,32 @@ public abstract partial class BackupService(string kind, string changed, IWslcRu
     /// <summary>What every line of a job begins with in the agent's log, the name after it (<c>backup: hermes-data: INFO: Packing hermes-data.</c>).</summary>
     public abstract string LogPrefix { get; }
 
-    /// <summary>The default folder until Settings → Defaults names another: in the user's own folder, outside Documents, which OneDrive may carry away.</summary>
-    protected abstract string FirstDefaultFolder { get; }
+    /// <summary>The folder of the backups' base this kind's default is while it follows the base (<see cref="BackupBase"/>): <c>Volumes</c>.</summary>
+    protected abstract string BaseSubfolder { get; }
+
+    /// <summary>What <see cref="BaseSubfolder"/> was called before (<c>Volume backups</c>): a default kept as it, in the first base, follows the base too.</summary>
+    protected abstract string FormerBaseSubfolder { get; }
+
+    /// <summary>
+    /// A backup's name in its folder, the moment it is made
+    /// (<c>2026-10-28_065115</c>): every kind's is its date alone, in a folder
+    /// named after what it is of (<c>Containers\hermes\2026-10-28_065115</c>),
+    /// so the name is said once and the dates sort as they were made.
+    /// </summary>
+    protected internal static string Stamp() => $"{DateTimeOffset.Now:yyyy-MM-dd_HHmmss}";
+
+    /// <summary>A job begun: a container's backups mark the container (<see cref="BackupMarks"/>), so every list of containers shows it.</summary>
+    protected virtual void Began(BackupWork job)
+    {
+    }
+
+    /// <summary>A job ended, however it ended.</summary>
+    protected virtual void Ended(BackupWork job)
+    {
+    }
+
+    /// <summary>A backup of the history as it is listed: a project's with its containers' backups, read from it.</summary>
+    protected virtual BackupEntry Shown(BackupEntry entry) => entry;
 
     /// <summary>A backup is made of parts chosen one by one (a container's, <see cref="BackupWhat"/>); a volume's is the volume.</summary>
     protected virtual bool InParts => false;
@@ -71,26 +95,45 @@ public abstract partial class BackupService(string kind, string changed, IWslcRu
     /// <summary>The jobs under way, which an update of the agent waits for.</summary>
     public int InFlight => _jobs.Values.Count(job => job.Snapshot().Running);
 
-    /// <summary>Where backups go: the default folder, the folder of all of them, each one's own.</summary>
+    /// <summary>
+    /// Where backups go: the default folder, the folder of all of them, each
+    /// one's own. The default follows the backups' base (<see cref="BackupBase"/>)
+    /// while it is not given one of its own: kept empty, or kept as the
+    /// folder the first base gave it, before there was a base to follow.
+    /// </summary>
     public BackupSettings Settings()
     {
+        var baseFolder = backupBase.Get().Folder;
+        var stored = new BackupSettings("", []);
         lock (_filesGate)
         {
             try
             {
-                if (File.Exists(_settingsPath) && JsonSerializer.Deserialize<BackupSettings>(File.ReadAllText(_settingsPath), Json) is { DefaultFolder.Length: > 0 } read)
+                if (File.Exists(_settingsPath) && JsonSerializer.Deserialize<BackupSettings>(File.ReadAllText(_settingsPath), Json) is { } read)
                 {
-                    return read with { Plans = read.Plans ?? [] };
+                    stored = read with { Plans = read.Plans ?? [] };
                 }
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
             {
                 logger.LogWarning("{Kind} backup settings could not be read from {Path}: {Message}", kind, _settingsPath, ex.Message);
             }
-
-            return new BackupSettings(FirstDefaultFolder, []);
         }
+
+        var follows = stored.DefaultFolder.Trim().Length == 0
+            || SameFolder(stored.DefaultFolder, Path.Combine(BackupBase.First, BaseSubfolder))
+            || SameFolder(stored.DefaultFolder, Path.Combine(BackupBase.First, FormerBaseSubfolder));
+        return stored with
+        {
+            DefaultFolder = follows ? Path.Combine(baseFolder, BaseSubfolder) : stored.DefaultFolder,
+            BaseFolder = baseFolder,
+            BaseSubfolder = BaseSubfolder,
+            DefaultFromBase = follows,
+        };
     }
+
+    private static bool SameFolder(string one, string other) =>
+        string.Equals(one.Trim().TrimEnd('\\', '/'), other.Trim().TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Saves where backups go and how they are made; every folder a full path
@@ -99,7 +142,9 @@ public abstract partial class BackupService(string kind, string changed, IWslcRu
     /// </summary>
     public BackupSettings SaveSettings(BackupSettings settings)
     {
-        var saved = new BackupSettings(FullPath(settings.DefaultFolder, "default backup folder"),
+        // The default kept empty while it is the base's: it follows the base when the base moves.
+        var inBase = Path.Combine(backupBase.Get().Folder, BaseSubfolder);
+        var saved = new BackupSettings(settings.DefaultFolder.Trim().Length == 0 || SameFolder(settings.DefaultFolder, inBase) ? "" : FullPath(settings.DefaultFolder, "default backup folder"),
             [.. (settings.Plans ?? []).Where(plan => plan.Name.Trim().Length > 0)
                 .Select(plan => plan with
                 {
@@ -107,6 +152,7 @@ public abstract partial class BackupService(string kind, string changed, IWslcRu
                     Folder = FullPathOrEmpty(plan.Folder, $"backup folder of {plan.Name}"),
                     Stop = Choice(plan.Stop, BackupChoice.Stops, true, $"stopping of {plan.Name}"),
                     What = Parts(plan.What, $"what a backup of {plan.Name} holds"),
+                    LeaveVolumes = InParts && plan.LeaveVolumes is { Count: > 0 } left ? [.. left.Where(volume => volume.Trim().Length > 0).Select(volume => volume.Trim()).Distinct()] : null,
                 })],
             FullPathOrEmpty(settings.AllFolder, $"backup folder of every {kind}"),
             Choice(settings.DefaultStop, BackupChoice.Stops, false, "default stopping"),
@@ -119,9 +165,9 @@ public abstract partial class BackupService(string kind, string changed, IWslcRu
             File.WriteAllText(_settingsPath, JsonSerializer.Serialize(saved, Json));
         }
 
-        logger.LogInformation("{Kind} backup settings saved: default folder {Folder}", kind, saved.DefaultFolder);
+        logger.LogInformation("{Kind} backup settings saved: default folder {Folder}", kind, saved.DefaultFolder.Length > 0 ? saved.DefaultFolder : $"{inBase} (the base's)");
         Changed();
-        return saved;
+        return Settings();
     }
 
     /// <summary>
@@ -140,7 +186,7 @@ public abstract partial class BackupService(string kind, string changed, IWslcRu
         }
 
         var shown = snapshots.Where(job => job is not { State: "success", FinishedAt: { } finished } || now - finished <= KeepDone).ToList();
-        var history = History().Select(entry => entry with { Exists = File.Exists(entry.Path) || Directory.Exists(entry.Path) })
+        var history = History().Select(entry => Shown(entry with { Exists = File.Exists(entry.Path) || Directory.Exists(entry.Path) }))
             .OrderByDescending(entry => entry.CreatedAt).ToList();
         return new BackupList(shown, history, Settings());
     }
@@ -180,7 +226,7 @@ public abstract partial class BackupService(string kind, string changed, IWslcRu
     /// those restored from it). Only what the history names: nothing else of
     /// the machine is deleted here. Refused while a restore reads it.
     /// </summary>
-    public void DeleteBackup(string path)
+    public virtual void DeleteBackup(string path)
     {
         var backup = WslcArgs.Require(path, "backup");
         if (_jobs.Values.Select(job => job.Snapshot()).Any(job => job.Running && string.Equals(job.File, backup, StringComparison.OrdinalIgnoreCase)))
@@ -242,9 +288,76 @@ public abstract partial class BackupService(string kind, string changed, IWslcRu
 
         var job = new BackupWork(Guid.NewGuid().ToString("N"), jobKind, name, what, file, line => Log(name, line));
         _jobs[job.Id] = job;
+        Began(job);
         _ = Task.Run(() => RunAsync(job, work));
         Changed();
         return job.Snapshot();
+    }
+
+    /// <summary>
+    /// A job another one drives (a project's backup, each of its containers'),
+    /// listed and followed as any, its card's ring turning from the start with
+    /// <paramref name="waiting"/>; its work is run by the one that drives it
+    /// (<see cref="DriveAsync"/>), and one never reached is let go
+    /// (<see cref="Abandon"/>).
+    /// </summary>
+    protected internal BackupWork Track(string jobKind, string name, string what, string file, string waiting)
+    {
+        if (_jobs.Values.Any(other => other.Name == name && other.Snapshot().Running))
+        {
+            throw new InvalidOperationException($"A backup or restore of {name} is under way; wait for it, or cancel it.");
+        }
+
+        var job = new BackupWork(Guid.NewGuid().ToString("N"), jobKind, name, what, file, line => Log(name, line));
+        _jobs[job.Id] = job;
+        Began(job);
+        job.Step(waiting);
+        Changed();
+        return job;
+    }
+
+    /// <summary>
+    /// A tracked job's work, run by the job that drives it: it ends as any
+    /// job does, cancelled by its own Cancel or by the driver's token, and how
+    /// it failed goes on to the driver.
+    /// </summary>
+    protected internal async Task DriveAsync(BackupWork job, CancellationToken driving, Func<CancellationToken, Task> work)
+    {
+        var said = BackupWhat.Said(job.What).ToLowerInvariant();
+        job.Say(job.Kind == BackupJob.Backup ? $"INFO: Backup of {job.Name} ({said}) to {job.File}." : $"INFO: Restore of {job.Name} ({said}) from {job.File}.");
+        using var either = CancellationTokenSource.CreateLinkedTokenSource(job.Token, driving);
+        try
+        {
+            await work(either.Token);
+            job.Succeed();
+        }
+        catch (Exception) when (either.IsCancellationRequested)
+        {
+            job.Fail("Cancelled", cancelled: true);
+            throw;
+        }
+        catch (Exception ex) when (ex is WslcException or WslcNotFoundException or TimeoutException or IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException or JsonException)
+        {
+            job.Say($"ERROR: {ex.Message}");
+            job.Fail(Explained(job.Snapshot().Status, ex.Message));
+            throw;
+        }
+        finally
+        {
+            Ended(job);
+            Changed();
+        }
+    }
+
+    /// <summary>A tracked job its driver never reached, let go as cancelled, saying why; one that ended stays as it ended.</summary>
+    protected internal void Abandon(BackupWork job, string why)
+    {
+        if (job.Snapshot().Running)
+        {
+            job.Fail(why, cancelled: true);
+            Ended(job);
+            Changed();
+        }
     }
 
     private async Task RunAsync(BackupWork job, Func<BackupWork, CancellationToken, Task> work)
@@ -266,6 +379,10 @@ public abstract partial class BackupService(string kind, string changed, IWslcRu
             // The command's own words in the log, the step and the reason on the card.
             job.Say($"ERROR: {ex.Message}");
             job.Fail(Explained(job.Snapshot().Status, ex.Message));
+        }
+        finally
+        {
+            Ended(job);
         }
 
         Changed();

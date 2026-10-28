@@ -7,7 +7,7 @@
 @inject NavigationManager Navigation
 
 @* A card leads with the verbs worth reaching without the menu — view and edit,
-   view files, pull — and keeps the image's own (create, run, the menu, remove)
+   view files, pull, Zaindari in the image's colour — and keeps the image's own (create, run, the menu, remove)
    at the far end. The menu then drops what the card already shows: one
    component, one list, two behaviours. *@
 <div class="@(Shortcuts ? "wslc-row-verbs" : "")">
@@ -17,6 +17,8 @@
         <MudIconButton Icon="@Icons.Material.Filled.EditNote" Size="Size.Small" title="View &amp; edit" Disabled="@(Busy || Pulling)" OnClick="InspectAsync" />
         <MudIconButton Icon="@Icons.Material.Filled.Folder" Size="Size.Small" title="View files" Disabled="@(Busy || Pulling)" OnClick="FilesAsync" />
         <MudIconButton Icon="@Icons.Material.Filled.Download" Size="Size.Small" title="Pull" Disabled="@(Busy || Pulling)" OnClick="PullAsync" />
+        <MudIconButton Icon="@Icons.Material.Filled.Security" Size="Size.Small" Color="@ImageSecurityFlow.Tone(Image)" title="@ImageSecurityFlow.Title" Disabled="@(Busy || Pulling)"
+                       OnClick="ZaindariAsync" />
     </MudStack>
 }
 @if (!ShortcutsAlone)
@@ -32,10 +34,10 @@
             <MudMenuItem Icon="@Icons.Material.Filled.Folder" OnClick="FilesAsync">View files</MudMenuItem>
         }
         <MudMenuItem Icon="@Icons.Material.Filled.Inventory2" OnClick="UsageAsync">View container usage</MudMenuItem>
-        <MudMenuItem Icon="@Icons.Material.Filled.Security" Class="@ImageSecurityFlow.TextClass(ImageSecurityFlow.Tone(Image))"
-                     OnClick="@(() => ImageSecurityFlow.ShowAsync(Dialogs, Image.Reference, [Image.Reference], patchable: true))">@ImageSecurityFlow.Title</MudMenuItem>
         @if (!Shortcuts)
         {
+            <MudMenuItem Icon="@Icons.Material.Filled.Security" Class="@ImageSecurityFlow.TextClass(ImageSecurityFlow.Tone(Image))"
+                         OnClick="ZaindariAsync">@ImageSecurityFlow.Title</MudMenuItem>
             <MudMenuItem Icon="@Icons.Material.Filled.Download" OnClick="PullAsync">Pull</MudMenuItem>
         }
         <MudMenuItem Icon="@Icons.Material.Filled.Upload" OnClick="PushAsync">Push</MudMenuItem>
@@ -50,6 +52,9 @@
 
 @code {
     [Parameter, EditorRequired] public ImageSummary Image { get; set; } = default!;
+
+    /// <summary>Zaindari's window of the image, its patch offered.</summary>
+    private Task ZaindariAsync() => ImageSecurityFlow.ShowAsync(Dialogs, Image.Reference, [Image.Reference], patchable: true);
 
     /// <summary>The card's own group: the verbs worth reaching without the menu.</summary>
     [Parameter] public bool Shortcuts { get; set; }
