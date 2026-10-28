@@ -264,6 +264,25 @@ changed in it is not saved, since the patch moves the container with the
 settings it has. Its arrow, as the Compose window's, opens the whole note
 over the form.
 
+### What a patch changed
+
+Zaindari's window has two tabs: **Vulnerabilities**, its report, and
+**Changes**, pressed when the image shown is a patch (a container on it, or
+the patch itself). Changes says what the patch changed from the image it was
+built from, in a table, a row a package: the system's packages first, then
+each Python environment's libraries, by interpreter
+(`/opt/venv-a0/bin/python3.12`), with the version before and after (`new`
+for one it brought, `taken out` for one it took out) and **why**: the
+vulnerabilities of it the image had and the patch no longer has, by CVE and
+severity, the worst first; or, when it fixed none, why it changed all the
+same (the system's upgrade took it to a newer version, or a library raised
+needs it); and how many of its own the patch still has, which no version
+fixes yet. Both images are compared as the agent read them and keeps them
+under their ids, and the vulnerabilities by advisory, so no distribution's
+version order is guessed at. Under the table, the Dockerfile the patch was
+last built by. A package is the unit: a library is many files, and the
+files of one are in Files.
+
 For anything else, **Build image** takes a Dockerfile from your device,
 pasted in its field or loaded into it, and builds it with no folder on the
 agent's machine.

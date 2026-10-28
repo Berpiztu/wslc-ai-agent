@@ -6,7 +6,9 @@
    (ImageReportLines). Accept: what no version fixes, to accept, as the
    Accept window does (AcceptEditor), saved by Save. Patch: the patch
    window's editor (PatchEditor), that container alone ticked, started by
-   Patch. A step's tab is pressed only when it has something to do, and when
+   Patch. Changes, for a container on a patch: what the patch changed from
+   the image it was built from, package by package, and why (PatchChangesView).
+   A step's tab is pressed only when it has something to do, and when
    neither has, the bar says so. Cancel, on Accept and Patch, goes back to
    the report, in Zaindari's own window only: in the Project window the tabs
    are the way back. A container under way shows its work instead (MemberWork),
@@ -44,8 +46,8 @@
                    back to the report; in the Project window the tabs are the way back, and there is none. *@
                 @if (!AmongOthers)
                 {
-                    <MudButton Size="Size.Small" Variant="Variant.Filled" Class="@(_step == Vulnerabilities ? "invisible" : null)"
-                               Disabled="@(Verb.Busy || _step == Vulnerabilities)" OnClick="@(() => StepTo(Vulnerabilities))">Cancel</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Class="@(_step is Vulnerabilities or Changes ? "invisible" : null)"
+                               Disabled="@(Verb.Busy || _step is Vulnerabilities or Changes)" OnClick="@(() => StepTo(Vulnerabilities))">Cancel</MudButton>
                 }
             </div>
         </Header>
@@ -73,6 +75,12 @@
                     </PaneStep>
                 }
             </MudTabPanel>
+            <MudTabPanel Text="Changes" Disabled="@(!ImageReference.IsPatched(chosen.Image))">
+                @if (_step == Changes)
+                {
+                    <PatchChangesView @key="chosen.Image" Image="@chosen.Image" />
+                }
+            </MudTabPanel>
         </ChildContent>
     </MudTabs>
 }
@@ -81,9 +89,10 @@
     private const string Vulnerabilities = "vulnerabilities";
     private const string Accept = "accept";
     private const string Patch = "patch";
+    private const string Changes = "changes";
 
     /// <summary>The steps, in the order of their tabs.</summary>
-    private static readonly string[] Steps = [Vulnerabilities, Accept, Patch];
+    private static readonly string[] Steps = [Vulnerabilities, Accept, Patch, Changes];
 
     private string _step = Vulnerabilities;
     private string? _shown;

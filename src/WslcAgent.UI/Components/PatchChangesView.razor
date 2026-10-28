@@ -1,0 +1,71 @@
+@* What a patch changed (PatchChanges), Zaindari's Changes tab: from the image
+   it was built from to the patch, a row a package, the system's first, then
+   each Python environment's libraries, with its version before and after and
+   why: the vulnerabilities it fixed, else what changed it all the same, and
+   how many of its own the patch still has. A table as every list is
+   (ListGrid), its rows scrolling; under it the Dockerfile the patch was last
+   built by, to read. Read once, when the tab is opened. *@
+@inject WslcAgentApi Api
+
+@if (_changes is null)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else
+{
+    @if (_changes.Message.Length > 0)
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">@_changes.Message</MudText>
+    }
+    <ListGrid TItem="PatchChange" Items="_changes.Changes" EmptyText="@(_changes.Found ? "The patch changed no package." : "Nothing to compare.")">
+        <Columns>
+            <PropertyColumn T="PatchChange" TProperty="string" Property="c => c.Package" Title="Package" StickyLeft="true" HeaderClass="@GridColumn.Width(24)" CellClass="@GridColumn.Width(24)" />
+            <PropertyColumn T="PatchChange" TProperty="string" Property="c => c.Kind" Title="Kind" HeaderClass="@GridColumn.Width(7)" CellClass="@GridColumn.Width(7)">
+                <CellTemplate>@(context.Item.Kind == PatchChange.System ? "System" : "Python")</CellTemplate>
+            </PropertyColumn>
+            <PropertyColumn T="PatchChange" TProperty="string" Property="c => c.Where" Title="Where" HeaderClass="@GridColumn.Width(24)" CellClass="@($"{GridColumn.Width(24)} wslc-mono")" />
+            <PropertyColumn T="PatchChange" TProperty="string" Property="c => c.Before" Title="Before" HeaderClass="@GridColumn.Width(16)" CellClass="@GridColumn.Width(16)">
+                <CellTemplate>@(context.Item.Before.Length > 0 ? context.Item.Before : "new")</CellTemplate>
+            </PropertyColumn>
+            <PropertyColumn T="PatchChange" TProperty="string" Property="c => c.After" Title="After" HeaderClass="@GridColumn.Width(16)" CellClass="@GridColumn.Width(16)">
+                <CellTemplate>@(context.Item.After.Length > 0 ? context.Item.After : "taken out")</CellTemplate>
+            </PropertyColumn>
+            <PropertyColumn T="PatchChange" TProperty="int" Property="c => c.Fixes.Count" Title="Why" HeaderClass="@GridColumn.Stretch(40)" CellClass="@GridColumn.Stretch(40)">
+                <CellTemplate>@Why(context.Item)</CellTemplate>
+            </PropertyColumn>
+        </Columns>
+    </ListGrid>
+    @if (_changes.Dockerfile.Length > 0)
+    {
+        <MudTextField T="string" Value="@_changes.Dockerfile" Label="Dockerfile the patch was built by" Lines="5" ReadOnly="true"
+                      Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
+    }
+}
+
+@code {
+    /// <summary>The image, or its patch.</summary>
+    [Parameter, EditorRequired] public string Image { get; set; } = "";
+
+    private PatchChanges? _changes;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _changes = await Api.GetPatchChangesAsync(Image);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _changes = new PatchChanges(Image, Image, false, [], Message: ex.Message);
+        }
+    }
+
+    /// <summary>Why it changed: the vulnerabilities it fixed, the worst first, each by its CVE and severity; else what changed it; and what is still open in it.</summary>
+    private static string Why(PatchChange change)
+    {
+        var why = change.Fixes.Count > 0
+            ? $"fixes {string.Join(", ", change.Fixes.Select(fix => $"{(fix.Cve.Length > 0 ? fix.Cve : fix.Advisory)} ({fix.Severity})"))}"
+            : change.Reason;
+        return change.Open > 0 ? $"{why}; {change.Open} still open, no version fixes {(change.Open == 1 ? "it" : "them")} yet" : why;
+    }
+}

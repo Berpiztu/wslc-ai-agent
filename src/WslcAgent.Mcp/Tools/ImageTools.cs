@@ -29,6 +29,14 @@ public static class ImageTools
         CancellationToken cancellationToken = default) =>
         security.ReportAsync(reference, cancellationToken);
 
+    [McpServerTool(Name = "image_patch_changes", ReadOnly = true)]
+    [Description("What an image's Zaindari patch (<image>-patched) changed, from the image it was built from to the patch: each system package and each Python library, per environment, with its version before and after, the vulnerabilities (advisory, CVE, severity) of it the image had and the patch no longer has, how many it still has, and, when it fixed none, why it changed all the same (the system's upgrade, a library raised that needs it).")]
+    public static Task<PatchChanges> ImagePatchChanges(
+        IImageSecurity security,
+        [Description("The image, or its patch.")] string reference,
+        CancellationToken cancellationToken = default) =>
+        security.ChangesAsync(reference, cancellationToken);
+
     [McpServerTool(Name = "pull_image")]
     [Description("Pull an image from its registry (wslc image pull). Slow for large images; returns when the pull is complete.")]
     public static async Task<string> PullImage(

@@ -49,7 +49,7 @@ public sealed class ImagePatches(IWslcRunner wslc, IImageSecurity security, Imag
             ? written.ReplaceLineEndings("\n") + "\n"
             : Dockerfile(image, upgrade, commands, user);
         var patch = Named(image);
-        var context = Path.Combine(options.Value.DataDirectory, "image-patches", string.Join("_", patch.Split(Path.GetInvalidFileNameChars().Append(':').ToArray())));
+        var context = FolderOf(patch);
         Directory.CreateDirectory(context);
         await File.WriteAllTextAsync(Path.Combine(context, "Dockerfile"), dockerfile, cancellationToken);
 
@@ -75,6 +75,18 @@ public sealed class ImagePatches(IWslcRunner wslc, IImageSecurity security, Imag
         });
         marks.PatchJob(image, job.Job);
         return job;
+    }
+
+    /// <summary>The folder a patch is built in: its Dockerfile and the files beside it, kept after the build.</summary>
+    private string FolderOf(string patch) =>
+        Path.Combine(options.Value.DataDirectory, "image-patches", string.Join("_", patch.Split(Path.GetInvalidFileNameChars().Append(':').ToArray())));
+
+    /// <summary>What the image's patch changed (<see cref="IImageSecurity.ChangesAsync"/>), with the Dockerfile it was last built by.</summary>
+    public async Task<PatchChanges> ChangesAsync(string image, CancellationToken cancellationToken)
+    {
+        var changes = await security.ChangesAsync(image, cancellationToken);
+        var dockerfile = Path.Combine(FolderOf(changes.Patched), "Dockerfile");
+        return File.Exists(dockerfile) ? changes with { Dockerfile = await File.ReadAllTextAsync(dockerfile, cancellationToken) } : changes;
     }
 
     /// <summary>The patch's name: the image's tag with <c>-patched</c>; a patch patched again keeps its own.</summary>

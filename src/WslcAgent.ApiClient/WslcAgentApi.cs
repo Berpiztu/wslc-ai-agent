@@ -787,6 +787,10 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<BuildJob> PatchImageAsync(PatchImageRequest request, CancellationToken cancellationToken = default) =>
         PostJsonAsync<PatchImageRequest, BuildJob>("api/v1/image-security/patch", request, cancellationToken);
 
+    /// <summary>What the image's patch changed, from the image to the patch, package by package, and why; <paramref name="image"/> either of them.</summary>
+    public Task<PatchChanges> GetPatchChangesAsync(string image, CancellationToken cancellationToken = default) =>
+        GetAsync<PatchChanges>($"api/v1/image-security/patch-changes?image={Escape(image)}", cancellationToken);
+
     /// <summary>The patch's Python lines tried in a container of the image, nothing written: what each would change, or why it would fail.</summary>
     public Task<PatchDryRun> DryRunPatchAsync(PatchDryRunRequest request, CancellationToken cancellationToken = default) =>
         PostJsonAsync<PatchDryRunRequest, PatchDryRun>("api/v1/image-security/patch/dry-run", request, cancellationToken);

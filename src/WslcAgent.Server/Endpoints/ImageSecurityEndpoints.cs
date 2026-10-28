@@ -40,6 +40,10 @@ public static class ImageSecurityEndpoints
         api.MapPost("/image-security/patch", (PatchImageRequest request, ImagePatches patches, CancellationToken ct) => patches.StartAsync(request, ct))
             .WithName("PatchImage");
 
+        // What the image's patch changed, from the image to the patch, package by package, and the vulnerabilities each change fixed.
+        api.MapGet("/image-security/patch-changes", (string image, ImagePatches patches, CancellationToken ct) => patches.ChangesAsync(WslcArgs.Require(image, "image"), ct))
+            .WithName("GetPatchChanges");
+
         // The patch's Python lines tried first, in a container of the image, nothing written: what each would change.
         api.MapPost("/image-security/patch/dry-run", (PatchDryRunRequest request, PatchDryRuns runs, CancellationToken ct) => runs.RunAsync(request, ct))
             .WithName("DryRunPatch");

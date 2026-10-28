@@ -211,6 +211,33 @@ public sealed record PatchDryRun(IReadOnlyList<PatchDryRunStep> Steps)
 /// <param name="Output">What uv said, whole.</param>
 public sealed record PatchDryRunStep(string Command, IReadOnlyList<string> Changes, IReadOnlyList<string> Warnings, string Error, IReadOnlyList<string> Output);
 
+/// <summary>
+/// Answer of <c>GET /api/v1/image-security/patch-changes?image=</c>: what a
+/// patch changed, from the image it was built from to the patch, package by
+/// package, and why: the vulnerabilities each change fixed.
+/// </summary>
+/// <param name="Original">The image the patch was built from: <c>agent0ai/agent-zero:latest</c>.</param>
+/// <param name="Patched">The patch: <c>agent0ai/agent-zero:latest-patched</c>.</param>
+/// <param name="Found">Both are on this machine, and were read.</param>
+/// <param name="Changes">What changed, the system's packages first, then each Python environment's libraries.</param>
+/// <param name="Dockerfile">The Dockerfile the patch was last built by; empty when it is not kept.</param>
+/// <param name="Message">Why there is nothing to compare, or why the reasons are missing (OSV.dev not reached); empty otherwise.</param>
+public sealed record PatchChanges(string Original, string Patched, bool Found, IReadOnlyList<PatchChange> Changes, string Dockerfile = "", string Message = "");
+
+/// <summary>A package the patch changed, and why.</summary>
+/// <param name="Kind"><see cref="System"/> or <see cref="Python"/>.</param>
+/// <param name="Where">A system package's distribution (<c>Debian:12</c>); a Python library's interpreter (<c>/opt/venv-a0/bin/python3.12</c>).</param>
+/// <param name="Before">Its version in the image; empty for one the patch brought.</param>
+/// <param name="After">Its version in the patch; empty for one the patch took out.</param>
+/// <param name="Fixes">The vulnerabilities of it the image has and the patch no longer has: why it changed.</param>
+/// <param name="Open">How many of its vulnerabilities the patch still has: no version fixes them yet.</param>
+/// <param name="Reason">Why it changed when it fixed nothing: the system's upgrade took it to a newer version, or a library raised needed it.</param>
+public sealed record PatchChange(string Kind, string Where, string Package, string Before, string After, IReadOnlyList<ImageAdvisory> Fixes, int Open, string Reason)
+{
+    public const string System = "system";
+    public const string Python = "python";
+}
+
 /// <summary>A library installed as a build for one variant: <c>torch</c> <c>2.4.0+cpu</c>.</summary>
 /// <param name="Library">Its name, as PyPI compares them.</param>
 /// <param name="Version">Its version, the variant after the <c>+</c>.</param>

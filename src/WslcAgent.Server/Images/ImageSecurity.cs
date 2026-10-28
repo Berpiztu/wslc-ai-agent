@@ -497,6 +497,109 @@ public sealed partial class ImageSecurity(
             PatchCheck: ImagePatches.Check(pythons, [.. files.Select(file => new ImageTextFile(file.Name, file.Version))], advisories));
     }
 
+    /// <summary>
+    /// What a patch changed (<see cref="PatchChanges"/>), <paramref name="image"/>
+    /// the image or its patch: the packages of each, as read and kept under
+    /// their ids (read now when they were not), compared, the system's by name
+    /// and each Python environment's by library; and why each changed: the
+    /// vulnerabilities OSV.dev knows of it in the image that the patch no
+    /// longer has, compared by advisory, so no version order of any
+    /// distribution is guessed at. One that fixed nothing changed with the
+    /// system's upgrade, or with a library raised.
+    /// </summary>
+    public async Task<PatchChanges> ChangesAsync(string image, CancellationToken cancellationToken = default)
+    {
+        var original = ImageReference.Unpatched(image.Trim());
+        var patched = ImagePatches.Named(original);
+        var (patchedId, _, _) = await OriginAsync(patched, cancellationToken);
+        if (patchedId is null)
+        {
+            return new PatchChanges(original, patched, false, [], Message: $"{patched} is not on this machine: {original} has not been patched.");
+        }
+
+        var (originalId, _, _) = await OriginAsync(original, cancellationToken);
+        if (originalId is null)
+        {
+            return new PatchChanges(original, patched, false, [],
+                Message: $"{original}, the image {patched} was built from, is no longer on this machine: what the patch changed cannot be read against it.");
+        }
+
+        var before = await PackagesAsync(original, originalId, cancellationToken) ?? [];
+        var after = await PackagesAsync(patched, patchedId, cancellationToken) ?? [];
+        var (beforePackages, _, beforePro, _, _) = Split(before);
+        var (afterPackages, _, afterPro, _, _) = Split(after);
+        List<ImageVulnerability> had = [], left = [];
+        var message = "";
+        try
+        {
+            had = Reachable(await OsvAsync(beforePackages ?? [], cancellationToken), beforePro);
+            left = Reachable(await OsvAsync(afterPackages ?? [], cancellationToken), afterPro);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException && !cancellationToken.IsCancellationRequested)
+        {
+            message = $"OSV.dev could not be reached ({ex.Message}): the changes are listed without the vulnerabilities they fixed.";
+        }
+
+        var changes = new List<PatchChange>();
+        changes.AddRange(Compared(PatchChange.System, SystemOf(beforePackages), SystemOf(afterPackages), had, left));
+        changes.AddRange(Compared(PatchChange.Python, LibrariesByEnvironment(before), LibrariesByEnvironment(after), had, left));
+        return new PatchChanges(original, patched, true, changes, Message: message);
+    }
+
+    /// <summary>The system's packages, by name: each one's distribution and version.</summary>
+    private static Dictionary<(string Where, string Package), string> SystemOf(List<Installed>? packages) =>
+        (packages ?? []).Where(package => package.Ecosystem != Installed.PyPI)
+            .GroupBy(package => (package.Ecosystem, package.Name))
+            .ToDictionary(package => package.Key, package => package.First().Version);
+
+    /// <summary>Each Python environment's libraries, by interpreter and library: each one's version (<see cref="Installed.PythonEnvironment"/>).</summary>
+    private static Dictionary<(string Where, string Package), string> LibrariesByEnvironment(List<Installed> read) =>
+        read.Where(entry => entry.Ecosystem == Installed.PythonEnvironment && entry.Version.Contains("==", StringComparison.Ordinal))
+            .Select(entry => (Where: entry.Name, Pair: entry.Version.Split("==", 2)))
+            .GroupBy(entry => (entry.Where, entry.Pair[0]))
+            .ToDictionary(entry => entry.Key, entry => entry.First().Pair[1]);
+
+    /// <summary>
+    /// What changed between <paramref name="before"/> and <paramref name="after"/>,
+    /// each with the vulnerabilities of it the image had and the patch has not
+    /// (by advisory), how many it still has, and, when it fixed nothing, why it
+    /// changed all the same.
+    /// </summary>
+    private static IEnumerable<PatchChange> Compared(string kind, Dictionary<(string Where, string Package), string> before,
+        Dictionary<(string Where, string Package), string> after, List<ImageVulnerability> had, List<ImageVulnerability> left)
+    {
+        bool Of(ImageVulnerability vulnerability, string package) => kind == PatchChange.Python
+            ? vulnerability.Ecosystem == Installed.PyPI && Normalized(vulnerability.Package) == Normalized(package)
+            : vulnerability.Ecosystem != Installed.PyPI && vulnerability.Package == package;
+
+        foreach (var key in before.Keys.Union(after.Keys).OrderBy(key => key.Where, StringComparer.Ordinal).ThenBy(key => key.Package, StringComparer.OrdinalIgnoreCase))
+        {
+            var was = before.GetValueOrDefault(key, "");
+            var now = after.GetValueOrDefault(key, "");
+            if (was == now)
+            {
+                continue;
+            }
+
+            var open = left.Where(vulnerability => Of(vulnerability, key.Package)).Select(vulnerability => vulnerability.Advisory).ToHashSet(StringComparer.Ordinal);
+            var fixes = had.Where(vulnerability => Of(vulnerability, key.Package) && !open.Contains(vulnerability.Advisory))
+                .DistinctBy(vulnerability => vulnerability.Advisory)
+                .OrderByDescending(vulnerability => Array.IndexOf(SeverityOrder, vulnerability.Severity))
+                .Select(vulnerability => vulnerability.ToAdvisory())
+                .ToList();
+            var reason = (kind, was.Length == 0, now.Length == 0) switch
+            {
+                (PatchChange.System, true, _) => "brought in by the system's upgrade, a package a newer one needs",
+                (PatchChange.System, _, true) => "taken out by the system's upgrade",
+                (PatchChange.System, _, _) => "upgraded with the system's packages: a newer version was published",
+                (_, true, _) => "brought in with a library the patch raised, which needs it",
+                (_, _, true) => "taken out by the patch",
+                _ => "raised by the patch, or with a library it raised, which needs it",
+            };
+            yield return new PatchChange(kind, key.Where, key.Package, was, now, fixes, open.Count, reason);
+        }
+    }
+
     /// <summary>The image's packages, from what was read under its id already, or read now and kept; null for an image with none to read. The kernel is left out (<see cref="WithoutKernel"/>).</summary>
     private async Task<List<Installed>?> PackagesAsync(string image, string? id, CancellationToken cancellationToken)
     {
@@ -523,7 +626,9 @@ public sealed partial class ImageSecurity(
     /// carries uv came to be read (<see cref="Installed.Command"/>); 3 when the
     /// environment of each Python library came to be read
     /// (<see cref="Installed.PythonEnvironment"/>, <see cref="Installed.PythonVenv"/>),
-    /// and a requirements file in a cache to be left out.
+    /// and a requirements file in a cache to be left out; 4 when each library's
+    /// version in its environment came to be read, for a build for one variant
+    /// (<c>torch 2.4.0+cpu</c>) and what a patch changed in each.
     /// </summary>
     internal const string ReadRule = "4";
 

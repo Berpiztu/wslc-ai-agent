@@ -234,7 +234,8 @@ die.
   `container_backups` (what is under way and every backup written),
   `restore_container` (gated: its image loaded, its volumes replaced, and with
   `config` the container made again, stopped).
-- **Images**: `list_images`, `inspect_image`, `image_vulnerabilities`, `pull_image`, `tag_image`,
+- **Images**: `list_images`, `inspect_image`, `image_vulnerabilities`, `image_patch_changes`
+  (what a Zaindari patch changed from its image, package by package, and the CVEs each change fixed), `pull_image`, `tag_image`,
   `push_image` (needs a registry login done by the operator) and `save_image`
   (writes a tar on the **agent's** host, at a path on that machine).
 - **Volumes and networks**: `list_volumes`, `create_volume`, `inspect_volume`,
