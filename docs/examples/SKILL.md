@@ -86,11 +86,11 @@ rather than guessing the wider reading.
 
 ## 5. Confirmation policy
 
-Eleven tools change something that cannot be undone by the same tool, or put a
+Twelve tools change something that cannot be undone by the same tool, or put a
 container on the internet, and are gated: `remove_container`,
 `kill_container`, `exec_in_container`, `stop_session`, `remove_image`,
 `remove_volume`, `remove_network`, `prune_images`, `prune_volumes`,
-`restore_volume` and `publish_container_port`. **They are off unless the operator turned them on**, so if
+`restore_volume`, `restore_container` and `publish_container_port`. **They are off unless the operator turned them on**, so if
 they are not in your tool list, this agent does not do those things: say so
 and stop. **The rule: a gated tool runs only after the user has
 approved that exact action, in person.** Not because the request was clear,
@@ -225,12 +225,22 @@ die.
 - **Keep it running across reboots**: `set_restart_policy` with
   `unless-stopped` or `always`. This is agent-managed, not a runtime flag;
   `no` turns it off.
+- **Container backups**: `backup_container` (what: any of `config`, its
+  settings, `image` and `volumes`, with commas between; empty for its
+  settings'; its volumes need every container that uses them stopped, it
+  among them: pass `stop=true` only when the user agreed to stop them, and they are
+  started again when it ends; a folder on the **agent's** host, in the
+  background),
+  `container_backups` (what is under way and every backup written),
+  `restore_container` (gated: its image loaded, its volumes replaced, and with
+  `config` the container made again, stopped).
 - **Images**: `list_images`, `inspect_image`, `image_vulnerabilities`, `pull_image`, `tag_image`,
   `push_image` (needs a registry login done by the operator) and `save_image`
   (writes a tar on the **agent's** host, at a path on that machine).
 - **Volumes and networks**: `list_volumes`, `create_volume`, `inspect_volume`,
   `volume_containers` (who uses it); `backup_volume` (a `.tar.gz` in the volume's
-  backup folder on the **agent's** host, in the background), `volume_backups` (what is under
+  backup folder on the **agent's** host, in the background; `stop=true` once
+  the user agreed to stop the containers that use it), `volume_backups` (what is under
   way and every backup written), `restore_volume` (gated: the volume's contents
   replaced, or the volume created); `list_networks`, `inspect_network`,
   `network_topology` (the whole map: who is attached to what, with addresses),

@@ -21,8 +21,13 @@
    saves, while its file names this image. A patch is never refused; if
    it does not work, View & edit puts a container back on the image it had.
    The agent does the rest: the title bar's activity line follows it, step
-   by step, to its end (PatchActivity). Its size is the same whatever it
-   lists: the rows and the containers scroll in boxes of their own. *@
+   by step, to its end (PatchActivity). Before anything is chosen Zaindari
+   says what it thinks of patching the image's Python libraries (PatchCheck):
+   patchable, with care and why, or not and why; and Try runs the patch's
+   Python lines in a container of the image, nothing written, to say what
+   each would change, or why it would fail, before it is built. Its size is
+   the same whatever it lists: the rows, the containers and what Zaindari
+   says scroll in boxes of their own. *@
 @using WslcAgent.ApiClient
 @inject WslcAgentApi Api
 @inject PatchActivity Patches
@@ -38,6 +43,48 @@
 @if (ImageRemedies.WhatIsLeft(Report.Vulnerabilities) is { Length: > 0 } left)
 {
     <MudAlert Severity="@(Report.Vulnerabilities.Any(v => v.FixedIn.Length > 0) ? Severity.Warning : Severity.Info)" Dense="true" Class="mt-2">@left</MudAlert>
+}
+
+@if (Report.PatchCheck is { } check)
+{
+    <MudAlert Severity="@CheckSeverity(check)" Dense="true" Class="mt-2">
+        <div class="d-flex align-center gap-2">
+            <span class="flex-grow-1">@check.Said</span>
+            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" Disabled="@(_trying || PythonLines().Count == 0)"
+                       OnClick="TryAsync">Try the patch</MudButton>
+        </div>
+    </MudAlert>
+    <div class="wslc-patch-check mt-1">
+        @foreach (var note in check.Notes)
+        {
+            <MudText Typo="Typo.caption">• @note</MudText>
+        }
+        @if (_trying)
+        {
+            <MudProgressLinear Indeterminate="true" Class="mt-1" />
+        }
+        else if (_tried is { } tried)
+        {
+            <MudText Typo="Typo.caption" Class="@ImageSecurityFlow.TextClass(tried.Ok ? Color.Success : Color.Error)">
+                <b>@(tried.Ok ? "Tried: it would install. What it would change:" : "Tried: it would fail.")</b>
+            </MudText>
+            @foreach (var step in tried.Steps)
+            {
+                @if (step.Error.Length > 0)
+                {
+                    <MudText Typo="Typo.caption" Class="@ImageSecurityFlow.TextClass(Color.Error)">@step.Error</MudText>
+                }
+                @foreach (var warning in step.Warnings)
+                {
+                    <MudText Typo="Typo.caption" Class="@ImageSecurityFlow.TextClass(Color.Warning)">@warning</MudText>
+                }
+                @foreach (var change in step.Changes)
+                {
+                    <MudText Typo="Typo.caption">@change</MudText>
+                }
+            }
+        }
+    </div>
 }
 
 @* Two columns, one under the other on a narrow screen: the Dockerfile, the requirements.txt
@@ -90,14 +137,15 @@
 
     @* The rows: each library line of the image's requirements files, and each vulnerable library
        they do not name, with what to do with it. A vulnerable one in the colour of what it needs;
-       one taken out red and struck through. All to latest chooses the latest for every row. *@
+       one taken out red and struck through. Raise the vulnerable raises every row a version fixes;
+       taking one to its latest is chosen row by row. *@
     <div class="wslc-patch-requirements-column">
         @* The file the rows write: the image's own, or, when it has none, a new one the patch copies in
            (NoFile); no title when there is no row, since there is then no file at all. *@
         <div class="d-flex align-center gap-1">
             <MudText Typo="Typo.caption" Class="flex-grow-1"><b>@(_rows.Count == 0 ? "" : Files.Count > 0 ? TargetPath : "A new requirements.txt, for these dependencies")</b></MudText>
-            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" Disabled="@(_rows.Count == 0)"
-                       OnClick="AllToLatest">All to latest</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" Disabled="@(!_rows.Any(row => row.Line.Suggested.Length > 0))"
+                       OnClick="RaiseVulnerable">Raise the vulnerable</MudButton>
         </div>
         <div class="wslc-patch-requirements">
             @if (_rows.Count == 0)
@@ -166,6 +214,10 @@
     /// <summary>The lines the choices last wrote into the Dockerfile, taken away again before the next ones are written.</summary>
     private List<string> _written = [];
 
+    /// <summary>The patch's Python lines being tried, and what trying them said; forgotten when a choice changes them.</summary>
+    private bool _trying;
+    private PatchDryRun? _tried;
+
     private IReadOnlyList<ImageTextFile> Files => Report.RequirementFiles ?? [];
 
     /// <summary>The file the rows are written into first: the image's first requirements file, or <see cref="NoFile"/>.</summary>
@@ -223,23 +275,63 @@
     /// <summary>PyPI's names compare as PEP 503 says: case and <c>_</c>, <c>-</c>, <c>.</c> alike.</summary>
     private static string Normalized(string name) => name.Trim().ToLowerInvariant().Replace('_', '-').Replace('.', '-');
 
-    /// <summary>Every row to its latest version, written into the Dockerfile at once, as one choice is.</summary>
-    private void AllToLatest()
+    /// <summary>
+    /// Every row a version fixes raised to it, written into the Dockerfile at
+    /// once, as one choice is; the rest as they were. Never every row to its
+    /// latest: a line its authors pin has its reason (agent-zero's
+    /// <c>pyreqwest-impersonate==0.5.3</c>, the last with a wheel), so that is
+    /// chosen row by row.
+    /// </summary>
+    private void RaiseVulnerable()
     {
         for (var at = 0; at < _rows.Count; at++)
         {
-            _choices[at] = Latest;
+            if (_rows[at].Line.Suggested.Length > 0)
+            {
+                _choices[at] = Raise;
+            }
         }
 
         WriteRequirements();
     }
 
+    private static Severity CheckSeverity(PatchCheck check) => check.Verdict switch
+    {
+        PatchCheck.Clear => Severity.Success,
+        PatchCheck.Care => Severity.Warning,
+        _ => Severity.Error,
+    };
+
+    /// <summary>The patch's Python lines, as the rows wrote them into the Dockerfile, without <c>RUN</c>: what Try runs.</summary>
+    private List<string> PythonLines() =>
+        [.. _written.Where(line => line.StartsWith("RUN uv pip ", StringComparison.Ordinal)).Select(line => line["RUN ".Length..])];
+
+    /// <summary>The patch's Python lines tried in a container of the image, nothing written; a refusal said where its answer goes.</summary>
+    private async Task TryAsync()
+    {
+        _trying = true;
+        _tried = null;
+        try
+        {
+            _tried = await Api.DryRunPatchAsync(new PatchDryRunRequest(Report.Image, PythonLines()));
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _tried = new PatchDryRun([new PatchDryRunStep("", [], [], ex.Message, [])]);
+        }
+        finally
+        {
+            _trying = false;
+        }
+    }
+
     /// <summary>
     /// The requirements files the choices change, rewritten: a line raised to
     /// the version that fixes it, taken to its latest (its pin taken off), or
-    /// taken out; a dependency raised or taken to its latest added to the first
-    /// file. Comments, options and the rest of each file as they were. Each with
-    /// the plain name it goes beside the Dockerfile by.
+    /// taken out, its condition kept (<c>; sys_platform == "win32"</c>); a
+    /// dependency raised or taken to its latest added to the first file.
+    /// Comments, options and the rest of each file as they were. Each with the
+    /// plain name it goes beside the Dockerfile by.
     /// </summary>
     private List<(string Path, string Name, string Text)> Rewritten()
     {
@@ -273,10 +365,10 @@
                 switch (Choice(at))
                 {
                     case Raise when _rows[at].Line.Suggested.Length > 0:
-                        lines.Add(_rows[at].Line.Suggested);
+                        lines.Add(WithCondition(_rows[at].Line.Suggested, said));
                         break;
                     case Latest:
-                        lines.Add(_rows[at].Line.Library);
+                        lines.Add(WithCondition(_rows[at].Line.Library, said));
                         break;
                     case TakeOut:
                         break;
@@ -305,8 +397,26 @@
     private List<string> TakenOut() =>
         [.. _rows.Select((row, at) => (Row: row, Choice: Choice(at)))
             .Where(chosen => chosen.Choice == TakeOut)
-            .Select(chosen => chosen.Row.Line.Library.Split('[')[0])
+            .Select(chosen => NameOf(chosen.Row.Line.Library))
             .Distinct(StringComparer.OrdinalIgnoreCase)];
+
+    /// <summary>A library's name without its extras: <c>uvicorn</c> of <c>uvicorn[standard]</c>.</summary>
+    private static string NameOf(string library) => library.Split('[')[0];
+
+    /// <summary>A line rewritten with the condition the old one had, if any: <c>pywinpty; sys_platform == "win32"</c>.</summary>
+    private static string WithCondition(string line, string said) =>
+        said.IndexOf(';') is var at and >= 0 ? $"{line}; {said[(at + 1)..].Trim()}" : line;
+
+    /// <summary>
+    /// What the rows raise or take to their latest, each library once: its
+    /// name, what installs it (the line that fixes it, or the library alone),
+    /// and whether it is taken to its latest.
+    /// </summary>
+    private List<(string Library, string Wanted, bool ToLatest)> Raised() =>
+        [.. _rows.Select((row, at) => (Row: row, Choice: Choice(at)))
+            .Where(chosen => chosen.Choice == Latest || (chosen.Choice == Raise && chosen.Row.Line.Suggested.Length > 0))
+            .Select(chosen => (Library: NameOf(chosen.Row.Line.Library), Wanted: chosen.Choice == Raise ? chosen.Row.Line.Suggested : chosen.Row.Line.Library, ToLatest: chosen.Choice == Latest))
+            .DistinctBy(chosen => Normalized(chosen.Library))];
 
     /// <summary>The new file, as it will be, to read: each with its path when there are several; the old one when nothing changes yet.</summary>
     private string Preview()
@@ -329,26 +439,61 @@
     /// <summary>
     /// The Dockerfile told what the rows chose, each time one is chosen: the
     /// lines the last choices wrote taken away, then each new file copied over
-    /// the old one and installed from, and what was taken out uninstalled, since
-    /// installing from a file never takes anything out; none when every row is
-    /// kept. Its lines go before the last USER, so they run as root; what the
-    /// user wrote in it stays as they wrote it.
+    /// the old one, so the image says what it holds; none when every row is
+    /// kept. What is installed is the libraries chosen, by name, never a file
+    /// whole: installing a file installs every line of it not there yet (a
+    /// tool's file, SearXNG's development one, would bring Sphinx and Selenium
+    /// into the application's environment). Each library in every environment
+    /// that holds it, as the image has them (<see cref="ImageVulnerabilities.PythonEnvironments"/>),
+    /// a command per environment, with the index of its builds for one variant
+    /// (<see cref="PythonEnvironment.Sources"/>), so <c>torch +cpu</c> stays one;
+    /// a library installed nowhere is not installed, nor a build for one
+    /// variant whose index is not known, and the Dockerfile says so; a library
+    /// taken out uninstalled where it is. A file none of whose libraries is
+    /// installed (a tool's) is not copied either. Its lines go before the last
+    /// USER, so they run as root; what the user wrote in it stays as they
+    /// wrote it.
     /// </summary>
     private void WriteRequirements()
     {
+        _tried = null;
         var gone = _written.ToHashSet(StringComparer.Ordinal);
         _dockerfile = string.Join('\n', _dockerfile.ReplaceLineEndings("\n").Split('\n').Where(line => !gone.Contains(line.Trim())));
 
+        var environments = Report.PythonEnvironments ?? [];
         var lines = new List<string>();
         foreach (var file in Rewritten())
         {
-            lines.Add($"COPY {file.Name} {file.Path}");
-            lines.Add($"RUN {Report.PythonInstaller} -r {file.Path}");
+            lines.Add(PythonEnvironment.Of(environments, LibrariesOf(file.Text)) is null
+                ? $"# {file.Path}: none of its libraries is installed in the image, so it is left as it is"
+                : $"COPY {file.Name} {file.Path}");
         }
 
-        if (TakenOut() is { Count: > 0 } takenOut)
+        var raised = Raised();
+        if (raised.Where(chosen => !environments.Any(environment => environment.Holds(chosen.Library))).Select(chosen => chosen.Library).ToList() is { Count: > 0 } nowhere)
         {
-            lines.Add($"RUN {Report.PythonUninstaller} {string.Join(' ', takenOut)}");
+            lines.Add($"# not installed in the image, so not installed by the patch: {string.Join(", ", nowhere)}");
+        }
+
+        foreach (var environment in environments)
+        {
+            var held = raised.Where(chosen => environment.Holds(chosen.Library)).ToList();
+            foreach (var build in held.Select(chosen => environment.BuildOf(chosen.Library)).OfType<PythonBuild>().Where(build => build.Index.Length == 0))
+            {
+                lines.Add($"# {build.Library} {build.Version} in {environment.Python}: a build for one variant, from an index not known, so it is left as it is");
+            }
+
+            var installed = held.Where(chosen => environment.BuildOf(chosen.Library) is not { Index.Length: 0 }).ToList();
+            if (installed.Count > 0)
+            {
+                var latest = string.Concat(installed.Where(chosen => chosen.ToLatest).Select(chosen => $" {Report.PythonUpgradeOne} {chosen.Library}"));
+                lines.Add($"RUN {Report.PythonInstaller} {environment.Flags}{environment.Sources}{latest} {string.Join(' ', installed.Select(chosen => $"\"{chosen.Wanted}\""))}");
+            }
+
+            if (TakenOut().Where(environment.Holds).ToList() is { Count: > 0 } taken)
+            {
+                lines.Add($"RUN {Report.PythonUninstaller} {environment.Flags} {string.Join(' ', taken)}");
+            }
         }
 
         // uv first, for an image that does not carry it: every line above installs with it.
@@ -360,6 +505,13 @@
         lines.ForEach(Insert);
         _written = lines;
     }
+
+    /// <summary>The libraries a requirements file names, a line each: its name before any extras, version or marker; comments and options (<c>-r</c>, <c>--index-url</c>) name none.</summary>
+    private static IEnumerable<string> LibrariesOf(string text) =>
+        text.ReplaceLineEndings("\n").Split('\n')
+            .Select(line => line.Split('#')[0].Trim())
+            .Where(line => line.Length > 0 && char.IsLetterOrDigit(line[0]))
+            .Select(line => string.Concat(line.TakeWhile(c => char.IsLetterOrDigit(c) || c is '.' or '_' or '-')));
 
     /// <summary>A line added once to the Dockerfile, before its last USER (the image's own user given back), so it runs as root.</summary>
     private void Insert(string line)

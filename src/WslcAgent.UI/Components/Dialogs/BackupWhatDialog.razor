@@ -1,0 +1,29 @@
+@* What a container's backup holds, asked before it is made: its parts ticked
+   (BackupParts), as its settings tick them to begin with, to change for this
+   backup alone. Cancel and Back up in the title row. Returns the parts;
+   nothing when cancelled. *@
+
+<MudDialog>
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Cancel</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Backup"
+                       OnClick="@(() => Dialog.Close(DialogResult.Ok(_what)))">Back up</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <BackupParts Value="@_what" ValueChanged="@((string what) => _what = what)" />
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">Its volumes are backed up with the containers that use them stopped.</MudText>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private string _what = BackupWhat.All;
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    /// <summary>The parts ticked to begin with: its settings'.</summary>
+    [Parameter, EditorRequired] public string What { get; set; } = "";
+
+    protected override void OnInitialized() => _what = BackupWhat.PartsOf(What) is { Count: > 0 } parts ? BackupWhat.Of(parts) : BackupWhat.All;
+}

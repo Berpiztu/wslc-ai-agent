@@ -1,0 +1,51 @@
+@* The parts a container's backup holds, a tick each (BackupWhat): All first,
+   which ticks every one and shows the dash while only some are, then
+   Configuration, Image and Volumes, any of them; the last one ticked cannot
+   be unticked, so a backup always holds something. A level with one below
+   has Default first: ticked, the level below's parts show and cannot be
+   changed; unticked, the level's own, starting from those. *@
+
+<div class="@Class">
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">What to back up</MudText>
+    <div class="d-flex flex-wrap align-center gap-3">
+        @if (Inherited is not null)
+        {
+            <SquareCheckBox Value="@IsDefault" ValueChanged="SetDefaultAsync" Label="Default" />
+        }
+        <SquareCheckBox Value="@(Shown.Count == BackupWhat.OfContainer.Count)" Partly="@(Shown.Count < BackupWhat.OfContainer.Count)"
+                        ValueChanged="TickAllAsync" Label="All" Disabled="@(IsDefault || Shown.Count == BackupWhat.OfContainer.Count)" />
+        @foreach (var part in BackupWhat.OfContainer)
+        {
+            <SquareCheckBox Value="@Shown.Contains(part)" ValueChanged="@((bool on) => TickAsync(part, on))" Label="@BackupWhat.SaidPart(part)"
+                            Disabled="@(IsDefault || (Shown.Count == 1 && Shown.Contains(part)))" />
+        }
+    </div>
+</div>
+
+@code {
+    /// <summary>The level's own parts (<see cref="BackupWhat.Of"/>); empty for Default, or, with no level below, for every part.</summary>
+    [Parameter] public string Value { get; set; } = "";
+
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    /// <summary>The level below's parts, what Default gives; null where there is none below (the agent's default, a backup's own question).</summary>
+    [Parameter] public string? Inherited { get; set; }
+
+    [Parameter] public string Class { get; set; } = "";
+
+    private bool IsDefault => Inherited is not null && BackupWhat.PartsOf(Value).Count == 0;
+
+    /// <summary>The parts ticked as they show: the level's own, else the level below's, else every one.</summary>
+    private IReadOnlyList<string> Shown =>
+        BackupWhat.PartsOf(Value) is { Count: > 0 } own ? own
+        : BackupWhat.PartsOf(Inherited) is { Count: > 0 } below ? below
+        : BackupWhat.OfContainer;
+
+    /// <summary>Default ticked gives the level below's again; unticked, the level's own start as those.</summary>
+    private Task SetDefaultAsync(bool on) => ValueChanged.InvokeAsync(on ? BackupChoice.Default : BackupWhat.Of(Shown));
+
+    private Task TickAllAsync(bool on) => on ? ValueChanged.InvokeAsync(BackupWhat.All) : Task.CompletedTask;
+
+    private Task TickAsync(string part, bool on) =>
+        ValueChanged.InvokeAsync(BackupWhat.Of(on ? Shown.Append(part) : Shown.Where(shown => shown != part)));
+}

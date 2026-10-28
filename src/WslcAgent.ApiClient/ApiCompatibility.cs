@@ -21,10 +21,14 @@ namespace WslcAgent.ApiClient;
 public static class ApiCompatibility
 {
     /// <summary>The level of the API this build speaks.</summary>
-    public const int Level = 37;
+    public const int Level = 40;
 
-    /// <summary>The oldest client level this agent still serves (sent in <c>/health</c>).</summary>
-    public const int MinimumClientLevel = 1;
+    /// <summary>
+    /// The oldest client level this agent still serves (sent in <c>/health</c>):
+    /// 38 since a container's backup became a job of the agent's, its old
+    /// export, poll and download endpoints gone.
+    /// </summary>
+    public const int MinimumClientLevel = 38;
 
     /// <summary>The oldest agent level this client still works with.</summary>
     public const int MinimumAgentLevel = 1;

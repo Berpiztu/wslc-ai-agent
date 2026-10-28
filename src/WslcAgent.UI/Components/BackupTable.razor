@@ -1,0 +1,122 @@
+@* The Backups tab of the window of backups (BackupsDialog): a table as every
+   list is (ListGrid), the newest first, each row with Restore and Delete; the
+   table takes the height left and only its rows scroll. One's own (Name
+   given): when, what it holds (a container's), size and its file or folder.
+   All's: the same with whose it is first. A backup or restore under way
+   stands above them, as a row on its way does in a list page's table: the
+   bar in its first cell, with its log and its cancel; one that failed stays
+   there, saying why, until it is dismissed. Back up and Restore from a file
+   are the window's verbs, in its title row. *@
+@inject WslcAgentApi Api
+@inject IDialogService Dialogs
+
+<ListGrid TItem="BackupRow" Items="Rows" EmptyText="@(Name is { } name ? $"No backup of {name} yet." : $"No backup of any {Kind.Noun} yet.")">
+    <Columns>
+        @if (Name is null)
+        {
+            <PropertyColumn T="BackupRow" TProperty="string" Property="r => r.Name" Title="@Kind.Title" StickyLeft="true" HeaderClass="@GridColumn.Width(24)" CellClass="@GridColumn.Width(24)">
+                <CellTemplate>
+                    @if (context.Item.Job is { } job)
+                    {
+                        <BackupRing Kind="Kind" Job="job" Row="true" Changed="Changed" />
+                    }
+                    else
+                    {
+                        @context.Item.Name
+                    }
+                </CellTemplate>
+            </PropertyColumn>
+        }
+        <PropertyColumn T="BackupRow" TProperty="DateTimeOffset" Property="r => r.When" Title="When" StickyLeft="@(Name is not null)" HeaderClass="@GridColumn.Width(16)" CellClass="@GridColumn.Width(16)">
+            <CellTemplate>
+                @if (Name is not null && context.Item.Job is { } job)
+                {
+                    <BackupRing Kind="Kind" Job="job" Row="true" Name="@BackupFlow.Said(job.Kind)" Changed="Changed" />
+                }
+                else
+                {
+                    @context.Item.When.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                }
+            </CellTemplate>
+        </PropertyColumn>
+        @if (Kind.InParts)
+        {
+            <PropertyColumn T="BackupRow" TProperty="string" Property="r => r.What" Title="What" HeaderClass="@GridColumn.Width(8)" CellClass="@GridColumn.Width(8)">
+                <CellTemplate>@BackupWhat.Said(context.Item.What)</CellTemplate>
+            </PropertyColumn>
+        }
+        <PropertyColumn T="BackupRow" TProperty="long" Property="r => r.Backup == null ? 0 : r.Backup.Bytes" Title="Size" HeaderClass="@GridColumn.Number(8)" CellClass="@GridColumn.Number(8)">
+            <CellTemplate>@(context.Item.Backup is { } backup ? ChartBytes.Compact(backup.Bytes) : "")</CellTemplate>
+        </PropertyColumn>
+        @* One moved or deleted since says so before its path, in the error colour, and cannot be restored. *@
+        <PropertyColumn T="BackupRow" TProperty="string" Property="r => r.Path" Title="@(Kind.InFolders ? "Folder" : "File")" HeaderClass="@GridColumn.Stretch(40)" CellClass="@($"{GridColumn.Stretch(40)} wslc-mono")">
+            <CellTemplate>
+                @if (context.Item.Backup is { Exists: false })
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Color="Color.Error" Size="Size.Small" title="No longer there" />
+                }
+                @context.Item.Path
+            </CellTemplate>
+        </PropertyColumn>
+    </Columns>
+    <Actions>
+        <TemplateColumn T="BackupRow" Title="Actions" Sortable="false" Resizable="false" DragAndDropEnabled="false" StickyRight="true" HeaderClass="@GridColumn.Actions" CellClass="@GridColumn.Actions">
+            <CellTemplate>
+                @if (context.Item.Backup is { } backup)
+                {
+                    <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center">
+                        <MudIconButton Icon="@Icons.Material.Filled.CloudDownload" Size="Size.Small" Color="Color.Warning" title="@($"Restore into {backup.Name}")"
+                                       Disabled="@(!backup.Exists || Running(backup.Name))" OnClick="@(() => RestoreAsync(backup))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="Delete this backup"
+                                       Disabled="@(Running(backup.Name))" OnClick="@(() => DeleteAsync(backup))" />
+                    </MudStack>
+                }
+            </CellTemplate>
+        </TemplateColumn>
+    </Actions>
+</ListGrid>
+<MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+    @* The same words for every one: a note that names it would take another line for a longer name and move the table. *@
+    @Note
+</MudText>
+
+@code {
+    [Parameter, EditorRequired] public BackupKind Kind { get; set; } = default!;
+
+    /// <summary>Whose backups these are; null for All, every one's, with whose it is in a column.</summary>
+    [Parameter] public string? Name { get; set; }
+
+    /// <summary>The jobs under way or just ended: of <see cref="Name"/>, or of all of them.</summary>
+    [Parameter] public IReadOnlyList<BackupJob> Jobs { get; set; } = [];
+
+    /// <summary>The backups: of <see cref="Name"/>, or of all of them.</summary>
+    [Parameter] public IReadOnlyList<BackupEntry> Backups { get; set; } = [];
+
+    /// <summary>A restore started, a backup deleted, a job cancelled or dismissed: the window reads everything again.</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private IReadOnlyList<BackupRow> Rows => BackupRow.Of(Jobs, Backups);
+
+    /// <summary>Its backup or restore is under way: nothing of its own can be restored or deleted meanwhile.</summary>
+    private bool Running(string name) => BackupFlow.For(Jobs, name) is { Running: true };
+
+    private string Note => Kind.InFolders
+        ? "Back up writes a folder <container>-<date> in the backup folder. Restore puts back what it holds, the container and its volumes' users stopped first; Delete removes the folder."
+        : "Back up writes <volume>-<date>.tar.gz in the backup folder. Restore replaces what the volume holds with the backup's contents, its containers stopped first; Delete removes the file.";
+
+    private async Task RestoreAsync(BackupEntry backup)
+    {
+        if (await BackupFlow.RestoreIntoAsync(Dialogs, Api, Kind, backup.Name, backup.Path))
+        {
+            await Changed.InvokeAsync();
+        }
+    }
+
+    private async Task DeleteAsync(BackupEntry backup)
+    {
+        if (await BackupFlow.DeleteAsync(Dialogs, Api, Kind, backup))
+        {
+            await Changed.InvokeAsync();
+        }
+    }
+}

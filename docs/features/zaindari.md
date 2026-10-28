@@ -146,11 +146,27 @@ USER root
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /usr/local/bin/uv
 COPY requirements.txt /backend/requirements.txt
-RUN uv pip install --python "$(command -v python3)" --no-cache -U -r /backend/requirements.txt
-RUN uv pip uninstall --python "$(command -v python3)" python-jose
+RUN uv pip install --no-cache --no-build --python /usr/local/bin/python3.12 "pillow>=13.0.0"
+RUN uv pip uninstall --python /usr/local/bin/python3.12 python-jose
 USER app
 ```
 
+- **Before anything is chosen, Zaindari says what it thinks** of patching
+  the image's Python libraries, read from the image: **patchable**; **with
+  care**, each thing said (Python in several environments, and which; builds
+  for one variant, as `torch 2.4.0+cpu`, which stay one; lines the
+  application's own files pin, with the reason their authors wrote beside
+  them; libraries no version fixes yet); or **not patchable**, and why (none
+  of its vulnerable libraries is in an environment the agent can read). In a
+  box of its own height, so what it says never moves the window.
+- **Try the patch** runs the patch's Python lines before it is built, in a
+  container of the image, with `--dry-run`: nothing is written, and it takes
+  seconds where the build takes minutes. It says what each would change,
+  library by library (`torch 2.4.0+cpu → 2.14.1+cpu`, `new: httpx2 2.16.0`),
+  what calls for care (a build for one variant that would become another,
+  NVIDIA's libraries it would bring, libraries the image does not have), or
+  why it would fail, in uv's own words. A choice changed forgets what was
+  tried.
 - The agent writes it first: `FROM` the image, as root its system packages
   upgraded when one has a fix the image can install (`apk upgrade`, or
   `apt-get update` and `apt-get upgrade`), and its own user given back last.
@@ -160,19 +176,48 @@ USER app
   so is each vulnerable Python library they do not name (a dependency, as
   Pillow under pdfplumber). Each row says what to do with it: **Keep**,
   **Raise** to the version Zaindari names (`pillow==12.2.0` → `pillow>=13.0.0`),
-  **Latest**, or **Take out**, shown red and struck through. **All to
-  latest** chooses the latest for every row. The file is rewritten by the
-  choices, comments and options kept, a dependency added with the version
-  that fixes it, and shown whole under the rows, with a button to copy it to
-  your sources. As each choice is made, the Dockerfile is written by it: the
-  lines that copy the file in over the old one and install from it, and take out
-  what was taken out, put in and taken away again with the choices, so the
-  Dockerfile shown is always what is built; the file goes beside it. The
+  **Latest**, or **Take out**, shown red and struck through. **Raise the
+  vulnerable** raises every row a version fixes; taking one to its latest is
+  chosen row by row, never all at once: a line its authors pin has its reason
+  (agent-zero's `pyreqwest-impersonate==0.5.3`, the last with a wheel). The file is rewritten by the
+  choices, comments, options and each line's condition kept
+  (`; sys_platform == "win32"`), a dependency added with the version that
+  fixes it, and shown whole under the rows, with a button to copy it to your
+  sources. As each choice is made, the Dockerfile is written by it: the lines
+  that copy the file in over the old one, install what was raised and take
+  out what was taken out, put in and taken away again with the choices, so
+  the Dockerfile shown is always what is built; the file goes beside it.
+  What is installed is the libraries chosen, by name, never a file whole:
+  installing a file installs every line of it not there yet, and a tool's
+  file (SearXNG's development one) would bring Sphinx and Selenium into the
+  application's environment. The
   installer is always uv, quicker than pip and never missing as pip is from
-  an environment uv made (Hermes's `/opt/hermes/.venv`): it installs into the
-  Python the image runs as `python3`, its virtual environment's when that
-  comes first in the PATH. An image with no `uv` where its system looks for
-  commands, nor the library, gets it first, copied from Astral's image
+  an environment uv made (Hermes's `/opt/hermes/.venv`). An image may hold
+  several Python environments (agent-zero has its application's virtual
+  environment, SearXNG's, pyenv's and the system's), and the agent reads them
+  from the image: where each library is installed, and which of those folders
+  is a virtual environment (its `pyvenv.cfg`). A library is raised, or taken
+  out, in every environment that holds it, with its interpreter
+  (`--python /opt/venv-a0/bin/python3.12`), and a Python of the system's,
+  which its distribution marks as its own, is told to let it
+  (`--break-system-packages`); one installed nowhere is not installed, and
+  the Dockerfile says so. A file none of whose libraries is installed (a
+  tool's) is not copied either; one in an installer's cache is not listed.
+  Never with `-U`, which takes every library and every one they need to its
+  latest: what is installed and still meets what was asked stays as the
+  image has it, and a library taken to its latest is named
+  (`--upgrade-package fastapi`). Nor ever built from its sources
+  (`--no-build`): only a version with a wheel for the image is taken, so a
+  library whose newer version has its sources alone stays where it is
+  instead of failing the build. A library installed as a build for one
+  variant (agent-zero's `torch 2.4.0+cpu`, which PyPI does not have: its
+  torch is built for CUDA, gigabytes of NVIDIA libraries with it) is read
+  from its version, and its index added to every install in its environment
+  (PyTorch's, `--extra-index-url https://download.pytorch.org/whl/cpu
+  --index-strategy unsafe-best-match`), so a `+cpu` build that has to change,
+  chosen or needed by another, stays one; a build whose index is not known
+  is left as it is, and the Dockerfile says so. An image with no `uv`
+  where its system looks for commands, nor the library, gets it first, copied from Astral's image
   (`COPY --from=ghcr.io/astral-sh/uv:…`). A library raised
   can break the program, which is why it is never done alone. An image with
   no requirements file was installed from files left outside it: its

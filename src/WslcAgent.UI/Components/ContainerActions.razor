@@ -91,7 +91,7 @@
         }
         <MudMenuItem Icon="@Icons.Material.Filled.FileDownload" OnClick="ExportJson">Export JSON</MudMenuItem>
         <MudMenuItem Icon="@Icons.Material.Filled.DataObject" OnClick="ExportFullAsync">Export JSON, full variables</MudMenuItem>
-        <MudMenuItem Icon="@Icons.Material.Filled.Backup" OnClick="BackupAsync">Backup</MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Filled.Backup" OnClick="BackupAsync">Backup &amp; restore</MudMenuItem>
         <MudMenuItem Icon="@Icons.Material.Filled.Bolt" OnClick="@(() => RunAsync(Container.Name, "kill", ct => Api.KillContainerAsync(Container.Id, ct)))">Kill</MudMenuItem>
     </MudMenu>
     <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="Remove"
@@ -263,10 +263,10 @@
         return ClientFileSave.TextAsync(Files, Snackbar, $"{Container.Name}-inspect.json", () => Api.GetContainerInspectJsonAsync(Container.Id));
     }
 
+    /// <summary>Its Backup &amp; restore window, it alone; the page reads its list again after, for what was started there.</summary>
     private async Task BackupAsync()
     {
-        await DialogFlow.ShowPersistentAsync<Dialogs.BackupDialog>(Dialogs, $"Backup — {Container.Name}",
-            new DialogParameters<Dialogs.BackupDialog> { { d => d.Container, Container.Id } });
+        await BackupFlow.ShowAsync(Dialogs, BackupKind.Container, Container.Name);
         await Changed.InvokeAsync();
     }
 

@@ -1,7 +1,7 @@
-@* The log of a volume's backup or restore, in the view logs are read in:
-   each step, the wslc command it ran and what it printed, followed while it
-   runs. Close leaves it running; Cancel, there while it runs, stops it, after
-   asking. *@
+@* The log of a backup or a restore, of a volume or of a container, in the
+   view logs are read in: each step, the wslc command it ran and what it
+   printed, followed while it runs. Close leaves it running; Cancel, there
+   while it runs, stops it, after asking. *@
 @inject WslcAgentApi Api
 @inject IDialogService Dialogs
 @inject ISnackbar Snackbar
@@ -11,7 +11,7 @@
         <DialogTitle Title="@Dialog.Title">
             @if (_job is { Running: true } job)
             {
-                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" OnClick="@(() => VolumeBackupFlow.CancelAsync(Dialogs, Api, Snackbar, job))">Cancel</MudButton>
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" OnClick="@(() => BackupFlow.CancelAsync(Dialogs, Api, Snackbar, Kind, job))">Cancel</MudButton>
             }
             <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Cancel())">Close</MudButton>
         </DialogTitle>
@@ -22,24 +22,26 @@
 </MudDialog>
 
 @code {
-    private VolumeBackupJob? _job;
+    private BackupJob? _job;
 
     [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
 
-    /// <summary>The job on the agent (<c>/volume-backups/{id}</c>).</summary>
+    [Parameter, EditorRequired] public BackupKind Kind { get; set; } = default!;
+
+    /// <summary>The job on the agent (<c>/{kind}-backups/{id}</c>).</summary>
     [Parameter, EditorRequired] public string Job { get; set; } = "";
 
     /// <summary>What the view shows: the job's lines as they are now. Each read also says whether it still runs, for Cancel in the title line.</summary>
     private async Task<string> ReadAsync()
     {
-        VolumeBackupJob job;
+        BackupJob job;
         try
         {
-            job = await Api.GetVolumeBackupJobAsync(Job);
+            job = await Api.GetBackupJobAsync(Kind.Key, Job);
         }
         catch (AgentApiException ex) when (ex.StatusCode == 404)
         {
-            return "This backup or restore is no longer kept by the agent: its end is in the agent's log (Logs).";
+            return "This backup or restore is no longer kept by the agent: its lines are in its Logs tab, and in the agent's log (Logs, Backups).";
         }
 
         if (job.Running != _job?.Running)

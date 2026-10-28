@@ -113,6 +113,11 @@
                                               LogTitle="View the patch's output" CancelTitle="Cancel the patch"
                                               OnLog="@(() => PatchLogAsync(context.Item.Value.PatchJob, patching))" OnCancel="@(() => CancelPatchAsync(context.Item.Value.PatchJob))" />
                             }
+                            else if (BackupFlow.For(_backups, context.Item.Value.Name) is { } backup)
+                            {
+                                @* Its backup or restore, run by the agent: the bar with its log and its cancel; one that failed says why until dismissed. *@
+                                <BackupRing Kind="BackupKind.Container" Job="backup" Row="true" Lead="@Mark(context.Item.Value)" Changed="RefreshAsync" />
+                            }
                             else if (Working.IsBusy(context.Item.Value.Id))
                             {
                                 @* A verb on the container itself, its own or its project's going through
@@ -229,6 +234,9 @@
     private IReadOnlyList<ContainerLaunch> _launches = [];
     private IReadOnlyList<ContainerTransfer> _transfers = [];
 
+    /// <summary>The containers' backups and restores under way or just ended: each on its card, as a ring, and its row, as a bar.</summary>
+    private IReadOnlyList<BackupJob> _backups = [];
+
     /// <summary>The agent's pulls, read only while a container's image update is pulling.</summary>
     private IReadOnlyList<ImagePullState> _pulls = [];
     private readonly HashSet<string> _reportedLaunches = [];
@@ -240,6 +248,7 @@
         _aggregate = response.Aggregate;
         _launches = await Api.GetContainerLaunchesAsync();
         _transfers = await Api.GetContainerTransfersAsync();
+        _backups = (await Api.GetBackupsAsync(BackupKind.Container.Key)).Jobs;
         _pulls = response.Containers.Any(row => row.IsUpdating) ? await Api.GetImagePullsAsync() : [];
         ReportFinishedLaunches();
         var runs = _launches.Where(l => !l.IsProject && !l.Done)
@@ -681,6 +690,10 @@
                             {
                                 @* Zaindari's patch of its image, built by the agent with its window closed: the ring turns until the build ends. *@
                                 <PatchRing Patch="@patching" Job="@c.PatchJob" Status="@ImageSecurityFlow.PatchStatus(c, patching)" OnCancelled="RefreshAsync" />
+                            }
+                            else if (BackupFlow.For(_backups, c.Name) is { } backup)
+                            {
+                                <BackupRing Kind="BackupKind.Container" Job="backup" Changed="RefreshAsync" />
                             }
                             else
                             {

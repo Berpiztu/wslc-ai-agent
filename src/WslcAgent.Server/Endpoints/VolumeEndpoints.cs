@@ -48,7 +48,7 @@ public static class VolumeEndpoints
             .WithName("CloseVolumeFiles");
 
         // Backups and restores: started here, run by the agent, followed by the jobs below.
-        group.MapPost("/{name}/backup", (string name, BackupVolumeRequest request, VolumeBackups backups) => backups.StartBackup(name, request.Folder))
+        group.MapPost("/{name}/backup", (string name, BackupVolumeRequest request, VolumeBackups backups) => backups.StartBackup(name, request.Folder, request.Stop))
             .WithName("BackupVolume");
 
         group.MapPost("/restore", (RestoreVolumeRequest request, VolumeBackups backups) => backups.StartRestore(request.File, request.Volume))
@@ -62,46 +62,7 @@ public static class VolumeEndpoints
             .WithName("RemoveVolume");
 
         // Their own group: under /volumes a literal would hide a volume of that name.
-        var jobs = api.MapGroup("/volume-backups");
-
-        jobs.MapGet("", (VolumeBackups backups) => backups.List())
-            .WithName("VolumeBackups");
-
-        // Where backups go: the default folder and each volume's own. A job's id never reads "settings".
-        jobs.MapGet("/settings", (VolumeBackups backups) => backups.Settings())
-            .WithName("VolumeBackupSettings");
-
-        jobs.MapPut("/settings", (VolumeBackupSettings settings, VolumeBackups backups) => backups.SaveSettings(settings))
-            .WithName("SaveVolumeBackupSettings");
-
-        // The backup and restore lines of the agent's log, of a volume or of every volume. Before /{id}: a literal.
-        jobs.MapGet("/log", (string? volume, VolumeBackups backups) => backups.Log(volume))
-            .WithName("VolumeBackupLog");
-
-        // A backup of the history, by its file, which travels in the query as an image's reference does.
-        jobs.MapDelete("/history", (string path, VolumeBackups backups) =>
-            {
-                backups.DeleteBackup(path);
-                return TypedResults.NoContent();
-            })
-            .WithName("DeleteVolumeBackup");
-
-        jobs.MapGet("/{id}", (string id, VolumeBackups backups) => backups.Get(id))
-            .WithName("VolumeBackupJob");
-
-        jobs.MapPost("/{id}/cancel", (string id, VolumeBackups backups) =>
-            {
-                backups.Cancel(id);
-                return TypedResults.NoContent();
-            })
-            .WithName("CancelVolumeBackupJob");
-
-        jobs.MapDelete("/{id}", (string id, VolumeBackups backups) =>
-            {
-                backups.Dismiss(id);
-                return TypedResults.NoContent();
-            })
-            .WithName("DismissVolumeBackupJob");
+        api.MapBackups<VolumeBackups>("/volume-backups", "Volume");
 
         return api;
     }

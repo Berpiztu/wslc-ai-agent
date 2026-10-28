@@ -6691,6 +6691,14 @@ html[data-wslc-rows~="outlined"] .wslc-files-table {
     overflow-y: auto;
 }
 
+/* What Zaindari says of a patch before it is built, and what trying it said
+   (PatchEditor): a box of its own height, scrolling, so what it says, long or
+   short, never moves the rest of the window. */
+.wslc-patch-check {
+    height: calc(4 * (1.25rem + 2 * 4px));
+    overflow-y: auto;
+}
+
 /* The patch editor (PatchEditor): two columns, the Dockerfile and its
    containers, and the requirements editor; one under the other where the
    window is narrower than two of them. The editor is as tall as the first

@@ -335,8 +335,8 @@ says so) · View files (files slice) · Restart · Open with browser
 (`OpenPortDialog`, every published port as a link; the `PortsLink` opens the
 preferred one) · View browser sessions (browser slice) · Logs · Stats
 (`ContainerStatsDialog`, also the details tab) · Exec (terminal slice) ·
-Export JSON (`/containers/{id}/inspect.json` download) · Backup
-(`BackupDialog`, persistent, the job's steps and Save as…) · Kill.
+Export JSON (`/containers/{id}/inspect.json` download) · Backup & restore
+(`BackupsDialog` on the container alone: its backups, logs and settings) · Kill.
 
 ## 5. Data and behaviour
 

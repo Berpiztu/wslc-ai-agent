@@ -34,7 +34,8 @@ public sealed partial class ContainerService(
     Images.ContainerAudit audit,
     ProjectGaps gaps,
     ILogger<ContainerService> logger,
-    Images.ImageVersions? imageVersions = null) : IContainerService
+    Images.ImageVersions? imageVersions = null,
+    Backups.BusyVolumes? busyVolumes = null) : IContainerService
 {
     private const string MetadataLabel = "com.microsoft.wsl.container.metadata=";
 
@@ -82,8 +83,9 @@ public sealed partial class ContainerService(
 
     /// <summary>
     /// A project's container is not started while a service its own depends
-    /// on does not run in its project (<see cref="ProjectDependencies"/>);
-    /// refused, why is kept for it as a start <c>wslc</c> refused is
+    /// on does not run in its project (<see cref="ProjectDependencies"/>), and
+    /// no container while a volume it uses is being backed up or restored
+    /// (<see cref="Backups.BusyVolumes"/>); refused, why is kept for it as a start <c>wslc</c> refused is
     /// (<see cref="StartFailures"/>), so the container says it in red and its
     /// logs end with it, and is not only told to whoever asked.
     /// </summary>
@@ -92,6 +94,11 @@ public sealed partial class ContainerService(
         try
         {
             await dependencies.RequireRunningAsync(WslcArgs.Require(container, "container"), cancellationToken);
+            if (busyVolumes is { Any: true }
+                && busyVolumes.Why(container, (await InspectAsync(container, cancellationToken)).Mounts.Where(mount => mount.Type == "volume").Select(mount => mount.Source)) is { } why)
+            {
+                throw new InvalidOperationException(why);
+            }
         }
         catch (InvalidOperationException ex)
         {
@@ -163,6 +170,12 @@ public sealed partial class ContainerService(
     /// </summary>
     private async Task<ContainerCreated> LaunchCheckedAsync(ContainerLaunchRequest request, bool start, CancellationToken cancellationToken)
     {
+        // A volume being backed up or restored is not given to a container that starts with it.
+        if (start && busyVolumes?.Why(request.Name.Trim().Length > 0 ? request.Name.Trim() : request.Image, request.Volumes.Select(mount => mount.Split(':')[0])) is { } why)
+        {
+            throw new InvalidOperationException(why);
+        }
+
         var said = await security.GuardLaunchAsync(request.Image, cancellationToken);
         return Noted(await LaunchAsync(request, start, cancellationToken), said);
     }

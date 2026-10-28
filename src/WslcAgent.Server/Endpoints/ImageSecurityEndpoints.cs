@@ -40,6 +40,10 @@ public static class ImageSecurityEndpoints
         api.MapPost("/image-security/patch", (PatchImageRequest request, ImagePatches patches, CancellationToken ct) => patches.StartAsync(request, ct))
             .WithName("PatchImage");
 
+        // The patch's Python lines tried first, in a container of the image, nothing written: what each would change.
+        api.MapPost("/image-security/patch/dry-run", (PatchDryRunRequest request, PatchDryRuns runs, CancellationToken ct) => runs.RunAsync(request, ct))
+            .WithName("DryRunPatch");
+
         // What a person accepted: a vulnerability nobody can mend today, in a part the image does not use,
         // said with its reason and no longer raised while no version fixes it. The image's colour changes
         // at its next check (Zaindari's window, a new container).

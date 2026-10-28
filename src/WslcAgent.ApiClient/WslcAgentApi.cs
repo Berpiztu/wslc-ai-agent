@@ -677,21 +677,15 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<ContainerLaunchRequest> ParseLaunchFormAsync(string json, CancellationToken cancellationToken = default) =>
         PostJsonAsync<LaunchFormSource, ContainerLaunchRequest>("api/v1/containers/launch-form", new LaunchFormSource(json), cancellationToken);
 
-    // Backups
+    // Backups: a container's started here, followed with the volume's (below) by their kind.
 
-    public Task<BackupJob> StartBackupAsync(string container, CancellationToken cancellationToken = default) =>
-        PostJsonAsync<object, BackupJob>($"api/v1/containers/{Escape(container)}/backup", new { }, cancellationToken);
+    /// <summary>What of the container (<see cref="BackupWhat"/>) backed up into a folder of its own in its backup folder, or <paramref name="folder"/>; <paramref name="stop"/>, the user agreed to stop what runs; returns at once, the agent runs it.</summary>
+    public Task<BackupJob> BackupContainerAsync(string name, string what, bool stop = false, string folder = "", CancellationToken cancellationToken = default) =>
+        PostJsonAsync<BackupContainerRequest, BackupJob>($"api/v1/containers/{Escape(name)}/backup", new BackupContainerRequest(what, folder, stop), cancellationToken);
 
-    public Task<BackupJob> GetBackupAsync(string job, CancellationToken cancellationToken = default) =>
-        GetAsync<BackupJob>($"api/v1/containers/backups/{Escape(job)}", cancellationToken);
-
-    /// <summary>Where the browser downloads the finished archive; the job moves to <c>saving</c> when it is fetched.</summary>
-    public Uri BackupDownloadUrl(string job) =>
-        new(http.BaseAddress!, $"api/v1/containers/backups/{Escape(job)}/download");
-
-    /// <summary>Finishes or discards the job: the archive is deleted from the agent.</summary>
-    public Task CancelBackupAsync(string job, CancellationToken cancellationToken = default) =>
-        PostAsync($"api/v1/containers/backups/{Escape(job)}/cancel", cancellationToken);
+    /// <summary>A container's backup put back, what it holds, into <paramref name="container"/>, created when it is not there; returns at once, the agent runs it.</summary>
+    public Task<BackupJob> RestoreContainerAsync(string folder, string container, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<RestoreContainerRequest, BackupJob>("api/v1/containers/restore", new RestoreContainerRequest(folder, container), cancellationToken);
 
     public Task<RestartPolicyInfo> GetRestartPolicyAsync(string container, CancellationToken cancellationToken = default) =>
         GetAsync<RestartPolicyInfo>($"api/v1/containers/{Escape(container)}/restart-policy", cancellationToken);
@@ -792,6 +786,10 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     /// <summary>Zaindari's patch: the image built again with its system packages upgraded, then the containers named moved to it; a build job to follow.</summary>
     public Task<BuildJob> PatchImageAsync(PatchImageRequest request, CancellationToken cancellationToken = default) =>
         PostJsonAsync<PatchImageRequest, BuildJob>("api/v1/image-security/patch", request, cancellationToken);
+
+    /// <summary>The patch's Python lines tried in a container of the image, nothing written: what each would change, or why it would fail.</summary>
+    public Task<PatchDryRun> DryRunPatchAsync(PatchDryRunRequest request, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<PatchDryRunRequest, PatchDryRun>("api/v1/image-security/patch/dry-run", request, cancellationToken);
 
     /// <summary>Every vulnerability a person accepted, of every image.</summary>
     public Task<ImageAcceptances> GetImageAcceptancesAsync(CancellationToken cancellationToken = default) =>
@@ -956,40 +954,47 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task PruneVolumesAsync(CancellationToken cancellationToken = default) =>
         PostAsync("api/v1/volumes/prune", cancellationToken);
 
-    /// <summary>The volume packed into a <c>.tar.gz</c> in its backup folder, or <paramref name="folder"/>; returns at once, the agent runs it.</summary>
-    public Task<VolumeBackupJob> BackupVolumeAsync(string name, string folder = "", CancellationToken cancellationToken = default) =>
-        PostJsonAsync<BackupVolumeRequest, VolumeBackupJob>($"api/v1/volumes/{Escape(name)}/backup", new BackupVolumeRequest(folder), cancellationToken);
+    /// <summary>The volume packed into a <c>.tar.gz</c> in its backup folder, or <paramref name="folder"/>; <paramref name="stop"/>, the user agreed to stop what runs; returns at once, the agent runs it.</summary>
+    public Task<BackupJob> BackupVolumeAsync(string name, bool stop = false, string folder = "", CancellationToken cancellationToken = default) =>
+        PostJsonAsync<BackupVolumeRequest, BackupJob>($"api/v1/volumes/{Escape(name)}/backup", new BackupVolumeRequest(folder, stop), cancellationToken);
 
     /// <summary>A backup put back into a volume, created when it is not there; returns at once, the agent runs it.</summary>
-    public Task<VolumeBackupJob> RestoreVolumeAsync(string file, string volume, CancellationToken cancellationToken = default) =>
-        PostJsonAsync<RestoreVolumeRequest, VolumeBackupJob>("api/v1/volumes/restore", new RestoreVolumeRequest(file, volume), cancellationToken);
+    public Task<BackupJob> RestoreVolumeAsync(string file, string volume, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<RestoreVolumeRequest, BackupJob>("api/v1/volumes/restore", new RestoreVolumeRequest(file, volume), cancellationToken);
 
-    public Task<VolumeBackupList> GetVolumeBackupsAsync(CancellationToken cancellationToken = default) =>
-        GetAsync<VolumeBackupList>("api/v1/volume-backups", cancellationToken);
+    // Every kind of backup, by its kind ("volume", "container"): /api/v1/{kind}-backups.
 
-    /// <summary>Where backups go: the default folder and each volume's own.</summary>
-    public Task<VolumeBackupSettings> GetVolumeBackupSettingsAsync(CancellationToken cancellationToken = default) =>
-        GetAsync<VolumeBackupSettings>("api/v1/volume-backups/settings", cancellationToken);
+    /// <summary>The backups and restores under way or just ended, every backup of the history and where they go.</summary>
+    public Task<BackupList> GetBackupsAsync(string kind, CancellationToken cancellationToken = default) =>
+        GetAsync<BackupList>($"api/v1/{kind}-backups", cancellationToken);
 
-    public Task<VolumeBackupSettings> SaveVolumeBackupSettingsAsync(VolumeBackupSettings settings, CancellationToken cancellationToken = default) =>
-        PostJsonAsync<VolumeBackupSettings, VolumeBackupSettings>("api/v1/volume-backups/settings", settings, cancellationToken, HttpMethod.Put);
+    /// <summary>Where backups go: the default folder, the folder of all of them, each one's own.</summary>
+    public Task<BackupSettings> GetBackupSettingsAsync(string kind, CancellationToken cancellationToken = default) =>
+        GetAsync<BackupSettings>($"api/v1/{kind}-backups/settings", cancellationToken);
 
-    /// <summary>The backup and restore lines of the agent's log, of <paramref name="volume"/>, or of every volume when it is empty, each said by its volume; the oldest first.</summary>
-    public Task<IReadOnlyList<string>> GetVolumeBackupLogAsync(string volume = "", CancellationToken cancellationToken = default) =>
-        GetAsync<IReadOnlyList<string>>(volume.Length > 0 ? $"api/v1/volume-backups/log?volume={Escape(volume)}" : "api/v1/volume-backups/log", cancellationToken);
+    public Task<BackupSettings> SaveBackupSettingsAsync(string kind, BackupSettings settings, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<BackupSettings, BackupSettings>($"api/v1/{kind}-backups/settings", settings, cancellationToken, HttpMethod.Put);
 
-    /// <summary>A backup of the history deleted, its file with it.</summary>
-    public Task DeleteVolumeBackupAsync(string path, CancellationToken cancellationToken = default) =>
-        SendAsync(HttpMethod.Delete, $"api/v1/volume-backups/history?path={Escape(path)}", cancellationToken);
+    /// <summary>What a backup of <paramref name="name"/> would do as its settings stand: what it holds (<paramref name="what"/>, else its settings'), the running containers it stops, whether its settings stop them.</summary>
+    public Task<BackupPreview> GetBackupPreviewAsync(string kind, string name, string what = "", CancellationToken cancellationToken = default) =>
+        GetAsync<BackupPreview>($"api/v1/{kind}-backups/preview?name={Escape(name)}{(what.Length > 0 ? $"&what={Escape(what)}" : "")}", cancellationToken);
 
-    public Task<VolumeBackupJob> GetVolumeBackupJobAsync(string id, CancellationToken cancellationToken = default) =>
-        GetAsync<VolumeBackupJob>($"api/v1/volume-backups/{Escape(id)}", cancellationToken);
+    /// <summary>The lines of <paramref name="name"/>'s backups and restores, or of all of them when it is empty, each said by its name; the oldest first.</summary>
+    public Task<IReadOnlyList<string>> GetBackupLogAsync(string kind, string name = "", CancellationToken cancellationToken = default) =>
+        GetAsync<IReadOnlyList<string>>(name.Length > 0 ? $"api/v1/{kind}-backups/log?name={Escape(name)}" : $"api/v1/{kind}-backups/log", cancellationToken);
 
-    public Task CancelVolumeBackupJobAsync(string id, CancellationToken cancellationToken = default) =>
-        PostAsync($"api/v1/volume-backups/{Escape(id)}/cancel", cancellationToken);
+    /// <summary>A backup of the history deleted, its file or its folder with it.</summary>
+    public Task DeleteBackupAsync(string kind, string path, CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Delete, $"api/v1/{kind}-backups/history?path={Escape(path)}", cancellationToken);
 
-    public Task DismissVolumeBackupJobAsync(string id, CancellationToken cancellationToken = default) =>
-        SendAsync(HttpMethod.Delete, $"api/v1/volume-backups/{Escape(id)}", cancellationToken);
+    public Task<BackupJob> GetBackupJobAsync(string kind, string id, CancellationToken cancellationToken = default) =>
+        GetAsync<BackupJob>($"api/v1/{kind}-backups/{Escape(id)}", cancellationToken);
+
+    public Task CancelBackupJobAsync(string kind, string id, CancellationToken cancellationToken = default) =>
+        PostAsync($"api/v1/{kind}-backups/{Escape(id)}/cancel", cancellationToken);
+
+    public Task DismissBackupJobAsync(string kind, string id, CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Delete, $"api/v1/{kind}-backups/{Escape(id)}", cancellationToken);
 
     // Networks
 

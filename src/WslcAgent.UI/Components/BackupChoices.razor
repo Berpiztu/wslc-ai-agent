@@ -1,0 +1,48 @@
+@* A backup's choices at one level (Settings → Defaults, every one's in a page's
+   Backup & restore, one's own in its own): whether a backup stops the running
+   containers it needs stopped, a choice; and, for a container's, what it
+   holds, its parts ticked (BackupParts). A level with one below offers
+   Default first, said with what it gives now; the agent's default has none
+   below it. Each is the place its value goes, the parent saves them. *@
+
+<MudSelect Margin="Margin.Dense" T="string" Value="Stop" ValueChanged="StopChanged" Label="Stop running containers" Dense="true"
+           HelperTextOnFocus="true" Variant="Variant.Filled" Class="@FieldClass"
+           HelperText="Ask at each backup; Yes, stopped and started again; No, refused while they run.">
+    @if (Below is { } below)
+    {
+        <MudSelectItem T="string" Value="@BackupChoice.Default">@($"Default ({BackupChoice.Said(below.StopOfAll)})")</MudSelectItem>
+    }
+    @foreach (var choice in BackupChoice.Stops)
+    {
+        <MudSelectItem T="string" Value="@choice">@BackupChoice.Said(choice)</MudSelectItem>
+    }
+</MudSelect>
+@if (Kind.InParts)
+{
+    <BackupParts Value="@What" ValueChanged="WhatChanged" Inherited="@(Below?.WhatOfAll)" Class="@FieldClass" />
+}
+
+@code {
+    [Parameter, EditorRequired] public BackupKind Kind { get; set; } = default!;
+
+    [Parameter] public string Stop { get; set; } = BackupChoice.Ask;
+
+    [Parameter] public EventCallback<string> StopChanged { get; set; }
+
+    /// <summary>The level's own parts; empty for Default, or, at the agent's default, for every part.</summary>
+    [Parameter] public string What { get; set; } = "";
+
+    [Parameter] public EventCallback<string> WhatChanged { get; set; }
+
+    /// <summary>
+    /// The level below, as it stands, what Default gives
+    /// (<see cref="BackupSettings.StopOfAll"/>, <see cref="BackupSettings.WhatOfAll"/>):
+    /// for one, the settings with every one's choices as edited; for every
+    /// one, the settings without them, the agent's default. Null at the
+    /// agent's default, which has none below it.
+    /// </summary>
+    [Parameter] public BackupSettings? Below { get; set; }
+
+    /// <summary>Each field's class: its space from the field above where the fields stand in a column.</summary>
+    [Parameter] public string FieldClass { get; set; } = "";
+}

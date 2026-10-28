@@ -1,8 +1,10 @@
 @* Settings → Defaults: the agent's default values, the same for every client,
-   which what is set closer to the work goes over. The first, the folder
-   volume backups go to: the Volumes page's Backup & restore gives every
-   volume another, and a volume's Backup & restore that volume its own.
-   Leaving the page, or the tab, with a value not saved asks first. *@
+   which what is set closer to the work goes over. Backups, a volume's and a
+   container's: the folder they go to, whether they stop the running
+   containers they need stopped, and what a container's holds (BackupChoices);
+   a page's Backup & restore gives every one of them its own, and one's own
+   Backup & restore that one its own. Leaving the page, or the tab, with a
+   value not saved asks first. *@
 @inject WslcAgentApi Api
 @inject IDialogService Dialogs
 @inject NavigationManager Navigation
@@ -13,19 +15,27 @@
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
         What things start from until they are given their own.
     </MudText>
-    @if (_saved is null)
+    @if (_saved.Count < Kinds.Length)
     {
         <MudProgressLinear Indeterminate="true" />
     }
     else
     {
-        <div class="wslc-field-pick has-note">
-            <MudTextField T="string" @bind-Value="_backupFolder" Label="Volume backup folder" Placeholder="C:\Backups\WSLC" Immediate="true"
-                          HelperTextOnFocus="true" Variant="Variant.Filled" Margin="Margin.Dense" Required="true" RequiredError="A folder is required"
-                          HelperText="A folder of the agent's machine. The Volumes page's Backup & restore can give every volume another, and a volume its own."
-                          autocapitalize="none" autocorrect="off" spellcheck="false" />
-            <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick a folder" OnClick="PickBackupFolderAsync" />
-        </div>
+        @foreach (var kind in Kinds)
+        {
+            var edited = _edited[kind.Key];
+            <div class="@($"wslc-field-pick has-note{(kind == Kinds[0] ? "" : " mt-4")}")">
+                <MudTextField T="string" Value="@edited.DefaultFolder" ValueChanged="@((string folder) => Edit(kind, _edited[kind.Key] with { DefaultFolder = folder }))" Label="@($"{kind.Title} backup folder")"
+                              Placeholder="C:\Backups\WSLC" Immediate="true" HelperTextOnFocus="true" Variant="Variant.Filled" Margin="Margin.Dense"
+                              Required="true" RequiredError="A folder is required"
+                              HelperText="@($"A folder of the agent's machine. The {kind.Title}s page's Backup & restore can give every {kind.Noun} another, and a {kind.Noun} its own.")"
+                              autocapitalize="none" autocorrect="off" spellcheck="false" />
+                <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick a folder" OnClick="@(() => PickAsync(kind))" />
+            </div>
+            <BackupChoices Kind="kind" FieldClass="mt-2"
+                           Stop="@edited.DefaultStop" StopChanged="@((string stop) => Edit(kind, _edited[kind.Key] with { DefaultStop = stop }))"
+                           What="@edited.DefaultWhat" WhatChanged="@((string what) => Edit(kind, _edited[kind.Key] with { DefaultWhat = what }))" />
+        }
         <MudStack Row="true" Spacing="2" Class="mt-3">
             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" Disabled="@(!Changed)" OnClick="SaveAsync">Save defaults</MudButton>
         </MudStack>
@@ -33,11 +43,26 @@
 </MudPaper>
 
 @code {
-    private VolumeBackupSettings? _saved;
-    private string _backupFolder = "";
+    /// <summary>The kinds of backup whose defaults are set here, in the order shown.</summary>
+    private static readonly BackupKind[] Kinds = [BackupKind.Volume, BackupKind.Container];
+
+    private readonly Dictionary<string, BackupSettings> _saved = [];
+
+    /// <summary>Each kind's settings with its defaults as edited; the rest as the agent last said.</summary>
+    private readonly Dictionary<string, BackupSettings> _edited = [];
+
     private IDisposable? _guard;
 
-    private bool Changed => _saved is { } saved && _backupFolder.Trim().Length > 0 && _backupFolder.Trim() != saved.DefaultFolder;
+    /// <summary>The kinds whose defaults are edited and not saved; a folder left empty is not a change.</summary>
+    private IEnumerable<BackupKind> Edited =>
+        Kinds.Where(kind => _saved.TryGetValue(kind.Key, out var saved) && _edited[kind.Key] is var edited
+            && ((edited.DefaultFolder.Trim() is { Length: > 0 } folder && folder != saved.DefaultFolder)
+                || edited.DefaultStop != saved.DefaultStop || WhatOf(edited) != WhatOf(saved)));
+
+    /// <summary>The default's parts as a backup takes them: none named is every part.</summary>
+    private static string WhatOf(BackupSettings settings) => (settings with { AllWhat = BackupChoice.Default }).WhatOfAll;
+
+    private bool Changed => Edited.Any();
 
     protected override async Task OnInitializedAsync()
     {
@@ -61,7 +86,11 @@
                 await SaveAsync();
                 return;
             case UnsavedChoice.Discard:
-                _backupFolder = _saved?.DefaultFolder ?? "";
+                foreach (var kind in Kinds)
+                {
+                    _edited[kind.Key] = _saved[kind.Key];
+                }
+
                 return;
             default:
                 context.PreventNavigation();
@@ -73,8 +102,11 @@
     {
         try
         {
-            _saved = await Api.GetVolumeBackupSettingsAsync();
-            _backupFolder = _saved.DefaultFolder;
+            foreach (var kind in Kinds)
+            {
+                _saved[kind.Key] = await Api.GetBackupSettingsAsync(kind.Key);
+                _edited[kind.Key] = _saved[kind.Key];
+            }
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
         {
@@ -82,19 +114,30 @@
         }
     }
 
-    private async Task PickBackupFolderAsync()
+    private void Edit(BackupKind kind, BackupSettings edited) => _edited[kind.Key] = edited;
+
+    private async Task PickAsync(BackupKind kind)
     {
-        if (await Pickers.HostFolderAsync(Dialogs, _backupFolder) is { } folder)
+        if (await Pickers.HostFolderAsync(Dialogs, _edited[kind.Key].DefaultFolder) is { } folder)
         {
-            _backupFolder = folder;
+            Edit(kind, _edited[kind.Key] with { DefaultFolder = folder });
         }
     }
 
+    /// <summary>The defaults edited, saved over what the agent has now: every one's and each one's own stay as they are.</summary>
     private async Task SaveAsync()
     {
-        if (_saved is { } saved && await VolumeBackupFlow.SaveSettingsAsync(Dialogs, Api, saved with { DefaultFolder = _backupFolder.Trim() }))
+        foreach (var kind in Edited.ToList())
         {
-            await ReadAsync();
+            var edited = _edited[kind.Key];
+            var folder = edited.DefaultFolder.Trim() is { Length: > 0 } typed ? typed : _saved[kind.Key].DefaultFolder;
+            if (!await BackupFlow.SaveSettingsAsync(Dialogs, Api, kind,
+                    _saved[kind.Key] with { DefaultFolder = folder, DefaultStop = edited.DefaultStop, DefaultWhat = edited.DefaultWhat }))
+            {
+                return;
+            }
         }
+
+        await ReadAsync();
     }
 }

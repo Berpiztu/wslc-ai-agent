@@ -1,4 +1,8 @@
-# Volume backups and restores
+# Volume and container backups and restores
+
+Volumes and containers back up and restore the same way: one design, one
+set of components, the same window. What a container adds is said in its own
+section.
 
 ## What a volume backup has
 
@@ -26,6 +30,68 @@ named after it inside the folder of every volume (the window of every
 volume's backups, or, while that has none, the Settings default):
 `…\Volume backups\hermes-data\`, made when it is not there. A volume with a
 folder of its own backs up into that folder itself.
+
+## How backups are made
+
+Two settings go the same three levels as the folder, each beside it: in
+Settings → Defaults, in the window of every one's backups, and in each one's.
+At the window's two levels each starts at **Default**, which takes the level
+below and says what that gives now (`Default (Ask)`).
+
+- **Stop running containers**: what a backup does when a container it needs
+  stopped runs (see Running containers).
+  - **Ask**: it asks, naming them, whether to stop them; yes, they are
+    stopped and started again when it ends; no, nothing starts.
+  - **Yes**: they are stopped without asking and started again.
+  - **No**: the backup is refused while they run, saying which.
+- **What to back up**, a container's only: a tick for each part,
+  **Configuration**, **Image** and **Volumes**, any of them, and **All**,
+  which ticks every one (a dash while only some are). The last one ticked
+  cannot be unticked: a backup always holds something. With **Default**
+  ticked, the level below's ticks show and cannot be changed; unticked, the
+  level's own start from those. The agent's default ticks all of them until
+  it is changed. At each backup the same ticks are asked, as its settings
+  tick them, to change for that backup alone.
+
+## Containers
+
+A container's backup is the same as a volume's, in the Containers page and
+in each container's menu (**Backup & restore**), with one choice more,
+asked when it is made, ticked to begin with as its settings say (How backups
+are made), any of its parts:
+
+- **Configuration**: its settings, to make it again as it was.
+- **Image**: its image.
+- **Volumes**: its volumes' contents.
+
+A container's backup is a folder, `<container>-<date>`, in its backup folder
+(the same three levels, `Container backups`): `backup.json` says what it
+holds (and, with its configuration, its settings), `image.tar` the image, `volumes\` one
+`.tar.gz` per volume, packed as a volume's backup is. A folder of the machine
+mounted into it is not a volume: it is not in the backup, and the log says
+so. A restore puts back what the backup holds: the image loaded, each
+volume's contents replaced (created when it is not there), and with its
+configuration the container made again, stopped, with its settings; one that is not there is
+created, a new machine's. Its Backups table has a What column.
+
+The old container backup (an export downloaded by the browser) is gone.
+
+## Running containers
+
+- **A backup is made with the containers stopped.** A volume's backup
+  needs every container that uses it stopped; a container's with its
+  volumes needs every container that uses them stopped, it among them. Those
+  running are stopped, asked first or not, or the backup is refused, as its
+  **Stop running containers** says, and the agent starts again the ones it
+  stopped when the backup ends, well or not: each once what it depends on
+  runs. One that does not start again is said in the backup's log, and the
+  backup, which is written, ends in error saying so. A container's
+  configuration and image are backed up while it runs.
+- **A restore stops nothing.** It is refused while a container that uses
+  what it puts back runs, saying which to stop.
+- **A container does not start while a volume it uses is being backed up or
+  restored**: not its Start, Restart or Run, nor its restart policy. It is
+  refused, saying which volume and why, until that ends.
 
 ## The window
 

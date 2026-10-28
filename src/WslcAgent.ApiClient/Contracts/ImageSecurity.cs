@@ -84,11 +84,14 @@ public sealed record AcceptImageVulnerability(string Image, string Ecosystem, st
 /// <param name="PythonFixes">Each Python library with a fix published, at the version that fixes all of its own: <c>aiohttp&gt;=3.13.6</c>; for the patch window to offer.</param>
 /// <param name="PythonInstall">The command that would raise them, by <paramref name="PythonInstaller"/>; a suggestion to read before it runs. Empty without <paramref name="PythonFixes"/>.</param>
 /// <param name="Requirements">Every library line of the image's own <c>requirements*.txt</c> files, the vulnerable ones with the change Zaindari suggests: for the patch window to choose, line by line, what to raise, take to its latest or take out, and for the user's sources.</param>
-/// <param name="PythonInstaller">The command the patch installs Python libraries with, the names to follow: always uv, into the Python the image runs as <c>python3</c> (a virtual environment's when it comes first in the PATH), <c>uv pip install --python "$(command -v python3)" --no-cache -U</c>.</param>
-/// <param name="PythonUninstaller">The command it takes them out with, the names to follow: <c>uv pip uninstall --python "$(command -v python3)"</c>.</param>
+/// <param name="PythonInstaller">The command the patch installs Python libraries with, always uv: <c>uv pip install --no-cache</c>, then the environment's own flags (<see cref="PythonEnvironment.Flags"/>), then the names; never <c>-U</c>, so what is installed and still meets a file stays as it is, and a library taken to its latest is named after <paramref name="PythonUpgradeOne"/>.</param>
+/// <param name="PythonUninstaller">The command it takes them out with: <c>uv pip uninstall</c>, then the environment's flags, then the names.</param>
 /// <param name="PythonSetup">The Dockerfile line that puts uv in an image that does not carry it, to go before the first <paramref name="PythonInstaller"/> or <paramref name="PythonUninstaller"/>: <c>COPY --from=ghcr.io/astral-sh/uv:… /uv /usr/local/bin/uv</c>; empty when the image has uv.</param>
 /// <param name="PatchDockerfile">The Dockerfile the patch would build, as the patch window first shows it to be read and changed: <c>FROM</c> the image, <c>USER root</c>, its system upgrade when it has one, and its own user given back.</param>
 /// <param name="RequirementFiles">The image's own <c>requirements*.txt</c> files, whole, comments and options kept: what the patch window rewrites by the choices made on <paramref name="Requirements"/>.</param>
+/// <param name="PythonUpgradeOne">What takes one library to its latest and no other, its name to follow: <c>--upgrade-package</c>.</param>
+/// <param name="PatchCheck">What Zaindari says of patching its Python libraries, before anything is chosen; null when it has none to patch.</param>
+/// <param name="PythonEnvironments">The image's Python environments, each with the libraries installed in it: a library is installed, or taken out, in the one it is in, a requirements file in the one that holds most of its libraries (<see cref="PythonEnvironment.Of"/>).</param>
 public sealed record ImageVulnerabilities(
     string Image,
     bool Found,
@@ -109,7 +112,110 @@ public sealed record ImageVulnerabilities(
     string PythonUninstaller = "",
     string PatchDockerfile = "",
     IReadOnlyList<ImageTextFile>? RequirementFiles = null,
-    string PythonSetup = "");
+    string PythonSetup = "",
+    IReadOnlyList<PythonEnvironment>? PythonEnvironments = null,
+    string PythonUpgradeOne = "",
+    PatchCheck? PatchCheck = null);
+
+/// <summary>
+/// What Zaindari says of patching an image's Python libraries, read from the
+/// image before anything is chosen: <see cref="Clear"/>, nothing to be careful
+/// with; <see cref="Care"/>, it can be patched knowing what <see cref="Notes"/>
+/// says; <see cref="Refused"/>, it cannot be, and why.
+/// </summary>
+/// <param name="Notes">What to be careful with, or why it cannot be patched, a line each.</param>
+public sealed record PatchCheck(string Verdict, IReadOnlyList<string> Notes)
+{
+    public const string Clear = "clear";
+    public const string Care = "care";
+    public const string Refused = "refused";
+
+    /// <summary>The verdict as a sentence.</summary>
+    public string Said => Verdict switch
+    {
+        Clear => "Its Python libraries can be patched: nothing in the image calls for care.",
+        Care => "Its Python libraries can be patched with care: read what follows, and try the patch before it is built.",
+        _ => "Its Python libraries cannot be patched by Zaindari:",
+    };
+}
+
+/// <summary>
+/// A Python environment of an image: a virtual environment (<c>/opt/venv-a0</c>),
+/// or a Python of the system's, which a distribution may mark as its own
+/// (externally managed) and refuse to install into without being told.
+/// </summary>
+/// <param name="Python">Its interpreter: <c>/opt/venv-a0/bin/python3.12</c>.</param>
+/// <param name="Venv">A virtual environment; false for a Python of the system's.</param>
+/// <param name="Libraries">The libraries installed in it, by their names as PyPI compares them (<see cref="Normalized"/>).</param>
+/// <param name="Builds">Those installed as a build for one variant (<c>torch 2.4.0+cpu</c>), which PyPI does not have.</param>
+public sealed record PythonEnvironment(string Python, bool Venv, IReadOnlyList<string> Libraries, IReadOnlyList<PythonBuild>? Builds = null)
+{
+    /// <summary>What tells uv the environment to work in: its interpreter, and, for a Python of the system's, that the distribution's mark is to be passed over.</summary>
+    public string Flags => $"--python {Python}{(Venv ? "" : " --break-system-packages")}";
+
+    /// <summary>
+    /// What an install in it adds after <see cref="Flags"/>: the index of each
+    /// of its variant builds, for uv to take the best version of every library
+    /// from PyPI and those, so a build for one variant that has to change
+    /// stays one (a <c>+cpu</c> build is newer than PyPI's of the same version,
+    /// the one for CUDA); empty when it has none whose index is known.
+    /// </summary>
+    public string Sources =>
+        (Builds ?? []).Select(build => build.Index).Where(index => index.Length > 0).Distinct(StringComparer.Ordinal).ToList() is { Count: > 0 } indexes
+            ? string.Concat(indexes.Select(index => $" --extra-index-url {index}")) + " --index-strategy unsafe-best-match"
+            : "";
+
+    /// <summary><paramref name="library"/> is installed in it.</summary>
+    public bool Holds(string library) => Libraries.Contains(Normalized(library));
+
+    /// <summary><paramref name="library"/>'s build for one variant, when it is one.</summary>
+    public PythonBuild? BuildOf(string library) => (Builds ?? []).FirstOrDefault(build => build.Library == Normalized(library));
+
+    /// <summary>
+    /// The environment that holds most of <paramref name="libraries"/>: the one
+    /// a requirements file is of; null when none holds any of them (a file of
+    /// a tool's, not the application's).
+    /// </summary>
+    public static PythonEnvironment? Of(IEnumerable<PythonEnvironment> environments, IEnumerable<string> libraries)
+    {
+        var wanted = libraries.Select(Normalized).ToHashSet(StringComparer.Ordinal);
+        return environments
+            .Select(environment => (Environment: environment, Held: environment.Libraries.Count(wanted.Contains)))
+            .Where(candidate => candidate.Held > 0)
+            .OrderByDescending(candidate => candidate.Held)
+            .Select(candidate => candidate.Environment)
+            .FirstOrDefault();
+    }
+
+    /// <summary>PyPI's names compare as PEP 503 says: case and <c>_</c>, <c>-</c>, <c>.</c> alike; extras left out.</summary>
+    public static string Normalized(string name) =>
+        name.Split('[')[0].Trim().ToLowerInvariant().Replace('_', '-').Replace('.', '-');
+}
+
+/// <summary>Body of <c>POST /api/v1/image-security/patch/dry-run</c>: the patch's Python lines, tried in a container of the image before it is built.</summary>
+/// <param name="Commands">Its <c>uv pip install</c> and <c>uv pip uninstall</c> lines, as the Dockerfile runs them, without <c>RUN</c>.</param>
+public sealed record PatchDryRunRequest(string Image, IReadOnlyList<string> Commands);
+
+/// <summary>What the patch's Python lines would do, each tried: nothing is written.</summary>
+public sealed record PatchDryRun(IReadOnlyList<PatchDryRunStep> Steps)
+{
+    /// <summary>None would fail.</summary>
+    public bool Ok => Steps.All(step => step.Error.Length == 0);
+}
+
+/// <summary>One line of the patch, tried.</summary>
+/// <param name="Command">The line, as the patch runs it.</param>
+/// <param name="Changes">What it would change, a library a line: <c>torch 2.4.0+cpu → 2.14.1+cpu</c>, <c>new: httpx2 2.16.0</c>, <c>out: python-jose</c>.</param>
+/// <param name="Warnings">What calls for care: a build for one variant that would become another, NVIDIA's libraries it would bring, libraries the image does not have.</param>
+/// <param name="Error">Why it would fail, as uv says it; empty when it would not.</param>
+/// <param name="Output">What uv said, whole.</param>
+public sealed record PatchDryRunStep(string Command, IReadOnlyList<string> Changes, IReadOnlyList<string> Warnings, string Error, IReadOnlyList<string> Output);
+
+/// <summary>A library installed as a build for one variant: <c>torch</c> <c>2.4.0+cpu</c>.</summary>
+/// <param name="Library">Its name, as PyPI compares them.</param>
+/// <param name="Version">Its version, the variant after the <c>+</c>.</param>
+/// <param name="Index">Where builds for that variant come from (<c>https://download.pytorch.org/whl/cpu</c>); empty when it is not known, and it is not to be changed.</param>
+public sealed record PythonBuild(string Library, string Version, string Index);
 
 /// <summary>A text file of an image, as a path in it and its text: a <c>requirements.txt</c>.</summary>
 public sealed record ImageTextFile(string Path, string Text);

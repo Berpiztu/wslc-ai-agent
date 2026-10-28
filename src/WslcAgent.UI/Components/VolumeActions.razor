@@ -56,7 +56,7 @@
     /// <summary>Its Backup &amp; restore window; the page reads its list again after, for what was started there.</summary>
     private async Task BackupsAsync()
     {
-        await VolumeBackupFlow.ShowAsync(Dialogs, Volume.Name);
+        await BackupFlow.ShowAsync(Dialogs, BackupKind.Volume, Volume.Name);
         await Changed.InvokeAsync();
     }
 

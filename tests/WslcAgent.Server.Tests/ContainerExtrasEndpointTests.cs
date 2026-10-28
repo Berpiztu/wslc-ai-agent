@@ -5,7 +5,7 @@ using WslcAgent.ApiClient.Contracts;
 
 namespace WslcAgent.Server.Tests;
 
-/// <summary>Stats, the inspect JSON download, the form read from a JSON, backups and image inspect.</summary>
+/// <summary>Stats, the inspect JSON download, the form read from a JSON, a backup's choice and image inspect.</summary>
 public sealed class ContainerExtrasEndpointTests(WebApplicationFactory<Program> factory)
     : IClassFixture<WebApplicationFactory<Program>>
 {
@@ -59,23 +59,17 @@ public sealed class ContainerExtrasEndpointTests(WebApplicationFactory<Program> 
     }
 
     [Fact]
-    public async Task Backup_refuses_a_running_container_at_the_check_step()
+    public async Task A_container_backup_holds_all_its_image_or_its_volumes_and_nothing_else()
     {
         var runner = new FakeWslcRunner().Answer(Inspect, FakeWslcRunner.Fixture("container-inspect.json"));
         var client = factory.ClientWith(runner);
 
-        var started = await client.PostAsync("/api/v1/containers/web/backup", content: null);
-        var job = await started.Content.ReadFromJsonAsync<BackupJob>();
-        var polled = await client.GetFromJsonAsync<BackupJob>($"/api/v1/containers/backups/{job!.Id}");
-        var download = await client.GetAsync($"/api/v1/containers/backups/{job.Id}/download");
-        var unknown = await client.GetAsync("/api/v1/containers/backups/nope");
+        var refused = await client.PostAsJsonAsync("/api/v1/containers/web/backup", new BackupContainerRequest("everything"));
+        var unknown = await client.GetAsync("/api/v1/container-backups/nope");
 
-        Assert.Equal(BackupState.Error, job.State);
-        Assert.Equal(BackupStep.Check, job.Step);
-        Assert.Equal("Container web is running. Stop it before backing it up.", polled!.Error);
-        Assert.Equal(HttpStatusCode.Conflict, download.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
-        Assert.DoesNotContain(runner.Calls, call => call.Contains("export"));
+        Assert.DoesNotContain(runner.Calls, call => call.Contains("image save"));
     }
 
     [Fact]

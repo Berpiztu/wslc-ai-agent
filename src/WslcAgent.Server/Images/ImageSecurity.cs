@@ -70,6 +70,17 @@ internal readonly record struct Installed(string Ecosystem, string Name, string 
 
     /// <summary>Not a package: a command the image carries where its system looks for commands (<c>usr/local/bin/uv</c>), its name as <see cref="Name"/>, so a patch knows whether to bring its own.</summary>
     public const string Command = "command";
+
+    /// <summary>
+    /// Not a package: a Python library's environment, its interpreter as
+    /// <see cref="Name"/> (<c>/opt/venv-a0/bin/python3.12</c>), the library as
+    /// <see cref="Version"/> (PyPI's name for it), read from where it is
+    /// installed, so a patch installs and takes out each library in its own.
+    /// </summary>
+    public const string PythonEnvironment = "python-environment";
+
+    /// <summary>Not a package: a virtual environment, its folder as <see cref="Name"/> (<c>/opt/venv-a0</c>), read from its <c>pyvenv.cfg</c>; a Python whose folder is not one is the system's.</summary>
+    public const string PythonVenv = "python-venv";
 }
 
 /// <summary>
@@ -440,9 +451,10 @@ public sealed partial class ImageSecurity(
         List<Installed>? packages;
         List<Installed> files;
         bool ubuntuPro, uv;
+        List<PythonEnvironment> pythons;
         try
         {
-            (packages, files, ubuntuPro, uv) = Split(await PackagesAsync(image, id, cancellationToken));
+            (packages, files, ubuntuPro, uv, pythons) = Split(await PackagesAsync(image, id, cancellationToken));
         }
         catch (Exception ex) when (ex is TimeoutException or WslcNotFoundException or WslcException or IOException or InvalidDataException)
         {
@@ -477,10 +489,12 @@ public sealed partial class ImageSecurity(
             .ToList();
         return new ImageVulnerabilities(image, true, built, true, true, built && remedies.Count > 0 && settings.Get().Policy == ImageSecurityPolicy.Block,
             listed, advisories, remedies, Patch: ImagePatches.Named(image),
-            SystemUpgrade: ImagePatches.SystemUpgrade(packages, found), PythonFixes: fixes, PythonInstall: ImagePatches.PythonInstall(fixes),
+            SystemUpgrade: ImagePatches.SystemUpgrade(packages, found), PythonFixes: fixes, PythonInstall: ImagePatches.PythonInstall(fixes, pythons),
             Requirements: requirements, PythonInstaller: ImagePatches.Installer, PythonUninstaller: ImagePatches.Uninstaller, PythonSetup: ImagePatches.UvSetup(uv),
             PatchDockerfile: ImagePatches.Dockerfile(image, ImagePatches.SystemUpgrade(packages, found), [], user),
-            RequirementFiles: [.. files.Select(file => new ImageTextFile(file.Name, file.Version))]);
+            RequirementFiles: [.. files.Select(file => new ImageTextFile(file.Name, file.Version))], PythonEnvironments: pythons,
+            PythonUpgradeOne: ImagePatches.UpgradeOne,
+            PatchCheck: ImagePatches.Check(pythons, [.. files.Select(file => new ImageTextFile(file.Name, file.Version))], advisories));
     }
 
     /// <summary>The image's packages, from what was read under its id already, or read now and kept; null for an image with none to read. The kernel is left out (<see cref="WithoutKernel"/>).</summary>
@@ -506,9 +520,12 @@ public sealed partial class ImageSecurity(
     /// The rule an image's packages are read by now: 1 when whether an Ubuntu
     /// image is attached to Ubuntu Pro came to be read, and a Python library
     /// Debian or Ubuntu installed to be left to its package; 2 when whether it
-    /// carries uv came to be read (<see cref="Installed.Command"/>).
+    /// carries uv came to be read (<see cref="Installed.Command"/>); 3 when the
+    /// environment of each Python library came to be read
+    /// (<see cref="Installed.PythonEnvironment"/>, <see cref="Installed.PythonVenv"/>),
+    /// and a requirements file in a cache to be left out.
     /// </summary>
-    internal const string ReadRule = "2";
+    internal const string ReadRule = "4";
 
     /// <summary>Packages kept by an earlier rule than <see cref="ReadRule"/>: read again, once.</summary>
     private static bool ReadByEarlierRule(List<Installed>? kept) =>
@@ -580,13 +597,13 @@ public sealed partial class ImageSecurity(
     private string? KeptPath(string id) =>
         keptIn is null ? null : Path.Combine(keptIn, $"{id.Replace(':', '-')}.packages-requirements.json");
 
-    /// <summary>A <c>requirements*.txt</c> of the image's own, not one a library ships in its site-packages or a node module.</summary>
+    /// <summary>A <c>requirements*.txt</c> of the image's own, not one a library ships in its site-packages or a node module, nor one an installer left in its cache (<c>.cache/uv/sdists…</c>).</summary>
     private static bool IsRequirementsFile(string path)
     {
         var name = path[(path.LastIndexOf('/') + 1)..];
         return name.StartsWith("requirements", StringComparison.OrdinalIgnoreCase) && name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
             && !path.Contains("site-packages/", StringComparison.Ordinal) && !path.Contains("dist-packages/", StringComparison.Ordinal)
-            && !path.Contains("node_modules/", StringComparison.Ordinal);
+            && !path.Contains("node_modules/", StringComparison.Ordinal) && !path.Contains(".cache/", StringComparison.Ordinal);
     }
 
     /// <summary>A requirements file larger than this is not one a person wrote.</summary>
@@ -594,18 +611,69 @@ public sealed partial class ImageSecurity(
 
     /// <summary>
     /// The packages apart from the requirements files kept with them, whether
-    /// the image is attached to Ubuntu Pro, and whether it carries uv (the
-    /// command, or the library that brings it); the packages null when there is
-    /// none.
+    /// the image is attached to Ubuntu Pro, whether it carries uv (the
+    /// command, or the library that brings it), and its Python environments,
+    /// each with its libraries; the packages null when there is none.
     /// </summary>
-    private static (List<Installed>? Packages, List<Installed> Files, bool UbuntuPro, bool Uv) Split(List<Installed>? read)
+    private static (List<Installed>? Packages, List<Installed> Files, bool UbuntuPro, bool Uv, List<PythonEnvironment> Pythons) Split(List<Installed>? read)
     {
         var files = (read ?? []).Where(entry => entry.Ecosystem == Installed.RequirementsFile).ToList();
-        var packages = (read ?? []).Where(entry => entry.Ecosystem is not Installed.RequirementsFile and not Installed.UbuntuPro and not Installed.ReadBy and not Installed.Command).ToList();
+        var packages = (read ?? []).Where(entry => entry.Ecosystem is not Installed.RequirementsFile and not Installed.UbuntuPro and not Installed.ReadBy
+            and not Installed.Command and not Installed.PythonEnvironment and not Installed.PythonVenv).ToList();
         var ubuntuPro = (read ?? []).Any(entry => entry.Ecosystem == Installed.UbuntuPro && entry.Name == Installed.Attached);
         var uv = (read ?? []).Any(entry => entry.Ecosystem is Installed.Command or Installed.PyPI && string.Equals(entry.Name, ImagePatches.Uv, StringComparison.OrdinalIgnoreCase));
-        return (read is null || packages.Count == 0 ? null : packages, files, ubuntuPro, uv);
+        var venvs = (read ?? []).Where(entry => entry.Ecosystem == Installed.PythonVenv).Select(entry => entry.Name).ToHashSet(StringComparer.Ordinal);
+        var pythons = (read ?? []).Where(entry => entry.Ecosystem == Installed.PythonEnvironment)
+            .GroupBy(entry => entry.Name, StringComparer.Ordinal)
+            .Select(environment => EnvironmentOf(environment.Key, venvs.Contains(FolderOf(environment.Key)), [.. environment.Select(entry => entry.Version)]))
+            .OrderBy(environment => environment.Python, StringComparer.Ordinal)
+            .ToList();
+        return (read is null || packages.Count == 0 ? null : packages, files, ubuntuPro, uv, pythons);
     }
+
+    /// <summary>
+    /// An environment of <paramref name="python"/>, from its libraries as
+    /// read (<c>torch==2.4.0+cpu</c>): their names, and those installed as a
+    /// build for one variant, by the label after the <c>+</c> of their version,
+    /// each with the index such builds come from when it is known
+    /// (<see cref="ImagePatches.IndexOf"/>).
+    /// </summary>
+    private static PythonEnvironment EnvironmentOf(string python, bool venv, List<string> installed)
+    {
+        var libraries = installed.Select(entry => entry.Split("==")[0]).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+        var builds = installed.Select(entry => entry.Split("==", 2))
+            .Where(pair => pair.Length == 2 && pair[1].Contains('+'))
+            .Select(pair => new PythonBuild(pair[0], pair[1], ImagePatches.IndexOf(pair[0], pair[1].Split('+')[1])))
+            .DistinctBy(build => build.Library)
+            .OrderBy(build => build.Library, StringComparer.Ordinal)
+            .ToList();
+        return new PythonEnvironment(python, venv, libraries, builds);
+    }
+
+    /// <summary>The folder an interpreter's environment is: <c>/opt/venv-a0</c> of <c>/opt/venv-a0/bin/python3.12</c>.</summary>
+    private static string FolderOf(string python) =>
+        python.LastIndexOf("/bin/", StringComparison.Ordinal) is var at and > 0 ? python[..at] : "";
+
+    /// <summary>
+    /// The interpreter a library installed at <paramref name="path"/> runs
+    /// with, read from where it is: <c>opt/venv-a0/lib/python3.12/site-packages/…</c>
+    /// is <c>/opt/venv-a0/bin/python3.12</c>; what a system's pip put in
+    /// <c>usr/local/lib/python3.13/dist-packages</c> is the system's own
+    /// <c>/usr/bin/python3.13</c>. Null for a path that is not in one.
+    /// </summary>
+    internal static string? PythonOf(string path)
+    {
+        if (PythonFolder().Match(path) is not { Success: true } match)
+        {
+            return null;
+        }
+
+        var (root, python) = (match.Groups["root"].Value, match.Groups["python"].Value);
+        return root == "usr/local/" && match.Groups["kind"].Value == "dist" ? $"/usr/bin/{python}" : $"/{root}bin/{python}";
+    }
+
+    [GeneratedRegex(@"^(?<root>(?:[^/]+/)*?)lib/(?<python>python\d+(?:\.\d+)?)/(?<kind>site|dist)-packages/")]
+    private static partial Regex PythonFolder();
 
     /// <summary>
     /// The fixes an image's own upgrade reaches: in an image attached to Ubuntu
@@ -667,7 +735,7 @@ public sealed partial class ImageSecurity(
         bool ubuntuPro;
         try
         {
-            (packages, _, ubuntuPro, _) = Split(await PackagesAsync(image, id, cancellationToken));
+            (packages, _, ubuntuPro, _, _) = Split(await PackagesAsync(image, id, cancellationToken));
         }
         catch (Exception ex) when (ex is TimeoutException or WslcNotFoundException or WslcException or IOException or InvalidDataException)
         {
@@ -783,6 +851,12 @@ public sealed partial class ImageSecurity(
                 continue;
             }
 
+            if (path == "pyvenv.cfg" || path.EndsWith("/pyvenv.cfg", StringComparison.Ordinal))
+            {
+                found.Add(new Installed(Installed.PythonVenv, "/" + path[..Math.Max(0, path.Length - "/pyvenv.cfg".Length)], ""));
+                continue;
+            }
+
             if (entry.DataStream is { } content && entry.EntryType != TarEntryType.HardLink)
             {
                 if (path is "etc/os-release" or "usr/lib/os-release")
@@ -827,6 +901,10 @@ public sealed partial class ImageSecurity(
             if (library is { } installed && IsInstalled(path))
             {
                 found.Add(installed);
+                if (PythonOf(path) is { } python)
+                {
+                    found.Add(new Installed(Installed.PythonEnvironment, python, $"{WslcAgent.ApiClient.Contracts.PythonEnvironment.Normalized(installed.Name)}=={installed.Version}"));
+                }
             }
         }
 

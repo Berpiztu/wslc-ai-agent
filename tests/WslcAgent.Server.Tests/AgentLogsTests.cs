@@ -121,6 +121,7 @@ public sealed class AgentLogsTests
         Assert.Equal("transfers", AgentLogs.KindOf("transfer: app.msi → web:/data started"));
         // A volume's backup or restore, every line of it, its own group.
         Assert.Equal("backups", AgentLogs.KindOf("backup: hermes-data: INFO: Packing hermes-data."));
+        Assert.Equal("backups", AgentLogs.KindOf("container backup: hermes: INFO: Saving image nousresearch/hermes-agent:latest."));
     }
 
     [Fact]

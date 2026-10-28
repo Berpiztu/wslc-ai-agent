@@ -177,6 +177,42 @@ public sealed class ImageSecurityTests
     }
 
     [Fact]
+    public void A_library_s_environment_is_read_from_where_it_is_installed()
+    {
+        Assert.Equal("/opt/venv-a0/bin/python3.12", ImageSecurity.PythonOf("opt/venv-a0/lib/python3.12/site-packages/fastapi-0.115.0.dist-info/METADATA"));
+        Assert.Equal("/opt/pyenv/versions/3.12.4/bin/python3.12", ImageSecurity.PythonOf("opt/pyenv/versions/3.12.4/lib/python3.12/site-packages/pip-24.0.dist-info/METADATA"));
+        Assert.Equal("/usr/local/bin/python3.12", ImageSecurity.PythonOf("usr/local/lib/python3.12/site-packages/flask-3.0.2.dist-info/METADATA"));
+        // What a system's pip put in /usr/local is the system's Python's own.
+        Assert.Equal("/usr/bin/python3.13", ImageSecurity.PythonOf("usr/local/lib/python3.13/dist-packages/rich-13.7.1.dist-info/METADATA"));
+        Assert.Null(ImageSecurity.PythonOf("root/.cache/uv/archive-v0/x/rich-13.7.1.dist-info/METADATA"));
+    }
+
+    [Fact]
+    public void A_build_for_one_variant_is_installed_from_its_own_index()
+    {
+        // torch 2.4.0+cpu from PyPI would come back built for CUDA, gigabytes of NVIDIA libraries with it.
+        Assert.Equal("https://download.pytorch.org/whl/cpu", ImagePatches.IndexOf("torch", "cpu"));
+        Assert.Equal("", ImagePatches.IndexOf("numpy", "cpu"));
+        var environment = new PythonEnvironment("/opt/venv-a0/bin/python3.12", true, ["torch", "torchvision"],
+            [new PythonBuild("torch", "2.4.0+cpu", "https://download.pytorch.org/whl/cpu"), new PythonBuild("torchvision", "0.19.0+cpu", "https://download.pytorch.org/whl/cpu")]);
+        Assert.Equal(" --extra-index-url https://download.pytorch.org/whl/cpu --index-strategy unsafe-best-match", environment.Sources);
+    }
+
+    [Fact]
+    public void A_patch_is_tried_by_its_own_uv_lines_alone_and_says_what_they_would_change()
+    {
+        Assert.Equal(new[] { "pip", "install", "--no-cache", "--python", "/opt/venv-a0/bin/python3.12", "flask[async]" },
+            PatchDryRuns.Words("uv pip install --no-cache --python /opt/venv-a0/bin/python3.12 \"flask[async]\""));
+        // Never a shell: anything else is refused before a container is made.
+        Assert.Throws<ArgumentException>(() => PatchDryRuns.Words("uv pip install x; rm -rf /"));
+        Assert.Throws<ArgumentException>(() => PatchDryRuns.Words("apt-get install x"));
+
+        var (changes, warnings) = PatchDryRuns.Changes(["- torch==2.4.0+cpu", "+ torch==2.14.1", "+ nvidia-cudnn-cu12==9.1.0", "- six==1.0"]);
+        Assert.Equal(new[] { "torch 2.4.0+cpu → 2.14.1", "new: nvidia-cudnn-cu12 9.1.0", "out: six 1.0" }, changes);
+        Assert.Equal(3, warnings.Count);
+    }
+
+    [Fact]
     public void A_patch_upgrades_the_system_and_runs_the_user_s_commands_under_a_patched_tag()
     {
         Installed[] alpine = [new("Alpine:v3.24", "apk-tools", "3.0.8-r0"), new("Alpine:v3.24", "zlib", "1.3.2-r0")];
@@ -192,8 +228,13 @@ public sealed class ImageSecurityTests
         // The highest fix of each library, always by uv, into the python3 the image runs (a venv with no pip in it too).
         var fixes = ImageSecurity.PythonFixes(black);
         Assert.Equal(["black>=24.10"], fixes);
-        Assert.Equal("uv pip install --python \"$(command -v python3)\" --no-cache -U \"black>=24.10\"", ImagePatches.PythonInstall(fixes));
-        Assert.Equal("uv pip uninstall --python \"$(command -v python3)\"", ImagePatches.Uninstaller);
+        // Each library raised in the environment it is in, read from the image; a system's Python told to let it.
+        PythonEnvironment[] environments = [new("/opt/venv-a0/bin/python3.12", true, ["black", "fastapi"]), new("/usr/bin/python3.13", false, ["requests"])];
+        Assert.Equal("uv pip install --no-cache --no-build --python /opt/venv-a0/bin/python3.12 \"black>=24.10\"", ImagePatches.PythonInstall(fixes, environments));
+        Assert.Equal("uv pip install --no-cache --no-build --python /usr/bin/python3.13 --break-system-packages \"requests>=2.33\"", ImagePatches.PythonInstall(["requests>=2.33"], environments));
+        // A requirements file goes where most of its libraries are; one whose libraries are nowhere has none.
+        Assert.Equal("/opt/venv-a0/bin/python3.12", PythonEnvironment.Of(environments, ["FastAPI", "black", "requests"])?.Python);
+        Assert.Null(PythonEnvironment.Of(environments, ["virtualenv"]));
         // uv brought in only for an image that does not carry it.
         Assert.Equal($"COPY --from={ImagePatches.UvImage} /uv /usr/local/bin/uv", ImagePatches.UvSetup(carriesUv: false));
         Assert.Equal("", ImagePatches.UvSetup(carriesUv: true));
@@ -438,7 +479,8 @@ public sealed class ImageSecurityTests
     }
 
     /// <summary>The names and versions read, for the tests of Python libraries.</summary>
-    private static List<(string, string)> Named(List<Installed>? installed) => [.. (installed ?? []).Select(p => (p.Name, p.Version))];
+    /// <summary>The Python libraries read, by name and version; what is read beside them (each one's environment) left out.</summary>
+    private static List<(string, string)> Named(List<Installed>? installed) => [.. (installed ?? []).Where(p => p.Ecosystem == Installed.PyPI).Select(p => (p.Name, p.Version))];
 
     /// <summary>An exported filesystem holding these files and nothing else.</summary>
     private static void WriteFiles(string path, params (string Name, string Text)[] files)

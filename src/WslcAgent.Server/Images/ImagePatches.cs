@@ -108,16 +108,101 @@ public sealed class ImagePatches(IWslcRunner wslc, IImageSecurity security, Imag
             : "";
     }
 
-    /// <summary>The command that would raise <paramref name="fixes"/>, by <see cref="Installer"/>. A suggestion the user reads before it runs.</summary>
-    internal static string PythonInstall(IReadOnlyList<string> fixes)
+    /// <summary>
+    /// The commands that would raise <paramref name="fixes"/>, by
+    /// <see cref="Installer"/>, each library in the environment it is in
+    /// (<see cref="PythonEnvironment.Of"/>), one command per environment. A
+    /// suggestion the user reads before it runs.
+    /// </summary>
+    internal static string PythonInstall(IReadOnlyList<string> fixes, IReadOnlyList<PythonEnvironment> environments)
     {
         if (fixes.Count == 0)
         {
             return "";
         }
 
-        return $"{Installer} {string.Join(' ', fixes.Select(fix => $"\"{fix}\""))}";
+        return string.Join(" && ", fixes
+            .GroupBy(fix => PythonEnvironment.Of(environments, [fix.Split(">=")[0]]) is { } environment ? $"{environment.Flags}{environment.Sources}" : "")
+            .Select(environment => $"{Installer}{(environment.Key.Length > 0 ? $" {environment.Key}" : "")} {string.Join(' ', environment.Select(fix => $"\"{fix}\""))}"));
     }
+
+    /// <summary>
+    /// What Zaindari says of patching the image's Python libraries
+    /// (<see cref="PatchCheck"/>), null when none is vulnerable. Refused when
+    /// none of them is in an environment read from the image: where it is
+    /// installed, and with which Python, is not known. Care, each said: several
+    /// environments; builds for one variant; lines the application's own files
+    /// pin with a reason; libraries no version fixes yet.
+    /// </summary>
+    internal static PatchCheck? Check(IReadOnlyList<PythonEnvironment> environments, IReadOnlyList<ImageTextFile> files, IReadOnlyList<ImageAdvisory> advisories)
+    {
+        var vulnerable = advisories.Where(advisory => advisory.Ecosystem == "PyPI" && advisory.Accepted is null).ToList();
+        if (vulnerable.Count == 0)
+        {
+            return null;
+        }
+
+        var libraries = vulnerable.Select(advisory => advisory.Package).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToList();
+        if (!libraries.Any(library => environments.Any(environment => environment.Holds(library))))
+        {
+            return new PatchCheck(PatchCheck.Refused,
+                [$"{string.Join(", ", libraries)}: in no Python environment read from the image; where {(libraries.Count == 1 ? "it is" : "they are")} installed, and with which Python, is not known."]);
+        }
+
+        var care = new List<string>();
+        if (environments.Count > 1)
+        {
+            care.Add($"Python in {environments.Count} environments, each library raised in the one it is in: "
+                + string.Join("; ", environments.Select(environment => $"{environment.Python}{(environment.Venv ? "" : " (the system's)")}, {environment.Libraries.Count} libraries")) + ".");
+        }
+
+        foreach (var environment in environments)
+        {
+            foreach (var build in environment.Builds ?? [])
+            {
+                care.Add(build.Index.Length > 0
+                    ? $"{build.Library} {build.Version} is a build for {build.Version.Split('+')[1]}: it comes from {build.Index}, and stays one."
+                    : $"{build.Library} {build.Version} is a build for {build.Version.Split('+')[1]} from an index not known: it is left as it is.");
+            }
+        }
+
+        foreach (var file in files.Where(file => PythonEnvironment.Of(environments, LibrariesOf(file.Text)) is not null))
+        {
+            foreach (var line in file.Text.ReplaceLineEndings("\n").Split('\n').Where(line => line.Contains("==", StringComparison.Ordinal) && line.Contains('#')))
+            {
+                care.Add($"{line.Split('#')[0].Trim()} is pinned in {file.Path}, its authors say why: {line[(line.IndexOf('#') + 1)..].Trim()}");
+            }
+        }
+
+        if (vulnerable.Where(advisory => advisory.FixedIn.Length == 0).Select(advisory => advisory.Package).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToList() is { Count: > 0 } unfixed)
+        {
+            care.Add($"No version fixes {string.Join(", ", unfixed)} yet: {(unfixed.Count == 1 ? "it stays" : "they stay")} vulnerable, or taken out.");
+        }
+
+        return new PatchCheck(care.Count > 0 ? PatchCheck.Care : PatchCheck.Clear, care);
+    }
+
+    /// <summary>The libraries a requirements file names, a line each: its name before any extras, version or condition.</summary>
+    private static IEnumerable<string> LibrariesOf(string text) =>
+        text.ReplaceLineEndings("\n").Split('\n')
+            .Select(line => line.Split('#')[0].Trim())
+            .Where(line => line.Length > 0 && char.IsLetterOrDigit(line[0]))
+            .Select(line => string.Concat(line.TakeWhile(c => char.IsLetterOrDigit(c) || c is '.' or '_' or '-')));
+
+    /// <summary>
+    /// Where builds of <paramref name="library"/> for <paramref name="variant"/>
+    /// come from (<c>torch 2.4.0+cpu</c>): PyTorch's own index for its
+    /// libraries, one per variant (<c>https://download.pytorch.org/whl/cpu</c>);
+    /// PyPI has only its default build, PyTorch's for CUDA, gigabytes of NVIDIA
+    /// libraries with it. Empty for any other: where it came from is not known.
+    /// </summary>
+    internal static string IndexOf(string library, string variant) =>
+        PyTorchLibraries.Contains(PythonEnvironment.Normalized(library)) && variant.Length > 0 ? $"{PyTorchIndex}/{variant}" : "";
+
+    /// <summary>PyTorch's libraries, built for each variant on its own index.</summary>
+    private static readonly HashSet<string> PyTorchLibraries = new(["torch", "torchvision", "torchaudio"], StringComparer.Ordinal);
+
+    private const string PyTorchIndex = "https://download.pytorch.org/whl";
 
     internal const string Uv = "uv";
 
@@ -128,22 +213,32 @@ public sealed class ImagePatches(IWslcRunner wslc, IImageSecurity security, Imag
     internal const string UvImage = "ghcr.io/astral-sh/uv:0.13.6";
 
     /// <summary>
-    /// The Python a patch installs into: the one the image runs as
-    /// <c>python3</c>, a virtual environment's when its folder comes first in
-    /// the PATH (an image made by uv: <c>/opt/hermes/.venv</c>, with no pip in
-    /// it), else the system's.
-    /// </summary>
-    private const string PatchedPython = "--python \"$(command -v python3)\"";
-
-    /// <summary>
     /// The installer, the names to follow: always uv, quicker than pip, never
     /// missing as pip is from an environment uv made, and it says what it
     /// changed; brought in by <see cref="UvSetup"/> when the image has none.
+    /// Never <c>-U</c>, which takes every library of a file and every one they
+    /// need to its latest: what is installed and still meets the file stays as
+    /// the image has it (agent-zero's <c>torch 2.4.0+cpu</c>, which
+    /// <c>sentence-transformers</c> needs, would come back as PyPI's latest,
+    /// built for CUDA, gigabytes of NVIDIA libraries with it). A library raised
+    /// is installed because what is there no longer meets its line; one taken
+    /// to its latest is named after <see cref="UpgradeOne"/>. Never built from
+    /// its sources either (<c>--no-build</c>): only a version with a wheel for
+    /// the image is taken, so a library its authors pin to the last one that
+    /// has a wheel (agent-zero's <c>pyreqwest-impersonate==0.5.3</c>; 0.5.5 has
+    /// its sources alone) is not compiled, and failed, in the build.
+    /// Each command is given the environment it works in after it
+    /// (<see cref="PythonEnvironment.Flags"/>), read from the image: an image may
+    /// hold several, a virtual environment its application runs in, another of
+    /// a tool's, the system's own.
     /// </summary>
-    internal const string Installer = $"uv pip install {PatchedPython} --no-cache -U";
+    internal const string Installer = "uv pip install --no-cache --no-build";
 
-    /// <summary>What takes a library out, by the same installer, the names to follow.</summary>
-    internal const string Uninstaller = $"uv pip uninstall {PatchedPython}";
+    /// <summary>What takes one library, the name to follow, to its latest, and no other.</summary>
+    internal const string UpgradeOne = "--upgrade-package";
+
+    /// <summary>What takes a library out, by the same installer, its environment's flags and the names to follow.</summary>
+    internal const string Uninstaller = "uv pip uninstall";
 
     /// <summary>The Dockerfile line that puts uv in an image that does not carry it, before <see cref="Installer"/> runs; empty when it does.</summary>
     internal static string UvSetup(bool carriesUv) =>

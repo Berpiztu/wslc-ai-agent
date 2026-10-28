@@ -16,6 +16,8 @@ namespace WslcAgent.Server.Containers;
 /// container is named, is not started, so it does not send its work to what
 /// is not its own. The pass goes round while it starts something, so one
 /// listed before what it depends on waits for it instead of being refused.
+/// Nor is one started while a volume it uses is being backed up or restored
+/// (<see cref="Backups.BusyVolumes"/>).
 /// </summary>
 public sealed class RestartPolicyReconciler(
     RestartPolicyStore policies,
@@ -23,7 +25,8 @@ public sealed class RestartPolicyReconciler(
     ProjectDependencies dependencies,
     StartFailures failures,
     Notifier notifier,
-    ILogger<RestartPolicyReconciler> logger)
+    ILogger<RestartPolicyReconciler> logger,
+    Backups.BusyVolumes? busyVolumes = null)
 {
     /// <summary>
     /// Runs the pass and returns the containers it started (the ones that were
@@ -53,6 +56,14 @@ public sealed class RestartPolicyReconciler(
                 {
                     // Its dependency may be further down the list: asked again on the next round.
                     refused[key] = ex.Message;
+                    continue;
+                }
+
+                // Not while a volume it uses is being backed up or restored: what it wrote would be half in the
+                // backup, or overwritten. Said as a refused start is, and started by hand once that is over.
+                if (busyVolumes is { Any: true } && busyVolumes.Why(key, await VolumesOfAsync(key, session, cancellationToken)) is { } busy)
+                {
+                    refused[key] = busy;
                     continue;
                 }
 
@@ -90,4 +101,9 @@ public sealed class RestartPolicyReconciler(
 
         return started;
     }
+
+    /// <summary>The volumes a container mounts, by name.</summary>
+    private async Task<IEnumerable<string>> VolumesOfAsync(string container, string? session, CancellationToken cancellationToken) =>
+        ContainerInspection.Parse(await wslc.RunAsync(["container", "inspect", container, "--format", "json"], cancellationToken: cancellationToken, session: session))
+            .Mounts.Where(mount => mount.Type == "volume").Select(mount => mount.Source);
 }

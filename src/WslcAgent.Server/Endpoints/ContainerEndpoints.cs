@@ -149,7 +149,7 @@ public static class ContainerEndpoints
 
         MapExec(group);
         MapFiles(group);
-        MapBackups(group);
+        MapBackupStarts(group);
 
         group.MapGet("/{container}/restart-policy", (string container, IContainerService containers) => containers.GetRestartPolicy(container))
             .WithName("GetRestartPolicy");
@@ -164,6 +164,9 @@ public static class ContainerEndpoints
                 return TypedResults.NoContent();
             })
             .WithName("RemoveContainer");
+
+        // Their own group: under /containers a literal would hide a container of that name.
+        api.MapBackups<ContainerBackups>("/container-backups", "Container");
 
         return api;
     }
@@ -364,31 +367,19 @@ public static class ContainerEndpoints
             .WithName("CopyContainerFile");
     }
 
-    /// <summary>The backup job: start, poll, download the archive, finish or discard.</summary>
-    private static void MapBackups(RouteGroupBuilder group)
+    /// <summary>
+    /// A container's backup and restore, started here and run by the agent;
+    /// the jobs, the history, the settings and the log are under
+    /// <c>/container-backups</c> (<see cref="BackupEndpoints.MapBackups"/>).
+    /// </summary>
+    private static void MapBackupStarts(RouteGroupBuilder group)
     {
-        group.MapPost("/{container}/backup", (string container, IContainerBackups backups, CancellationToken ct) => backups.StartAsync(container, ct))
-            .WithName("StartBackup");
+        group.MapPost("/{container}/backup", (string container, BackupContainerRequest request, ContainerBackups backups) =>
+                backups.StartBackup(container, request.What, request.Folder, request.Stop))
+            .WithName("BackupContainer");
 
-        group.MapGet("/backups/{job}", (string job, IContainerBackups backups) => backups.Get(job))
-            .WithName("GetBackup");
-
-        group.MapGet("/backups/{job}/download", (string job, IContainerBackups backups) =>
-            {
-                var info = backups.Get(job);
-                var path = backups.BeginDownload(job);
-                return path is null
-                    ? Results.Problem("The archive is not ready.", statusCode: StatusCodes.Status409Conflict, title: "Backup not ready")
-                    : Results.File(path, "application/x-tar", info.Filename);
-            })
-            .WithName("DownloadBackup");
-
-        group.MapPost("/backups/{job}/cancel", async Task<NoContent> (string job, IContainerBackups backups) =>
-            {
-                await backups.CancelAsync(job);
-                return TypedResults.NoContent();
-            })
-            .WithName("CancelBackup");
+        group.MapPost("/restore", (RestoreContainerRequest request, ContainerBackups backups) => backups.StartRestore(request.Folder, request.Container))
+            .WithName("RestoreContainer");
     }
 
     /// <summary>

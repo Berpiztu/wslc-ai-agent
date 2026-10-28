@@ -4,7 +4,7 @@ using WslcAgent.ApiClient.Contracts;
 
 namespace WslcAgent.Mcp.Tools;
 
-/// <summary>Read, lifecycle and launch tools for containers. Kill and remove are destructive: they run only with the user's approval (<see cref="ApprovalGate"/>).</summary>
+/// <summary>Read, lifecycle, launch and backup tools for containers. Kill, remove and restore are destructive: they run only with the user's approval (<see cref="ApprovalGate"/>).</summary>
 [McpServerToolType]
 public static class ContainerTools
 {
@@ -78,6 +78,42 @@ public static class ContainerTools
 
         await containers.RemoveAsync(container, force, cancellationToken);
         return $"removed {container}";
+    }
+
+    [McpServerTool(Name = "backup_container")]
+    [Description("Back up a container, in the background, into a folder <container>-<date> in its backup folder (its own, else a folder named after it in the folder of every container; container_backups says which) or the folder given: what holds any of its parts, with commas between: config (its settings, to make it again as it was), image, volumes (config,image,volumes is all of it); empty for what its backup settings tick. Its volumes need every container that uses them stopped, it among them: they are stopped and started again when it ends if its backup settings say yes, or stop=true says the user agreed; if they say no, or ask and stop is false, the backup is refused while they run. A host folder mounted into it is not in the backup. Returns the job at once; container_backups follows it.")]
+    public static BackupJob BackupContainer(
+        IContainerBackups backups,
+        [Description("Container name.")] string container,
+        [Description("Any of config, image and volumes, with commas between; empty for its backup settings'.")] string what = "",
+        [Description("Empty for the container's backup folder; else a folder of the agent's machine, by its full path (C:\\Backups), made when it is not there.")] string folder = "",
+        [Description("The user agreed to stop it and the running containers that use its volumes; they are started again when the backup ends.")] bool stop = false) =>
+        backups.StartBackup(container, what, folder, stop);
+
+    [McpServerTool(Name = "container_backups", ReadOnly = true)]
+    [Description("The container backups and restores under way or just ended (state, step, output), every backup's history, newest first (container, folder, what it holds, size, when, and whether it is still there), and where backups go: the default folder and each container's own.")]
+    public static BackupList ListContainerBackups(IContainerBackups backups) => backups.List();
+
+    [McpServerTool(Name = "restore_container", Destructive = true)]
+    [Description("Restore a container's backup (a folder with its backup.json), in the background, what it holds: its image loaded, its volumes' contents replaced (created when they are not there), and for a backup with its configuration the container made again, stopped, with its settings, under the name given (the one it had when empty). Refused while the container, or a container using one of its volumes, runs. Destructive: it asks for the user's approval first, through their client's prompt or a confirm token.")]
+    public static async Task<object> RestoreContainer(
+        IContainerBackups backups,
+        ApprovalGate approvals,
+        McpServer? server,
+        [Description("The backup's folder on the agent's machine, by its full path.")] string folder,
+        [Description("The container it goes into; empty for the one the backup was made of.")] string container = "",
+        [Description("The confirm token from the previous answer, once the user approved.")] string? confirm = null,
+        CancellationToken cancellationToken = default)
+    {
+        var target = container.Length > 0 ? container : "the container it was made of";
+        if (await approvals.CheckAsync(server, "restore_container", $"restore {folder} into {target}, replacing its volumes' contents and making it again", folder,
+                new Dictionary<string, string> { ["folder"] = folder, ["container"] = target },
+                confirm, cancellationToken) is { } required)
+        {
+            return required;
+        }
+
+        return backups.StartRestore(folder, container);
     }
 
     [McpServerTool(Name = "list_containers", ReadOnly = true)]

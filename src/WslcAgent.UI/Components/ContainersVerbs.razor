@@ -1,16 +1,25 @@
 @* The Containers page's verbs in the round button: Run and Create, the one
-   launch form in either mode, and Compose, the window a Compose file is
-   pasted or loaded into. Drawn by the page, and by the dashboard while a
-   container's card is selected. *@
+   launch form in either mode; Compose, the window a Compose file is pasted or
+   loaded into; and Backup & restore, the window of every container's backups
+   and restores. Drawn by the page, and by the dashboard while a container's
+   card is selected. *@
 @inherits PageVerbsBase
 @using WslcAgent.UI.Components.Launch
 
 <VerbFab StartIcon="@Icons.Material.Filled.PlayArrow" Label="Run" Color="Color.Success" OnClick="@(() => LaunchAsync(LaunchMode.Run))" Title="Run an image" />
 <VerbFab StartIcon="@Icons.Material.Filled.Add" Label="Create" Color="Color.Primary" OnClick="@(() => LaunchAsync(LaunchMode.Create))" Title="Create a container" />
 <VerbFab StartIcon="@Icons.Material.Filled.AccountTree" Label="Add Compose" OnClick="@(() => OpenAsync<ComposeDialog>("Compose", large: true))" Title="Paste or load a Compose file" />
+<VerbFab StartIcon="@Icons.Material.Filled.Backup" Label="Backup &amp; restore" Color="Color.Primary" OnClick="BackupsAsync" Title="Every container's backups and restores" />
 
 @code {
     private Task LaunchAsync(LaunchMode mode) =>
         OpenAsync<ContainerFormDialog>(mode == LaunchMode.Run ? "Run container" : "Create container",
             new DialogParameters<ContainerFormDialog> { { d => d.Mode, mode } }, large: true);
+
+    /// <summary>The window; the page reads its list again after, for what was started or created there.</summary>
+    private async Task BackupsAsync()
+    {
+        await BackupFlow.ShowAllAsync(Dialogs, BackupKind.Container);
+        await Changed.InvokeAsync();
+    }
 }

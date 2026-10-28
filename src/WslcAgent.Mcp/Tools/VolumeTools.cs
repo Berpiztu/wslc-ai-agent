@@ -64,16 +64,17 @@ public static class VolumeTools
     }
 
     [McpServerTool(Name = "backup_volume")]
-    [Description("Back up a volume: the agent packs it into <volume>-<date>.tar.gz in its backup folder (its own, else a folder named after it in the folder of every volume; volume_backups says which) or the folder given, in the background, and keeps it in the volume's backup history. Returns the job at once; volume_backups follows it.")]
-    public static VolumeBackupJob BackupVolume(
+    [Description("Back up a volume, every container that uses it stopped: the agent packs it into <volume>-<date>.tar.gz in its backup folder (its own, else a folder named after it in the folder of every volume; volume_backups says which) or the folder given, in the background, and keeps it in the volume's backup history. Running containers that use it are stopped and started again when it ends if its backup settings say yes, or stop=true says the user agreed; if they say no, or ask and stop is false, the backup is refused while they run. Returns the job at once; volume_backups follows it.")]
+    public static BackupJob BackupVolume(
         IVolumeBackups backups,
         [Description("Volume name.")] string name,
-        [Description("Empty for the volume's backup folder; else a folder of the agent's machine, by its full path (C:\\Backups), made when it is not there.")] string folder = "") =>
-        backups.StartBackup(name, folder);
+        [Description("Empty for the volume's backup folder; else a folder of the agent's machine, by its full path (C:\\Backups), made when it is not there.")] string folder = "",
+        [Description("The user agreed to stop the running containers that use it; they are started again when the backup ends.")] bool stop = false) =>
+        backups.StartBackup(name, folder, stop);
 
     [McpServerTool(Name = "volume_backups", ReadOnly = true)]
     [Description("The volume backups and restores under way or just ended (state, step, output), every backup's history, newest first (volume, file, size, when, and whether the file is still there), and where backups go: the default folder and each volume's own.")]
-    public static VolumeBackupList ListVolumeBackups(IVolumeBackups backups) => backups.List();
+    public static BackupList ListVolumeBackups(IVolumeBackups backups) => backups.List();
 
     [McpServerTool(Name = "restore_volume", Destructive = true)]
     [Description("Restore a backup (.tar.gz) into a volume, in the background: the volume is created when it is not there, and its contents are replaced by the backup's. Refused while a running container uses it. Destructive: it asks for the user's approval first, through their client's prompt or a confirm token.")]

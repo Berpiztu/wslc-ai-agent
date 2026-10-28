@@ -43,9 +43,9 @@
                     </TemplateColumn>
                     <PropertyColumn T="ListRow<VolumeSummary>" TProperty="string" Property="v => v.Value.Name" Title="Name" StickyLeft="true" HeaderClass="@GridColumn.Width(29)" CellClass="@GridColumn.Width(29)">
                         <CellTemplate>
-                            @if (VolumeBackupFlow.For(_jobs, context.Item.Value.Name) is { } job)
+                            @if (BackupFlow.For(_jobs, context.Item.Value.Name) is { } job)
                             {
-                                <VolumeBackupRing Job="job" Row="true" Changed="RefreshAsync" />
+                                <BackupRing Kind="BackupKind.Volume" Job="job" Row="true" Changed="RefreshAsync" />
                             }
                             else
                             {
@@ -63,7 +63,7 @@
                 <Actions>
                     <TemplateColumn T="ListRow<VolumeSummary>" Title="Actions" Sortable="false" Resizable="false" DragAndDropEnabled="false" StickyRight="true" HeaderClass="@GridColumn.Actions" CellClass="@GridColumn.Actions">
                         <CellTemplate>
-                            <VolumeActions Volume="context.Item.Value" BackingUp="@(VolumeBackupFlow.For(_jobs, context.Item.Value.Name) is { Running: true })" Changed="RefreshAsync" />
+                            <VolumeActions Volume="context.Item.Value" BackingUp="@(BackupFlow.For(_jobs, context.Item.Value.Name) is { Running: true })" Changed="RefreshAsync" />
                         </CellTemplate>
                     </TemplateColumn>
                 </Actions>
@@ -81,9 +81,9 @@
                             }
                         </HeaderActions>
                         <Avatar>
-                            @if (VolumeBackupFlow.For(_jobs, v.Name) is { } job)
+                            @if (BackupFlow.For(_jobs, v.Name) is { } job)
                             {
-                                <VolumeBackupRing Job="job" Changed="RefreshAsync" />
+                                <BackupRing Kind="BackupKind.Volume" Job="job" Changed="RefreshAsync" />
                             }
                             else
                             {
@@ -94,7 +94,7 @@
                             <VolumeCardBody Volume="v" TotalRead="_read" TotalWritten="_written" />
                         </ChildContent>
                         <Actions>
-                            <VolumeActions Volume="v" BackingUp="@(VolumeBackupFlow.For(_jobs, v.Name) is { Running: true })" Changed="RefreshAsync" Shortcuts="true" />
+                            <VolumeActions Volume="v" BackingUp="@(BackupFlow.For(_jobs, v.Name) is { Running: true })" Changed="RefreshAsync" Shortcuts="true" />
                         </Actions>
                     </EntityCard>
                 </ItemTemplate>
@@ -112,11 +112,11 @@
     private long _written;
 
     /// <summary>The backups and restores under way or just ended: each on its volume's card, as a ring, and its row, as a bar.</summary>
-    private IReadOnlyList<VolumeBackupJob> _jobs = [];
+    private IReadOnlyList<BackupJob> _jobs = [];
 
     protected override async Task<IReadOnlyList<VolumeSummary>> LoadAsync()
     {
-        var backups = Api.GetVolumeBackupsAsync();
+        var backups = Api.GetBackupsAsync(BackupKind.Volume.Key);
         var list = await Api.GetVolumesAsync();
         _jobs = (await backups).Jobs;
         _read = list.DiskReadBytes;

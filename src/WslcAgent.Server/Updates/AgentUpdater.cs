@@ -1,6 +1,7 @@
 using WslcAgent.ApiClient.Contracts;
 using WslcAgent.Mcp;
 using WslcAgent.Server.ClientPackages;
+using WslcAgent.Server.Backups;
 using WslcAgent.Server.Containers;
 using WslcAgent.Server.Notifications;
 using WslcAgent.Server.Wslc;
@@ -30,7 +31,7 @@ public sealed class AgentUpdater(
     PackageFolders folders,
     IAgentInfo info,
     ContainerTransfers transfers,
-    IContainerBackups backups,
+    IEnumerable<BackupService> backups,
     WslcEvents events,
     AgentUpdateLauncher launcher,
     Notifier notifier,
@@ -336,7 +337,7 @@ public sealed class AgentUpdater(
 
     private void Wake() => _wake.Release();
 
-    private int InFlight => transfers.InFlight + backups.InFlight;
+    private int InFlight => transfers.InFlight + backups.Sum(kind => kind.InFlight);
 
     private bool IsNewer(string version) => ClientPackageInfo.CompareDisplayVersion(version, info.Version) > 0;
 
