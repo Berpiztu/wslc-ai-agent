@@ -72,6 +72,65 @@ public sealed class WslcEventTests
         Assert.Equal("jade_wasatch", read.Name);
     }
 
+    [Theory]
+    // The lines of wslc 3.0.5: the command stands between the action and the id.
+    [InlineData("2026-11-02T20:00:00.000000000Z container exec_create: true  8449a1cce27f93 (execID=ab12, image=alpine:latest, name=jade_wasatch)")]
+    [InlineData("2026-11-02T20:00:00.000000000Z container exec_start: sh -c exit 7 8449a1cce27f93 (execID=ab12, image=alpine:latest, name=jade_wasatch)")]
+    [InlineData("2026-11-02T20:00:00.000000000Z container exec_die 8449a1cce27f93 (execID=ab12, exitCode=7, image=alpine:latest, name=jade_wasatch)")]
+    public void A_process_run_inside_a_container_is_an_exec(string line)
+    {
+        var read = WslcEventParsing.Parse(line);
+
+        Assert.NotNull(read);
+        Assert.True(read.IsExec);
+    }
+
+    [Theory]
+    [InlineData("2026-10-07T09:12:40.123456789Z container die 8449a1cce27f93 (execDuration=12, exitCode=1, image=alpine:latest, name=jade_wasatch)")]
+    [InlineData("2026-10-07T09:13:02.000000000Z container health_status: unhealthy 8449a1cce27f93 (image=alpine:latest, name=jade_wasatch)")]
+    [InlineData("2026-10-19T20:30:05.000000000-05:00 volume create pgdata (driver=local)")]
+    public void Anything_else_is_not_an_exec(string line)
+    {
+        var read = WslcEventParsing.Parse(line);
+
+        Assert.NotNull(read);
+        Assert.False(read.IsExec);
+    }
+
+    [Fact]
+    public void An_exec_of_several_lines_is_held_to_its_last_and_no_further()
+    {
+        var lines = new ExecLines();
+
+        // As wslc 3.0.5 printed it; the attributes may open with a label.
+        Assert.True(Held(lines, "2026-11-02T23:07:41.411800854-05:00 container exec_create: sh -c true"));
+        Assert.True(Held(lines, "more"));
+        Assert.True(Held(lines, "true 331b3c371b72 (ai.berpiztu.wslc.project=ia-apps, execID=65cc463a, image=alpine:latest, name=x)"));
+        Assert.False(Held(lines, "Operation aborted "));
+    }
+
+    [Fact]
+    public void An_exec_of_one_word_on_its_first_line_is_held_too()
+    {
+        var lines = new ExecLines();
+
+        Assert.True(Held(lines, "2026-11-02T23:07:41.411800854-05:00 container exec_start: sh"));
+        Assert.True(Held(lines, "-c true 331b3c371b72 (execID=65cc463a)"));
+        Assert.False(Held(lines, "Operation aborted "));
+    }
+
+    [Fact]
+    public void An_event_ends_an_exec_whose_attributes_never_came()
+    {
+        var lines = new ExecLines();
+
+        Assert.True(Held(lines, "2026-11-02T23:07:41.411800854-05:00 container exec_create: sh -c true"));
+        Assert.False(Held(lines, "2026-11-02T23:07:42.000000000-05:00 container start 8449a1cce27f93 (image=alpine:latest, name=x)"));
+        Assert.False(Held(lines, "Operation aborted "));
+    }
+
+    private static bool Held(ExecLines lines, string line) => lines.Hold(line, WslcEventParsing.Parse(line));
+
     [Fact]
     public void A_volume_is_named_by_its_id_and_a_prune_names_nothing()
     {

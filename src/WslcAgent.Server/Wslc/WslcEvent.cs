@@ -14,6 +14,14 @@ namespace WslcAgent.Server.Wslc;
 /// <param name="Name">The object's name (its <c>name</c> attribute, a volume's id), for the Recent events list; null when the line has none.</param>
 public sealed record WslcEvent(DateTimeOffset Time, string Type, string Action, string Id, int? ExitCode = null, string? Name = null)
 {
+    /// <summary>
+    /// A process run inside a container (<c>exec_create</c>, <c>exec_start</c>,
+    /// <c>exec_die</c>, wslc 3.0.5 on), a health check's probes among them.
+    /// No list changes with one, so its kind and action are all that is read:
+    /// the command's words stand before its id on the line.
+    /// </summary>
+    public bool IsExec => Type == "container" && Action.StartsWith("exec_", StringComparison.Ordinal);
+
     /// <summary>What the agent tells its clients: kind and action, without the id's noise.</summary>
     public override string ToString() => $"{Type} {Action}";
 }
@@ -55,9 +63,19 @@ public static class WslcEventParsing
         }
 
         var fields = text.Split(' ', 6, StringSplitOptions.RemoveEmptyEntries);
-        if (fields.Length < 4 || !DateTimeOffset.TryParse(fields[0], CultureInfo.InvariantCulture, DateTimeStyles.None, out var time))
+        if (fields.Length < 3 || !DateTimeOffset.TryParse(fields[0], CultureInfo.InvariantCulture, DateTimeStyles.None, out var time))
         {
             // The CLI's own errors arrive on the same stream; they are not events.
+            return null;
+        }
+
+        if (fields[1] == "container" && fields[2].StartsWith("exec_", StringComparison.Ordinal))
+        {
+            return new WslcEvent(time, fields[1], fields[2].TrimEnd(':'), "");
+        }
+
+        if (fields.Length < 4)
+        {
             return null;
         }
 
@@ -107,4 +125,37 @@ public static class WslcEventParsing
         var text = (end < 0 ? value : value[..end]).Trim().ToString();
         return text.Length > 0 ? text : null;
     }
+}
+
+/// <summary>
+/// wslc prints an exec's command as it was written, its line breaks too, so
+/// one event can take several lines, and only its last has the attributes:
+/// <code>
+/// 2026-11-02T23:07:41.411800854-05:00 container exec_create: sh -c true
+/// true 331b3c371b72… (execID=65cc463a…, image=…, name=…)
+/// </code>
+/// Any event that is not an exec ends one, so a line that never came cannot
+/// hide what follows it.
+/// </summary>
+internal sealed class ExecLines
+{
+    private const string Attribute = "execID=";
+
+    private bool _inside;
+
+    /// <summary>Whether this line, parsed as <paramref name="read"/>, belongs to an exec event.</summary>
+    public bool Hold(string line, WslcEvent? read)
+    {
+        if (read is { IsExec: false } || (read is null && !_inside))
+        {
+            _inside = false;
+            return false;
+        }
+
+        _inside = !line.Contains(Attribute, StringComparison.Ordinal);
+        return true;
+    }
+
+    /// <summary>A new stream: what the last one was printing ended with it.</summary>
+    public void Reset() => _inside = false;
 }

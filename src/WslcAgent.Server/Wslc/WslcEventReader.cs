@@ -23,7 +23,8 @@ namespace WslcAgent.Server.Wslc;
 /// <see cref="ContainerHealth"/>, every event to <see cref="RecentWslcEvents"/>
 /// (the Recent events list), and a stream
 /// that died with a session the user did not stop from the agent is a session
-/// lost.
+/// lost. A process run inside a container (<see cref="WslcEvent.IsExec"/>) goes
+/// nowhere.
 /// </para>
 /// </summary>
 public sealed class WslcEventReader(
@@ -72,6 +73,8 @@ public sealed class WslcEventReader(
     /// </summary>
     private string _lastWord = "";
 
+    private readonly ExecLines _execLines = new();
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var retry = FirstRetry;
@@ -112,6 +115,7 @@ public sealed class WslcEventReader(
             recent.Listening(_session);
             events.Live = true;
             _lastWord = "";
+            _execLines.Reset();
             var lasted = Stopwatch.StartNew();
             int exit;
             try
@@ -244,7 +248,16 @@ public sealed class WslcEventReader(
             return;
         }
 
-        if (WslcEventParsing.Parse(line) is not { } read)
+        var parsed = WslcEventParsing.Parse(line);
+
+        // Three of these for every probe of every health check: heard, they
+        // would read the lists again each time and push the Recent events out.
+        if (_execLines.Hold(line, parsed))
+        {
+            return;
+        }
+
+        if (parsed is not { } read)
         {
             // Not an event: the CLI saying why it is about to end. The first of
             // those lines is the one worth keeping — "Operation aborted" — and

@@ -292,7 +292,8 @@ die.
   `image`, `network` or, from wslc 3.0.4, `volume` (older wslc reports no
   volume events); `action` is wslc's own — `start`, `stop`, `kill`, `die`,
   `connect`, `disconnect`, `health_status: unhealthy`, a volume's `create`,
-  `mount`, `unmount`, `destroy`, `prune`… A `die` with a non-zero `exitCode` is a container
+  `mount`, `unmount`, `destroy`, `prune`… A process run inside a container is
+  never listed (wslc's `exec_` events). A `die` with a non-zero `exitCode` is a container
   that ended on its own, not one the user stopped. `name` is null when the
   event carries none: name the object by its short id then. The agent keeps
   the last 100, and the list starts empty when the agent starts or listens to
