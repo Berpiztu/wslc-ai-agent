@@ -145,6 +145,12 @@
     <MultiValueField Values="Form.Ulimits" Label="Ulimits" Split="ValueList.SplitPairs" Placeholder="nofile=1024:2048"
                      HelperText="Example: nofile=1024:2048. Several separated by commas, or edited as rows with ⋮."
                      Hint="One limit per row: name=soft[:hard], -1 for unlimited. Each row becomes a --ulimit flag." Error="@Error(LaunchFields.Ulimits)" />
+    <MultiValueField Values="Form.CapAdd" Label="Capabilities added" Split="ValueList.Split" Placeholder="NET_ADMIN"
+                     HelperText="Example: NET_ADMIN. Several separated by commas, or edited as rows with ⋮. Needs wslc 3.0.5."
+                     Hint="One Linux capability per row, or ALL. Each row becomes a --cap-add flag." Error="@Error(LaunchFields.CapAdd)" />
+    <MultiValueField Values="Form.CapDrop" Label="Capabilities dropped" Split="ValueList.Split" Placeholder="NET_RAW"
+                     HelperText="Example: NET_RAW. Several separated by commas, or edited as rows with ⋮. Needs wslc 3.0.5."
+                     Hint="One Linux capability per row, or ALL. Each row becomes a --cap-drop flag." Error="@Error(LaunchFields.CapDrop)" />
     <div class="wslc-span2">
         <MultiValueField Values="Form.Labels" Label="Labels" Split="ValueList.SplitPairs" Placeholder="key=value"
                          HelperText="Example: key=value. Several separated by commas, or edited as rows with ⋮."
@@ -869,6 +875,8 @@
         LaunchFields.Tmpfs => string.Join(';', Form.Tmpfs),
         LaunchFields.ShmSize => Form.ShmSize,
         LaunchFields.Ulimits => string.Join(';', Form.Ulimits),
+        LaunchFields.CapAdd => string.Join(';', Form.CapAdd),
+        LaunchFields.CapDrop => string.Join(';', Form.CapDrop),
         LaunchFields.StopSignal => Form.StopSignal,
         _ => "",
     };

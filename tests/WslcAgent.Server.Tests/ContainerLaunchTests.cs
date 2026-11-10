@@ -270,6 +270,33 @@ public sealed class ContainerLaunchTests
     }
 
     [Fact]
+    public void Capabilities_go_from_a_pasted_line_to_the_launch_and_back_from_inspect()
+    {
+        var parse = RunCommandLine.Parse("docker run -d --cap-add NET_ADMIN --cap-add SYS_TIME --cap-drop=NET_RAW alpine");
+
+        Assert.Empty(parse.Unsupported);
+        Assert.NotNull(parse.Request);
+        Assert.Equal(["NET_ADMIN", "SYS_TIME"], parse.Request.CapAdd);
+        Assert.Equal(["NET_RAW"], parse.Request.CapDrop);
+        Assert.Equal(["container", "run", "--detach", "--cap-add", "NET_ADMIN", "--cap-add", "SYS_TIME", "--cap-drop", "NET_RAW", "alpine"],
+            LaunchArgs.Run(parse.Request with { RestartPolicy = "" }));
+
+        var inspect = "[{\"Id\":\"abc\",\"Name\":\"/web\",\"Config\":{\"Image\":\"alpine\"},\"HostConfig\":{\"CapAdd\":[\"NET_ADMIN\"],\"CapDrop\":[\"NET_RAW\"]}}]";
+        var form = ContainerInspection.Parse(new WslcResult(["container", "inspect"], 0, inspect, "", TimeSpan.Zero)).Form;
+        Assert.Equal(["NET_ADMIN"], form.CapAdd);
+        Assert.Equal(["NET_RAW"], form.CapDrop);
+    }
+
+    [Fact]
+    public void A_capability_is_a_name()
+    {
+        var check = LaunchChecks.Inspect(new ContainerLaunchRequest { Image = "alpine", CapAdd = ["NET_ADMIN", "CAP_SYS_TIME", "ALL"], CapDrop = ["net raw"] });
+
+        var error = Assert.Single(check.Errors);
+        Assert.Equal(LaunchFields.CapDrop, error.Field);
+    }
+
+    [Fact]
     public void Shell_words_split_and_join_round_trip()
     {
         Assert.Equal(["sh", "-c", "echo 'hi there'"], ShellWords.Split("sh -c \"echo 'hi there'\""));

@@ -23,8 +23,12 @@ public sealed partial class LaunchChecks(
     INetworkService networks,
     IImageService images,
     PublishingService publishing,
+    IWslcRunner wslc,
     ILogger<LaunchChecks> logger) : ILaunchChecks
 {
+    /// <summary>The first <c>wslc</c> that takes <c>--cap-add</c> and <c>--cap-drop</c>.</summary>
+    private static readonly Version TakesCapabilities = new(3, 0, 5);
+
     public async Task<LaunchCheck> CheckAsync(ContainerLaunchRequest request, string source, CancellationToken cancellationToken = default)
     {
         var findings = new Findings();
@@ -33,6 +37,7 @@ public sealed partial class LaunchChecks(
         await AgainstNetworksAsync(request, findings, cancellationToken);
         await AgainstImagesAsync(request, findings, cancellationToken);
         await AgainstPublishingAsync(request, source, findings, cancellationToken);
+        await AgainstWslcAsync(request, findings, cancellationToken);
         return findings.ToCheck();
     }
 
@@ -82,6 +87,11 @@ public sealed partial class LaunchChecks(
         foreach (var limit in request.Ulimits.Where(limit => !Ulimit().IsMatch(limit)))
         {
             findings.Error(LaunchFields.Ulimits, $"'{limit}' is not a limit: name=soft[:hard], -1 for unlimited. Example: nofile=1024:2048.");
+        }
+
+        foreach (var (field, capability) in request.CapAdd.Select(c => (LaunchFields.CapAdd, c)).Concat(request.CapDrop.Select(c => (LaunchFields.CapDrop, c))).Where(c => !Capability().IsMatch(c.c)))
+        {
+            findings.Error(field, $"'{capability}' is not a Linux capability: a name such as NET_ADMIN (CAP_ in front or not), or ALL.");
         }
 
         if (request.StopTimeout.Length > 0 && (!int.TryParse(request.StopTimeout, out var stop) || stop < -1))
@@ -259,6 +269,35 @@ public sealed partial class LaunchChecks(
     private static List<int> HealthPorts(string healthCmd) =>
         AddressPort().Matches(healthCmd).Select(m => int.Parse(m.Groups["port"].Value, CultureInfo.InvariantCulture)).ToList();
 
+    /// <summary>
+    /// What only a newer <c>wslc</c> takes, said before its own CLI refuses an
+    /// argument it does not know, in words that say what to do.
+    /// </summary>
+    private async Task AgainstWslcAsync(ContainerLaunchRequest request, Findings findings, CancellationToken cancellationToken)
+    {
+        if (request.CapAdd.Count == 0 && request.CapDrop.Count == 0)
+        {
+            return;
+        }
+
+        string said;
+        try
+        {
+            said = await WslcVersion.ReadAsync(wslc, cancellationToken);
+        }
+        catch (Exception ex) when (ex is WslcException or WslcNotFoundException or TimeoutException)
+        {
+            findings.Warn(LaunchFields.General, $"Could not check the wslc version against the capabilities: {ex.Message}");
+            return;
+        }
+
+        if (WslcVersion.Parse(said) is { } version && version < TakesCapabilities)
+        {
+            findings.Error(request.CapAdd.Count > 0 ? LaunchFields.CapAdd : LaunchFields.CapDrop,
+                $"This machine's wslc is {said}, and capabilities need {TakesCapabilities} or later. Update WSL (wsl --update), or leave them empty.");
+        }
+    }
+
     /// <summary>A name in use, and a host port another running container holds or a program on this machine listens on.</summary>
     private async Task AgainstContainersAsync(ContainerLaunchRequest request, string source, Findings findings, CancellationToken cancellationToken)
     {
@@ -395,6 +434,9 @@ public sealed partial class LaunchChecks(
 
     [GeneratedRegex(@"^[a-z]+=-?\d+(:-?\d+)?$")]
     private static partial Regex Ulimit();
+
+    [GeneratedRegex(@"^[A-Za-z][A-Za-z_]*$")]
+    private static partial Regex Capability();
 
     /// <summary><c>[ip:]hostPort[-to]:containerPort[-to][/proto]</c>, or a container port alone (a random host port).</summary>
     [GeneratedRegex(@"^(?:(?:\d{1,3}\.){3}\d{1,3}:)?(?:(?<host>\d{1,5})(?<range>-\d{1,5})?:)?(?<container>\d{1,5})(?:-\d{1,5})?(?:/(?:tcp|udp|sctp))?$", RegexOptions.IgnoreCase)]

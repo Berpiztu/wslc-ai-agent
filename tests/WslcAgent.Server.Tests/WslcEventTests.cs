@@ -129,7 +129,7 @@ public sealed class WslcEventTests
         Assert.False(Held(lines, "Operation aborted "));
     }
 
-    private static bool Held(ExecLines lines, string line) => lines.Hold(line, WslcEventParsing.Parse(line));
+    private static bool Held(ExecLines lines, string line) => lines.Hold(line, WslcEventParsing.Parse(line), out _);
 
     [Fact]
     public void A_volume_is_named_by_its_id_and_a_prune_names_nothing()

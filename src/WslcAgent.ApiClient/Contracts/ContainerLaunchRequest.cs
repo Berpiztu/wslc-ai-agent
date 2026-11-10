@@ -113,6 +113,12 @@ public sealed record ContainerLaunchRequest
     /// <summary>Limits, <c>name=soft[:hard]</c>, one per <c>--ulimit</c>.</summary>
     public IReadOnlyList<string> Ulimits { get; init; } = [];
 
+    /// <summary>Linux capabilities added, one per <c>--cap-add</c> (<c>NET_ADMIN</c>, <c>ALL</c>); wslc 3.0.5 on.</summary>
+    public IReadOnlyList<string> CapAdd { get; init; } = [];
+
+    /// <summary>Linux capabilities dropped, one per <c>--cap-drop</c>; wslc 3.0.5 on.</summary>
+    public IReadOnlyList<string> CapDrop { get; init; } = [];
+
     /// <summary>The signal a stop sends, e.g. <c>SIGINT</c>; empty leaves the image's.</summary>
     public string StopSignal { get; init; } = "";
 

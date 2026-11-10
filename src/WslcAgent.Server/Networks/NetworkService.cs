@@ -35,8 +35,23 @@ public sealed class NetworkService(IWslcRunner wslc, ContainerUsageScanner usage
         return new NetworkListResponse(networks, networks.Count, totals.NetReceivedBytes, totals.NetSentBytes);
     }
 
-    public Task CreateAsync(CreateNetworkRequest request, CancellationToken cancellationToken = default) =>
-        wslc.RunAsync(CreateArgs(request), cancellationToken: cancellationToken);
+    /// <summary>The first <c>wslc</c> that creates a network with IPv6.</summary>
+    private static readonly Version TakesIpv6 = new(3, 0, 5);
+
+    public async Task CreateAsync(CreateNetworkRequest request, CancellationToken cancellationToken = default)
+    {
+        if (request.Ipv6)
+        {
+            // Said before the CLI refuses an argument it does not know, in words that say what to do.
+            var said = await WslcVersion.ReadAsync(wslc, cancellationToken);
+            if (WslcVersion.Parse(said) is { } version && version < TakesIpv6)
+            {
+                throw new ArgumentException($"This machine's wslc is {said}, and IPv6 networking needs {TakesIpv6} or later. Update WSL (wsl --update), or create the network without IPv6.");
+            }
+        }
+
+        await wslc.RunAsync(CreateArgs(request), cancellationToken: cancellationToken);
+    }
 
     public Task ConnectAsync(string network, string container, string ip, CancellationToken cancellationToken = default) =>
         wslc.RunAsync(ConnectArgs(network, container, ip), cancellationToken: cancellationToken);
@@ -275,7 +290,8 @@ public sealed class NetworkService(IWslcRunner wslc, ContainerUsageScanner usage
             ipam.ValueKind == JsonValueKind.Object ? ipam.GetString("IPRange") : "",
             item.TryGetProperty("Internal", out var internalFlag) && internalFlag.ValueKind == JsonValueKind.True,
             Pairs(item, "Labels"),
-            Pairs(item, "Options"));
+            Pairs(item, "Options"),
+            item.TryGetProperty("EnableIPv6", out var ipv6) && ipv6.ValueKind == JsonValueKind.True);
     }
 
     /// <summary><c>{"a":"1","b":"2"}</c> → <c>a=1, b=2</c>: commas between pairs, which the create splits again.</summary>
@@ -293,6 +309,7 @@ public sealed class NetworkService(IWslcRunner wslc, ContainerUsageScanner usage
             .Option("--gateway", request.Gateway)
             .Option("--ip-range", request.IpRange)
             .Flag("--internal", request.Internal)
+            .Flag("--ipv6", request.Ipv6)
             .Pairs("--label", request.Label)
             .Pairs("--opt", request.Option);
         args.Add(name);

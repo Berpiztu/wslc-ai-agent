@@ -146,6 +146,10 @@ public sealed class ComposeReaderTests
                 restart: on-failure
                 expose:
                   - "80"
+                cap_add:
+                  - NET_ADMIN
+                cap_drop:
+                  - NET_RAW
             """, Source(folder: ""));
 
         Assert.Equal("project", plan.Name);
@@ -165,6 +169,9 @@ public sealed class ComposeReaderTests
         Assert.Equal(["1.1.1.1"], app.Dns);
         Assert.Equal("128m", app.ShmSize);
         Assert.Equal(["nofile=1024:2048"], app.Ulimits);
+        Assert.Equal(["NET_ADMIN"], app.CapAdd);
+        Assert.Equal(["NET_RAW"], app.CapDrop);
+        Assert.DoesNotContain(plan.Unsupported, item => item.Contains("cap_", StringComparison.Ordinal));
         Assert.Empty(app.Volumes);
         Assert.Equal(RestartPolicyInfo.No, app.RestartPolicy);
     }

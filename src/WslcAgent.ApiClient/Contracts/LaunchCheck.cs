@@ -38,6 +38,8 @@ public static class LaunchFields
     public const string Tmpfs = "tmpfs";
     public const string ShmSize = "shmSize";
     public const string Ulimits = "ulimits";
+    public const string CapAdd = "capAdd";
+    public const string CapDrop = "capDrop";
     public const string StopSignal = "stopSignal";
 }
 

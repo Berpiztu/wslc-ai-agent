@@ -50,7 +50,7 @@ public static class NetworkTools
     }
 
     [McpServerTool(Name = "create_network")]
-    [Description("Create a network (wslc network create). Driver bridge by default; subnet, gateway and ip range in CIDR/IP form; internal restricts external access.")]
+    [Description("Create a network (wslc network create). Driver bridge by default; subnet, gateway and ip range in CIDR/IP form; internal restricts external access; ipv6 enables IPv6 (wslc 3.0.5 on).")]
     public static async Task<string> CreateNetwork(
         INetworkService networks,
         [Description("Network name.")] string name,
@@ -61,9 +61,10 @@ public static class NetworkTools
         [Description("Restrict external access.")] bool @internal = false,
         [Description("One label as key=value, or empty.")] string label = "",
         [Description("One driver option as key=value, or empty.")] string option = "",
+        [Description("Enable IPv6 networking (wslc 3.0.5 on).")] bool ipv6 = false,
         CancellationToken cancellationToken = default)
     {
-        await networks.CreateAsync(new CreateNetworkRequest(name, driver, subnet, gateway, ipRange, @internal, label, option), cancellationToken);
+        await networks.CreateAsync(new CreateNetworkRequest(name, driver, subnet, gateway, ipRange, @internal, label, option, ipv6), cancellationToken);
         return $"created network {name}";
     }
 

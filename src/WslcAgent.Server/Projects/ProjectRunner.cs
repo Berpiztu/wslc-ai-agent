@@ -282,6 +282,7 @@ public sealed class ProjectRunner(
 
     private async Task SaveAsync(Job job, ComposePlan plan, ProjectUpRequest request, CancellationToken stop)
     {
+        plan = await ForThisWslcAsync(plan, job.Note, stop);
         var state = await StateAsync(plan, stop);
         var services = plan.Services.Where(service => service.Enabled).ToList();
         var newNetworks = plan.Networks.Where(network => !state.Networks.Contains(network.Name)).ToList();
@@ -395,7 +396,7 @@ public sealed class ProjectRunner(
         }
 
         job.Say($"Creating network {network.Name}");
-        await networks.CreateAsync(new CreateNetworkRequest(network.Name, Subnet: network.Subnet, Gateway: network.Gateway, Internal: network.Internal, Label: $"{ProjectLabels.Project}={plan.Name}"), stop);
+        await networks.CreateAsync(new CreateNetworkRequest(network.Name, Subnet: network.Subnet, Gateway: network.Gateway, Internal: network.Internal, Ipv6: network.Ipv6, Label: $"{ProjectLabels.Project}={plan.Name}"), stop);
         job.Advance();
     }
 
@@ -481,6 +482,36 @@ public sealed class ProjectRunner(
 
     /// <summary>The first <c>wslc</c> that reads a build's context from its standard input.</summary>
     private static readonly Version ReadsContextFromInput = new(3, 0, 3);
+
+    /// <summary>The first <c>wslc</c> that takes capabilities and IPv6 networks.</summary>
+    private static readonly Version TakesCapabilitiesAndIpv6 = new(3, 0, 5);
+
+    /// <summary>
+    /// What an older <c>wslc</c> cannot take, left out and said: a file with
+    /// <c>cap_add</c>, <c>cap_drop</c> or <c>enable_ipv6</c> runs on it as it
+    /// did before wslc 3.0.5 brought them, instead of failing on a flag the
+    /// CLI does not know.
+    /// </summary>
+    private async Task<ComposePlan> ForThisWslcAsync(ComposePlan plan, Action<string, string> say, CancellationToken stop)
+    {
+        if (!plan.Services.Any(service => service.Launch.CapAdd.Count > 0 || service.Launch.CapDrop.Count > 0) && !plan.Networks.Any(network => network.Ipv6))
+        {
+            return plan;
+        }
+
+        var said = await WslcVersion.ReadAsync(wslc, stop);
+        if (WslcVersion.Parse(said) is not { } version || version >= TakesCapabilitiesAndIpv6)
+        {
+            return plan;
+        }
+
+        say("WARNING", $"This machine's wslc is {said}: cap_add, cap_drop and enable_ipv6 need {TakesCapabilitiesAndIpv6} or later, and are left out. Update WSL (wsl --update) to have them.");
+        return plan with
+        {
+            Services = [.. plan.Services.Select(service => service with { Launch = service.Launch with { CapAdd = [], CapDrop = [] } })],
+            Networks = [.. plan.Networks.Select(network => network with { Ipv6 = false })],
+        };
+    }
 
     /// <summary>
     /// A context a client sent can be built from: it is here, and this

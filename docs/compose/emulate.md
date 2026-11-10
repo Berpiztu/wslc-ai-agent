@@ -62,10 +62,11 @@ in the Run form like any other container.
 | `tmpfs` | `Tmpfs` | `--tmpfs` |
 | `shm_size` | `ShmSize` | `--shm-size` |
 | `ulimits` | `Ulimits` | `--ulimit` |
+| `cap_add`, `cap_drop` | `CapAdd`, `CapDrop` | `--cap-add`, `--cap-drop` (wslc 3.0.5) |
 | `stop_signal` | `StopSignal` | `--stop-signal` |
 
 `wslc container inspect` says back the labels and the ulimits alone (seen in
-wslc 3.0.2). The others the agent writes on the container itself, in the
+wslc 3.0.2), and the capabilities (wslc 3.0.5). The others the agent writes on the container itself, in the
 label `ai.berpiztu.wslc.launch`, and reads from there for View & edit and
 for every recreate: nothing set at launch is lost when a container is
 edited.
@@ -101,7 +102,7 @@ the file is brought up without it.
 that uses them is read, and each is named as not supported, as the Fill bar
 does:
 
-`privileged`, `cap_add`, `cap_drop`, `devices`, `read_only`, `sysctls`,
+`privileged`, `devices`, `read_only`, `sysctls`,
 `security_opt`, `pid`, `ipc`, `userns_mode`, `init`, `logging`,
 `network_mode: host` or `service:…`, `extra_hosts` with an address,
 `deploy.replicas` above one, and Swarm's `deploy` keys.
@@ -124,7 +125,7 @@ ComposeReader.Read(yaml, source) -> ComposePlan
   Name          the project
   File          the file read, empty for a pasted one
   Services[]    name, ContainerLaunchRequest, DependsOn[], Build?, Profiles[], Enabled
-  Networks[]    key, name, subnet, gateway, internal, external
+  Networks[]    key, name, subnet, gateway, internal, external, ipv6 (enable_ipv6, wslc 3.0.5)
   Volumes[]     key, name, driver, options, external
   Unsupported[] "web: privileged", "db: secrets (not yet)"...
   NotNeeded[]   "web: extra_hosts host.docker.internal:host-gateway"

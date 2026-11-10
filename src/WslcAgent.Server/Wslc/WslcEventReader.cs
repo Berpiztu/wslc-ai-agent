@@ -24,7 +24,7 @@ namespace WslcAgent.Server.Wslc;
 /// (the Recent events list), and a stream
 /// that died with a session the user did not stop from the agent is a session
 /// lost. A process run inside a container (<see cref="WslcEvent.IsExec"/>) goes
-/// nowhere.
+/// to <see cref="ExecWatch"/> alone.
 /// </para>
 /// </summary>
 public sealed class WslcEventReader(
@@ -35,6 +35,7 @@ public sealed class WslcEventReader(
     StoppedSessions held,
     ContainerStops stops,
     ContainerHealth health,
+    ExecWatch execs,
     Notifier notifier,
     ILogger<WslcEventReader> logger) : BackgroundService
 {
@@ -116,6 +117,7 @@ public sealed class WslcEventReader(
             events.Live = true;
             _lastWord = "";
             _execLines.Reset();
+            execs.Reset();
             var lasted = Stopwatch.StartNew();
             int exit;
             try
@@ -250,10 +252,16 @@ public sealed class WslcEventReader(
 
         var parsed = WslcEventParsing.Parse(line);
 
-        // Three of these for every probe of every health check: heard, they
-        // would read the lists again each time and push the Recent events out.
-        if (_execLines.Hold(line, parsed))
+        // Three of these for every probe of every health check: heard as the
+        // rest, they would read the lists again each time and push the Recent
+        // events out. Only ExecWatch hears them, whole.
+        if (_execLines.Hold(line, parsed, out var whole))
         {
+            if (whole is not null && ExecEvent.Parse(whole) is { } exec)
+            {
+                _ = execs.Heard(exec);
+            }
+
             return;
         }
 

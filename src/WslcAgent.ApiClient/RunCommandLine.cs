@@ -59,6 +59,7 @@ public static partial class RunCommandLine
         "--health-timeout", "--health-retries", "--health-start-period", "--ip", "-p", "--publish", "-v", "--volume", "-e", "--env",
         "--network", "--net", "--network-alias", "--entrypoint", "-u", "--user", "--public-name", "--gpus",
         "--label", "-l", "--hostname", "-h", "--domainname", "--dns", "--dns-search", "--dns-option", "--tmpfs", "--shm-size", "--ulimit", "--stop-signal",
+        "--cap-add", "--cap-drop",
     ];
 
     public static RunCommandParse Parse(string text)
@@ -80,6 +81,8 @@ public static partial class RunCommandLine
         var dnsOptions = new List<string>();
         var tmpfs = new List<string>();
         var ulimits = new List<string>();
+        var capAdd = new List<string>();
+        var capDrop = new List<string>();
         var publicNames = new List<string>();
         var publish = new List<string>();
         var volumes = new List<string>();
@@ -184,6 +187,8 @@ public static partial class RunCommandLine
                 case "--tmpfs": tmpfs.Add(value); break;
                 case "--shm-size": shmSize = value; break;
                 case "--ulimit": ulimits.Add(value); break;
+                case "--cap-add": capAdd.Add(value); break;
+                case "--cap-drop": capDrop.Add(value); break;
                 case "--stop-signal": stopSignal = value; break;
                 default:
                     unsupported.Add($"{flag} {value}");
@@ -234,6 +239,8 @@ public static partial class RunCommandLine
             Tmpfs = tmpfs,
             ShmSize = shmSize,
             Ulimits = ulimits,
+            CapAdd = capAdd,
+            CapDrop = capDrop,
             StopSignal = stopSignal,
         };
         return new RunCommandParse(request, unsupported, "", fromDocker) { NotNeeded = notNeeded };
@@ -297,6 +304,8 @@ public static partial class RunCommandLine
         Each("--tmpfs", request.Tmpfs);
         Flag("--shm-size", request.ShmSize);
         Each("--ulimit", request.Ulimits);
+        Each("--cap-add", request.CapAdd);
+        Each("--cap-drop", request.CapDrop);
         Each("--label", request.Labels);
         Flag("-u", request.User);
         Flag("--stop-signal", request.StopSignal);

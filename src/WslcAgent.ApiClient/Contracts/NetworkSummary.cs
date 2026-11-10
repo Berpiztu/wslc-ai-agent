@@ -41,6 +41,7 @@ public sealed record NetworkSummary(
 public sealed record NetworkListResponse(IReadOnlyList<NetworkSummary> Networks, int Count, long NetReceivedBytes, long NetSentBytes);
 
 /// <summary>Body of <c>POST /api/v1/networks</c>. Empty strings mean "not given".</summary>
+/// <param name="Ipv6">IPv6 networking on the network (<c>--ipv6</c>, wslc 3.0.5 on).</param>
 public sealed record CreateNetworkRequest(
     string Name,
     string Driver = "",
@@ -49,7 +50,8 @@ public sealed record CreateNetworkRequest(
     string IpRange = "",
     bool Internal = false,
     string Label = "",
-    string Option = "");
+    string Option = "",
+    bool Ipv6 = false);
 
 /// <summary>Body of <c>POST /api/v1/networks/{name}/connect</c> and <c>/disconnect</c>. <paramref name="Ip"/> is a static address for connect, used only on user-defined networks.</summary>
 public sealed record NetworkContainerRequest(string Container, string Ip = "");

@@ -7,8 +7,10 @@ namespace WslcAgent.Server.Containers;
 
 /// <summary>
 /// <c>wslc container run|create</c> argument lists from the launch fields, in
-/// a fixed flag order. The restart policy is not a CLI flag and is
-/// left to <see cref="RestartPolicyStore"/>.
+/// a fixed flag order. The restart policy is left to
+/// <see cref="RestartPolicyStore"/>, never wslc 3.0.5's <c>--restart</c>:
+/// that one is fixed at create, so changing it means recreating the container
+/// (docs/api-v1.md).
 /// </summary>
 public static class LaunchArgs
 {
@@ -47,6 +49,8 @@ public static class LaunchArgs
         Repeat(args, "--tmpfs", request.Tmpfs);
         args.Option("--shm-size", request.ShmSize);
         Repeat(args, "--ulimit", request.Ulimits);
+        Repeat(args, "--cap-add", request.CapAdd);
+        Repeat(args, "--cap-drop", request.CapDrop);
         Repeat(args, "--label", request.Labels.Where(label => !LaunchMemo.IsOwn(label)));
 
         // A container a Compose file brought up says so on itself: its project, its

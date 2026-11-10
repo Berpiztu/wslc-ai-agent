@@ -102,7 +102,7 @@ public static class WslcEventParsing
             : (rest[0], string.Join(' ', rest[1..]));
 
     /// <summary>The number of the <c>exitCode</c> attribute; null when there is none.</summary>
-    private static int? ExitCodeOf(string attributes) =>
+    internal static int? ExitCodeOf(string attributes) =>
         int.TryParse(AttributeOf(attributes, "exitCode="), NumberStyles.Integer, CultureInfo.InvariantCulture, out var code) ? code : null;
 
     /// <summary>
@@ -110,7 +110,7 @@ public static class WslcEventParsing
     /// opening the bracket or after a comma, up to the next comma or the closing
     /// bracket; null when there is none.
     /// </summary>
-    private static string? AttributeOf(string attributes, string key)
+    internal static string? AttributeOf(string attributes, string key)
     {
         var at = attributes.StartsWith("(" + key, StringComparison.Ordinal)
             ? 1
@@ -125,37 +125,4 @@ public static class WslcEventParsing
         var text = (end < 0 ? value : value[..end]).Trim().ToString();
         return text.Length > 0 ? text : null;
     }
-}
-
-/// <summary>
-/// wslc prints an exec's command as it was written, its line breaks too, so
-/// one event can take several lines, and only its last has the attributes:
-/// <code>
-/// 2026-11-02T23:07:41.411800854-05:00 container exec_create: sh -c true
-/// true 331b3c371b72… (execID=65cc463a…, image=…, name=…)
-/// </code>
-/// Any event that is not an exec ends one, so a line that never came cannot
-/// hide what follows it.
-/// </summary>
-internal sealed class ExecLines
-{
-    private const string Attribute = "execID=";
-
-    private bool _inside;
-
-    /// <summary>Whether this line, parsed as <paramref name="read"/>, belongs to an exec event.</summary>
-    public bool Hold(string line, WslcEvent? read)
-    {
-        if (read is { IsExec: false } || (read is null && !_inside))
-        {
-            _inside = false;
-            return false;
-        }
-
-        _inside = !line.Contains(Attribute, StringComparison.Ordinal);
-        return true;
-    }
-
-    /// <summary>A new stream: what the last one was printing ended with it.</summary>
-    public void Reset() => _inside = false;
 }

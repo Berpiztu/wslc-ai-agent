@@ -54,6 +54,8 @@ public sealed record ContainerInspection(
             Name = name,
             Project = ProjectOf(config),
             Ulimits = Ulimits(hostConfig),
+            CapAdd = Strings(hostConfig, "CapAdd"),
+            CapDrop = Strings(hostConfig, "CapDrop"),
             Hostname = memo?.Hostname ?? "",
             Domainname = memo?.Domainname ?? "",
             Dns = memo?.Dns ?? [],

@@ -348,7 +348,8 @@ public sealed record ComposeBuild(string Context, string Dockerfile, string Targ
 /// <param name="Key">Its name in the file.</param>
 /// <param name="Name">Its name on the machine: <c>project_key</c>, or the one the file gives.</param>
 /// <param name="External">It exists already and is not the project's to create or remove.</param>
-public sealed record ComposeNetwork(string Key, string Name, string Subnet, string Gateway, bool Internal, bool External);
+/// <param name="Ipv6">Its <c>enable_ipv6</c>.</param>
+public sealed record ComposeNetwork(string Key, string Name, string Subnet, string Gateway, bool Internal, bool External, bool Ipv6 = false);
 
 /// <summary>A named volume of the project.</summary>
 /// <param name="Key">Its name in the file.</param>

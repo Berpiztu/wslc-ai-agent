@@ -21,12 +21,30 @@ public sealed class RecentWslcEvents : IRecentEvents
     private readonly Lock _gate = new();
     private string _session = "";
 
-    /// <summary>One event heard, at the front.</summary>
+    /// <summary>
+    /// One event heard, in its place by time: at the front, but for an exec,
+    /// listed once its probe check has answered, behind what came meanwhile.
+    /// </summary>
     public void Heard(WslcEvent read)
     {
+        var entry = new WslcEventEntry(read.Time, read.Type, read.Action, read.Id, read.Name, read.ExitCode);
         lock (_gate)
         {
-            _events.AddFirst(new WslcEventEntry(read.Time, read.Type, read.Action, read.Id, read.Name, read.ExitCode));
+            var newer = _events.First;
+            while (newer is not null && newer.Value.Time > read.Time)
+            {
+                newer = newer.Next;
+            }
+
+            if (newer is null)
+            {
+                _events.AddLast(entry);
+            }
+            else
+            {
+                _events.AddBefore(newer, entry);
+            }
+
             if (_events.Count > Kept)
             {
                 _events.RemoveLast();

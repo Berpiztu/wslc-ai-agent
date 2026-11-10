@@ -514,6 +514,8 @@ public static partial class ComposeReader
                 Tmpfs = Texts(Take("tmpfs")),
                 ShmSize = shmSize,
                 Ulimits = Ulimits(Take("ulimits")),
+                CapAdd = Texts(Take("cap_add")),
+                CapDrop = Texts(Take("cap_drop")),
                 StopSignal = Text(Take("stop_signal")),
             };
             var dependsOn = DependsOn(name, $"{at}/depends_on", Take("depends_on"));
@@ -1027,7 +1029,7 @@ public static partial class ComposeReader
                 Note($"The network {key} is used and not declared: taken as the project's own.");
             }
 
-            ReadKeys(at, map, $"network {key}", "name", "external", "driver", "internal", "ipam");
+            ReadKeys(at, map, $"network {key}", "name", "external", "driver", "internal", "ipam", "enable_ipv6");
             var driver = Text(map.GetValueOrDefault("driver"));
             if (driver.Length > 0 && driver != "bridge")
             {
@@ -1041,7 +1043,7 @@ public static partial class ComposeReader
             }
 
             var ipam = List(Map(map.GetValueOrDefault("ipam")).GetValueOrDefault("config")).OfType<Dictionary<string, object?>>().FirstOrDefault() ?? new Dictionary<string, object?>();
-            var network = new ComposeNetwork(key, named.Name, Text(ipam.GetValueOrDefault("subnet")), Text(ipam.GetValueOrDefault("gateway")), IsTrue(map.GetValueOrDefault("internal")), named.External);
+            var network = new ComposeNetwork(key, named.Name, Text(ipam.GetValueOrDefault("subnet")), Text(ipam.GetValueOrDefault("gateway")), IsTrue(map.GetValueOrDefault("internal")), named.External, IsTrue(map.GetValueOrDefault("enable_ipv6")));
             _usedNetworks[key] = network;
             return network;
         }

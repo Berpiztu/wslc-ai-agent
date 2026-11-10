@@ -294,6 +294,6 @@ list sorted by a column is flat, the group's tick does not tick its
 containers, and there is no Export of a project.
 
 What will not come from us is what `wslc run` has no flag for
-(`privileged`, `cap_add`, `network_mode: host` and the others): the list,
+(`privileged`, `devices`, `network_mode: host` and the others): the list,
 and why, is in [emulate.md](emulate.md#cannot-be-done). `config` names them
 before anything runs.

@@ -133,8 +133,8 @@ publishing and cleaning up need them on.
 - **Run and create** from one form: image, name, ports, volumes and bind
   mounts, environment, networks with static addresses, entrypoint, command,
   working folder, user, restart policy, memory and CPU limits, health check,
-  host and domain names, DNS, labels, tmpfs mounts, shm size, ulimits and
-  stop signal. What `wslc` takes and its inspect does not say back, the
+  host and domain names, DNS, labels, tmpfs mounts, shm size, ulimits,
+  Linux capabilities added and dropped (wslc 3.0.5) and stop signal. What `wslc` takes and its inspect does not say back, the
   agent keeps on the container itself, so editing one never loses it.
   - **Paste a command**: a `docker run` or `wslc run` line, even across
     several lines, fills the form; flags it cannot use are named, and so is
@@ -359,7 +359,7 @@ publishing and cleaning up need them on.
 ### Networks
 
 - **List** with driver, subnet, gateway, scope; search; remove several.
-- **Create** with subnet, gateway, address range, internal, options, labels.
+- **Create** with subnet, gateway, address range, internal, IPv6 (wslc 3.0.5), options, labels.
 - **Edit**: saving replaces the network and reconnects its containers.
 - **Connect and disconnect** containers, with a static address.
 - **Network map**: networks as hubs, containers as nodes with their
@@ -501,7 +501,9 @@ The Home page is a dashboard designed by each user, not a fixed screen.
   on their own clock); Recent events (what `wslc` reported lately, newest
   first: containers started, stopped or ended with their exit code, networks
   connected or disconnected, health changes, and volumes created, mounted,
-  unmounted, destroyed or pruned from wslc 3.0.4); the agent's log; file transfers;
+  unmounted, destroyed or pruned from wslc 3.0.4, and commands run inside a
+  container from outside the agent, with their exit code, from wslc 3.0.5);
+  the agent's log; file transfers;
   free text.
 - **Ready-made cards**: container, Compose project, image, volume, network, system, charts.
   A project's card is born with a place for its containers, an empty group

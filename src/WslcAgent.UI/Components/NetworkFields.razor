@@ -9,6 +9,7 @@
 <MudTextField T="string" @bind-Value="Model.Gateway" Label="Gateway" Placeholder="172.28.0.1" Disabled="Disabled" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
 <MudTextField T="string" @bind-Value="Model.IpRange" Label="IP range" Placeholder="172.28.5.0/24" Disabled="Disabled" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
 <SquareCheckBox @bind-Value="Model.Internal" Disabled="Disabled" Label="Internal (no external access)" />
+<SquareCheckBox @bind-Value="Model.Ipv6" Disabled="Disabled" Label="IPv6 (needs wslc 3.0.5)" />
 <MudTextField T="string" @bind-Value="Model.Label" Label="Label" Placeholder="env=prod" Disabled="Disabled" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
 <MudTextField T="string" @bind-Value="Model.Option" Label="Driver option" Placeholder="com.example.key=value" Disabled="Disabled" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
 
@@ -32,6 +33,8 @@
 
         public bool Internal { get; set; }
 
+        public bool Ipv6 { get; set; }
+
         public string Label { get; set; } = "";
 
         public string Option { get; set; } = "";
@@ -44,10 +47,11 @@
             Gateway = request.Gateway,
             IpRange = request.IpRange,
             Internal = request.Internal,
+            Ipv6 = request.Ipv6,
             Label = request.Label,
             Option = request.Option,
         };
 
-        public CreateNetworkRequest ToRequest() => new(Name, Driver, Subnet, Gateway, IpRange, Internal, Label, Option);
+        public CreateNetworkRequest ToRequest() => new(Name, Driver, Subnet, Gateway, IpRange, Internal, Label, Option, Ipv6);
     }
 }

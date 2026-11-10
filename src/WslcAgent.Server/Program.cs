@@ -55,13 +55,16 @@ builder.Services.AddSingleton<ICliActivityLog>(services => services.GetRequiredS
 builder.Services.AddSingleton<ISelectedSession, SelectedSession>();
 builder.Services.AddSingleton<StoppedSessions>();
 builder.Services.AddSingleton<WslcRunner>();
-builder.Services.AddSingleton<IWslcRunner>(services => ActivatorUtilities.CreateInstance<CachingWslcRunner>(services, services.GetRequiredService<WslcRunner>()));
+builder.Services.AddSingleton<AgentExecs>();
+builder.Services.AddSingleton<IWslcRunner>(services => ActivatorUtilities.CreateInstance<CachingWslcRunner>(services,
+    (IWslcRunner)new AgentExecRunner(services.GetRequiredService<WslcRunner>(), services.GetRequiredService<AgentExecs>())));
 builder.Services.AddSingleton<ContainerUsageScanner>();
 builder.Services.AddSingleton<RestartPolicyStore>();
 builder.Services.AddSingleton<LogClearingStore>();
 builder.Services.AddSingleton<WslcAgent.Server.Resources.ResourceRegistry>();
 builder.Services.AddSingleton<WslcEvents>();
 builder.Services.AddSingleton<RecentWslcEvents>();
+builder.Services.AddSingleton<ExecWatch>();
 builder.Services.AddSingleton<IRecentEvents>(services => services.GetRequiredService<RecentWslcEvents>());
 builder.Services.AddSingleton<NotificationSettingsStore>();
 builder.Services.AddSingleton<NotificationHistory>();

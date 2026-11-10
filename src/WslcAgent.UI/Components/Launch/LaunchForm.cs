@@ -136,6 +136,12 @@ public sealed class LaunchForm
     /// <summary>One <c>--ulimit</c> per value, <c>name=soft[:hard]</c>.</summary>
     public List<string> Ulimits { get; } = [];
 
+    /// <summary>One <c>--cap-add</c> per value, a Linux capability such as <c>NET_ADMIN</c>.</summary>
+    public List<string> CapAdd { get; } = [];
+
+    /// <summary>One <c>--cap-drop</c> per value.</summary>
+    public List<string> CapDrop { get; } = [];
+
     public string StopSignal { get; set; } = "";
 
     /// <summary>The project and service the container belongs to, carried through unseen: no field shows it, and a save keeps it.</summary>
@@ -188,6 +194,8 @@ public sealed class LaunchForm
         Replace(DnsOptions, other.DnsOptions);
         Replace(Tmpfs, other.Tmpfs);
         Replace(Ulimits, other.Ulimits);
+        Replace(CapAdd, other.CapAdd);
+        Replace(CapDrop, other.CapDrop);
         Publish.Clear();
         Publish.AddRange(other.Publish);
         Env.Clear();
@@ -315,6 +323,8 @@ public sealed class LaunchForm
         form.DnsOptions.AddRange(request.DnsOptions);
         form.Tmpfs.AddRange(request.Tmpfs);
         form.Ulimits.AddRange(request.Ulimits);
+        form.CapAdd.AddRange(request.CapAdd);
+        form.CapDrop.AddRange(request.CapDrop);
         (form.ImageName, form.ImageTag) = SplitImage(request.Image);
         form.Publish.AddRange(request.Publish);
         form.Env.AddRange(request.Env);
@@ -375,6 +385,8 @@ public sealed class LaunchForm
             Tmpfs = Kept(Tmpfs),
             ShmSize = ShmSize.Trim(),
             Ulimits = Kept(Ulimits),
+            CapAdd = Kept(CapAdd),
+            CapDrop = Kept(CapDrop),
             StopSignal = StopSignal.Trim(),
             Project = Project,
         };
