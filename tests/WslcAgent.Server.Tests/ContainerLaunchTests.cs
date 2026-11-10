@@ -236,7 +236,7 @@ public sealed class ContainerLaunchTests
     [Fact]
     public void A_pasted_run_line_fills_the_form()
     {
-        var parse = RunCommandLine.Parse("docker run -d --name web -p 85:80 -v c:\\data\\app:/a0/usr \\\n  -e KEY=value --network appnet --hostname h --label a=b --cap-add NET_ADMIN agent0ai/agent-zero python app.py");
+        var parse = RunCommandLine.Parse("docker run -d --name web -p 85:80 -v c:\\data\\app:/a0/usr \\\n  -e KEY=value --network appnet --hostname h --label a=b --device /dev/fuse agent0ai/agent-zero python app.py");
 
         Assert.NotNull(parse.Request);
         Assert.Equal("agent0ai/agent-zero", parse.Request.Image);
@@ -248,7 +248,7 @@ public sealed class ContainerLaunchTests
         Assert.Equal("python app.py", parse.Request.Command);
         Assert.Equal("h", parse.Request.Hostname);
         Assert.Equal(["a=b"], parse.Request.Labels);
-        Assert.Equal(["--cap-add NET_ADMIN"], parse.Unsupported);
+        Assert.Equal(["--device /dev/fuse"], parse.Unsupported);
         Assert.StartsWith("Read as a wslc run. Filled: image agent0ai/agent-zero, name web, 1 port(s)", parse.Summary);
         Assert.Equal("No image reference found.", RunCommandLine.Parse("wslc run -d").Error);
     }

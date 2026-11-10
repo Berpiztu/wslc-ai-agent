@@ -79,16 +79,24 @@ public sealed class ContainerEventNotificationsTests(WebApplicationFactory<Progr
     private static WslcEvent Event(string action, int? exitCode = null) =>
         new(DateTimeOffset.UtcNow, "container", action, Id, exitCode);
 
-    /// <summary>What was raised, once at least <paramref name="expected"/> are: a notification looks up its container's name first, in the background.</summary>
+    /// <summary>
+    /// What was raised about containers, once at least <paramref name="expected"/>
+    /// are: a notification looks up its container's name first, in the
+    /// background. The host's own are left out: the agent under test watches
+    /// the machine it runs on, and a disk past 90% there raised one of its own.
+    /// </summary>
     private static async Task<IReadOnlyList<AgentNotification>> RaisedAsync(Notifier notifier, int expected)
     {
-        for (var tries = 0; tries < 50 && notifier.After(0).Notifications.Count < expected; tries++)
+        for (var tries = 0; tries < 50 && Containers(notifier).Count < expected; tries++)
         {
             await Task.Delay(20);
         }
 
         // A moment more, so a notification that should not come has had its chance to.
         await Task.Delay(100);
-        return notifier.After(0).Notifications;
+        return Containers(notifier);
     }
+
+    private static List<AgentNotification> Containers(Notifier notifier) =>
+        [.. notifier.After(0).Notifications.Where(notification => notification.Kind.StartsWith("container-", StringComparison.Ordinal))];
 }
