@@ -177,6 +177,34 @@ public sealed class ComposeReaderTests
     }
 
     [Fact]
+    public void A_merged_anchor_that_merges_another_brings_that_one_s_keys_too()
+    {
+        // An anchor built on another (x-serve on x-base): the service takes both, and what is nearer wins.
+        var plan = ComposeReader.Read("""
+            x-base: &base
+              image: model:latest
+              restart: always
+              environment:
+                HOME: /cache
+            x-serve: &serve
+              <<: *base
+              restart: unless-stopped
+            services:
+              prepare:
+                <<: *base
+              batch:
+                <<: *serve
+                command: batch
+            """, Source());
+
+        var batch = plan.Services.Single(service => service.Name == "batch");
+        Assert.Equal("model:latest", batch.Launch.Image);
+        Assert.Equal(["HOME=/cache"], batch.Launch.Env);
+        Assert.Equal(RestartPolicyInfo.UnlessStopped, batch.Launch.RestartPolicy);
+        Assert.Equal(RestartPolicyInfo.Always, plan.Services.Single(service => service.Name == "prepare").Launch.RestartPolicy);
+    }
+
+    [Fact]
     public void Variables_merge_keys_and_profiles_are_read_as_compose_reads_them()
     {
         var plan = ComposeReader.Read("""

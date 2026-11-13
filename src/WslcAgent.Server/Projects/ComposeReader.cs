@@ -1455,13 +1455,23 @@ public static partial class ComposeReader
             return values;
         }
 
-        /// <summary>The keys of a merged map that the map itself does not write, each with the line it was written on in the map poured.</summary>
+        /// <summary>
+        /// The keys of a merged map that the map itself does not write, each with the line it was written on in the map poured;
+        /// then those of the maps it merges in its turn (an anchor built on another one), which its own keys come before.
+        /// </summary>
         private void Pour(YamlMappingNode merged, string path, Dictionary<string, object?> values)
         {
+            var poured = new List<YamlNode>();
             foreach (var child in merged.Children)
             {
                 var name = (child.Key as YamlScalarNode)?.Value ?? "";
-                if (name == "<<" || values.ContainsKey(name))
+                if (name == "<<")
+                {
+                    poured.AddRange(child.Value is YamlSequenceNode many ? many.Children : [child.Value]);
+                    continue;
+                }
+
+                if (values.ContainsKey(name))
                 {
                     continue;
                 }
@@ -1469,6 +1479,11 @@ public static partial class ComposeReader
                 var keyPath = $"{path}/{name}";
                 _lineOf[keyPath] = (int)child.Key.Start.Line;
                 values[name] = Value(child.Value, keyPath);
+            }
+
+            foreach (var deeper in poured.OfType<YamlMappingNode>())
+            {
+                Pour(deeper, path, values);
             }
         }
 
