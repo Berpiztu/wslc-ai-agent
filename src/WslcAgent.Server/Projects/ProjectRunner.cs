@@ -53,8 +53,7 @@ public sealed class ProjectRunner(
     private const int MaxLines = 2000;
     private static readonly TimeSpan Poll = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan LaunchPoll = TimeSpan.FromMilliseconds(500);
-    private static readonly TimeSpan HealthyWithin = TimeSpan.FromMinutes(3);
-    private static readonly TimeSpan CompletedWithin = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan HealthShownWithin = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan KeepDone = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan KeepCancelled = TimeSpan.FromSeconds(45);
 
@@ -666,23 +665,67 @@ public sealed class ProjectRunner(
 
             var healthy = dependency.Condition == ComposeDependency.Healthy;
             job.Say($"Waiting for {other.Launch.Name} to {(healthy ? "be healthy" : "finish")}");
-            var until = DateTimeOffset.UtcNow + (healthy ? HealthyWithin : CompletedWithin);
+            var healthShownBy = DateTimeOffset.UtcNow + HealthShownWithin;
             while (true)
             {
                 var row = (await containers.ListAsync(all: true, cancellationToken: stop)).Containers.FirstOrDefault(container => container.Name == other.Launch.Name);
-                if (row is not null && (healthy ? row.HealthStatus == "healthy" : !row.IsRunning && row.State != "created"))
+                if (DependencyMet(row, healthy, DateTimeOffset.UtcNow > healthShownBy, service.Launch.Name))
                 {
                     break;
-                }
-
-                if (DateTimeOffset.UtcNow > until)
-                {
-                    throw new TimeoutException($"{other.Launch.Name} did not {(healthy ? "become healthy" : "finish")} in time, and {service.Launch.Name} waits for it.");
                 }
 
                 await Task.Delay(Poll, stop);
             }
         }
+    }
+
+    /// <summary>
+    /// Whether what a service waits for has come: its dependency healthy, or run to its end with
+    /// exit code 0. It throws, with why, once it cannot come any more. As in Compose, the wait
+    /// itself has no limit: a dependency that downloads or migrates takes the time it takes, and
+    /// the job's cancel is what ends a wait nobody wants. The one limit is on a health that never
+    /// shows (<paramref name="healthOverdue"/>): a container with no health check has none to wait for.
+    /// </summary>
+    internal static bool DependencyMet(ContainerSummary? row, bool healthy, bool healthOverdue, string waiting)
+    {
+        if (row is null || row.State == "created")
+        {
+            return false;
+        }
+
+        if (!healthy)
+        {
+            if (row.State != "exited")
+            {
+                return false;
+            }
+
+            return row.ExitCode is null or 0
+                ? true
+                : throw new InvalidOperationException($"{row.Name} ended with exit code {row.ExitCode}, and {waiting} waits for it to end well.");
+        }
+
+        if (row.HealthStatus == "healthy")
+        {
+            return true;
+        }
+
+        if (row.State == "exited")
+        {
+            throw new InvalidOperationException($"{row.Name} stopped before it was healthy, and {waiting} waits for it.");
+        }
+
+        if (row.HealthStatus == "unhealthy")
+        {
+            throw new InvalidOperationException($"{row.Name} is unhealthy, and {waiting} waits for it.");
+        }
+
+        if (row.IsRunning && row.HealthStatus.Length == 0 && healthOverdue)
+        {
+            throw new InvalidOperationException($"{row.Name} has no health check, and {waiting} waits for it to be healthy.");
+        }
+
+        return false;
     }
 
     /// <summary>
