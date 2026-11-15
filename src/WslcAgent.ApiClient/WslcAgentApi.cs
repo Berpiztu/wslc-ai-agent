@@ -172,6 +172,10 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<SystemOverview> GetSystemAsync(CancellationToken cancellationToken = default) =>
         GetAsync<SystemOverview>("api/v1/system", cancellationToken);
 
+    /// <summary>How much of the running session's store nothing uses; 409 while the session is stopped.</summary>
+    public Task<StoreReclaimable> GetReclaimableAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<StoreReclaimable>("api/v1/system/reclaimable", cancellationToken);
+
     /// <summary><c>images</c>, <c>volumes</c> or <c>networks</c>.</summary>
     public Task<CleanupResult> CleanupAsync(string target, CancellationToken cancellationToken = default) =>
         PostJsonAsync<object?, CleanupResult>($"api/v1/system/cleanup/{Escape(target)}", null, cancellationToken);
@@ -289,6 +293,13 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
 
     // Image security check (Settings → Security)
 
+    /// <summary>Settings → Security → Session at agent start.</summary>
+    public Task<AgentStartSettings> GetAgentStartSettingsAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<AgentStartSettings>("api/v1/agent-start", cancellationToken);
+
+    public Task<AgentStartSettings> SetAgentStartSettingsAsync(AgentStartSettings settings, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<AgentStartSettings, AgentStartSettings>("api/v1/agent-start", settings, cancellationToken, HttpMethod.Put);
+
     public Task<ImageSecuritySettings> GetImageSecuritySettingsAsync(CancellationToken cancellationToken = default) =>
         GetAsync<ImageSecuritySettings>("api/v1/image-security", cancellationToken);
 
@@ -353,6 +364,14 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
 
     public Task<TerminalJob> PrepareTerminalJobAsync(string job, CancellationToken cancellationToken = default) =>
         PostJsonAsync<object?, TerminalJob>($"api/v1/terminal/jobs/{Escape(job)}", null, cancellationToken);
+
+    /// <summary>Whether a job's script is still under way.</summary>
+    public Task<TerminalJobState> GetTerminalJobStateAsync(string job, CancellationToken cancellationToken = default) =>
+        GetAsync<TerminalJobState>($"api/v1/terminal/jobs/{Escape(job)}", cancellationToken);
+
+    /// <summary>Asks a running job to stop at its next safe place; says so when there is nothing to stop.</summary>
+    public Task<TerminalJobStop> StopTerminalJobAsync(string job, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<object?, TerminalJobStop>($"api/v1/terminal/jobs/{Escape(job)}/stop", null, cancellationToken);
 
     // Registry
 

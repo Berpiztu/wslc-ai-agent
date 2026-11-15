@@ -12,6 +12,9 @@ public static class SystemEndpoints
         group.MapGet("", (ISystemService system, CancellationToken ct) => system.GetAsync(ct))
             .WithName("SystemOverview");
 
+        group.MapGet("/reclaimable", (ISystemService system, CancellationToken ct) => system.ReclaimableAsync(ct))
+            .WithName("SystemReclaimable");
+
         group.MapPost("/cleanup/{target}", (string target, ISystemService system, CancellationToken ct) => system.CleanupAsync(target, ct))
             .WithName("SystemCleanup");
 

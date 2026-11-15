@@ -14,4 +14,12 @@ public interface ISystemService
     /// <see cref="ArgumentException"/> for any other target.
     /// </summary>
     Task<CleanupResult> CleanupAsync(string target, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// What the selected session's store holds and how much of it no image and
+    /// no container uses. Reads only, and only while that session runs:
+    /// <see cref="InvalidOperationException"/> when it does not, since reading
+    /// it would start it.
+    /// </summary>
+    Task<StoreReclaimable> ReclaimableAsync(CancellationToken cancellationToken = default);
 }

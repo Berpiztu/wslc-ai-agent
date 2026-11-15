@@ -21,6 +21,9 @@ public sealed class SystemService(
 {
     private const int TopImageCount = 8;
 
+    /// <summary>Reading a store of a thousand layers takes half a minute; a slow disk, more.</summary>
+    private static readonly TimeSpan ReclaimableTimeout = TimeSpan.FromMinutes(5);
+
     private static readonly Dictionary<string, string> CleanupCommands = new(StringComparer.Ordinal)
     {
         ["images"] = "wslc image prune -f -a",
@@ -96,6 +99,27 @@ public sealed class SystemService(
             reclaimed,
             storeDelta,
             imageDelta);
+    }
+
+    public async Task<StoreReclaimable> ReclaimableAsync(CancellationToken cancellationToken = default)
+    {
+        var session = selected.Name ?? "";
+        var (active, sessionsError) = await ActiveSessionsAsync(cancellationToken);
+        if (active.All(s => s.DisplayName != session))
+        {
+            // wslc starts the session a command is sent to, and this page is
+            // where a stopped one is compacted.
+            throw new InvalidOperationException(sessionsError.Length > 0
+                ? $"Could not verify that session {session} is running: {sessionsError}"
+                : $"Session {session} is not running, and reading its store would start it. Start it, or run Compact VHDX and answer q there: it reads the same in a temporary session and changes nothing.");
+        }
+
+        var result = await wslc.RunAsync(
+            ["system", "session", "run", "sh", "-c", StoreCleanupScript.Piped(StoreCleanupScript.Report)],
+            ReclaimableTimeout,
+            cancellationToken);
+        return SystemParsing.Reclaimable(session, result.Stdout)
+            ?? throw new InvalidOperationException($"The store of session {session} is not laid out the way the agent knows, so what it could give back cannot be said.");
     }
 
     /// <summary>The prune through the one service each resource already has; the page prunes every unused image, not only dangling ones.</summary>

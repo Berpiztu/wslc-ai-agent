@@ -3,7 +3,8 @@
    in the rail at its right and the session state on the buttons that act on it.
    Its own two verbs live there as well: a tab for itself and a terminal window
    on the agent's desktop. With a Job (System → Compact VHDX) the agent's command
-   line for it is typed into the shell on every connect, and the rail keeps only
+   line for it is typed into the shell on every connect, and again when the
+   window is opened once the job has ended, and the rail keeps only
    what a job can use: Reconnect is how the job runs again. The session belongs
    to the tab, not to this component: leaving the page keeps the shell and what
    it printed, coming back takes it over again, and only Close (or Log out)
@@ -114,14 +115,38 @@
     [JSInvokable]
     public async Task OnState(string state, string text, bool resumed)
     {
-        var connectedNow = state == "connected" && !_live && !resumed;
+        var arrived = state == "connected" && !_live;
         _status = text.Length > 0 ? text : state;
         _busy = state == "connecting";
         _live = state == "connected";
         await InvokeAsync(StateHasChanged);
-        if (connectedNow && Job.Length > 0)
+        if (arrived && Job.Length > 0 && (!resumed || await JobEndedAsync()))
         {
             await RunJobAsync();
+        }
+    }
+
+    /// <summary>
+    /// A session taken back shows the job as it stands while it is still under
+    /// way. One whose job has ended, or was stopped, is the last run's page:
+    /// opening the window again means running it again, on a cleared pane.
+    /// When the agent cannot say, the page is left as it is.
+    /// </summary>
+    private async Task<bool> JobEndedAsync()
+    {
+        try
+        {
+            if ((await Api.GetTerminalJobStateAsync(Job)).Running || _session is null)
+            {
+                return false;
+            }
+
+            await _session.InvokeVoidAsync("clear");
+            return true;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException or JSException)
+        {
+            return false;
         }
     }
 

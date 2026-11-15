@@ -145,6 +145,33 @@ public static partial class SystemParsing
         return (running?.DisplayName ?? "", storage);
     }
 
+    /// <summary>
+    /// What <see cref="StoreCleanupScript"/> reported about a store, from the
+    /// lines it marked; null when it did not say everything, as on a store not
+    /// laid out the way it knows.
+    /// </summary>
+    public static StoreReclaimable? Reclaimable(string session, string output)
+    {
+        var facts = output.Split('\n')
+            .Select(line => line.Trim())
+            .Where(line => line.StartsWith(StoreCleanupScript.Mark, StringComparison.Ordinal))
+            .Select(line => line[StoreCleanupScript.Mark.Length..].Split(' '))
+            .GroupBy(fields => fields[0])
+            .ToDictionary(group => group.Key, group => group.Last());
+
+        long Number(string fact, int at) =>
+            facts.TryGetValue(fact, out var fields) && fields.Length > at && long.TryParse(fields[at], out var value) ? value : -1;
+
+        long[] read =
+        [
+            Number("USED", 1), Number("IMAGES", 1), Number("IMAGES", 2), Number("IMAGES", 3), Number("CONTAINERS", 1),
+            Number("CONTAINERS", 2), Number("UNUSED", 1), Number("UNUSED", 2), Number("BUILD", 1), Number("BUILD", 2),
+        ];
+        return read.Any(value => value < 0)
+            ? null
+            : new StoreReclaimable(session, read[0], (int)read[1], (int)read[2], read[3], (int)read[4], (int)read[5], (int)read[6], read[7], (int)read[8], read[9]);
+    }
+
     private static string Field(JsonElement parent, string name) =>
         parent.ValueKind == JsonValueKind.Object ? parent.GetString(name).Trim() : "";
 

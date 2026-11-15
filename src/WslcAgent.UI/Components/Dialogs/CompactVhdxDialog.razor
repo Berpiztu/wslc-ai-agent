@@ -1,10 +1,17 @@
 @* System → Compact VHDX: the host terminal in the standard dialog, with the
-   compaction job typed into its shell. The shell stays open when the job is
-   done; closing the dialog ends it. *@
+   compaction job typed into its shell. Stop asks the job to leave at its next
+   safe place, between two steps. Close only leaves the window: a job under way
+   goes on, and opening the window again shows it as it stands; once it has
+   ended, opening the window runs a new one. *@
+@inject WslcAgentApi Api
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
 
 <MudDialog>
     <TitleContent>
         <DialogTitle Title="@Dialog.Title">
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" StartIcon="@Icons.Material.Filled.Stop"
+                       OnClick="StopAsync">Stop</MudButton>
             <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Close())">Close</MudButton>
         </DialogTitle>
     </TitleContent>
@@ -16,5 +23,34 @@
 </MudDialog>
 
 @code {
+    private const string Job = "compact-vhdx";
+
     [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    private async Task StopAsync()
+    {
+        const string question = "Stop the compaction? It ends the step it is on and leaves, so nothing is left half done; what it has removed stays removed, and the VHDX is not compacted. Running Compact VHDX again goes on from there.";
+        if (!await DialogFlow.ConfirmAsync(Dialogs, "Stop Compact VHDX", question, "Stop", destructive: true))
+        {
+            return;
+        }
+
+        if (await AskToStopAsync() is { } answer)
+        {
+            Snackbar.Add(answer.Message, answer.Stopping ? Severity.Success : Severity.Info);
+        }
+    }
+
+    private async Task<TerminalJobStop?> AskToStopAsync()
+    {
+        try
+        {
+            return await Api.StopTerminalJobAsync(Job);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add(ex.Message.Length > 0 ? ex.Message : "Could not ask the job to stop", Severity.Error);
+            return null;
+        }
+    }
 }

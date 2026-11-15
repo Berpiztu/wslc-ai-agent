@@ -374,7 +374,10 @@ publishing and cleaning up need them on.
 - **System page**: `wslc`, Windows and kernel versions, runtime details, the
   virtual disks (VHDX) of every session and their sizes, the largest images.
 - **Clean up**: prune images, volumes and networks; **compact** a session's
-  virtual disk, with its size before and after.
+  virtual disk, with its size before and after. Before it compacts it says
+  what the disk holds and what no image and no container uses any more
+  (layers left behind by containers and images long removed, the build
+  cache), and removes that only when you answer yes. **Reclaimable space**, among the same page's verbs, reads that figure from the running session into the page's VHDX summary and changes nothing.
 - **Registries**: log in to and out of container registries.
 
 ## Manage from anywhere

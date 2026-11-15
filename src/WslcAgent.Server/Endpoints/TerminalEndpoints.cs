@@ -48,6 +48,12 @@ public static class TerminalEndpoints
         group.MapPost("/jobs/{job}", (string job, TerminalJobs jobs, CancellationToken ct) => jobs.PrepareAsync(job, ct))
             .WithName("PrepareTerminalJob");
 
+        group.MapGet("/jobs/{job}", (string job, TerminalJobs jobs) => jobs.State(job))
+            .WithName("GetTerminalJobState");
+
+        group.MapPost("/jobs/{job}/stop", (string job, TerminalJobs jobs, CancellationToken ct) => jobs.StopAsync(job, ct))
+            .WithName("StopTerminalJob");
+
         return api;
     }
 }

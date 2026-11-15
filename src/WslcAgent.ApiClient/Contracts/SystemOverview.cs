@@ -86,6 +86,40 @@ public sealed record ActiveSession(string Id, int? CreatorPid, string DisplayNam
 /// <param name="Created">Null when the CLI's text could not be read.</param>
 public sealed record SystemImage(string Repository, string Tag, long SizeBytes, DateTimeOffset? Created);
 
+/// <summary>
+/// Body of <c>GET /api/v1/system/reclaimable</c>: what the running session's
+/// store holds and how much of it no image and no container uses, read from
+/// the store's own records. Nothing is changed by reading it; Compact VHDX is
+/// what removes it, once the session is stopped.
+/// </summary>
+/// <param name="Session">The session whose store was read.</param>
+/// <param name="UsedBytes">What is in use inside its VHDX.</param>
+/// <param name="Images">The images it holds.</param>
+/// <param name="ImageLayers">The layers images and containers stand on: kept.</param>
+/// <param name="ImageBytes">Their sizes added up.</param>
+/// <param name="Containers">The containers it holds.</param>
+/// <param name="LeftBehindContainers">Containers long removed whose own layer was left behind, and holds the layers under it.</param>
+/// <param name="UnusedLayers">Layers no image and no container uses.</param>
+/// <param name="UnusedLayerBytes">Their sizes added up.</param>
+/// <param name="BuildCacheFolders">The build cache's folders, with those left-behind layers.</param>
+/// <param name="BuildCacheBytes">Their size, with the cache's own records.</param>
+public sealed record StoreReclaimable(
+    string Session,
+    long UsedBytes,
+    int Images,
+    int ImageLayers,
+    long ImageBytes,
+    int Containers,
+    int LeftBehindContainers,
+    int UnusedLayers,
+    long UnusedLayerBytes,
+    int BuildCacheFolders,
+    long BuildCacheBytes)
+{
+    /// <summary>What Compact VHDX can remove before it compacts.</summary>
+    public long ReclaimableBytes => UnusedLayerBytes + BuildCacheBytes;
+}
+
 /// <summary>Body of <c>POST /api/v1/system/cleanup/{target}</c>.</summary>
 /// <param name="Target"><c>images</c>, <c>volumes</c> or <c>networks</c>.</param>
 /// <param name="Command">The command line that ran.</param>

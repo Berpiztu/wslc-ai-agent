@@ -125,6 +125,32 @@ public sealed class SystemEndpointTests(WebApplicationFactory<Program> factory)
         Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
     }
 
+    [Fact]
+    public async Task Reclaimable_reads_the_running_store_and_is_refused_for_a_stopped_one()
+    {
+        const string report = "::STEP Reading the layers of the images\n::USED 1000\n::IMAGES 2 5 300\n::CONTAINERS 1 4\n::UNUSED 7 400\n::BUILD 3 50\n::END\n";
+        var running = new FakeWslcRunner()
+            .Answer("system session list", $"ID  CREATOR PID  NAME\n3   77           {SessionStores.Default}\n")
+            .AnswerWhen(args => args.Take(3).SequenceEqual(["system", "session", "run"]), report);
+        var stopped = new FakeWslcRunner().Answer("system session list", "ID  CREATOR PID  NAME\n");
+
+        var store = await factory.ClientWith(running).GetFromJsonAsync<StoreReclaimable>("/api/v1/system/reclaimable");
+        var refused = await factory.ClientWith(stopped).GetAsync("/api/v1/system/reclaimable");
+
+        Assert.Equal(new StoreReclaimable(SessionStores.Default, 1000, 2, 5, 300, 1, 4, 7, 400, 3, 50), store);
+        Assert.Equal(450, store!.ReclaimableBytes);
+        // Reading a stopped store would start it: nothing is sent to it.
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.DoesNotContain(stopped.Calls, args => args.Contains("run"));
+    }
+
+    [Fact]
+    public void Reclaimable_is_not_said_of_a_store_that_did_not_report_everything()
+    {
+        Assert.Null(SystemParsing.Reclaimable("s", "::LAYOUT unknown\n::END\n"));
+        Assert.Null(SystemParsing.Reclaimable("s", "::USED 1000\n::IMAGES 2 5 300\n"));
+    }
+
     private static SessionStore Store(string name) =>
         new(name, $"C:\\s\\{name}", $"C:\\s\\{name}\\storage.vhdx", $"C:\\s\\{name}\\swap.vhdx", 0, 0, 0, null, false, false);
 }

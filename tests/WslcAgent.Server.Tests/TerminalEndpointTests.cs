@@ -48,4 +48,37 @@ public sealed class TerminalEndpointTests(WebApplicationFactory<Program> factory
         Assert.Contains("Optimize-VHD -Path $path -Mode Full", script);
         Assert.DoesNotContain("session terminate", script, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void Script_removes_from_the_store_only_on_a_yes()
+    {
+        var script = CompactVhdxScript.Build(@"C:\s\storage.vhdx", "s", @"C:\wslc\wslc.exe");
+
+        // Trimming is what it does unless the answer to its question is yes.
+        Assert.Contains("$mode = 'trim'", script);
+        Assert.Contains("if ($answer -match '^\\s*y(es)?\\s*$') { $mode = 'clean' }", script);
+        // And q leaves before anything is removed, trimmed or compacted.
+        Assert.Contains("if ($answer -match '^\\s*q(uit)?\\s*$') {", script);
+        Assert.True(
+            script.IndexOf("Read-Host", StringComparison.Ordinal) < script.IndexOf("Enter-Store $mode", StringComparison.Ordinal),
+            "The store is entered to remove or trim only after the question.");
+    }
+
+    [Fact]
+    public void Store_script_is_typed_in_lines_a_terminal_takes_and_removes_only_when_cleaning()
+    {
+        var typed = StoreCleanupScript.Typed(StoreCleanupScript.Report);
+
+        Assert.All(typed.Split('\n'), line => Assert.True(line.Length < 100, line));
+        Assert.EndsWith($"sh {StoreCleanupScript.GuestPath} report; exit\n", typed);
+
+        // Every removal sits behind the clean mode, and none names a volume or a container's folder.
+        var text = StoreCleanupScript.Text.ReplaceLineEndings("\n");
+        var cleaning = text.IndexOf("if [ \"$mode\" = clean ]; then", StringComparison.Ordinal);
+        var firstRemoval = text.IndexOf("drop \"$(cat", StringComparison.Ordinal);
+        Assert.True(cleaning >= 0 && firstRemoval > cleaning);
+        Assert.DoesNotContain("rm -rf $root/volumes", text);
+        Assert.DoesNotContain("rm -rf $root/containers", text);
+        Assert.DoesNotContain("docker ", text);
+    }
 }

@@ -78,6 +78,7 @@ builder.Services.AddSingleton<ContainerHealth>();
 builder.Services.AddHostedService<NotificationWatcher>();
 builder.Services.AddHostedService<WslcEventReader>();
 builder.Services.AddSingleton<RestartPolicyReconciler>();
+builder.Services.AddSingleton<AgentStartSettingsStore>();
 builder.Services.AddHostedService<RestartReconciler>();
 builder.Services.AddSingleton<ContainerRecreations>();
 builder.Services.AddSingleton<StartFailures>();
@@ -244,6 +245,7 @@ app.MapGroup("/api/v1")
     .MapSavedLoginEndpoints()
     .MapTestingEndpoints()
     .MapImageSecurityEndpoints()
+    .MapAgentStartEndpoints()
     .MapMcpSettingsEndpoints()
     .MapSessionEndpoints()
     .MapEventEndpoints()

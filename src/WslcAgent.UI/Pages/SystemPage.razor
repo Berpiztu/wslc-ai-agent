@@ -5,6 +5,7 @@
 @inject IDialogService Dialogs
 @inject ISnackbar Snackbar
 @inject SessionState Session
+@inject ActivityLine Activity
 @inject WslcAgent.UI.Updates.IClientUpdates Client
 
 <PageShell Title="System">
@@ -14,6 +15,8 @@
             <VerbFab StartIcon="@Icons.Material.Filled.DeleteSweep" Label="@(_running == target ? "Working..." : label)" Color="Color.Error" Disabled="_running is not null"
                      OnClick="@(() => CleanupAsync(target, label))" Title="@label" />
         }
+        <VerbFab StartIcon="@Icons.Material.Filled.DataUsage" Label="@(_measuring ? "Analysing..." : "Reclaimable space")"
+                 Disabled="@(_measuring || _overview is null || _overview.PrimaryActiveSession.Length == 0)" OnClick="MeasureAsync" Title="@MeasureTitle(_overview)" />
         <VerbFab StartIcon="@Icons.Material.Filled.Compress" Label="Compact VHDX" Color="Color.Warning" Disabled="@(_overview is null || _overview.CompactionBlocked)" OnClick="CompactAsync"
                  Title="@(_overview?.CompactionBlocked == true ? $"Stop session {_overview.SelectedSession} first: it holds its VHDX open" : "Opens the host terminal in a modal and runs Optimize-VHD elevated there")" />
     </Verbs>
@@ -39,7 +42,7 @@
                 <MudPaper Elevation="1" Class="pa-3 mb-2">
                     <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">
                         Compaction is blocked while session @o.SelectedSession is running and holds its VHDX open.
-                        Compact VHDX never terminates a session: stop it from the Session panel first. It then trims in a temporary session
+                        Compact VHDX never terminates a session: stop it from the Session panel first. It then says, in a temporary session, what the store no longer uses and removes it only on a yes, trims
                         on the same storage and runs <code>Optimize-VHD -Mode Full</code> elevated.
                     </MudAlert>
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">
@@ -88,6 +91,40 @@
                     <div><span class="wslc-summary-label">Storage VHDX file length</span><span class="wslc-summary-value">@Bytes.Humanize(o.Store.TotalStorageBytes)</span></div>
                     <div><span class="wslc-summary-label">Largest session VHDX file</span><span class="wslc-summary-value">@Bytes.Humanize(o.Store.LargestSessionBytes)</span></div>
                     <div><span class="wslc-summary-label">Images total size</span><span class="wslc-summary-value">@Bytes.Humanize(o.ImageTotalBytes)</span></div>
+                    @* What Compact VHDX could remove and what is in use inside the
+                       VHDX: asked for with the Reclaimable space verb, and until
+                       then said to be missing. The cells are always there and
+                       each value is one line, so the summary keeps its height
+                       before, during and after the reading. *@
+                    <div>
+                        <span class="wslc-summary-label">Can be reclaimed</span>
+                        @if (_measuring)
+                        {
+                            <span class="wslc-summary-value d-flex align-center">
+                                <span>Analysing</span>
+                                <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="ml-1" />
+                            </span>
+                        }
+                        else if (_reclaimable is { } found)
+                        {
+                            <span class="wslc-summary-value" title="@ReclaimableDetail(found)">@Bytes.Humanize(found.ReclaimableBytes) (layers @Bytes.Humanize(found.UnusedLayerBytes), build cache @Bytes.Humanize(found.BuildCacheBytes))</span>
+                        }
+                        else
+                        {
+                            <span class="wslc-summary-value mud-text-secondary" title="@MeasureTitle(o)">Not analysed</span>
+                        }
+                    </div>
+                    <div>
+                        <span class="wslc-summary-label">In use inside the VHDX</span>
+                        @if (!_measuring && _reclaimable is { } read)
+                        {
+                            <span class="wslc-summary-value" title="@($"{read.Images} images on {read.ImageLayers} layers: {Bytes.Humanize(read.ImageBytes)}")">@Bytes.Humanize(read.UsedBytes) (images @Bytes.Humanize(read.ImageBytes))</span>
+                        }
+                        else
+                        {
+                            <span class="wslc-summary-value mud-text-secondary" title="@MeasureTitle(o)">@(_measuring ? "Analysing" : "Not analysed")</span>
+                        }
+                    </div>
                 </div>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">WSLC session store root: <code>@o.Store.BasePath</code></MudText>
                 <MudText Typo="Typo.body2" Class="mud-text-secondary">VHDX values are file lengths on disk, not live payload inside WSLC.</MudText>
@@ -181,6 +218,11 @@
     /// <summary>The cleanup under way; every cleanup button waits for it.</summary>
     private string? _running;
 
+    /// <summary>What the store could give back, as last read, and when; null until it is asked for.</summary>
+    private StoreReclaimable? _reclaimable;
+    private DateTimeOffset? _reclaimableAt;
+    private bool _measuring;
+
     /// <summary>The one screen that watches the sessions: another client, or a terminal on the machine, can start or stop one, and this page says which run.</summary>
     private static readonly TimeSpan WatchEvery = TimeSpan.FromSeconds(5);
     private PeriodicTimer? _timer;
@@ -272,17 +314,62 @@
         }
     }
 
+    /// <summary>Reads what the running session's store could give back; it changes nothing, so it does not ask.</summary>
+    private async Task MeasureAsync()
+    {
+        _measuring = true;
+        using var work = Activity.Begin("Reading what the store can give back");
+        try
+        {
+            _reclaimable = await Api.GetReclaimableAsync();
+            _reclaimableAt = DateTimeOffset.Now;
+            work.Done($"{Bytes.Humanize(_reclaimable.ReclaimableBytes)} can be reclaimed from session {_reclaimable.Session}; nothing was changed.");
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            work.Fail($"The store was not read. {ex.Message}");
+        }
+        finally
+        {
+            _measuring = false;
+        }
+    }
+
+    /// <summary>Why the verb is there, or why it cannot be pressed: a stopped session is not read, since reading it would start it.</summary>
+    private static string MeasureTitle(SystemOverview? overview) =>
+        overview is { PrimaryActiveSession.Length: 0 }
+            ? $"Session {overview.SelectedSession} is stopped: start it to read its store, or run Compact VHDX and answer q there"
+            : "Reads how much of the running session's VHDX no image and no container uses; nothing is changed";
+
+    private string ReclaimableDetail(StoreReclaimable found) =>
+        $"{found.UnusedLayers} layers no image and no container uses: {Bytes.Humanize(found.UnusedLayerBytes)}. "
+        + $"Build cache ({found.BuildCacheFolders} folders): {Bytes.Humanize(found.BuildCacheBytes)}. "
+        + (found.LeftBehindContainers > 0 ? $"{found.LeftBehindContainers} containers long removed left their own layer behind, which kept them. " : "")
+        + $"Read from session {found.Session} at {When(_reclaimableAt)}; Compact VHDX removes it, with the session stopped and only after asking.";
     /// <summary>System → Compact VHDX: asks, then the host terminal runs the job in a dialog.</summary>
     private async Task CompactAsync()
     {
-        const string question = "Open the host terminal and compact there? It trims in a temporary session, then runs Optimize-VHD elevated. Refuses while a WSLC session is active; nothing of yours is terminated.";
-        if (!await DialogFlow.ConfirmAsync(Dialogs, "Compact VHDX", question, "Compact VHDX"))
+        const string question = "Open the host terminal and compact there? It first says what the store no longer uses (layers left behind, the build cache) and removes it only if you answer yes there; then it trims in a temporary session and runs Optimize-VHD elevated. Refuses while a WSLC session is active; nothing of yours is terminated.";
+        if (!await CompactingAsync() && !await DialogFlow.ConfirmAsync(Dialogs, "Compact VHDX", question, "Compact VHDX"))
         {
             return;
         }
 
         await DialogFlow.ShowAsync<CompactVhdxDialog>(Dialogs, "Compact VHDX", large: true);
         await LoadAsync();
+    }
+
+    /// <summary>A compaction already under way is shown, not asked for again; when the agent cannot say, it is asked.</summary>
+    private async Task<bool> CompactingAsync()
+    {
+        try
+        {
+            return (await Api.GetTerminalJobStateAsync("compact-vhdx")).Running;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            return false;
+        }
     }
 
     private static IEnumerable<(string Label, string Value)> InfoFields(SystemRuntimeInfo info) =>

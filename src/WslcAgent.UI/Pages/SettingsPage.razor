@@ -115,6 +115,23 @@
                     <MudProgressLinear Indeterminate="true" />
                 }
             </MudPaper>
+            <MudPaper Outlined="true" Class="pa-4">
+                <MudText Typo="Typo.h6">Session at agent start</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+                    When the agent starts, it brings up the containers whose restart policy says they should run, and that starts
+                    their session when it is stopped. Off, a session the agent finds stopped is left stopped, and those containers
+                    with it, until it is started from the Session panel; a session already running is not touched either way.
+                </MudText>
+                @if (_agentStart is { } agentStart)
+                {
+                    <MudSwitch T="bool" Value="agentStart.StartStoppedSession" ValueChanged="SaveAgentStartAsync"
+                               Label="Start the session when it is stopped" LabelPlacement="Placement.Start" Color="Color.Primary" Disabled="_agentStartBusy" />
+                }
+                else
+                {
+                    <MudProgressLinear Indeterminate="true" />
+                }
+            </MudPaper>
         </div>
             </div>
         </MudTabPanel>
@@ -955,6 +972,8 @@
     /// <summary>Settings → Security → Image security check; null while unknown.</summary>
     private ImageSecuritySettings? _imageSecurity;
     private bool _imageSecurityBusy;
+    private AgentStartSettings? _agentStart;
+    private bool _agentStartBusy;
     private AgentUpdateStatus? _update;
     private bool _updateBusy;
     private string _skillClient = "Hermes";
@@ -1035,6 +1054,36 @@
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
         {
             Snackbar.Add($"Image security check: {ex.Message}", Severity.Error);
+        }
+
+        try
+        {
+            _agentStart = await Api.GetAgentStartSettingsAsync();
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"Session at agent start: {ex.Message}", Severity.Error);
+        }
+    }
+
+    /// <summary>Saved on the agent; it is read the next time the agent starts.</summary>
+    private async Task SaveAgentStartAsync(bool start)
+    {
+        _agentStartBusy = true;
+        try
+        {
+            _agentStart = await Api.SetAgentStartSettingsAsync(new AgentStartSettings(start));
+            Snackbar.Add(start
+                ? "The agent starts a stopped session when it starts"
+                : "The agent leaves a stopped session stopped when it starts", Severity.Success);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            Snackbar.Add($"Session at agent start: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _agentStartBusy = false;
         }
     }
 
