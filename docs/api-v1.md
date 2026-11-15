@@ -343,8 +343,8 @@ Notes
   and it is fixed when the container is created (wslc has no
   `container update`), so changing it means recreating the container. The
   agent's own changes it at once, `unless-stopped` included.
-- MCP tools mirror these, served at `/api/v1/mcp` (55 today): `health`,
-  `system_info`, `cli_activity`, `recent_events`, `home_overview`, `list_sessions`,
+- MCP tools mirror these, served at `/api/v1/mcp` (56 today): `health`,
+  `system_info`, `system_reclaimable`, `cli_activity`, `recent_events`, `home_overview`, `list_sessions`,
   `switch_session`, `start_session`, `stop_session`, `list_containers`,
   `inspect_container`, `container_logs`, `container_stats`,
   `check_container_launch` (this project's, over `/containers/launch-check`), `run_container`,

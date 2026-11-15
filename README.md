@@ -281,7 +281,7 @@ its own previews, the first of them 1.6.4, for WSL 3.0.4.
   added, as a Windows update patches Windows, and moves its containers to it. Settings → Security sets whether it
   stops, only warns, or is off ([how it works](docs/features/zaindari.md)).
 - **An MCP agent for WSLC, skill included for Claude, Hermes, OpenClaw,
-  etc.**: 55 tools, the destructive ones off by default and asking your
+  etc.**: 56 tools, the destructive ones off by default and asking your
   approval once switched on, and a skill installed with one click. One Windows program beside `wslc` that runs in
   the background of your Windows session, goes on with the browser and the
   apps closed, and serves the web interface, the clients

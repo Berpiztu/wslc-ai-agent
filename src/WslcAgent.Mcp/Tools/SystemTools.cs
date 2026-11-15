@@ -25,6 +25,16 @@ public static class SystemTools
         return new SystemInfoResult(summary, overview);
     }
 
+    [McpServerTool(Name = "system_reclaimable", ReadOnly = true)]
+    [Description("How much of the selected session's virtual disk nothing uses any more: layers no image and no container uses (kept by containers long removed) and the build cache, beside what images hold. Reads only, and only while the session runs. Removing it is Compact VHDX's, in the UI, with the session stopped.")]
+    public static async Task<SystemReclaimableResult> SystemReclaimable(ISystemService system, CancellationToken cancellationToken = default)
+    {
+        var store = await system.ReclaimableAsync(cancellationToken);
+        var summary = $"Session '{store.Session}': {Bytes.Humanize(store.ReclaimableBytes)} of {Bytes.Humanize(store.UsedBytes)} in use can be removed "
+            + $"({store.UnusedLayers} unused layers, {Bytes.Humanize(store.UnusedLayerBytes)}; build cache, {Bytes.Humanize(store.BuildCacheBytes)}).";
+        return new SystemReclaimableResult(summary, store);
+    }
+
     [McpServerTool(Name = "cli_activity", ReadOnly = true)]
     [Description("Recent wslc commands the agent ran, newest first, with status, exit code, output and the runtime's own error text — the ones running now, then the finished ones from the agent's log. Use it to explain a failure: it shows the exact command.")]
     public static CliActivityResult CliActivity(
@@ -51,6 +61,9 @@ public sealed record RecentEventsResult(string Summary, int Count, IReadOnlyList
 
 /// <summary>Result of <c>system_info</c>: one line to read, then the whole overview.</summary>
 public sealed record SystemInfoResult(string Summary, SystemOverview Overview);
+
+/// <summary>Result of <c>system_reclaimable</c>: one line to read, then the figures.</summary>
+public sealed record SystemReclaimableResult(string Summary, StoreReclaimable Store);
 
 /// <summary>Result of <c>cli_activity</c>.</summary>
 public sealed record CliActivityResult(string Summary, int Count, IReadOnlyList<CliTraceEntry> Traces);

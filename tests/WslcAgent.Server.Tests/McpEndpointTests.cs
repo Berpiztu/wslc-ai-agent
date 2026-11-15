@@ -30,6 +30,7 @@ public sealed class McpEndpointTests(WebApplicationFactory<Program> factory)
         Assert.Contains("list_networks", names);
         Assert.Contains("list_sessions", names);
         Assert.Contains("system_info", names);
+        Assert.Contains("system_reclaimable", names);
         Assert.Contains("home_overview", names);
         Assert.Contains("remove_container", names);
         Assert.Contains("parse_compose", names);

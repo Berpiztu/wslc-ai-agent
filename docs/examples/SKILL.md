@@ -275,6 +275,9 @@ die.
   `list_volumes` → tell the user what is unused, then `remove_image` /
   `remove_volume` by name, or `prune_images` / `prune_volumes` for the lot.
   Every one of them is gated, so the user approves before anything goes.
+  `system_reclaimable` says how much of the session's virtual disk nothing
+  uses any more (layers kept by containers long removed, the build cache);
+  it only reads, and removing that is Compact VHDX's, in the UI.
 - **Sessions**: `list_sessions`, then `switch_session` only to a listed name
   the user asked for; `start_session` to boot one. Containers, images and
   volumes are per session, so re-list after switching. Never invent a session
