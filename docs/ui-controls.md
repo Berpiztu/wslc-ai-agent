@@ -639,6 +639,7 @@ from this table, or adds a row to it; nothing is inlined twice with two icons.
 | Remove, Delete, Unpublish | `Delete` | Error | every row and card, Settings lists |
 | Prune, Delete all | `DeleteSweep` | Error | page verbs |
 | Reclaimable space (read what a store no longer uses) | `DataUsage` | — | System verb |
+| Check (is an image whole) | `FactCheck` | — | Images verb, image menu |
 | Cancel a change, Dismiss, Remove a row, Close a pane | `Close` | Error (Warning in the launch rail) | rails, rows, progress cells |
 | More actions, Pick (inside a field) | `MoreVert` | — | row menus, `wslc-field-pick` buttons |
 | View & edit, Edit & run again | `EditNote` | — | rows, cards, menus, failed launch rows |

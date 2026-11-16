@@ -21,6 +21,29 @@ public static class ImageTools
         CancellationToken cancellationToken = default) =>
         images.InspectAsync(reference, cancellationToken);
 
+    [McpServerTool(Name = "image_containers", ReadOnly = true)]
+    [Description("Which containers stand on an image, found by the image each container is pinned to and not by its name: name, id, state and the image name it was created with. A container keeps its image when that image's name moves to a newer one (a pull, a patch), so an image with no name left can still have a container; this finds it, where the image list only counts it.")]
+    public static Task<ImageUsers> ImageContainers(
+        IImageService images,
+        [Description("Image reference or id.")] string reference,
+        CancellationToken cancellationToken = default) =>
+        images.UsersAsync(reference, cancellationToken);
+
+    [McpServerTool(Name = "check_images", ReadOnly = true)]
+    [Description("Check whether an image, or every image when none is named, is whole: each of its layers still holds what the session recorded for it when it was pulled or built. A pull cut short, a disk that filled up or a session that went down mid-write leaves an image that is listed and fails only when a container made from it runs; this says so, layer by layer, with how much is missing. A damaged image is removed and pulled again. Reads only.")]
+    public static async Task<ImageChecksResult> CheckImages(
+        IImageIntegrity integrity,
+        [Description("Image reference or id; empty for every image.")] string reference = "",
+        CancellationToken cancellationToken = default)
+    {
+        var checks = await integrity.CheckAsync(reference, cancellationToken);
+        var damaged = checks.Images.Where(check => check.IsDamaged).ToList();
+        var summary = damaged.Count == 0
+            ? $"{checks.Images.Count} images checked: every one is whole."
+            : string.Join(' ', damaged.Select(check => check.Why()));
+        return new ImageChecksResult(summary, checks.Images);
+    }
+
     [McpServerTool(Name = "image_vulnerabilities", ReadOnly = true)]
     [Description("An image's Python libraries (pip list read in the image itself) and every known vulnerability of them from OSV.dev, the low ones too, the worst first, each with its advisory, CVE and the version that fixes it; with a line per library saying the version that fixes all of its own, and whether the agent refuses to make containers from the image (built here, Settings → Security set to Block). A vulnerability a person accepted (no version fixes it, in a part the image does not use) carries its acceptance, with who, when and why, and counts in no colour nor refusal; accepting one is a person's decision, made in Zaindari's window, not through this server.")]
     public static Task<ImageVulnerabilities> ImageVulnerabilities(
@@ -138,3 +161,6 @@ public static class ImageTools
         return $"tagged {source} as {target}";
     }
 }
+
+/// <summary>Result of <c>check_images</c>: one line to read, then each image checked.</summary>
+public sealed record ImageChecksResult(string Summary, IReadOnlyList<ImageCheck> Images);

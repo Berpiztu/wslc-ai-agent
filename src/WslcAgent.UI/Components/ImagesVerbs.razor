@@ -22,6 +22,7 @@
     <SelectedTemplate></SelectedTemplate>
 </MudFileUpload>
 <VerbFab StartIcon="@Icons.Material.Filled.TravelExplore" Label="Hub" Href="https://hub.docker.com/search" Target="_blank" Title="Search images on Docker Hub" />
+<VerbFab StartIcon="@Icons.Material.Filled.FactCheck" Label="Check" OnClick="CheckAsync" Title="Check images: whether their layers still hold what was recorded for them" />
 <VerbFab StartIcon="@Icons.Material.Filled.DeleteSweep" Label="Prune" Color="Color.Error" OnClick="PruneAsync" Title="Remove dangling images (no name, no tag)" />
 
 @code {
@@ -85,6 +86,12 @@
         await Changed.InvokeAsync();
     }
 
+    /// <summary>The window of checks, every image at the left; the page reads its list again after, for the checks started there.</summary>
+    private async Task CheckAsync()
+    {
+        await PullFlow.ShowChecksAsync(Dialogs);
+        await Changed.InvokeAsync();
+    }
     private Task PruneAsync() =>
         ConfirmAndRunAsync("Prune images", "Remove every dangling image (no name, no tag)?", "Prune", "images", Api.PruneImagesAsync);
 }

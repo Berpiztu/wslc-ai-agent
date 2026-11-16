@@ -11,17 +11,51 @@ public static class ImageReference
     /// <summary>The tag a reference means when it names none.</summary>
     public const string Latest = "latest";
 
-    /// <summary>What Zaindari's patch adds to the tag of the image it patches: <c>alpine:latest-patched</c>, built on this machine and published nowhere.</summary>
+    /// <summary>
+    /// What Zaindari's patch adds to the tag of the image it patches, built on
+    /// this machine and published nowhere: <c>alpine:latest-patched</c> for a
+    /// patch of the image alone, and <c>alpine:latest-patched-web</c> for the
+    /// one made for the container <c>web</c>. A container's patch is its own:
+    /// what was upgraded, raised or accepted in it was chosen for that
+    /// container, so another container's patch never takes its name.
+    /// </summary>
     public const string PatchedSuffix = "-patched";
 
-    /// <summary>Whether the reference names a patch Zaindari built (<see cref="PatchedSuffix"/>).</summary>
-    public static bool IsPatched(string image) => Split(image).Tag.EndsWith(PatchedSuffix, StringComparison.Ordinal);
+    /// <summary>The longest tag a registry, and wslc, take.</summary>
+    private const int MaxTagLength = 128;
 
-    /// <summary>The image a patch was made from (<c>alpine:latest-patched</c> → <c>alpine:latest</c>); any other reference as it is.</summary>
+    /// <summary>Whether the reference names a patch Zaindari built: its tag ends with <see cref="PatchedSuffix"/>, or goes on from it with a container's name.</summary>
+    public static bool IsPatched(string image) => PatchedAt(Split(image).Tag) >= 0;
+
+    /// <summary>The image a patch was made from (<c>alpine:latest-patched</c> and <c>alpine:latest-patched-web</c> → <c>alpine:latest</c>); any other reference as it is.</summary>
     public static string Unpatched(string image)
     {
         var (repository, tag) = Split(image);
-        return IsPatched(image) ? $"{repository}:{tag[..^PatchedSuffix.Length]}" : image;
+        return PatchedAt(tag) is >= 0 and var at ? $"{repository}:{tag[..at]}" : image;
+    }
+
+    /// <summary>
+    /// The patch of <paramref name="image"/> made for <paramref name="container"/>:
+    /// the image's own tag, <see cref="PatchedSuffix"/> and the container's name as
+    /// a tag takes it, in lower case. Of a patch, it is the patch of the image
+    /// that one was made from, for this container.
+    /// </summary>
+    public static string PatchedFor(string image, string container)
+    {
+        var (repository, tag) = Split(Unpatched(image));
+        var name = string.Concat(container.Trim().ToLowerInvariant().Select(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '.' or '-' ? c : '-'));
+        var patched = $"{tag}{PatchedSuffix}";
+        return name.Length == 0
+            ? $"{repository}:{patched}"
+            : $"{repository}:{patched}-{name[..Math.Min(name.Length, Math.Max(1, MaxTagLength - patched.Length - 1))]}";
+    }
+
+    /// <summary>Where the patch's mark starts in a tag: at its end, or before a container's name; -1 for a tag that is no patch's.</summary>
+    private static int PatchedAt(string tag)
+    {
+        var at = tag.LastIndexOf(PatchedSuffix, StringComparison.Ordinal);
+        var after = at + PatchedSuffix.Length;
+        return at > 0 && (after == tag.Length || tag[after] == '-') ? at : -1;
     }
 
     /// <summary>The repository and the tag; <see cref="Latest"/> when none is named, as wslc reads it.</summary>

@@ -89,3 +89,22 @@ public sealed record SaveImageRequest(string Reference, string Output);
 
 /// <summary>Answer of <c>POST /api/v1/images/save</c>: the archive written on the agent's machine.</summary>
 public sealed record SavedImage(string Reference, string Path);
+
+/// <summary>
+/// Answer of <c>GET /api/v1/images/users?image=</c>: the containers that stand
+/// on an image, found by the image each one is pinned to and not by its name.
+/// A container keeps the image it was made from when that image's name moves
+/// to another (a newer pull, a patch): the old image is left with no name and
+/// still has its container, which a search by name does not find.
+/// </summary>
+/// <param name="Image">The image asked for, as it was asked.</param>
+/// <param name="Id">Its id, the first twelve characters.</param>
+/// <param name="Containers">The containers pinned to it, sorted by name; the files helpers left out.</param>
+public sealed record ImageUsers(string Image, string Id, IReadOnlyList<ImageUser> Containers);
+
+/// <summary>One container that stands on an image.</summary>
+/// <param name="Name">Container name.</param>
+/// <param name="Id">Container id.</param>
+/// <param name="CreatedAs">The image name the container was made with; it may name another image by now.</param>
+/// <param name="State">Container state (<c>running</c>, <c>exited</c>, <c>created</c>…).</param>
+public sealed record ImageUser(string Name, string Id, string CreatedAs, string State);

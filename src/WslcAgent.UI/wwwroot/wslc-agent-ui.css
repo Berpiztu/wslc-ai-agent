@@ -2918,6 +2918,14 @@
     word-break: break-all;
 }
 
+/* Sentences in the logs box (a report): they wrap between words at the box's
+   width, so they are read without scrolling sideways; only a word longer than
+   the box is broken. */
+.wslc-logs-pre.wslc-logs-words {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
 .wslc-log-line {
     margin: 0;
     padding: 0.02rem 0;
@@ -6862,6 +6870,16 @@ html[data-wslc-rows~="outlined"] .wslc-files-table {
 /* Update image's line saying which version the tag chosen is: one line,
    whatever it says, so the window keeps its size. */
 .wslc-update-version {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* A text that keeps to one line whatever it says, cut with an ellipsis: what
+   it stands in keeps its height, and nothing under it moves when the text
+   changes. Its whole text is its title. */
+.wslc-one-line {
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

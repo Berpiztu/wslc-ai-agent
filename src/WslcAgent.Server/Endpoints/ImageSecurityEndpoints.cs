@@ -23,14 +23,15 @@ public static class ImageSecurityEndpoints
 
         // Zaindari's window: the image checked now, every library and every known vulnerability;
         // what is found marks the image, worse, better or clean, and its containers read it.
-        api.MapGet("/image-security/vulnerabilities", async (string image, IImageSecurity security, WslcEvents events, CancellationToken ct) =>
+        api.MapGet("/image-security/vulnerabilities", async (string image, string? container, IImageSecurity security, ImagePatches patches, WslcEvents events, CancellationToken ct) =>
             {
                 if (string.IsNullOrWhiteSpace(image))
                 {
                     throw new ArgumentException("image is required", nameof(image));
                 }
 
-                var report = await security.ReportAsync(image, ct);
+                // Asked for a container, it is of the image that container stands on, by its id: the name may have moved since.
+                var report = string.IsNullOrWhiteSpace(container) ? await security.ReportAsync(image, ct) : await patches.ReportForAsync(image, container, ct);
                 events.Publish(new ChangeNotice([ChangeNotice.Container, ChangeNotice.Image]));
                 return report;
             })

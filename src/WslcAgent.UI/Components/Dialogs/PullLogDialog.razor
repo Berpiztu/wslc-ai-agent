@@ -1,4 +1,4 @@
-@* The window of a pull or a push the agent runs: its console (PullConsole).
+@* The window of a pull, a push or a check the agent runs: its console (PullConsole).
    Close leaves it running; Cancel stops it, after asking. *@
 @inject WslcAgentApi Api
 @inject IDialogService Dialogs
@@ -6,7 +6,7 @@
 
 <MudDialog ContentClass="wslc-dialog-action">
     <TitleContent>
-        <DialogTitle Title="@($"{(Push ? "Push" : "Pull")} progress")">
+        <DialogTitle Title="@($"{Kind.Verb()} progress")">
             <Info>
                 <MudChip T="string" Size="Size.Small" Class="my-0">@Image</MudChip>
             </Info>
@@ -20,7 +20,7 @@
         </DialogTitle>
     </TitleContent>
     <DialogContent>
-        <PullConsole Image="@Image" Finished="Finished" Push="Push" ActiveChanged="ActiveChanged" />
+        <PullConsole Image="@Image" Finished="Finished" Kind="Kind" ActiveChanged="ActiveChanged" />
     </DialogContent>
 </MudDialog>
 
@@ -34,8 +34,8 @@
     /// <summary>Opened from a row that already knows the pull has ended: its output is painted at once, and there is nothing to cancel.</summary>
     [Parameter] public bool Finished { get; set; }
 
-    /// <summary>The push of <see cref="Image"/>, not its pull.</summary>
-    [Parameter] public bool Push { get; set; }
+    /// <summary>Which job of <see cref="Image"/> this is the window of; its pull unless said.</summary>
+    [Parameter] public ImageJobKind Kind { get; set; }
 
     protected override void OnInitialized() => _showCancel = !Finished;
 
@@ -51,7 +51,7 @@
 
     private async Task CancelAsync()
     {
-        if (await PullFlow.CancelAsync(Dialogs, Api, Snackbar, Image, Push))
+        if (await PullFlow.CancelAsync(Dialogs, Api, Snackbar, Image, Kind))
         {
             Dialog.Close();
         }

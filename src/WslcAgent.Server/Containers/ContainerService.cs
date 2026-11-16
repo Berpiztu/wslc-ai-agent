@@ -36,7 +36,8 @@ public sealed partial class ContainerService(
     ILogger<ContainerService> logger,
     Images.ImageVersions? imageVersions = null,
     Backups.BusyVolumes? busyVolumes = null,
-    Backups.BackupMarks? backupMarks = null) : IContainerService
+    Backups.BackupMarks? backupMarks = null,
+    Images.ImageIntegrity? integrity = null) : IContainerService
 {
     private const string MetadataLabel = "com.microsoft.wsl.container.metadata=";
 
@@ -202,6 +203,13 @@ public sealed partial class ContainerService(
     {
         var id = WslcArgs.Require(container, "container");
         var snapshot = await InspectAsync(id, cancellationToken);
+        // Asked before anything of the container is touched: one recreated on a
+        // damaged image would be removed, and its replacement would not start.
+        if (integrity is not null && request.Image.Trim().Length > 0 && await integrity.WhyDamagedAsync(request.Image, cancellationToken) is { } damaged)
+        {
+            throw new InvalidOperationException($"Container {snapshot.Name} cannot be updated: {damaged}");
+        }
+
         // The container does not exist for a moment in the middle: its entry in
         // the registry — the uid a dashboard card points at — is held through
         // it, and given the new container at the end, whatever its name.

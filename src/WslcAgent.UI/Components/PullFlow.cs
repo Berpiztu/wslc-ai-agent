@@ -14,7 +14,15 @@ public static class PullFlow
 
     /// <summary>The console of a push the agent runs (a publish), the pull's own with the push's output.</summary>
     public static Task<bool> ShowPushLogAsync(IDialogService dialogs, string image) =>
-        DialogFlow.ShowAsync<PullLogDialog>(dialogs, "Push progress", new DialogParameters<PullLogDialog> { { d => d.Image, image }, { d => d.Push, true } }, large: true);
+        DialogFlow.ShowAsync<PullLogDialog>(dialogs, "Push progress", new DialogParameters<PullLogDialog> { { d => d.Image, image }, { d => d.Kind, ImageJobKind.Push } }, large: true);
+
+    /// <summary>An image's own check: its window, that image alone. A card's or a row's look at a check under way, or ended, is this same window, which opens on it.</summary>
+    public static Task<bool> ShowCheckAsync(IDialogService dialogs, string image) =>
+        DialogFlow.ShowAsync<CheckImageDialog>(dialogs, $"Check image — {image}", new DialogParameters<CheckImageDialog> { { d => d.Reference, image } }, large: true);
+
+    /// <summary>The page's Check: every image at the left, the same pane at the right, as wide as the backups' window.</summary>
+    public static Task<bool> ShowChecksAsync(IDialogService dialogs) =>
+        DialogFlow.ShowAsync<CheckImageDialog>(dialogs, "Check images", wide: true);
 
     /// <summary>The log of a patch's build job, in the view logs are read in (<see cref="BuildLogDialog"/>).</summary>
     public static Task<bool> ShowBuildLogAsync(IDialogService dialogs, string job, string image) =>
@@ -40,10 +48,10 @@ public static class PullFlow
         }
     }
 
-    /// <summary>Asks, then stops the pull (or the push); true when it was running and is stopping.</summary>
-    public static async Task<bool> CancelAsync(IDialogService dialogs, WslcAgentApi api, ISnackbar snackbar, string image, bool push = false)
+    /// <summary>Asks, then stops the pull (or the push, or the check); true when it was running and is stopping.</summary>
+    public static async Task<bool> CancelAsync(IDialogService dialogs, WslcAgentApi api, ISnackbar snackbar, string image, ImageJobKind kind = ImageJobKind.Pull)
     {
-        var noun = push ? "push" : "pull";
+        var noun = kind.Verb().ToLowerInvariant();
         if (!await DialogFlow.ConfirmAsync(dialogs, $"Cancel {noun}", $"Are you sure you want to cancel this {noun}?", $"Cancel {noun}", destructive: true))
         {
             return false;
@@ -51,7 +59,7 @@ public static class PullFlow
 
         try
         {
-            return (await (push ? api.CancelImagePushAsync(image) : api.CancelImagePullAsync(image))).Cancelled;
+            return (await api.CancelAsync(kind, image)).Cancelled;
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
         {
@@ -66,6 +74,19 @@ public static class PullFlow
         try
         {
             await api.DismissImagePullAsync(image);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    /// <summary>The cross of a check that ended: the agent forgets it and the card is the image's again.</summary>
+    public static async Task DismissCheckAsync(WslcAgentApi api, ISnackbar snackbar, string image)
+    {
+        try
+        {
+            await api.DismissImageCheckAsync(image);
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
         {

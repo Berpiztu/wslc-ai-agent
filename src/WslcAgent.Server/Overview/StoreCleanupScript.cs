@@ -1,4 +1,5 @@
 using System.Text;
+using WslcAgent.Server.Wslc;
 
 namespace WslcAgent.Server.Overview;
 
@@ -218,7 +219,7 @@ public static class StoreCleanupScript
     /// terminal there to cut a long line, and base64 keeps the script's quotes
     /// away from the command line.
     /// </summary>
-    public static string Piped(string mode) => $"echo {Encoded()} | base64 -d | sh -s {mode}";
+    public static string Piped(string mode) => GuestScript.Piped(Text, mode);
 
     /// <summary>
     /// What is typed into the temporary session's shell to run the script in

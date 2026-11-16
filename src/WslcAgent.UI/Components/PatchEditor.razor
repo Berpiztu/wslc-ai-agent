@@ -35,7 +35,8 @@
 @inject ISnackbar Snackbar
 
 <MudText Typo="Typo.body2">
-    Builds <b>@Report.Patch</b> from @Report.Image, then moves the containers ticked to it with their ports, mounts, environment and name.
+    Builds a patch of @Report.Image for each container ticked, its own and named after it (<b>@ImageReference.PatchedFor(Report.Image, "its-name")</b>), and moves the container to it
+    with its ports, mounts, environment and name; with none ticked, the image's own, <b>@Report.Patch</b>.
     A patch is never refused; if it does not work, View &amp; edit puts a container back on its old image.
 </MudText>
 @* What is left, as Zaindari's window and the patch's log end with it: whether a patch can still mend
@@ -93,9 +94,9 @@
    the long one. *@
 <div class="wslc-patch-columns mt-2">
     <div>
-        <MudText Typo="Typo.caption" Class="mud-text-secondary">
-            @(Report.SystemUpgrade.Length > 0 ? "System packages with a fix published: its RUN line upgrades them; take it out to leave them." : "No system package with a fix published, or no package manager in the image to install one.")
-        </MudText>
+        @* One line whatever it says, its whole text in its title: it changes as the Dockerfile is typed, and nothing under it may move.
+           In the warning colour while there is nothing to patch, which is why Patch is not offered. *@
+        <MudText Typo="Typo.caption" Class="@($"{(NothingToDo ? "mud-warning-text" : "mud-text-secondary")} wslc-one-line")" title="@UpgradeSaid">@UpgradeSaid</MudText>
         <MudTextField T="string" @bind-Value="_dockerfile" Label="Dockerfile of the patch, as it will be built" Lines="9" Immediate="true"
                       HelperTextOnFocus="true" Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-1"
                       HelperText="Change it as you will. What the rows choose is written in it as you choose: the lines that copy the new requirements.txt in and install from it, before its last USER."
@@ -190,6 +191,39 @@
 
     /// <summary>Opened from one container (Update image, View &amp; edit): that one alone ticked, by id or name; empty, every one of the image's.</summary>
     [Parameter] public IReadOnlyList<string> Only { get; set; } = [];
+
+    /// <summary>Told when the patch starts or stops having something to do: its host's verb is offered only while it has.</summary>
+    [Parameter] public EventCallback<bool> NothingToDoChanged { get; set; }
+
+    /// <summary>
+    /// The Dockerfile adds no step to the image it starts from: nothing but its
+    /// FROM, the user it runs as, and comments. Built, it would be the same
+    /// image again, so it is said and not built; a step written in, or a
+    /// library chosen, and there is a patch to build.
+    /// </summary>
+    public bool NothingToDo => !_dockerfile.ReplaceLineEndings("\n").Split('\n')
+        .Select(line => line.TrimStart())
+        .Any(line => line.Length > 0 && !line.StartsWith('#')
+            && !line.StartsWith("FROM ", StringComparison.OrdinalIgnoreCase) && !line.StartsWith("USER ", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The line over the Dockerfile: that there is nothing to patch, or what the system's upgrade would do.</summary>
+    private string UpgradeSaid =>
+        NothingToDo ? "This image cannot be patched now: there is nothing left to patch. Its Dockerfile adds no step; add one, or choose a library, and Patch is offered."
+        : Report.SystemUpgrade.Length > 0 ? "System packages with a fix published: its RUN line upgrades them; take it out to leave them."
+        : "No system package with a fix published, or no package manager in the image to install one.";
+
+    /// <summary>What the host was last told, so it is told only when it changes.</summary>
+    private bool? _nothingTold;
+
+    /// <summary>The Dockerfile changes as it is typed and as the rows are chosen: after each drawing, the host learns whether there is still something to build.</summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_nothingTold != NothingToDo)
+        {
+            _nothingTold = NothingToDo;
+            await NothingToDoChanged.InvokeAsync(NothingToDo);
+        }
+    }
 
     /// <summary>A row: a library line of a requirements file, or a vulnerable library none names (<see cref="Dependency"/>), added to the first file when chosen.</summary>
     private sealed record Row(ImageRequirement Line, bool Dependency);

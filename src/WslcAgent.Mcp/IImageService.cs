@@ -11,6 +11,13 @@ public interface IImageService
     /// <summary><c>wslc image inspect REFERENCE</c>: the raw JSON, indented.</summary>
     Task<ImageInspect> InspectAsync(string reference, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The containers that stand on an image, by the image each is pinned to:
+    /// one whose image lost its name to a newer one is found too.
+    /// <see cref="KeyNotFoundException"/> for an image that is not there.
+    /// </summary>
+    Task<ImageUsers> UsersAsync(string reference, CancellationToken cancellationToken = default);
+
     /// <summary>What a local image sets for every container made from it, as launch fields; an image that is not on the machine says so and nothing else.</summary>
     Task<ImageDefaults> DefaultsAsync(string reference, CancellationToken cancellationToken = default);
 

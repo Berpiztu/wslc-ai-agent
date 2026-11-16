@@ -40,7 +40,9 @@
                 else
                 {
                     <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" Class="@(_step == Patch ? null : "invisible")"
-                               Disabled="@(Verb.Busy || !CanPatch || _step != Patch)" OnClick="PatchAsync">@(RunningHere ? "Starting…" : "Patch")</MudButton>
+                               Disabled="@(Verb.Busy || !CanPatch || _step != Patch || _patch is { NothingToDo: true })"
+                               title="@(_patch is { NothingToDo: true } ? "Nothing to patch: the Dockerfile adds no step to the image" : null)"
+                               OnClick="PatchAsync">@(RunningHere ? "Starting…" : "Patch")</MudButton>
                 }
                 @* In Zaindari's own window, on Accept and Patch, Cancel drops what was ticked or written there and goes
                    back to the report; in the Project window the tabs are the way back, and there is none. *@
@@ -71,7 +73,7 @@
                 @if (Report is { } report)
                 {
                     <PaneStep Error="@Verb.Error">
-                        <PatchEditor @key="@($"{chosen.Id} {report.Image}")" @ref="_patch" Report="report" Only="@(new[] { chosen.Id })" />
+                        <PatchEditor @key="@($"{chosen.Id} {report.Image}")" @ref="_patch" Report="report" Only="@(new[] { chosen.Id })" NothingToDoChanged="@(_ => Repaint())" />
                     </PaneStep>
                 }
             </MudTabPanel>
@@ -168,7 +170,8 @@
     {
         if (!_reports.TryGetValue(image, out var report))
         {
-            _reports[image] = report = Api.GetImageVulnerabilitiesAsync(image);
+            // Of the image the chosen container stands on, by its id: its name may belong to another image by now.
+            _reports[image] = report = Chosen is { } chosen ? Api.GetImageVulnerabilitiesAsync(image, chosen.Id) : Api.GetImageVulnerabilitiesAsync(image);
             _ = RepaintWhenAsync(report);
         }
 

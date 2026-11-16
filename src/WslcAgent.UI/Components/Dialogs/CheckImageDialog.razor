@@ -1,0 +1,35 @@
+@* The window of image checks (ImageCheckView): one image's own (its card's
+   button, its row's menu) that one alone; the page's Check verb every image,
+   the list at the left and the same pane at the right. The title row holds
+   the pane's verbs, Check or Cancel, and Close, which leaves a check under
+   way running. Sized when it opens and never changes. *@
+
+<MudDialog ContentClass="wslc-dialog-action wslc-dialog-tall">
+    <TitleContent>
+        <DialogTitle Title="@Dialog.Title">
+            @_view?.Verbs
+            <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="@(() => Dialog.Close())">Close</MudButton>
+        </DialogTitle>
+    </TitleContent>
+    <DialogContent>
+        <ImageCheckView @ref="_view" Image="@Reference" Changed="@(() => Dialog.StateHasChanged())" />
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    /// <summary>Whose window it is, alone, by its reference; empty for every image.</summary>
+    [Parameter] public string Reference { get; set; } = "";
+
+    private ImageCheckView? _view;
+
+    /// <summary>The title row draws the view's verbs, and the view exists only once it has been drawn.</summary>
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Dialog.StateHasChanged();
+        }
+    }
+}

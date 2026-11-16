@@ -52,6 +52,15 @@
                                               OnLog="@(() => PullFlow.ShowLogAsync(Dialogs, pull.Image, finished: pull.State != "running"))" OnCancel="@(() => CancelPullAsync(pull.Image))"
                                               OnDismiss="@(() => DismissPullAsync(pull.Image))" />
                             }
+                            else if (PullFlow.For(_checks, context.Item.Value) is { } check)
+                            {
+                                @* Its check: how far it has got, what it found, its stop; damaged, it stays in red until dismissed. *@
+                                <ProgressCell Name="@(context.Item.Value.IsDangling ? "<none>" : context.Item.Value.Repository)" Pct="check.Pct" Status="@check.Status"
+                                              Failed="@(check.State is "error" or "cancelled")" Done="@(check.State == "success")"
+                                              LogTitle="View what the check found" CancelTitle="Cancel the check"
+                                              OnLog="@(() => PullFlow.ShowCheckAsync(Dialogs, check.Image))" OnCancel="@(() => CancelCheckAsync(check.Image))"
+                                              OnDismiss="@(() => DismissCheckAsync(check.Image))" />
+                            }
                             else if (context.Item.Value.PatchingTo is { } patching)
                             {
                                 @* Zaindari's patch being built from this image: the bar moves until it is. *@
@@ -109,6 +118,13 @@
                                               OnLog="@(() => PullFlow.ShowLogAsync(Dialogs, pull.Image, finished: pull.State != "running"))" OnCancel="@(() => CancelPullAsync(pull.Image))"
                                               OnDismiss="@(() => DismissPullAsync(pull.Image))" />
                             }
+                            else if (PullFlow.For(_checks, i) is { } check)
+                            {
+                                <ProgressRing Pct="check.Pct" Status="@check.Status" Failed="@(check.State is "error" or "cancelled")" Done="@(check.State == "success")"
+                                              LogTitle="View what the check found" CancelTitle="Cancel the check"
+                                              OnLog="@(() => PullFlow.ShowCheckAsync(Dialogs, check.Image))" OnCancel="@(() => CancelCheckAsync(check.Image))"
+                                              OnDismiss="@(() => DismissCheckAsync(check.Image))" />
+                            }
                             else if (i.PatchingTo is { } patching)
                             {
                                 <PatchRing Patch="@patching" Job="@i.PatchJob" Status="@($"Patching: building {patching}")" OnCancelled="RefreshAsync" />
@@ -138,6 +154,13 @@
 
     private IReadOnlyList<ImagePullState> _pulls = [];
 
+    /// <summary>The checks of an image the agent runs or has just ended, each on its image's row.</summary>
+    private IReadOnlyList<ImagePullState> _checks = [];
+
+    /// <summary>The checks whose end this page has said, by image; the ones already ended when it opened are old news.</summary>
+    private readonly HashSet<string> _reportedChecks = [];
+    private bool _checksSeeded;
+
     /// <summary>The pulls whose end this page has said, by image; one running again is said again when it ends.</summary>
     private readonly HashSet<string> _reportedEnds = [];
 
@@ -150,7 +173,9 @@
         var response = await Api.GetImagesAsync();
         _aggregate = response.Aggregate;
         _pulls = await Api.GetImagePullsAsync();
+        _checks = await Api.GetImageChecksAsync();
         ReportEndedPulls();
+        ReportEndedChecks();
         var pending = _pulls.Where(p => p.State != "success" && !response.Images.Any(row => PullFlow.For([p], row) is not null)).Select(PullFlow.PendingRow);
         var pulling = response.Images.Where(row => PullFlow.For(_pulls, row) is { State: not "success" });
         return [.. pulling, .. pending, .. response.Images.Where(row => PullFlow.For(_pulls, row) is null or { State: "success" })];
@@ -173,15 +198,17 @@
         {
             while (await timer.WaitForNextTickAsync(cancellationToken))
             {
-                if (!_pulls.Any(p => p.State == "running"))
+                if (!_pulls.Concat(_checks).Any(p => p.State == "running"))
                 {
                     continue;
                 }
 
                 var before = _pulls;
+                var checksBefore = _checks;
                 try
                 {
                     _pulls = await Api.GetImagePullsAsync(cancellationToken);
+                    _checks = await Api.GetImageChecksAsync(cancellationToken);
                 }
                 catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
                 {
@@ -190,8 +217,10 @@
                 }
 
                 ReportEndedPulls();
+                ReportEndedChecks();
 
-                if (before.Any(p => p.State == "running" && _pulls.FirstOrDefault(n => n.Image == p.Image)?.State != "running"))
+                if (before.Any(p => p.State == "running" && _pulls.FirstOrDefault(n => n.Image == p.Image)?.State != "running")
+                    || checksBefore.Any(p => p.State == "running" && _checks.FirstOrDefault(n => n.Image == p.Image)?.State != "running"))
                 {
                     // Drawn too: the tick after the last pull has nothing left to follow and paints nothing.
                     await RefreshAndDrawAsync();
@@ -241,6 +270,49 @@
                 }
             }
         }
+    }
+
+    /// <summary>The end of each check, said once on the activity line: whole, or why it is not. A cancelled one says nothing.</summary>
+    private void ReportEndedChecks()
+    {
+        if (!_checksSeeded)
+        {
+            _checksSeeded = true;
+            _reportedChecks.UnionWith(_checks.Where(check => check.State != "running").Select(check => check.Image));
+        }
+
+        foreach (var check in _checks)
+        {
+            if (check.State == "running")
+            {
+                _reportedChecks.Remove(check.Image);
+            }
+            else if (_reportedChecks.Add(check.Image))
+            {
+                if (check.State == "success")
+                {
+                    Activity.Done($"Image {check.Image} is whole");
+                }
+                else if (check.State == "error")
+                {
+                    Activity.Fail(check.Error);
+                }
+            }
+        }
+    }
+
+    private async Task CancelCheckAsync(string image)
+    {
+        if (await PullFlow.CancelAsync(Dialogs, Api, Snackbar, image, ImageJobKind.Check))
+        {
+            await RefreshAsync();
+        }
+    }
+
+    private async Task DismissCheckAsync(string image)
+    {
+        await PullFlow.DismissCheckAsync(Api, Snackbar, image);
+        await RefreshAsync();
     }
 
     /// <summary>The console of the patch being built from an image; nothing until the patch has its job.</summary>

@@ -26,6 +26,8 @@ public sealed class McpEndpointTests(WebApplicationFactory<Program> factory)
         Assert.Contains("health", names);
         Assert.Contains("list_containers", names);
         Assert.Contains("list_images", names);
+        Assert.Contains("check_images", names);
+        Assert.Contains("image_containers", names);
         Assert.Contains("list_volumes", names);
         Assert.Contains("list_networks", names);
         Assert.Contains("list_sessions", names);

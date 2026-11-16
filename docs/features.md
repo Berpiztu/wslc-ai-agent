@@ -8,7 +8,7 @@ agents alike.
 ## At a glance
 
 - **An MCP agent for WSLC, skill included for Claude, Hermes, OpenClaw, etc.**
-  - 56 MCP tools: your AI assistant runs your containers; destructive actions are off by default, and once switched on each one asks your approval
+  - 58 MCP tools: your AI assistant runs your containers; destructive actions are off by default, and once switched on each one asks your approval
   - Its skill, which teaches the assistant WSLC, installed with one click into Claude Code, Hermes Agent or OpenClaw
   - A small Windows program that sits next to `wslc`, Microsoft's container CLI, and runs it for you
   - Runs in the background of your Windows session: close the browser and the apps, and its jobs, restart policies, alarms and notifications go on
@@ -53,7 +53,7 @@ from the start, with its skill included for Claude, Hermes, OpenClaw, etc.
 
 ### MCP and AI assistants
 
-- **An MCP server** in the agent (`/api/v1/mcp`) with 56 tools: containers,
+- **An MCP server** in the agent (`/api/v1/mcp`) with 58 tools: containers,
   images, volumes, networks, sessions, publishing, notifications, logs and
   the machine's state, and the paste of a `docker run` line.
 - **Destructive tools off by default**: removing, pruning, killing, running a
@@ -339,8 +339,20 @@ publishing and cleaning up need them on.
   made from it; each one found is in the build's log, with the version that
   fixes it. Settings → Security sets what one moderate or worse does: stop the
   build (the default), only say it, or no check at all.
+- **Check**: whether an image is whole. A pull cut short, or onto a disk that
+  filled up, leaves an image that is listed and fails only when a container
+  made from it runs. **Check** compares what each layer holds with what was
+  recorded for it and says which image is damaged and how much is missing:
+  among the page's verbs for every image at once; and for one image from a
+  button on its card, or its menu in the table, which opens a window, starts
+  the check as a job of the agent's and shows it layer by layer. Closing the
+  window leaves it running: the image's card shows how far it has got, opens
+  what it found and stops it, and a damaged image stays in red until dismissed.
+  Every pull checks its image as it ends and fails saying so, and a container
+  is not moved to a damaged image: it says the image is damaged, and to remove
+  it and pull it again.
 - **Files of an image**, browsed through a temporary container.
-- Which containers use an image; run or create a container from it.
+- Which containers use an image, found by the image each is pinned to: one whose image lost its name to a newer pull or a patch is named too, and said why; run or create a container from it.
 - **Prune** dangling images; Docker Hub one click away to find images.
 - **Publish a version**: an image tagged as `registry/owner/app:1.4` (and
   `latest` with it) and pushed, with the push's progress, a live console and

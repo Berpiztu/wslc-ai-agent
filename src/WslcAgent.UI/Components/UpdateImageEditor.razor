@@ -10,7 +10,8 @@
    container that runs a patch is offered its original, as published. Under
    the Version, a line says which version the image named is: as its
    registry has it now, what the update pulls (asked without a login), and
-   this machine's when it has another. *@
+   this machine's when it has another; and under it, whether the image
+   named, when it is on this machine, is whole. *@
 @inject WslcAgentApi Api
 @inject IDialogService Dialogs
 
@@ -29,6 +30,8 @@
 </div>
 @* Which version the tag chosen is, read with Zaindari's answer, a line that is always there so nothing moves. *@
 <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1 wslc-update-version">@VersionSaid</MudText>
+@* Whether the image named, when it is on this machine, is whole: a line that is always there too. *@
+<MudText Typo="Typo.caption" Class="@($"{(Damaged ? "mud-error-text" : "mud-text-secondary")} mt-1 wslc-update-version")" title="@(_integrity?.Why() ?? IntegritySaid)">@IntegritySaid</MudText>
 <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
     The image is pulled, then the container is recreated with its ports, mounts, environment and name. If the new version does not start, the previous container stays as it was.
     Leave latest for the version published last, or type one (1.4) to go to that one, or back to it.
@@ -71,6 +74,25 @@
 
     /// <summary>The image named has been looked for on this machine and in its registry.</summary>
     private bool _looked;
+
+    /// <summary>The image named checked against the record of its layers, when it is on this machine; null when it is not, or could not be checked.</summary>
+    private ImageCheck? _integrity;
+
+    /// <summary>
+    /// The image named is on this machine and damaged: the container cannot be
+    /// moved to it, and the window's verb is not offered. Said on the one line
+    /// that is always there, never in a message under the form, which would
+    /// make the window taller.
+    /// </summary>
+    public bool Damaged => _integrity is { IsDamaged: true };
+
+    /// <summary>What the line says of it, in one line: whole, damaged and what follows from it, or that it is checked once pulled. The whole of it is the line's tooltip.</summary>
+    private string IntegritySaid =>
+        _checking || !_looked ? "Image integrity: …"
+        : Damaged ? $"Image {Target} is damaged: the container cannot be updated to it. Remove the image and pull it again."
+        : _integrity is { } check ? $"Image integrity: whole ({check.Layers} layers)"
+        : _local is null ? "Image integrity: not on this machine yet; it is checked once pulled"
+        : "Image integrity: could not be checked";
 
     /// <summary>
     /// What the line under the Version says of the image named: the version the update goes to, as the
@@ -118,6 +140,7 @@
             var published = PublishedAsync(Target);
             _local = (await Api.GetImagesAsync()).Images.FirstOrDefault(image => !image.IsDangling && ImageReference.Normalize(image.Reference) == target);
             _published = await published;
+            _integrity = _local is null ? null : await IntegrityAsync(Target);
             _report = await Api.GetImageVulnerabilitiesAsync(Target);
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
@@ -138,6 +161,19 @@
         try
         {
             return await Api.GetRegistryImageVersionAsync(image);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The image named checked; null when the agent could not (one too old to, or a store it does not know).</summary>
+    private async Task<ImageCheck?> IntegrityAsync(string image)
+    {
+        try
+        {
+            return (await Api.CheckImagesAsync(image)).Images.FirstOrDefault();
         }
         catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
         {

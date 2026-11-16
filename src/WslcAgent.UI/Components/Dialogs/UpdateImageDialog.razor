@@ -1,11 +1,12 @@
 @* A container's Update image window: the update editor (UpdateImageEditor)
-   as a form, Update its verb, waiting while Zaindari is asked. Started, the
+   as a form, Update its verb, waiting while Zaindari is asked and not offered
+   for an image found damaged, which its line says. Started, the
    dialog closes and the container's row shows the pull; a patch begun from
    its Patch… closes it too. *@
 
-<FormDialog SubmitText="Update" BusyText="Starting…" OnSubmit="UpdateAsync" Waiting="_checking">
+<FormDialog SubmitText="Update" BusyText="Starting…" OnSubmit="UpdateAsync" Waiting="@(_checking || _damaged)">
     <UpdateImageEditor @ref="_editor" Container="@Container" Current="@Current"
-                       CheckingChanged="@(checking => _checking = checking)" Patched="@(() => Dialog.Cancel())" />
+                       CheckingChanged="CheckingChanged" Patched="@(() => Dialog.Cancel())" />
 </FormDialog>
 
 @code {
@@ -22,6 +23,16 @@
     private UpdateImageEditor _editor = default!;
 
     private bool _checking;
+
+    /// <summary>The image named is damaged, as the editor's line says: Update is not offered for it.</summary>
+    private bool _damaged;
+
+    /// <summary>Zaindari and the image's integrity are asked together: once they have answered, whether the image is damaged is known.</summary>
+    private void CheckingChanged(bool checking)
+    {
+        _checking = checking;
+        _damaged = !checking && _editor is { Damaged: true };
+    }
 
     private async Task UpdateAsync() => Started(await _editor.StartAsync());
 }

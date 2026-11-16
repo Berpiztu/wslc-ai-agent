@@ -8,6 +8,8 @@ namespace WslcAgent.Server.Containers;
 /// the list marks those rows (<see cref="ContainerSummary.UpdatingTo"/>), so the
 /// container asked for shows the pull, not only the image it pulls. Once the
 /// pull is over the recreate takes the row (<see cref="ContainerRecreations"/>).
+/// A pull that failed keeps its mark while the agent remembers it: the row
+/// stays as the failed update, with why and its console, until it is dismissed.
 /// </summary>
 public sealed class ImageUpdatesUnderWay
 {
@@ -16,6 +18,9 @@ public sealed class ImageUpdatesUnderWay
     public void Begin(string containerId, string image) => _pulling[containerId] = image;
 
     public void End(string containerId) => _pulling.TryRemove(containerId, out _);
+
+    /// <summary>Lets go of the container's update to <paramref name="image"/>, and of no other it may have begun since.</summary>
+    public void End(string containerId, string image) => _pulling.TryRemove(new KeyValuePair<string, string>(containerId, image));
 
     /// <summary>The rows with the image each one's update pulls; the rest as they are.</summary>
     public IReadOnlyList<ContainerSummary> Annotate(IReadOnlyList<ContainerSummary> rows)

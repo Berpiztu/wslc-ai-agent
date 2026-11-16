@@ -7,8 +7,8 @@ using WslcAgent.Server.Wslc;
 
 namespace WslcAgent.Server.Images;
 
-/// <summary>Images as <c>wslc image list --format json</c> reports them, marked with container usage.</summary>
-public sealed class ImageService(IWslcRunner wslc, ContainerUsageScanner usage, ImagePulls pulls, Resources.ResourceRegistry registry, ImageMarks marks, ImageVersions? versions = null) : IImageService
+/// <summary>Images as <c>wslc image list --format json</c> reports them, each with the containers <c>wslc</c> counts on it: by the image's id, never by its name.</summary>
+public sealed class ImageService(IWslcRunner wslc, ImagePulls pulls, Resources.ResourceRegistry registry, ImageMarks marks, ImageVersions? versions = null, ImageIntegrity? integrity = null) : IImageService
 {
     private const string None = "<none>";
     private static readonly TimeSpan PullTimeout = TimeSpan.FromMinutes(30);
@@ -17,13 +17,8 @@ public sealed class ImageService(IWslcRunner wslc, ContainerUsageScanner usage, 
     {
         // --digests fills the Digest field, which the CLI left as <none> before
         // wslc 2.9.13; without the flag the column is not computed at all.
-        var listTask = wslc.RunAsync(["image", "list", "--digests", "--format", "json"], cancellationToken: cancellationToken);
-        var usageTask = usage.ScanAsync(cancellationToken);
-        await Task.WhenAll(listTask, usageTask);
-
-        var rows = WslcJson.ParseRows(listTask.Result.Stdout)
-            .Select(row => ToSummary(row, usageTask.Result))
-            .ToList();
+        var list = await wslc.RunAsync(["image", "list", "--digests", "--format", "json"], cancellationToken: cancellationToken);
+        var rows = WslcJson.ParseRows(list.Stdout).Select(ToSummary).ToList();
         // Every read is the registry's too, an image by its repository:tag; a
         // dangling image has no name to keep and is not entered.
         var tagged = rows.Where(i => !i.IsDangling).Select(i => (i.Reference, i.Reference)).ToList();
@@ -50,6 +45,52 @@ public sealed class ImageService(IWslcRunner wslc, ContainerUsageScanner usage, 
         return new ImageInspect(reference, json);
     }
 
+    /// <summary>
+    /// A container row says the image name it was made with, and <c>wslc</c>
+    /// counts an image's containers without naming them; which image a
+    /// container is pinned to is in its inspect, so each one is inspected and
+    /// its image's id compared with this image's.
+    /// </summary>
+    public async Task<ImageUsers> UsersAsync(string reference, CancellationToken cancellationToken = default)
+    {
+        var image = WslcArgs.Require(reference, "image reference");
+        var inspected = await wslc.RunAsync(["image", "inspect", image, "--format", "json"], cancellationToken: cancellationToken);
+        var imageId = PinnedTo(inspected, "Id");
+        if (imageId.Length == 0)
+        {
+            throw new KeyNotFoundException($"Image {image} is not on this session.");
+        }
+
+        var list = await wslc.RunAsync(["container", "list", "--all", "--format", "json"], cancellationToken: cancellationToken);
+        var containers = WslcJson.ParseRows(list.Stdout)
+            .Where(row => !ContainerService.IsHelper(row.GetString("Names")))
+            .Select(row => row.GetString("ID") is { Length: > 0 } id ? id : row.GetString("Id"))
+            .Where(id => id.Length > 0)
+            .ToList();
+
+
+        var users = new List<ImageUser>();
+        foreach (var id in containers)
+        {
+            var result = await wslc.RunAsync(["container", "inspect", id, "--format", "json"], cancellationToken: cancellationToken);
+            if (PinnedTo(result, "Image") == imageId)
+            {
+                var container = ContainerInspection.Parse(result);
+                users.Add(new ImageUser(container.Name, container.Id, container.Image, container.State));
+            }
+        }
+
+        return new ImageUsers(image, imageId[..Math.Min(12, imageId.Length)], [.. users.OrderBy(user => user.Name.Length > 0 ? user.Name : user.Id, StringComparer.OrdinalIgnoreCase)]);
+    }
+
+    /// <summary>An image id out of an inspect, without its algorithm: an image's own <c>Id</c>, or the <c>Image</c> a container is pinned to.</summary>
+    private static string PinnedTo(WslcResult inspect, string field)
+    {
+        var root = WslcJson.ParseRows(inspect.Stdout).FirstOrDefault();
+        var id = root.ValueKind == JsonValueKind.Object ? root.GetString(field).Trim() : "";
+        return id.StartsWith("sha256:", StringComparison.Ordinal) ? id["sha256:".Length..] : id;
+    }
+
     public async Task<ImageDefaults> DefaultsAsync(string reference, CancellationToken cancellationToken = default)
     {
         // Asked of the catalog first: an image that is not here is an answer, not the CLI's failure.
@@ -63,8 +104,16 @@ public sealed class ImageService(IWslcRunner wslc, ContainerUsageScanner usage, 
         return new ImageDefaults(true, ContainerInspection.ImageFields(image, result));
     }
 
-    public Task PullAsync(string reference, bool allTags = false, CancellationToken cancellationToken = default) =>
-        wslc.RunAsync(new List<string> { "image", "pull" }.Flag("--all-tags", allTags).Append(ImageReference.Normalize(WslcArgs.Require(reference, "image reference"))).ToList(), PullTimeout, cancellationToken);
+    public async Task PullAsync(string reference, bool allTags = false, CancellationToken cancellationToken = default)
+    {
+        var image = ImageReference.Normalize(WslcArgs.Require(reference, "image reference"));
+        await wslc.RunAsync(new List<string> { "image", "pull" }.Flag("--all-tags", allTags).Append(image).ToList(), PullTimeout, cancellationToken);
+        // A pull that ended well onto a disk that filled up leaves an image that is listed and does not run.
+        if (integrity is not null && await integrity.WhyDamagedAsync(image, cancellationToken) is { } damaged)
+        {
+            throw new InvalidOperationException(damaged);
+        }
+    }
 
     /// <summary>Uploads can take as long as a pull.</summary>
     public Task PushAsync(string reference, bool allTags = false, CancellationToken cancellationToken = default) =>
@@ -114,9 +163,11 @@ public sealed class ImageService(IWslcRunner wslc, ContainerUsageScanner usage, 
     /// <summary>
     /// Map one row. <c>Repository</c> and <c>Tag</c> print <c>&lt;none&gt;</c> for a
     /// dangling image; its reference is then the id, the only form the CLI accepts.
-    /// <c>Containers</c> (2.9.8+) decides usage; without it the container rows do.
+    /// <c>Containers</c>, the containers <c>wslc</c> counts on the image by its
+    /// id, decides usage and nothing else does: a container's image name can
+    /// belong to another image by now.
     /// </summary>
-    internal static ImageSummary ToSummary(JsonElement row, ContainerUsage usage)
+    internal static ImageSummary ToSummary(JsonElement row)
     {
         var fullId = ShortId(FirstNonEmpty(row.GetString("ID"), row.GetString("Id")));
         var repository = NoneAsEmpty(row.GetString("Repository"));
@@ -128,7 +179,7 @@ public sealed class ImageService(IWslcRunner wslc, ContainerUsageScanner usage, 
         // tried the new one and was refused as in use.
         var reference = repository.Length > 0 && tag.Length > 0 ? $"{repository}:{tag}" : fullId;
         var containers = int.TryParse(row.GetString("Containers"), out var count) && count >= 0 ? count : (int?)null;
-        var inUse = containers is int n ? n > 0 : UsageKeys(repository, tag, fullId).Overlaps(usage.ImageRefs);
+        var inUse = containers is > 0;
 
         return new ImageSummary(
             Id: fullId,
@@ -141,27 +192,6 @@ public sealed class ImageService(IWslcRunner wslc, ContainerUsageScanner usage, 
             Containers: containers,
             InUse: inUse,
             Digest: NoneAsEmpty(row.GetString("Digest")));
-    }
-
-    /// <summary>Every spelling a container row may use for this image.</summary>
-    private static HashSet<string> UsageKeys(string repository, string tag, string id)
-    {
-        var keys = new HashSet<string>(StringComparer.Ordinal);
-        if (repository.Length > 0)
-        {
-            keys.Add(repository);
-            if (tag.Length > 0)
-            {
-                keys.Add($"{repository}:{tag}");
-            }
-        }
-
-        if (id.Length > 0)
-        {
-            keys.Add(id);
-        }
-
-        return keys;
     }
 
     /// <summary>The pull jobs the agent is running, the same ones its UI draws.</summary>

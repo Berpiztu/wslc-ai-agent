@@ -26,8 +26,8 @@
     /// <summary>Zaindari is being asked about the image named: Update waits, as the container's own window does.</summary>
     private bool _checking;
 
-    /// <summary>The container chosen is at rest (as its own Update image asks) and Zaindari has answered.</summary>
-    private bool CanUpdate => Chosen is { } chosen && ProjectMemberPanes.AtRest(chosen) && !_checking;
+    /// <summary>The container chosen is at rest (as its own Update image asks), Zaindari has answered, and the image named is not one found damaged.</summary>
+    private bool CanUpdate => Chosen is { } chosen && ProjectMemberPanes.AtRest(chosen) && !_checking && _editor is not { Damaged: true };
 
     public override string BusyText => "Starting the update…";
 

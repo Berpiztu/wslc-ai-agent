@@ -1,0 +1,294 @@
+@* The check of an image, as its window (CheckImageDialog) shows it. One's
+   own (its card's button, its row's menu) is that image alone: the pane and
+   nothing else. The page's Check verb is every image, built as the backups'
+   window is (BackupsView): the list at the left, and at the right the very
+   same pane for the one chosen. The pane: what a check does until one is
+   asked for, then its console (PullConsole), layer by layer; an image whose
+   check is under way, or ended a moment ago, opens on it. The verbs (Verbs)
+   go where the host puts them, its title row: Check, or Cancel while one
+   runs. A check is the agent's job: leaving the window leaves it running,
+   and one under way turns a wheel in its slot of the list. *@
+@inject WslcAgentApi Api
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+@if (Alone)
+{
+    @Pane
+}
+else
+{
+    <div class="wslc-member-panes">
+        <MudPaper Outlined="true" Class="wslc-member-menu">
+            <MudList T="string" SelectedValue="@_chosen" SelectedValueChanged="Choose" Dense="true" role="list">
+                @foreach (var image in _images)
+                {
+                    var job = JobOf(image.Reference);
+                    <MudListItem T="string" @key="image.Reference" Value="@image.Reference" role="listitem">
+                        <div class="d-flex align-center gap-2">
+                            @* One slot for the mark or the turning wheel, so a check under way moves nothing. *@
+                            <span class="wslc-member-mark">
+                                @if (job is { State: "running" })
+                                {
+                                    <MudProgressCircular Indeterminate="true" Size="Size.Small" Color="Color.Info" />
+                                }
+                                else
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.FactCheck" Size="Size.Small" Color="@Tone(job)" />
+                                }
+                            </span>
+                            <div class="wslc-member-text">
+                                <MudText Typo="Typo.body2" Class="wslc-member-line">@image.Reference</MudText>
+                                <MudText Typo="Typo.caption" Class="wslc-member-line mud-text-secondary">@Caption(image, job)</MudText>
+                            </div>
+                        </div>
+                    </MudListItem>
+                }
+            </MudList>
+        </MudPaper>
+
+        <div class="wslc-member-pane">
+            @Pane
+        </div>
+    </div>
+}
+
+@code {
+    private static readonly TimeSpan LookEvery = TimeSpan.FromSeconds(1);
+
+    private readonly CancellationTokenSource _closing = new();
+    private IReadOnlyList<ImageSummary> _images = [];
+    private IReadOnlyList<ImagePullState> _checks = [];
+
+    /// <summary>The image the pane is of, by its reference: the window's own, or the one chosen in the list.</summary>
+    private string? _chosen;
+
+    /// <summary>The pane shows the chosen image's console: a check of it was asked for here, or the agent still holds one.</summary>
+    private bool _console;
+
+    /// <summary>That check had ended when the pane opened on it: its console paints what it found at once.</summary>
+    private bool _ended;
+
+    /// <summary>Counts the consoles opened, so each check asked for gets a console of its own.</summary>
+    private int _opened;
+
+    private bool _starting;
+    private string? _error;
+
+    /// <summary>Whose check it is, alone; empty for every image, the list at the left.</summary>
+    [Parameter] public string Image { get; set; } = "";
+
+    /// <summary>Its host's title row repainted: the verbs are drawn there, outside this component's tree.</summary>
+    [Parameter] public Action? Changed { get; set; }
+
+    /// <summary>One's own window: the pane alone, no list.</summary>
+    private bool Alone => Image.Length > 0;
+
+    /// <summary>The pane's verbs, for the host's title row: Check, or Cancel while the chosen image's check runs.</summary>
+    public RenderFragment Verbs => __builder =>
+    {
+        if (_chosen is { } image)
+        {
+            if (JobOf(image) is { State: "running" })
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Error" OnClick="CancelAsync">Cancel</MudButton>
+            }
+            else
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.FactCheck"
+                           Disabled="_starting" OnClick="CheckAsync">Check</MudButton>
+            }
+        }
+    };
+
+    /// <summary>The one pane, whether the window is an image's alone or every image's.</summary>
+    private RenderFragment Pane => __builder =>
+    {
+        if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2 flex-shrink-0">@_error</MudAlert>
+        }
+
+        if (_chosen is not { } image)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Choose an image at the left to check it.</MudText>
+        }
+        else if (_console)
+        {
+            // How the check stands, where it cannot be missed: a band over the console that is there from
+            // the start, one line whatever it says, so nothing under it moves when the check ends; it
+            // only changes its colour and its words, red for a damaged image.
+            var verdict = Verdict(image);
+            <MudPaper Elevation="0" Class="@($"pa-2 mb-2 flex-shrink-0 wslc-one-line {verdict.Class}")" title="@verdict.Text">
+                <MudText Typo="Typo.body2" Class="wslc-one-line">@verdict.Text</MudText>
+            </MudPaper>
+
+            <PullConsole @key="@($"{image} {_opened}")" Image="@Key(image)" Kind="ImageJobKind.Check" Finished="_ended" />
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Check measures each layer of @image and compares it with what the session recorded for it when the image was pulled or built.
+                A layer that lost file contents, as a pull cut short or a full disk leaves it, makes the image damaged: it is removed and pulled again.
+                Nothing is changed by checking.
+            </MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
+                The check runs on the agent. Close leaves it running: follow it, open its output or stop it from the image's card.
+            </MudText>
+        }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _checks = await Api.GetImageChecksAsync();
+            if (!Alone)
+            {
+                _images = (await Api.GetImagesAsync()).Images;
+            }
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _error = ex.Message.Length > 0 ? ex.Message : "The images could not be read";
+        }
+
+        if (Alone)
+        {
+            Open(Image);
+        }
+
+        _ = FollowAsync(_closing.Token);
+        Changed?.Invoke();
+    }
+
+    /// <summary>The checks read every second while the window is open: the list's wheels, and which verb the title offers.</summary>
+    private async Task FollowAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(LookEvery);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                try
+                {
+                    _checks = await Api.GetImageChecksAsync(cancellationToken);
+                }
+                catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+                {
+                    // The agent did not answer this tick; the next asks again.
+                    continue;
+                }
+
+                await InvokeAsync(() =>
+                {
+                    StateHasChanged();
+                    Changed?.Invoke();
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The window closed.
+        }
+    }
+
+    private void Choose(string? image)
+    {
+        if (image is not null)
+        {
+            Open(image);
+            Changed?.Invoke();
+        }
+    }
+
+    /// <summary>The pane on <paramref name="image"/>: its check's console when the agent holds one, what a check does when it holds none.</summary>
+    private void Open(string image)
+    {
+        _chosen = image;
+        _error = null;
+        var job = JobOf(image);
+        _console = job is not null;
+        _ended = job is { State: not "running" };
+        _opened++;
+    }
+
+    private async Task CheckAsync()
+    {
+        if (_chosen is not { } image)
+        {
+            return;
+        }
+
+        _starting = true;
+        _error = null;
+        Changed?.Invoke();
+        try
+        {
+            await Api.StartImageCheckAsync(image);
+            _checks = await Api.GetImageChecksAsync();
+            _console = true;
+            _ended = false;
+            _opened++;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _error = ex.Message.Length > 0 ? ex.Message : "The check could not be started";
+        }
+        finally
+        {
+            _starting = false;
+            StateHasChanged();
+            Changed?.Invoke();
+        }
+    }
+
+    private async Task CancelAsync()
+    {
+        if (_chosen is { } image && await PullFlow.CancelAsync(Dialogs, Api, Snackbar, Key(image), ImageJobKind.Check))
+        {
+            _checks = await Api.GetImageChecksAsync();
+            StateHasChanged();
+            Changed?.Invoke();
+        }
+    }
+
+    /// <summary>The band over the console: what it says of the chosen image's check, and the theme's colour it says it in.</summary>
+    private (string Text, string Class) Verdict(string image) => JobOf(image) switch
+    {
+        { State: "error" } failed => (failed.Error, "mud-theme-error"),
+        { State: "success" } => ($"Image {image} is whole: every layer holds what was recorded for it.", "mud-theme-success"),
+        { State: "cancelled" } => ($"The check of {image} was cancelled.", "mud-theme-warning"),
+        _ => ($"Checking {image}…", "mud-theme-info"),
+    };
+
+    /// <summary>The image as the agent names its job: in lower case, as wslc takes it.</summary>
+    private static string Key(string image) => ImageReference.Normalize(image);
+
+    private ImagePullState? JobOf(string image) => _checks.FirstOrDefault(check => check.Image == Key(image));
+
+    /// <summary>The mark's colour: red for an image found damaged, green for one found whole, none while nothing is known.</summary>
+    private static Color Tone(ImagePullState? job) => job switch
+    {
+        { State: "error" } => Color.Error,
+        { State: "success" } => Color.Success,
+        _ => Color.Default,
+    };
+
+    /// <summary>What the list says under an image: its check, while the agent holds one; its size and age otherwise.</summary>
+    private static string Caption(ImageSummary image, ImagePullState? job) => job switch
+    {
+        { State: "running" } => job.Status.Length > 0 ? job.Status : "Checking…",
+        { State: "success" } => "Whole",
+        { State: "error" } => "Damaged, or not checked: see its output",
+        { State: "cancelled" } => "Check cancelled",
+        _ => string.Join(" · ", new[] { image.Size, image.CreatedSince }.Where(text => text.Length > 0)),
+    };
+
+    public void Dispose()
+    {
+        _closing.Cancel();
+        _closing.Dispose();
+    }
+}

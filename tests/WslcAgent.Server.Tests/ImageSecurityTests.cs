@@ -3,6 +3,7 @@ using System.Net;
 using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using WslcAgent.ApiClient;
 using WslcAgent.ApiClient.Contracts;
 using WslcAgent.Server.Images;
 using WslcAgent.Server.Wslc;
@@ -220,6 +221,15 @@ public sealed class ImageSecurityTests
         ImageVulnerability[] black = [new("black", "23.1", "PYSEC-1", "", "high", "24.3", ""), new("black", "23.1", "GHSA-2", "", "moderate", "24.10", "")];
         Assert.Equal("alpine:latest-patched", ImagePatches.Named("alpine:latest"));
         Assert.Equal("alpine:latest-patched", ImagePatches.Named("alpine:latest-patched"));
+
+        // A container's patch is its own, named after it; of a patch, it is the patch of the image that one was made from.
+        Assert.Equal("alpine:latest-patched-desarrollo", ImageReference.PatchedFor("alpine:latest", "Desarrollo"));
+        Assert.Equal("alpine:latest-patched-web", ImageReference.PatchedFor("alpine:latest-patched", "web"));
+        Assert.Equal("alpine:latest-patched-web", ImageReference.PatchedFor("alpine:latest-patched-other", "web"));
+        Assert.True(ImageReference.IsPatched("alpine:latest-patched-web"));
+        Assert.Equal("alpine:latest", ImageReference.Unpatched("alpine:latest-patched-web"));
+        Assert.Equal("alpine:latest-patched-web", ImagePatches.Named("alpine:latest-patched-web"));
+        Assert.False(ImageReference.IsPatched("app:1.0-patchedup"));
         Assert.Equal("apk upgrade --no-cache", ImagePatches.SystemUpgrade(alpine, zlib));
         // No manager (distroless) or no fix published: no system upgrade; the user's commands are left.
         Assert.Equal("", ImagePatches.SystemUpgrade([alpine[1]], zlib));

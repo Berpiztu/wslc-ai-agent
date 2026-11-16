@@ -35,6 +35,21 @@ public abstract class ImageJobs(IWslcRunner wslc, ICliActivity activity, Notifie
     protected abstract (int Pct, string Status) Read(string output);
 
     /// <summary>
+    /// Why what the job left on the machine must not be used, asked once the
+    /// command has ended, well or badly; null when there is nothing to say. A
+    /// pull asks whether the image is whole: one cut short, or onto a disk
+    /// that filled up, leaves an image that is listed and does not run.
+    /// </summary>
+    protected virtual Task<string?> DamagedAsync(string image) => Task.FromResult<string?>(null);
+
+    /// <summary>Why the job failed, from what its command drew and how it ended; null when it did not.</summary>
+    protected virtual string? Failure(string image, string output, int exitCode) =>
+        exitCode == 0 ? null : PullProgress.Failure(output) ?? $"{Verb} failed (exit code {exitCode})";
+
+    /// <summary>The job's output as its console shows it: as it is, unless the job writes for itself and not for a reader.</summary>
+    protected virtual string Shown(string log) => log;
+
+    /// <summary>
     /// Starts a job on <paramref name="image"/>. One already under way is joined (a run
     /// waiting for its image, a second click); a finished or failed one is replaced.
     /// </summary>
@@ -87,7 +102,7 @@ public abstract class ImageJobs(IWslcRunner wslc, ICliActivity activity, Notifie
 
         var state = job.Snapshot();
         var (log, truncated) = PullProgress.Log(job.Output());
-        return new ImagePullLog(reference, log, truncated, state.Pct, state.Status, state.State == "running");
+        return new ImagePullLog(reference, Shown(log), truncated, state.Pct, state.Status, state.State == "running");
     }
 
     /// <summary>Stops a running job; false when there is none.</summary>
@@ -147,13 +162,24 @@ public abstract class ImageJobs(IWslcRunner wslc, ICliActivity activity, Notifie
             {
                 job.Finish("cancelled", $"{Verb} cancelled by user");
             }
-            else if (session.ExitCode == 0)
-            {
-                job.Finish("success", "");
-            }
             else
             {
-                job.Finish("error", PullProgress.Failure(text) ?? $"{Verb} failed (exit code {session.ExitCode})");
+                var failure = Failure(job.Image, text, session.ExitCode);
+                var damaged = await DamagedAsync(job.Image);
+                if (damaged is not null)
+                {
+                    // In the job's console too: it is where the reason is looked for.
+                    job.Append($"\r\nERROR: {damaged}\r\n");
+                }
+
+                if (failure is null && damaged is null)
+                {
+                    job.Finish("success", "");
+                }
+                else
+                {
+                    job.Finish("error", string.Join(' ', new[] { failure, damaged }.Where(part => part is not null)));
+                }
             }
 
             var (log, _) = PullProgress.Log(text);

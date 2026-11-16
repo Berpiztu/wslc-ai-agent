@@ -7,7 +7,7 @@
     <TitleContent>
         <DialogTitle Title="@Dialog.Title">
             <MudButton Size="Size.Small" Variant="Variant.Filled" OnClick="Cancel" Disabled="_busy">Cancel</MudButton>
-            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="SubmitAsync" Disabled="@(_busy || Waiting)">@(_busy ? BusyText : SubmitText)</MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="SubmitAsync" Disabled="@(_busy || Waiting)" title="@WaitingTitle">@(_busy ? BusyText : SubmitText)</MudButton>
         </DialogTitle>
     </TitleContent>
     <DialogContent>
@@ -41,6 +41,9 @@
 
     /// <summary>Something the form shows is still being found out (Zaindari's patch offer): the verb waits for it.</summary>
     [Parameter] public bool Waiting { get; set; }
+
+    /// <summary>Why the verb waits, as its tooltip, when it is not for something being found out: there is nothing for it to do.</summary>
+    [Parameter] public string? WaitingTitle { get; set; }
 
     private bool _waitingShown;
 

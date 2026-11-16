@@ -510,7 +510,8 @@ public sealed partial class ImageSecurity(
     public async Task<PatchChanges> ChangesAsync(string image, CancellationToken cancellationToken = default)
     {
         var original = ImageReference.Unpatched(image.Trim());
-        var patched = ImagePatches.Named(original);
+        // A container's patch is asked about by its own name; an image, about the patch made for no container.
+        var patched = ImageReference.IsPatched(image.Trim()) ? image.Trim() : ImagePatches.Named(original);
         var (patchedId, _, _) = await OriginAsync(patched, cancellationToken);
         if (patchedId is null)
         {

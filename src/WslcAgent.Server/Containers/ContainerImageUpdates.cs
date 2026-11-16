@@ -22,10 +22,13 @@ namespace WslcAgent.Server.Containers;
 /// failed at its minute. Started here and returned at once: the agent owns the
 /// rest, and its end is a notification.
 /// </summary>
-public sealed class ContainerImageUpdates(IContainerService containers, ImagePulls pulls, ImagePatches patches, ImageUpdatesUnderWay underWay, Notifier notifier, ILogger<ContainerImageUpdates> logger)
+public sealed class ContainerImageUpdates(IContainerService containers, ImagePulls pulls, ImagePatches patches, ImageUpdatesUnderWay underWay, Notifier notifier, ILogger<ContainerImageUpdates> logger, ImageIntegrity? integrity = null)
 {
     private static readonly TimeSpan PullTimeout = TimeSpan.FromHours(1);
     private static readonly TimeSpan PollEvery = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>How long a failed update is kept on its container's row at most: a little over what a failed pull is remembered.</summary>
+    private static readonly TimeSpan KeepFailed = TimeSpan.FromMinutes(6);
     private const string Job = "Image update";
 
     /// <summary>The pull started (or joined) for the new image; 404 for a container that is not there.</summary>
@@ -33,6 +36,13 @@ public sealed class ContainerImageUpdates(IContainerService containers, ImagePul
     {
         var details = await containers.DetailsAsync(WslcArgs.Require(container, "container"), cancellationToken);
         var image = ImageReference.Normalize(WslcArgs.Require(request.Image, "image"));
+        // An image already here and damaged is not mended by pulling it again, since its
+        // layers are taken as present: said now, in the window, with nothing started.
+        if (integrity is not null && await integrity.WhyDamagedAsync(image, cancellationToken) is { } damaged)
+        {
+            throw new InvalidOperationException($"Container {details.Name} cannot be updated: {damaged}");
+        }
+
         // The container's row shows the pull from the moment it starts.
         underWay.Begin(details.Id, image);
         var pull = pulls.Start(image);
@@ -48,10 +58,20 @@ public sealed class ContainerImageUpdates(IContainerService containers, ImagePul
         {
             error = await PulledAsync(image);
         }
-        finally
+        catch
         {
-            // The pull is over: the recreate marks the row from here, or nothing does.
-            underWay.End(id);
+            underWay.End(id, image);
+            throw;
+        }
+
+        // The pull is over. One that ended well hands the row to the recreate. One that
+        // failed (the registry, the network, an image left damaged) stops here: the
+        // container keeps the image it has, and its row stays as the failed update, with
+        // why and the pull's console, until that is dismissed. It is the person's to decide.
+        var pullFailed = error is not null;
+        if (!pullFailed)
+        {
+            underWay.End(id, image);
         }
 
         if (error is null && patch && form is null)
@@ -99,6 +119,21 @@ public sealed class ContainerImageUpdates(IContainerService containers, ImagePul
         }
 
         notifier.JobEnded(Job, $"{name} → {image}", error, elapsed.Elapsed, NotificationLink.Containers, CliTraceDescription.Containers);
+        if (pullFailed)
+        {
+            await DismissedAsync(image);
+            underWay.End(id, image);
+        }
+    }
+
+    /// <summary>Waits while the failed pull is remembered: until it is dismissed, forgotten, or another pull of the image takes its place.</summary>
+    private async Task DismissedAsync(string image)
+    {
+        var deadline = DateTimeOffset.UtcNow + KeepFailed;
+        while (DateTimeOffset.UtcNow < deadline && pulls.Get(image) is { State: "error" or "cancelled" })
+        {
+            await Task.Delay(PollEvery);
+        }
     }
 
     /// <summary>Follows the pull to its end: null when the image is there, else why not.</summary>

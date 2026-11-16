@@ -1,9 +1,11 @@
 @* Zaindari's patch window, opened from a container's or an image's Zaindari
    window, Update image and View & edit: the patch editor (PatchEditor) as a
-   form, Patch its verb. Started, the window closes and the agent builds it. *@
+   form, Patch its verb, not offered while the patch has nothing to do. Started,
+   the window closes and the agent builds it. *@
 
-<FormDialog SubmitText="Patch" BusyText="Starting…" OnSubmit="@(() => _editor.StartAsync())">
-    <PatchEditor @ref="_editor" Report="Report" Only="Only" />
+<FormDialog SubmitText="Patch" BusyText="Starting…" OnSubmit="@(() => _editor.StartAsync())" Waiting="_nothing"
+            WaitingTitle="@(_nothing ? "Nothing to patch: the Dockerfile adds no step to the image" : null)">
+    <PatchEditor @ref="_editor" Report="Report" Only="Only" NothingToDoChanged="@(nothing => _nothing = nothing)" />
 </FormDialog>
 
 @code {
@@ -14,4 +16,7 @@
     [Parameter] public IReadOnlyList<string> Only { get; set; } = [];
 
     private PatchEditor _editor = default!;
+
+    /// <summary>The editor's Dockerfile adds no step: Patch is not offered, and the editor says why.</summary>
+    private bool _nothing;
 }

@@ -25,11 +25,13 @@ public static class ImageSecurityFlow
     /// <summary>
     /// The window, in the one logs open in: every image checked now, its
     /// vulnerabilities one after the other. <paramref name="patchable"/>: opened
-    /// for one container or one image, it offers the image's patch.
+    /// for one container or one image, it offers the image's patch. Opened for
+    /// <paramref name="container"/>, the image is the one that container stands
+    /// on, read by its id, and its patch is that container's own.
     /// </summary>
-    public static Task<bool> ShowAsync(IDialogService dialogs, string about, IReadOnlyList<string> images, bool patchable = false) =>
+    public static Task<bool> ShowAsync(IDialogService dialogs, string about, IReadOnlyList<string> images, bool patchable = false, string container = "") =>
         DialogFlow.ShowAsync<ImageVulnerabilitiesDialog>(dialogs, $"{Label} — {about}",
-            new DialogParameters<ImageVulnerabilitiesDialog> { { d => d.Images, images }, { d => d.About, about }, { d => d.Patchable, patchable } }, large: true);
+            new DialogParameters<ImageVulnerabilitiesDialog> { { d => d.Images, images }, { d => d.About, about }, { d => d.Patchable, patchable }, { d => d.Container, container } }, large: true);
 
     /// <summary>A project's Zaindari window: its containers as a menu, and for the one chosen its report, what can be accepted, and its patch.</summary>
     public static Task<bool> ShowProjectAsync(IDialogService dialogs, string project, IReadOnlyList<ContainerSummary> members) =>
@@ -75,7 +77,7 @@ public static class ImageSecurityFlow
         }
 
         return $"{report.Image} carries a system package with a fix published that it does not have yet ({first.Package} {first.Version}, {first.Severity}, fixed in {first.FixedIn}): "
-            + $"pulling it or recreating on it again does not mend it. Patch… opens the patch editor: {report.Patch} is built with them upgraded, and anything you add, and the container moved to it.";
+            + $"pulling it or recreating on it again does not mend it. Patch… opens the patch editor: a patch of its own, named after the container, is built with them upgraded, and anything you add, and the container moved to it.";
     }
 
     /// <summary>The container runs a patch Zaindari built: its chip says patched.</summary>

@@ -63,6 +63,9 @@
     /// <summary>Opened for one container or one image: the patch is offered.</summary>
     [Parameter] public bool Patchable { get; set; }
 
+    /// <summary>The container the window was opened for, by its id: its image is read by the image it stands on, and its patch is its own. Empty for an image's window.</summary>
+    [Parameter] public string Container { get; set; } = "";
+
     private const int ChangesTab = 1;
 
     private int _tab;
@@ -96,7 +99,7 @@
 
             try
             {
-                var report = await Api.GetImageVulnerabilitiesAsync(image);
+                var report = Container.Length > 0 ? await Api.GetImageVulnerabilitiesAsync(image, Container) : await Api.GetImageVulnerabilitiesAsync(image);
                 lines.AddRange(ImageReportLines.Of(report));
                 if (Patchable && ImageSecurityFlow.Acceptable(report).Count > 0)
                 {
@@ -134,7 +137,7 @@
     /// <summary>The patch's window; once it has started, the agent builds it and this window closes.</summary>
     private async Task PatchAsync(ImageVulnerabilities patch)
     {
-        if (await ImageSecurityFlow.ShowPatchAsync(Dialogs, patch, []))
+        if (await ImageSecurityFlow.ShowPatchAsync(Dialogs, patch, Container.Length > 0 ? [Container] : []))
         {
             Dialog.Close();
         }

@@ -43,7 +43,7 @@ public sealed class ImagesEndpointTests(WebApplicationFactory<Program> factory)
         // The repository alone is repository:latest to wslc — the new image.
         var row = System.Text.Json.JsonDocument.Parse("""{"ID":"63ca78027b1a","Repository":"ghcr.io/openclaw/openclaw","Tag":"<none>","Containers":"0"}""").RootElement;
 
-        var image = Images.ImageService.ToSummary(row, Containers.ContainerUsage.Empty);
+        var image = Images.ImageService.ToSummary(row);
 
         Assert.True(image.IsDangling);
         Assert.Equal("63ca78027b1a", image.Reference);

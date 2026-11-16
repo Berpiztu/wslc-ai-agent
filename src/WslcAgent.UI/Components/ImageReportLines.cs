@@ -1,3 +1,4 @@
+using WslcAgent.ApiClient;
 using WslcAgent.ApiClient.Contracts;
 
 namespace WslcAgent.UI.Components;
@@ -71,8 +72,8 @@ public static class ImageReportLines
     /// <summary>What Patch does with the image, in the line that ends its report when a patch is offered.</summary>
     public static string PatchOffered(ImageVulnerabilities report) =>
         Line("INFO", report.SystemUpgrade.Length > 0 || report.PythonFixes is { Count: > 0 }
-            ? $"Patch builds {report.Patch} from {report.Image}: its system packages upgraded, as a Windows update patches Windows, and the commands you add (a Python library raised), then moves its containers to it."
-            : $"Patch builds {report.Patch} with what you change in it (a library taken out, another put in), then moves its containers to it.");
+            ? $"Patch builds a patch of {report.Image}: its system packages upgraded, as a Windows update patches Windows, and the commands you add (a Python library raised). Each container ticked gets its own, named after it ({ImageReference.PatchedFor(report.Image, "its-name")}), and is moved to it."
+            : $"Patch builds a patch of {report.Image} with what you change in it (a library taken out, another put in). Each container ticked gets its own, named after it ({ImageReference.PatchedFor(report.Image, "its-name")}), and is moved to it.");
 
     /// <summary>A line as the agent's log writes one, which the logs view colours by its level.</summary>
     public static string Line(string level, string text) => $"{level,-8} | {text}";

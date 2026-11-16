@@ -20,8 +20,35 @@ public static class ImageEndpoints
         group.MapGet("/inspect", (string reference, IImageService images, CancellationToken ct) => images.InspectAsync(reference, ct))
             .WithName("InspectImage");
 
+        group.MapGet("/users", (string image, IImageService images, CancellationToken ct) => images.UsersAsync(image, ct))
+            .WithName("ImageUsers");
+
         group.MapGet("/defaults", (string reference, IImageService images, CancellationToken ct) => images.DefaultsAsync(reference, ct))
             .WithName("ImageDefaults");
+
+        // Whether one image, or every image, still holds what the session recorded for its layers.
+        group.MapGet("/check", (string? image, IImageIntegrity integrity, CancellationToken ct) => integrity.CheckAsync(image, ct))
+            .WithName("CheckImages");
+
+        // The checks of one image the agent owns, as its pulls: what an image's card follows.
+        group.MapGet("/checks", (ImageCheckJobs checks) => checks.List())
+            .WithName("ImageChecks");
+
+        group.MapPost("/checks", (CheckImageRequest request, ImageCheckJobs checks) => checks.Start(request.Reference))
+            .WithName("StartImageCheck");
+
+        group.MapGet("/checks/log", (string image, ImageCheckJobs checks) => checks.Log(image))
+            .WithName("ImageCheckLog");
+
+        group.MapPost("/checks/cancel", (CheckImageRequest request, ImageCheckJobs checks) => new CancelImagePullResult(checks.Cancel(request.Reference)))
+            .WithName("CancelImageCheck");
+
+        group.MapDelete("/checks", NoContent (string image, ImageCheckJobs checks) =>
+            {
+                checks.Dismiss(image);
+                return TypedResults.NoContent();
+            })
+            .WithName("DismissImageCheck");
 
         group.MapGet("/registry-version", (string image, RegistryVersions versions, CancellationToken ct) => versions.OfAsync(image, ct))
             .WithName("RegistryImageVersion");

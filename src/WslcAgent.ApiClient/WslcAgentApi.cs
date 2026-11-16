@@ -763,6 +763,32 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<RegistryImageVersion> GetRegistryImageVersionAsync(string image, CancellationToken cancellationToken = default) =>
         GetAsync<RegistryImageVersion>($"api/v1/images/registry-version?image={Escape(image)}", cancellationToken);
 
+    /// <summary>Whether <paramref name="image"/>, or every image when none is named, still holds what the session recorded for its layers.</summary>
+    public Task<ImageChecks> CheckImagesAsync(string? image = null, CancellationToken cancellationToken = default) =>
+        GetAsync<ImageChecks>(string.IsNullOrWhiteSpace(image) ? "api/v1/images/check" : $"api/v1/images/check?image={Escape(image)}", cancellationToken);
+
+    /// <summary>The checks of one image the agent runs or has just ended, as its pulls.</summary>
+    public Task<IReadOnlyList<ImagePullState>> GetImageChecksAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<IReadOnlyList<ImagePullState>>("api/v1/images/checks", cancellationToken);
+
+    /// <summary>Starts the check of an image as a job of the agent's; one already under way is joined.</summary>
+    public Task<ImagePullState> StartImageCheckAsync(string reference, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<CheckImageRequest, ImagePullState>("api/v1/images/checks", new CheckImageRequest(reference), cancellationToken);
+
+    public Task<ImagePullLog> GetImageCheckLogAsync(string image, CancellationToken cancellationToken = default) =>
+        GetAsync<ImagePullLog>($"api/v1/images/checks/log?image={Escape(image)}", cancellationToken);
+
+    public Task<CancelImagePullResult> CancelImageCheckAsync(string image, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<CheckImageRequest, CancelImagePullResult>("api/v1/images/checks/cancel", new CheckImageRequest(image), cancellationToken);
+
+    /// <summary>Forgets a check that ended, so its card goes back to the image; 409 while it is still running.</summary>
+    public Task DismissImageCheckAsync(string image, CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Delete, $"api/v1/images/checks?image={Escape(image)}", cancellationToken);
+
+    /// <summary>The containers that stand on an image, found by the image each is pinned to and not by its name.</summary>
+    public Task<ImageUsers> GetImageUsersAsync(string image, CancellationToken cancellationToken = default) =>
+        GetAsync<ImageUsers>($"api/v1/images/users?image={Escape(image)}", cancellationToken);
+
     public Task<ImageInspect> GetImageInspectAsync(string reference, CancellationToken cancellationToken = default) =>
         GetAsync<ImageInspect>($"api/v1/images/inspect?reference={Escape(reference)}", cancellationToken);
 
@@ -813,6 +839,15 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     /// <summary>View image packages and CVEs: the image's Python libraries and every known vulnerability of them, read only.</summary>
     public Task<ImageVulnerabilities> GetImageVulnerabilitiesAsync(string image, CancellationToken cancellationToken = default) =>
         GetAsync<ImageVulnerabilities>($"api/v1/image-security/vulnerabilities?image={Uri.EscapeDataString(image)}", cancellationToken);
+
+    /// <summary>
+    /// The same for the image a container stands on, by that image's id: the
+    /// name the container was made with may belong to another image by now (a
+    /// newer pull took it), and what is read, and what its patch starts from,
+    /// is what the container runs.
+    /// </summary>
+    public Task<ImageVulnerabilities> GetImageVulnerabilitiesAsync(string image, string container, CancellationToken cancellationToken = default) =>
+        GetAsync<ImageVulnerabilities>($"api/v1/image-security/vulnerabilities?image={Uri.EscapeDataString(image)}&container={Uri.EscapeDataString(container)}", cancellationToken);
 
     /// <summary>Zaindari's patch: the image built again with its system packages upgraded, then the containers named moved to it; a build job to follow.</summary>
     public Task<BuildJob> PatchImageAsync(PatchImageRequest request, CancellationToken cancellationToken = default) =>

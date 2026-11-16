@@ -17,7 +17,7 @@
         }
         else
         {
-            <pre class="wslc-logs-output wslc-logs-pre wslc-fill-scroll">@_json</pre>
+            <pre class="@($"wslc-logs-output wslc-logs-pre wslc-fill-scroll{(Words ? " wslc-logs-words" : "")}")">@_json</pre>
         }
     </DialogContent>
 </MudDialog>
@@ -30,6 +30,9 @@
 
     /// <summary>Produces the JSON to show; an <see cref="AgentApiException"/> or <see cref="HttpRequestException"/> shows its message instead.</summary>
     [Parameter, EditorRequired] public Func<Task<string>> Load { get; set; } = default!;
+
+    /// <summary>The document is sentences, not JSON: its lines wrap between words at the box's width.</summary>
+    [Parameter] public bool Words { get; set; }
 
     protected override async Task OnInitializedAsync()
     {

@@ -25,7 +25,7 @@ public static class ResourceViews
             { d => d.Fields, fields },
         }, large: true);
 
-    /// <summary>Plain text in the logs box, loaded when the window opens.</summary>
+    /// <summary>Plain text in the logs box, loaded when the window opens; its sentences wrap at the box's width.</summary>
     public static Task ReportAsync(IDialogService dialogs, string title, Func<Task<string>> load) =>
-        DialogFlow.ShowAsync<Dialogs.JsonDialog>(dialogs, title, new DialogParameters<Dialogs.JsonDialog> { { d => d.Load, load } }, large: true);
+        DialogFlow.ShowAsync<Dialogs.JsonDialog>(dialogs, title, new DialogParameters<Dialogs.JsonDialog> { { d => d.Load, load }, { d => d.Words, true } }, large: true);
 }
