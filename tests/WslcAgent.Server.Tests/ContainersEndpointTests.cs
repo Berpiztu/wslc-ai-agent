@@ -145,8 +145,8 @@ public sealed class ContainersEndpointTests(WebApplicationFactory<Program> facto
         var response = await client.PostAsJsonAsync("/api/v1/containers/web/recreate", new ContainerLaunchRequest { Image = "nginx", Name = "web", Env = ["A=1"] });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        // The new image's check (image inspect) comes before the container is touched, and is left out here.
-        var calls = runner.Calls.Where(call => call is not ["image", "inspect", ..]).ToList();
+        // The new image's checks (image inspect, and whether it is whole: image list) come before the container is touched, and are left out here.
+        var calls = runner.Calls.Where(call => call is not (["image", "inspect", ..] or ["image", "list", ..])).ToList();
         Assert.Equal(["container", "inspect", "web", "--format", "json"], calls[0]);
         // Inspect does not show --gpus: the snapshot reads it from the list row.
         Assert.Equal(["container", "list", "--all", "--format", "json"], calls[1]);

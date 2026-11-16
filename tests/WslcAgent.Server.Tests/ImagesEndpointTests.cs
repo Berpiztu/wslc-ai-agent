@@ -62,7 +62,8 @@ public sealed class ImagesEndpointTests(WebApplicationFactory<Program> factory)
 
         Assert.Equal(HttpStatusCode.NoContent, pull.StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, tag.StatusCode);
-        Assert.Equal(2, runner.Calls.Count);
+        // Besides the check of the image pulled, which looks for it in the list, finds no such image here and stops.
+        Assert.Equal(2, runner.Calls.Count(call => call is not ["image", "list", ..]));
     }
 
     [Fact]
