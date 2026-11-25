@@ -300,6 +300,21 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
     public Task<AgentStartSettings> SetAgentStartSettingsAsync(AgentStartSettings settings, CancellationToken cancellationToken = default) =>
         PostJsonAsync<AgentStartSettings, AgentStartSettings>("api/v1/agent-start", settings, cancellationToken, HttpMethod.Put);
 
+    public Task<PluginList> GetPluginsAsync(CancellationToken cancellationToken = default) =>
+        GetAsync<PluginList>("api/v1/plugins", cancellationToken);
+
+    public Task<PluginList> InstallPluginAsync(string path, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<InstallPluginRequest, PluginList>("api/v1/plugins", new InstallPluginRequest(path), cancellationToken);
+
+    public Task<PluginList> SwitchPluginAsync(string name, bool enabled, CancellationToken cancellationToken = default) =>
+        PostJsonAsync<PluginSwitch, PluginList>($"api/v1/plugins/{Uri.EscapeDataString(name)}", new PluginSwitch(enabled), cancellationToken, HttpMethod.Put);
+
+    public Task<PluginList> RemovePluginAsync(string name, CancellationToken cancellationToken = default) =>
+        DeleteAsync<PluginList>($"api/v1/plugins/{Uri.EscapeDataString(name)}", cancellationToken);
+
+    public Task<IReadOnlyList<AgentLogEntry>> GetPluginLogAsync(string name, int? tail = null, CancellationToken cancellationToken = default) =>
+        GetAsync<IReadOnlyList<AgentLogEntry>>($"api/v1/plugins/{Uri.EscapeDataString(name)}/log{(tail is { } count ? $"?tail={count}" : "")}", cancellationToken);
+
     public Task<ImageSecuritySettings> GetImageSecuritySettingsAsync(CancellationToken cancellationToken = default) =>
         GetAsync<ImageSecuritySettings>("api/v1/image-security", cancellationToken);
 

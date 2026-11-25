@@ -245,7 +245,7 @@ public sealed partial class AgentLogs(AgentLogFile file, ICliActivity activity) 
         }
 
         return new AgentLogEntry(entry.Id, entry.Timestamp, entry.Timestamp[..^2], LevelOf(entry, command), entry.Source, entry.Message, details,
-            command?.Kind ?? KindOf(entry.Message), command);
+            command?.Kind ?? (entry.Source.StartsWith(Plugins.PluginHost.LogPrefix, StringComparison.Ordinal) ? CliTraceDescription.Plugins : KindOf(entry.Message)), command);
     }
 
     /// <summary>

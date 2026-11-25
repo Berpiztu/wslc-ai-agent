@@ -54,6 +54,11 @@ records.
   tools call the same service interfaces the endpoints call.
 - **The agent to WSLC.** The server runs the `wslc` CLI (`WslcAgent.Server/Wslc/`)
   and parses its output. Nothing shells out to `docker`.
+- **Plugins in the agent.** Code that is not the agent's, loaded and unloaded
+  while the agent runs, only when installed and switched on in Settings →
+  Plugins: ASP.NET Core hosting startups in a .dll, each with services of its
+  own and its middleware behind the agent's login (`WslcAgent.Server/Plugins/`,
+  [plugins.md](plugins.md)). Nothing of a plugin lives in this repository.
 
 ## Rules that shape the code
 

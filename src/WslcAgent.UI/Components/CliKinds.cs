@@ -23,6 +23,8 @@ public static class CliKinds
         ("transfers", "File transfers", Icons.Material.Filled.SwapVert),
         // A volume's backup or restore, every line of it, to follow one through.
         ("backups", "Backups", Icons.Material.Filled.Backup),
+        // What the plugins wrote, and the agent about them (Settings, Plugins): one group for all of them.
+        ("plugins", "Plugins", Icons.Material.Filled.Extension),
         ("general", "General", Icons.Material.Filled.Notes),
     ];
 

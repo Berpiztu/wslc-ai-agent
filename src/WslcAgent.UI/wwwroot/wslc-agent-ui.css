@@ -6901,3 +6901,18 @@ html[data-wslc-rows~="outlined"] .wslc-files-table {
     white-space: nowrap;
     flex-shrink: 0;
 }
+
+/* Settings → Plugins: the log box keeps one height whatever it holds and only
+   its lines scroll; a long name, description or error is cut with an ellipsis
+   and shown whole on hover. */
+.wslc-plugin-log {
+    height: 16rem;
+    flex: none;
+}
+
+.wslc-plugin-cell {
+    max-width: 24rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
