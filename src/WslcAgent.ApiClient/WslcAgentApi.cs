@@ -759,9 +759,13 @@ public sealed class WslcAgentApi(HttpClient http, AgentAccessToken? access = nul
         await http.GetFromJsonAsync<ImageListResponse>("api/v1/images", cancellationToken)
         ?? new ImageListResponse([], new ImageAggregate(0, 0));
 
-    /// <summary>The version an image not on the machine says it is, asked of its registry without a login.</summary>
+    /// <summary>The version an image not on the machine says it is, asked of its registry with wslc's login for it, or else without one.</summary>
     public Task<RegistryImageVersion> GetRegistryImageVersionAsync(string image, CancellationToken cancellationToken = default) =>
         GetAsync<RegistryImageVersion>($"api/v1/images/registry-version?image={Escape(image)}", cancellationToken);
+
+    /// <summary>The tags the repository of an image has in its registry, asked with wslc's login for it, or else without one.</summary>
+    public Task<RegistryImageTags> GetRegistryImageTagsAsync(string image, CancellationToken cancellationToken = default) =>
+        GetAsync<RegistryImageTags>($"api/v1/images/registry-tags?image={Escape(image)}", cancellationToken);
 
     /// <summary>Whether <paramref name="image"/>, or every image when none is named, still holds what the session recorded for its layers.</summary>
     public Task<ImageChecks> CheckImagesAsync(string? image = null, CancellationToken cancellationToken = default) =>

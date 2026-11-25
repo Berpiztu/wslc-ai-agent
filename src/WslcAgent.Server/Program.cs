@@ -117,7 +117,9 @@ builder.Services.AddSingleton<ImageSecuritySettingsStore>();
 builder.Services.AddSingleton<ImageAcceptanceStore>();
 builder.Services.AddSingleton<ImageMarks>();
 builder.Services.AddSingleton<ImageVersions>();
-builder.Services.AddSingleton(services => new RegistryVersions(new HttpClient { Timeout = TimeSpan.FromSeconds(15) }, services.GetRequiredService<ILogger<RegistryVersions>>()));
+builder.Services.AddSingleton(_ => new RegistryClient(new HttpClient { Timeout = TimeSpan.FromSeconds(15) }));
+builder.Services.AddSingleton<RegistryVersions>();
+builder.Services.AddSingleton<RegistryTags>();
 builder.Services.AddSingleton<ContainerAudit>();
 builder.Services.AddSingleton<IImageSecurity>(services => services.GetRequiredService<ImageSecurity>());
 builder.Services.AddSingleton(services => new ImageSecurity(

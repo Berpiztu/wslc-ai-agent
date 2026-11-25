@@ -1,7 +1,8 @@
 @* Moving a container to another version of its image, in its Update image
    window (UpdateImageDialog) and in a project's (UpdateImageTab),
    inside the form of either, whose verb starts it (StartAsync): the
-   repository it runs and the version to go to. The agent pulls it, then
+   repository it runs and the version to go to, at first the one it runs,
+   typed or chosen from its registry's tags (ImageTagField). The agent pulls it, then
    recreates the container with everything else it has; the container's row
    shows the pull. Zaindari's Patch…, beside the Version (PatchOffer), says,
    once it has asked, whether the image named carries what pulling it again
@@ -22,10 +23,7 @@
               Variant="Variant.Filled" Margin="Margin.Dense" Class="mt-2" />
 @* Zaindari's Patch… and its note beside the Version, the image the update goes to. *@
 <div class="wslc-field-beside mt-2">
-    <MudTextField T="string" @bind-Value="_version" Label="Version" Placeholder="1.5" Immediate="true" OnBlur="CheckPatchAsync"
-                  Required="true" RequiredError="A version is required"
-                  autocapitalize="none" autocorrect="off" spellcheck="false"
-                  Variant="Variant.Filled" Margin="Margin.Dense" />
+    <ImageTagField Value="@_version" ValueChanged="VersionChosenAsync" Repository="@_repository" Label="Version" OnBlur="CheckPatchAsync" />
     <PatchOffer Image="@Target" Checking="_checking" Report="_report" OnPatch="PatchAsync" />
 </div>
 @* Which version the tag chosen is, read with Zaindari's answer, a line that is always there so nothing moves. *@
@@ -34,7 +32,7 @@
 <MudText Typo="Typo.caption" Class="@($"{(Damaged ? "mud-error-text" : "mud-text-secondary")} mt-1 wslc-update-version")" title="@(_integrity?.Why() ?? IntegritySaid)">@IntegritySaid</MudText>
 <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
     The image is pulled, then the container is recreated with its ports, mounts, environment and name. If the new version does not start, the previous container stays as it was.
-    Leave latest for the version published last, or type one (1.4) to go to that one, or back to it.
+    The version is the one the container runs: choose another from the registry's list, or type one (1.4) to go to it, or back to it.
 </MudText>
 @if (ImageReference.IsPatched(Current))
 {
@@ -43,7 +41,7 @@
 
 @code {
     private string _repository = "";
-    /// <summary>latest unless another is typed: the version published last, which is what an update usually wants.</summary>
+    /// <summary>The tag the container runs (of a patch, the one it was made from) until another is chosen or typed.</summary>
     private string _version = ImageReference.Latest;
 
     /// <summary>The container, by id.</summary>
@@ -121,7 +119,14 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _repository = ImageReference.RepositoryOf(ImageReference.Normalize(Current));
+        (_repository, _version) = ImageReference.Split(ImageReference.Unpatched(ImageReference.Normalize(Current)));
+        await CheckPatchAsync();
+    }
+
+    /// <summary>A version chosen from the list, or typed and left: the image it names is asked about.</summary>
+    private async Task VersionChosenAsync(string? version)
+    {
+        _version = version?.Trim() ?? "";
         await CheckPatchAsync();
     }
 

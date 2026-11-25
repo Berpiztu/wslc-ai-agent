@@ -3,21 +3,24 @@
    title bar's activity line says it from its start to its end, and the
    Images table shows its progress, its console and a way to stop it.
    A patch Zaindari built (…-patched) is published nowhere: its pull is the
-   one of the image it was made from, which the field is filled with. *@
+   one of the image it was made from, which the fields are filled with. *@
 @using WslcAgent.ApiClient
 @inject PullActivity Pulls
 
 <FormDialog SubmitText="Pull" BusyText="Starting…" OnSubmit="PullAsync">
     @* In lower case as it is typed: an image name is lower case by rule, and a
-       phone's keyboard capitalises the first letter. *@
-    <MudTextField T="string" Value="_reference" ValueChanged="Typed" Label="Image" Placeholder="alpine" Immediate="true"
+       phone's keyboard capitalises the first letter. Read when the field is
+       left, so a tag typed or pasted in it moves to Tag without breaking the
+       typing. *@
+    <MudTextField T="string" Value="_reference" ValueChanged="Typed" Label="Image" Placeholder="alpine"
                   Required="true" RequiredError="An image reference is required"
+                  autocapitalize="none" autocorrect="off" spellcheck="false"
                   Variant="Variant.Filled" Margin="Margin.Dense" />
-    @* The tag nearly every pull wants, so the name alone is typed; a tag typed
-       in the name is the one wanted, and clears it. It took the place of All
-       tags, every tag of the repository, which nobody pulls. *@
-    <SquareCheckBox Value="_latest" ValueChanged="@(on => _latest = on)" Label="Latest"
-                    title="Pull the latest tag of the image named; clear it to pull the tag typed after the name" />
+    @* The tag, latest unless another is typed or chosen from the registry's
+       list; a reference by digest names its image alone, and Tag is not used. *@
+    <div class="mt-2">
+        <ImageTagField @bind-Value="_tag" Repository="@_reference" />
+    </div>
     @if (_patchedFrom.Length > 0)
     {
         <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">@_patchedFrom is a patch built on this machine and published nowhere: the pull is of the image it was made from.</MudText>
@@ -26,8 +29,9 @@
 </FormDialog>
 
 @code {
+    /// <summary>The repository, or a reference by digest as it was typed.</summary>
     private string _reference = "";
-    private bool _latest = true;
+    private string _tag = ImageReference.Latest;
 
     /// <summary>The patch the dialog was opened for, whose original it pulls; empty for any other image.</summary>
     private string _patchedFrom = "";
@@ -40,15 +44,19 @@
         Typed(ImageReference.Unpatched(Reference));
     }
 
+    /// <summary>The name typed; a tag in it goes to Tag, a digest stays.</summary>
     private void Typed(string text)
     {
-        _reference = ImageReference.Normalize(text ?? "");
-        if (ImageReference.HasTag(_reference))
+        var reference = ImageReference.Normalize(text ?? "");
+        if (reference.Contains('@') || !ImageReference.HasTag(reference))
         {
-            _latest = false;
+            _reference = reference;
+            return;
         }
+
+        (_reference, _tag) = ImageReference.Split(reference);
     }
 
     private Task PullAsync() =>
-        Pulls.StartAsync(_latest ? $"{ImageReference.RepositoryOf(_reference)}:{ImageReference.Latest}" : _reference);
+        Pulls.StartAsync(_reference.Contains('@') ? _reference : $"{_reference}:{_tag.Trim()}");
 }

@@ -1,0 +1,79 @@
+@* An image's tag, typed freely or chosen from the tags its repository has in
+   its registry (GET /images/registry-tags): latest first, the highest
+   numbers next. The registry is asked when the list first opens, once per
+   repository; when it does not say (it asks for a login, it has no such
+   repository), the list says why in one line and the field keeps what is
+   typed. The value is told when an item is chosen or the field is left,
+   never at every key. Pull and Update image name their tag with it. *@
+@inject WslcAgentApi Api
+
+<MudAutocomplete T="string" Value="Value" ValueChanged="ValueChanged" Label="@Label" Placeholder="@ImageReference.Latest"
+                 SearchFunc="SearchAsync" CoerceValue="true" CoerceText="false" Strict="false" MaxItems="null"
+                 ResetValueOnEmptyText="false" ShowProgressIndicator="true" Dense="true"
+                 Required="true" RequiredError="@($"{Label} is required")" OnBlur="OnBlur"
+                 autocapitalize="none" autocorrect="off" spellcheck="false"
+                 Variant="Variant.Filled" Margin="Margin.Dense">
+    <NoItemsTemplate>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary px-4 py-1 wslc-one-line" title="@NoItems">@NoItems</MudText>
+    </NoItemsTemplate>
+</MudAutocomplete>
+
+@code {
+    /// <summary>The tag.</summary>
+    [Parameter] public string Value { get; set; } = ImageReference.Latest;
+
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    /// <summary>The image whose repository's tags the list offers; its own tag, if it has one, is left aside.</summary>
+    [Parameter, EditorRequired] public string Repository { get; set; } = "";
+
+    [Parameter] public string Label { get; set; } = "Tag";
+
+    /// <summary>The field is left: a window asks about the image it names then.</summary>
+    [Parameter] public EventCallback OnBlur { get; set; }
+
+    /// <summary>The repository <see cref="_tags"/> were asked for; a list for another is asked again.</summary>
+    private string? _askedFor;
+
+    private IReadOnlyList<string> _tags = [];
+
+    /// <summary>Why the registry gave no tags; empty when it gave them.</summary>
+    private string _note = "";
+
+    /// <summary>The text typed, which the list is narrowed to.</summary>
+    private string _typed = "";
+
+    private string NoItems =>
+        _note.Length > 0 ? $"No list of tags: {_note}. The one typed is used."
+        : $"No tag in the registry holds \"{_typed}\"; the one typed is used.";
+
+    private async Task<IEnumerable<string>> SearchAsync(string text, CancellationToken cancellationToken)
+    {
+        _typed = text?.Trim() ?? "";
+        var tags = await TagsAsync(cancellationToken);
+        return _typed.Length == 0 ? tags : tags.Where(tag => tag.Contains(_typed, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>The repository's tags, asked once per repository; none when the registry or the agent did not say.</summary>
+    private async Task<IReadOnlyList<string>> TagsAsync(CancellationToken cancellationToken)
+    {
+        var repository = ImageReference.RepositoryOf(ImageReference.Normalize(Repository));
+        if (repository == _askedFor)
+        {
+            return _tags;
+        }
+
+        try
+        {
+            var answer = await Api.GetRegistryImageTagsAsync(repository, cancellationToken);
+            (_tags, _note) = (answer.Tags, answer.Note);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            (_tags, _note) = ([], "the agent could not be asked");
+        }
+
+        _askedFor = repository;
+        return _tags;
+    }
+}

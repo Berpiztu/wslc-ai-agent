@@ -53,6 +53,9 @@ public static class ImageEndpoints
         group.MapGet("/registry-version", (string image, RegistryVersions versions, CancellationToken ct) => versions.OfAsync(image, ct))
             .WithName("RegistryImageVersion");
 
+        group.MapGet("/registry-tags", (string image, RegistryTags tags, CancellationToken ct) => tags.OfAsync(image, ct))
+            .WithName("RegistryImageTags");
+
         group.MapPost("/pull", async Task<NoContent> (PullImageRequest request, IImageService images, CancellationToken ct) =>
             {
                 await images.PullAsync(request.Reference, request.AllTags, ct);

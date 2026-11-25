@@ -59,6 +59,16 @@ public sealed record ImageSummary(
 /// <param name="Note">Why there is no version, in words (the image says none, the registry asks for a login, it could not be reached); empty when there is one.</param>
 public sealed record RegistryImageVersion(string Image, string Version, string From, string Note);
 
+/// <summary>
+/// Body of <c>GET /api/v1/images/registry-tags?image=</c>: the tags a repository
+/// has in its registry, asked as wslc's pull asks, with the login wslc keeps
+/// for the registry or else without one.
+/// </summary>
+/// <param name="Repository">The repository asked about, its tag left aside.</param>
+/// <param name="Tags"><c>latest</c> first, then the others with the highest numbers first; empty when the registry did not say.</param>
+/// <param name="Note">Why there are no tags, in words (the registry asks for a login, it refused wslc's, it has no such repository, it could not be reached); empty when it answered.</param>
+public sealed record RegistryImageTags(string Repository, IReadOnlyList<string> Tags, string Note);
+
 /// <summary>Totals for the page header.</summary>
 public sealed record ImageAggregate(int Count, long SizeBytes);
 
