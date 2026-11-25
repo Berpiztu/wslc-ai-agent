@@ -1,0 +1,201 @@
+@* Settings → Plugins: the control of what code the agent runs besides its
+   own. A plugin is an ASP.NET Core hosting startup in a .dll (docs/plugins.md);
+   it is loaded only once it is installed here and switched on, never because
+   its files are in a folder, and it runs inside the agent with everything the
+   agent may do. Install, switch and remove take effect at once, with no new
+   start of the agent. The list says of each one whether it is switched on and
+   whether it is loaded (and why not, when it failed); under it, the log of the
+   plugin chosen, drawn as the Logs page draws its entries: its own lines and
+   the agent's about it. *@
+@inject WslcAgentApi Api
+@inject IDialogService Dialogs
+
+<MudPaper Outlined="true" Class="pa-4">
+    <MudText Typo="Typo.h6">Plugins</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+        Code that runs inside the agent: an ASP.NET Core hosting startup in a .dll, with its endpoints behind the agent's login.
+        A plugin is loaded only when it is installed here and switched on; installing, switching and removing take effect at once,
+        with no new start of the agent.
+    </MudText>
+    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">@Danger</MudAlert>
+    <div class="wslc-field-pick has-note">
+        <MudTextField T="string" @bind-Value="_path" Label="Plugin assembly" Placeholder="C:\plugins\MyPlugin\MyPlugin.dll"
+                      Immediate="true" Variant="Variant.Filled" Margin="Margin.Dense" Class="wslc-mono" Disabled="_busy"
+                      HelperTextOnFocus="true" HelperText="A .dll of the agent's machine. The files beside it and its runtimes folder are copied into the agent's plugin folder."
+                      autocapitalize="none" autocorrect="off" spellcheck="false" />
+        <MudFab Color="Color.Success" StartIcon="@Icons.Material.Filled.MoreVert" Size="Size.Small" title="Pick a .dll" OnClick="PickAsync" Disabled="_busy" />
+    </div>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Extension" Class="mt-2"
+               Disabled="@(_busy || _path.Trim().Length == 0)" OnClick="InstallAsync">Install</MudButton>
+
+    @if (_list is null)
+    {
+        <MudProgressLinear Indeterminate="true" Class="mt-3" />
+    }
+    else
+    {
+        <MudSimpleTable Dense="true" Hover="true" Class="mt-3">
+            <thead>
+                <tr><th>Plugin</th><th>Version</th><th>State</th><th>On</th><th></th></tr>
+            </thead>
+            <tbody>
+                @if (_list.Plugins.Count == 0)
+                {
+                    <tr><td colspan="5" class="mud-text-secondary">No plugin is installed.</td></tr>
+                }
+                @foreach (var plugin in _list.Plugins)
+                {
+                    <tr @key="plugin.Name">
+                        <td class="wslc-plugin-cell" title="@TitleOf(plugin)"><b>@plugin.Name</b> <span class="mud-text-secondary">@plugin.Description</span></td>
+                        <td class="wslc-mono">@VersionOf(plugin)</td>
+                        <td class="wslc-plugin-cell" title="@plugin.Error">
+                            <MudChip T="string" Size="Size.Small" Color="@ColorOf(plugin)" Variant="Variant.Filled">@StateOf(plugin)</MudChip>
+                        </td>
+                        <td><MudSwitch T="bool" Value="plugin.Enabled" ValueChanged="@(on => SwitchAsync(plugin, on))" Color="Color.Primary" Disabled="_busy" /></td>
+                        <td>
+                            <MudIconButton Icon="@Icons.Material.Filled.Article" Size="Size.Small" title="Its log" OnClick="@(() => ShowLogAsync(plugin.Name))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" title="Remove" Disabled="_busy" OnClick="@(() => RemoveAsync(plugin))" />
+                        </td>
+                    </tr>
+                    @if (plugin.Error.Length > 0)
+                    {
+                        <tr><td colspan="5" class="wslc-plugin-cell" title="@plugin.Error"><MudText Typo="Typo.caption" Color="Color.Error">Not loaded: @plugin.Error</MudText></td></tr>
+                    }
+                }
+            </tbody>
+        </MudSimpleTable>
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-3">
+            <MudText Typo="Typo.subtitle2">@(_shown is null ? "Log" : $"Log of {_shown}")</MudText>
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" title="Read it again" Disabled="@(_shown is null)" OnClick="@(() => ShowLogAsync(_shown!))" />
+        </MudStack>
+        @* The log box keeps its height whatever it holds; only its lines scroll. *@
+        <div class="wslc-logs-output wslc-plugin-log" role="log">
+            @if (_shown is not null && _log is null)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else if (_shown is not null && _log!.Count == 0)
+            {
+                <div class="wslc-log-line wslc-log-empty">Nothing written yet.</div>
+            }
+            @foreach (var entry in _log ?? [])
+            {
+                <div @key="entry.Key" class="wslc-log-line wslc-log-entry log-level-@entry.Level.ToLowerInvariant()" title="@entry.Message"><span class="wslc-log-time">@entry.DisplayTimestamp</span> <span class="wslc-log-level">@entry.Level</span> <span class="wslc-log-source">@entry.Source</span><span class="wslc-log-sep"> - </span><span class="wslc-log-message">@entry.Message</span></div>
+            }
+        </div>
+    }
+</MudPaper>
+
+@code {
+    /// <summary>How much of a plugin's log is shown: its last lines.</summary>
+    private const int LogTail = 200;
+
+    /// <summary>What a plugin may do, said above the list and in the install's confirmation.</summary>
+    private const string Danger = "A plugin runs inside the agent and can do everything the agent can on this machine. Install only code you trust and know where it comes from.";
+
+    private PluginList? _list;
+    private string _path = "";
+    private bool _busy;
+
+    /// <summary>The plugin whose log is under the list, and the log.</summary>
+    private string? _shown;
+    private IReadOnlyList<AgentLogEntry>? _log;
+
+    protected override Task OnInitializedAsync() => RunAsync("Plugins", "The plugins could not be read.", Api.GetPluginsAsync);
+
+    private static string StateOf(PluginInfo plugin) =>
+        plugin.Loaded ? "loaded"
+        : plugin.Error.Length > 0 ? "failed"
+        : plugin.Enabled ? "not loaded"
+        : "off";
+
+    private static Color ColorOf(PluginInfo plugin) =>
+        plugin.Error.Length > 0 ? Color.Error : plugin.Loaded ? Color.Success : Color.Default;
+
+    /// <summary>The version running; the one installed while it is not.</summary>
+    private static string VersionOf(PluginInfo plugin) => plugin.Loaded ? plugin.LoadedVersion : plugin.Version;
+
+    private static string TitleOf(PluginInfo plugin) =>
+        $"{plugin.Description}\n{plugin.Assembly} in {plugin.Folder}\nInstalled {plugin.InstalledAt} from {plugin.InstalledFrom}";
+
+    private async Task PickAsync()
+    {
+        if (await Pickers.HostFileAsync(Dialogs, ".dll", _path) is { } picked)
+        {
+            _path = picked;
+        }
+    }
+
+    private async Task InstallAsync()
+    {
+        var path = _path.Trim();
+        if (!await DialogFlow.ConfirmAsync(Dialogs, "Install plugin", $"Install {path} and load it now?", "Install", danger: Danger))
+        {
+            return;
+        }
+
+        if (await RunAsync("Install plugin", "The plugin was not installed.", ct => Api.InstallPluginAsync(path, ct)))
+        {
+            _path = "";
+        }
+    }
+
+    private Task SwitchAsync(PluginInfo plugin, bool on) =>
+        RunAsync("Plugin", $"{plugin.Name} was not switched {(on ? "on" : "off")}.", ct => Api.SwitchPluginAsync(plugin.Name, on, ct));
+
+    private async Task RemoveAsync(PluginInfo plugin)
+    {
+        if (await DialogFlow.ConfirmRemoveAsync(Dialogs, "plugin", $"{plugin.Name}: it is unloaded and its files are deleted"))
+        {
+            await RunAsync("Remove plugin", $"{plugin.Name} was not removed.", ct => Api.RemovePluginAsync(plugin.Name, ct));
+        }
+    }
+
+    private async Task ShowLogAsync(string name)
+    {
+        _shown = name;
+        _log = null;
+        try
+        {
+            _log = await Api.GetPluginLogAsync(name, LogTail);
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            _shown = null;
+            await DialogFlow.ExplainAsync(Dialogs, "Plugin log", $"The log of {name} could not be read.", ex.Message);
+        }
+    }
+
+    /// <summary>One call that answers the list; its error in a window of its own.</summary>
+    private async Task<bool> RunAsync(string title, string failed, Func<CancellationToken, Task<PluginList>> call)
+    {
+        _busy = true;
+        try
+        {
+            _list = await call(CancellationToken.None);
+            // The log under the list is always one plugin's, read again after every change: the one shown, else the first.
+            var shown = _list.Plugins.FirstOrDefault(plugin => plugin.Name == _shown) ?? _list.Plugins.FirstOrDefault();
+            if (shown is null)
+            {
+                _shown = null;
+                _log = null;
+            }
+            else
+            {
+                await ShowLogAsync(shown.Name);
+            }
+
+            return true;
+        }
+        catch (Exception ex) when (ex is AgentApiException or HttpRequestException)
+        {
+            await DialogFlow.ExplainAsync(Dialogs, title, failed, ex.Message);
+            return false;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

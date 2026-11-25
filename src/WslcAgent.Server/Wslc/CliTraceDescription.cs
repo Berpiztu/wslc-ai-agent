@@ -25,6 +25,9 @@ public static class CliTraceDescription
     /// <summary>A volume's backup or restore, every line of it (written after <c>backup: </c>): a group of its own, to follow a backup through the log.</summary>
     public const string Backups = "backups";
 
+    /// <summary>What a plugin wrote, and what the agent wrote about one (its source is <c>Plugin NAME</c>): a group of its own, the Logs page's Plugins.</summary>
+    public const string Plugins = "plugins";
+
     /// <summary>The names a transfer travels under: the file inside the container (ContainerFiles) and the folder it is staged in on the host (Staging).</summary>
     private static readonly string[] TransferNames = ["wslc-cp-", "wslc-files-"];
 

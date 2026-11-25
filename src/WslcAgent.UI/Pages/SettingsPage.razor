@@ -21,7 +21,7 @@
 <PageShell Title="Settings">
     @* One subject a tab: who may reach the agent
        (Security), a container port on a public name (Publish), the MCP server and
-       its skill (MCP), the agent updating itself (Update), what it notifies (Notifications),
+       its skill (MCP), the agent updating itself (Update), the code it runs besides its own (Plugins), what it notifies (Notifications),
        the values things start from (Defaults: where volume backups go), what the person's own devices keep — the agents a client
        knows, the saved logins, the testing switch (User) — and what the
        application looks like (Layout). What is chosen in Layout is not a
@@ -388,6 +388,13 @@
         </div>
             </div>
         </MudTabPanel>
+        <MudTabPanel Text="Plugins">
+            <div class="wslc-fill-scroll">
+        <div class="wslc-settings-grid">
+            <PluginsCard />
+        </div>
+            </div>
+        </MudTabPanel>
         <MudTabPanel Text="Notifications">
             <div class="wslc-fill-scroll">
         <div class="wslc-settings-grid">
@@ -683,11 +690,11 @@
 
 @code {
     /// <summary>The tabs, in their order; the query names one.</summary>
-    private static readonly string[] Tabs = ["security", "publish", "mcp", "update", "notifications", "defaults", "user", "layout"];
+    private static readonly string[] Tabs = ["security", "publish", "mcp", "update", "plugins", "notifications", "defaults", "user", "layout"];
 
     private int _tab;
 
-    /// <summary><c>?tab=security|publish|mcp|update|notifications|user|layout</c>: the tab is part of the address, so Back returns to the one left.</summary>
+    /// <summary><c>?tab=security|publish|mcp|update|plugins|notifications|defaults|user|layout</c>: the tab is part of the address, so Back returns to the one left.</summary>
     [SupplyParameterFromQuery] public string? Tab { get; set; }
 
     protected override void OnParametersSet() => _tab = Math.Max(0, Array.IndexOf(Tabs, Tab ?? Tabs[0]));

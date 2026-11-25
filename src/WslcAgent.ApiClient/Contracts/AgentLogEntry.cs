@@ -10,7 +10,7 @@ namespace WslcAgent.ApiClient.Contracts;
 /// <param name="Source">The logger that wrote it.</param>
 /// <param name="Message">Its first line.</param>
 /// <param name="Details">The expanded block: timestamp, level, source and message, then any further lines (a stack trace, a command's outcome and output).</param>
-/// <param name="Kind">The group a <c>wslc</c> command line belongs to (<c>containers</c>, <c>images</c>, <c>networks</c>, <c>volumes</c>, <c>general</c>); <c>general</c> for any other message.</param>
+/// <param name="Kind">The group a <c>wslc</c> command line belongs to (<c>containers</c>, <c>images</c>, <c>networks</c>, <c>volumes</c>, <c>general</c>); <c>plugins</c> for what a plugin wrote and the agent wrote about one (a source that begins <c>Plugin </c>); <c>general</c> for any other message.</param>
 /// <param name="Command">The <c>wslc</c> command this entry records — running, or finished with its outcome and output — when it records one; null for every other entry. In a list (<c>GET /api/v1/logs</c>) the output is left out, as are its lines in <paramref name="Details"/>; <c>POST /api/v1/logs/entries</c> gives the entry whole.</param>
 public sealed record AgentLogEntry(
     int? EntryId,

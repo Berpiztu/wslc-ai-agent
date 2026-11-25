@@ -14,6 +14,7 @@ using WslcAgent.Server.Mcp;
 using WslcAgent.Server.Networks;
 using WslcAgent.Server.Notifications;
 using WslcAgent.Server.Overview;
+using WslcAgent.Server.Plugins;
 using WslcAgent.Server.Projects;
 using WslcAgent.Server.Publishing;
 using WslcAgent.Server.Registries;
@@ -46,6 +47,9 @@ InstalledAgentSettings.RecordVersion(agentInfo.Version);
 builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 builder.Services.AddSingleton<IAgentInfo>(agentInfo);
+builder.Services.AddSingleton(services => new PluginStore(services.GetRequiredService<Microsoft.Extensions.Options.IOptions<WslcOptions>>().Value.DataDirectory));
+builder.Services.AddSingleton<PluginHost>();
+builder.Services.AddSingleton<PluginService>();
 builder.Services.Configure<WslcOptions>(builder.Configuration.GetSection(WslcOptions.Section));
 builder.Services.AddSingleton<AgentLogFile>();
 builder.Services.AddSingleton<AgentLogs>();
@@ -237,6 +241,10 @@ app.UseWebSocketShutdown();
 // After the WebSockets, so a socket's handshake is recognised as one.
 app.UseMiddleware<AgentAuthMiddleware>();
 
+// The plugins' pipelines, behind the login like the agent's own endpoints;
+// loaded and unloaded while the agent runs (Settings → Plugins, docs/plugins.md).
+app.UseMiddleware<PluginsMiddleware>();
+
 // The Blazor WebAssembly UI (WslcAgent.Web) is served by the agent itself.
 // MapStaticAssets covers the referenced project's fingerprinted assets,
 // including _framework/; the older UseBlazorFrameworkFiles must not be added
@@ -268,6 +276,7 @@ app.MapGroup("/api/v1")
     .MapProjectEndpoints()
     .MapPublishingEndpoints()
     .MapHostEndpoints()
+    .MapPluginEndpoints()
     .MapClientEndpoints();
 
 // The MCP endpoint lives under the API's own version: the protocol version is
@@ -277,6 +286,9 @@ app.MapGroup("/api/v1")
 app.MapMcp("/api/v1/mcp");
 app.MapWellKnownSkillEndpoints();
 app.MapUiFallback();
+
+// Every plugin switched on, loaded before the first request.
+await app.Services.GetRequiredService<PluginService>().LoadSwitchedOnAsync();
 
 app.Run();
 
