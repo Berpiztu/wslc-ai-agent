@@ -34,6 +34,16 @@ server {
     # TLS ends at the VPS: a redirect written whole would say http.
     absolute_redirect off;
 
+    # Every application's text compressed here, before the tunnel to the VPS: its pages, scripts, styles and JSON.
+    # nginx compresses no proxied answer unless told (gzip_proxied), and only text/html (gzip_types); a chat of
+    # tables came to the browser as a megabyte of JSON. An answer the application already compressed is left as is
+    gzip on;
+    gzip_proxied any;
+    gzip_vary on;
+    gzip_comp_level 5;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css text/javascript application/javascript application/json application/xml image/svg+xml;
+
     # A name nobody published is not a mystery, it is a 404.
     if ($wslc_upstream = "") {
         return 404;

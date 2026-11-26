@@ -12,6 +12,9 @@ What it does:
 - **Publishes** container ports on public names. It writes nginx's configuration
   from its sites and reloads nginx in place; each name reaches a container by name
   on the shared network.
+- **Compresses** every application's text (pages, scripts, styles, JSON, SVG) with
+  gzip before the tunnel to the VPS, an answer the application already compressed
+  left as it is: nginx compresses no proxied answer unless told to.
 - **Puts a login in front** of every name whose application opens without asking
   for anything. When a name is published it asks the application, as a visitor
   with no session would: a `401`/`403`, a redirect to a sign-in page or a page with
